@@ -1,1 +1,13 @@
 @import "tailwindcss";
+
+html,
+body {
+  /* Chrome 주소창 스와이프 제스처는 허용하면서 rubber-band 스크롤만 방지 */
+  overscroll-behavior: none;
+}
+
+/* safe-area-inset: viewport-fit=cover 시 하드웨어 노치/시스템바 보상 */
+#root {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

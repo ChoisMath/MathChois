@@ -250,7 +250,7 @@ const StudentWorkViewer = () => {
   }
 
   return (
-    <div className="flex flex-col overflow-hidden bg-gray-100" style={{ height: '100dvh' }}>
+    <div className="flex flex-col bg-gray-100" style={{ height: '100dvh' }}>
 
       {/* ── 내비게이션 바 ── */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b z-10 flex-shrink-0">
