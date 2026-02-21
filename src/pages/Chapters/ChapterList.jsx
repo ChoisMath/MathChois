@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Plus, Book, Trash2, Edit2, ArrowLeft, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 const ChapterList = () => {
   const { classroomId } = useParams();
+  const navigate = useNavigate();
 
   const [classroom, setClassroom] = useState(null);
   const [chapters, setChapters] = useState([]);
@@ -100,7 +101,11 @@ const ChapterList = () => {
       ) : (
         <div className="bg-white shadow rounded-lg divide-y divide-gray-200">
           {chapters.map((ch) => (
-            <div key={ch.id} className="flex items-center px-6 py-4 gap-4">
+            <div
+              key={ch.id}
+              className="flex items-center px-6 py-4 gap-4 hover:bg-gray-50 cursor-pointer transition-colors"
+              onClick={() => navigate(`/teacher/classrooms/${classroomId}/chapters/${ch.id}/monitor`)}
+            >
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900">{ch.title}</p>
                 {ch.description && (
@@ -115,12 +120,13 @@ const ChapterList = () => {
                 <Link
                   to={`/teacher/chapters/${ch.id}/edit`}
                   className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <Edit2 className="h-4 w-4 mr-1" />
                   편집
                 </Link>
                 <button
-                  onClick={() => handleDelete(ch.id)}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(ch.id); }}
                   className="p-1.5 text-gray-400 hover:text-red-600 cursor-pointer"
                 >
                   <Trash2 className="h-4 w-4" />

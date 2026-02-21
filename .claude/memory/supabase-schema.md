@@ -63,6 +63,35 @@ updated_at       timestamptz DEFAULT now()
 UNIQUE (student_id, page_id)  -- upsert onConflict 사용
 ```
 
+### teacher_notes (Phase 4 — 수동 설정 필요)
+교사가 수업 전체 대상으로 작성하는 필기 (class-wide). 학생은 모달로 열람.
+```sql
+CREATE TABLE teacher_notes (
+  id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  teacher_id      uuid REFERENCES auth.users NOT NULL,
+  page_id         uuid REFERENCES pages(id) ON DELETE CASCADE NOT NULL,
+  excalidraw_data jsonb,
+  updated_at      timestamptz DEFAULT now(),
+  UNIQUE(teacher_id, page_id)
+);
+ALTER TABLE teacher_notes ENABLE ROW LEVEL SECURITY;
+```
+
+### teacher_student_comments (Phase 4 — 수동 설정 필요)
+교사가 특정 학생 필기에 남기는 개인 코멘트. 학생 StudyViewer에서 자동 로드 + Realtime 표시.
+```sql
+CREATE TABLE teacher_student_comments (
+  id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  teacher_id      uuid REFERENCES auth.users NOT NULL,
+  student_id      uuid REFERENCES auth.users NOT NULL,
+  page_id         uuid REFERENCES pages(id) ON DELETE CASCADE NOT NULL,
+  excalidraw_data jsonb,
+  updated_at      timestamptz DEFAULT now(),
+  UNIQUE(teacher_id, student_id, page_id)
+);
+ALTER TABLE teacher_student_comments ENABLE ROW LEVEL SECURITY;
+```
+
 ---
 
 ## RLS 정책 (Row Level Security)
@@ -142,6 +171,46 @@ SELECT: EXISTS (
 ```sql
 -- 본인 노트만 CRUD
 SELECT/INSERT/UPDATE/DELETE: student_id = auth.uid()
+
+-- 교사: 자신의 classroom 학생 노트 조회 (Phase 4 모니터링용)
+CREATE POLICY "student_notes_teacher_read" ON student_notes
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM pages p
+      JOIN chapters ch ON ch.id = p.chapter_id
+      JOIN classrooms c ON c.id = ch.classroom_id
+      WHERE p.id = student_notes.page_id AND c.teacher_id = auth.uid()
+    )
+  );
+```
+
+### teacher_notes (Phase 4)
+```sql
+-- 교사: 본인 노트 전체 CRUD
+CREATE POLICY "teacher_notes_teacher_all" ON teacher_notes
+  FOR ALL USING (teacher_id = auth.uid()) WITH CHECK (teacher_id = auth.uid());
+
+-- 학생: 참여한 classroom 페이지의 교사 노트 조회
+CREATE POLICY "teacher_notes_student_read" ON teacher_notes
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM pages p
+      JOIN chapters ch ON ch.id = p.chapter_id
+      JOIN classroom_members cm ON cm.classroom_id = ch.classroom_id
+      WHERE p.id = teacher_notes.page_id AND cm.student_id = auth.uid()
+    )
+  );
+```
+
+### teacher_student_comments (Phase 4)
+```sql
+-- 교사: 본인이 작성한 코멘트 전체 CRUD
+CREATE POLICY "tsc_teacher_all" ON teacher_student_comments
+  FOR ALL USING (teacher_id = auth.uid()) WITH CHECK (teacher_id = auth.uid());
+
+-- 학생: 자신을 대상으로 한 코멘트 조회
+CREATE POLICY "tsc_student_read" ON teacher_student_comments
+  FOR SELECT USING (student_id = auth.uid());
 ```
 
 ---
@@ -238,6 +307,19 @@ SELECT: true
      options: { redirectTo: `${window.location.origin}/auth/callback` }
    })
    ```
+
+---
+
+## Realtime 설정 (Phase 4)
+
+Supabase SQL Editor에서 실행:
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE student_notes;
+ALTER PUBLICATION supabase_realtime ADD TABLE teacher_student_comments;
+```
+
+- `student_notes`: ChapterMonitor(교사)가 학생 필기를 실시간 수신, StudentWorkViewer도 사용
+- `teacher_student_comments`: StudyViewer(학생)가 교사 코멘트를 실시간 수신
 
 ---
 

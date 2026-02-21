@@ -25,12 +25,7 @@ const ClassroomList = () => {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
 
-  // 학생: 코드로 참여
-  const [joinCode, setJoinCode] = useState('');
-  const [joining, setJoining] = useState(false);
-  const [joinError, setJoinError] = useState('');
-
-  const fetchClassrooms = async () => {
+const fetchClassrooms = async () => {
     setLoading(true);
     if (isTeacher) {
       const { data, error } = await supabase
@@ -56,8 +51,19 @@ const ClassroomList = () => {
         .from('classroom_members')
         .select('classroom:classrooms(*)')
         .eq('student_id', user.id);
-      if (error) console.error('[ClassroomList] 목록 조회 오류:', error);
-      setClassrooms(data?.map((d) => d.classroom) || []);
+      if (error) { console.error('[ClassroomList] 목록 조회 오류:', error); setLoading(false); return; }
+
+      const rows = data?.map((d) => d.classroom) || [];
+      const withCounts = await Promise.all(
+        rows.map(async (classroom) => {
+          const { count } = await supabase
+            .from('classroom_members')
+            .select('*', { count: 'exact', head: true })
+            .eq('classroom_id', classroom.id);
+          return { ...classroom, memberCount: count ?? 0 };
+        })
+      );
+      setClassrooms(withCounts);
     }
     setLoading(false);
   };
@@ -87,24 +93,7 @@ const ClassroomList = () => {
     }
   };
 
-  const handleJoin = async (e) => {
-    e.preventDefault();
-    if (!joinCode.trim()) return;
-    setJoining(true);
-    setJoinError('');
-    const { error } = await supabase.rpc('join_classroom_by_code', {
-      code: joinCode.trim(),
-    });
-    setJoining(false);
-    if (error) {
-      setJoinError(error.message === 'Classroom not found' ? '클래스룸을 찾을 수 없습니다.' : error.message);
-    } else {
-      setJoinCode('');
-      fetchClassrooms();
-    }
-  };
-
-  const getMemberCount = (classroom) => {
+const getMemberCount = (classroom) => {
     return classroom.memberCount ?? 0;
   };
 
@@ -127,29 +116,7 @@ const ClassroomList = () => {
         )}
       </div>
 
-      {/* 학생: 코드로 참여 */}
-      {!isTeacher && (
-        <form onSubmit={handleJoin} className="mb-6 flex items-center gap-3">
-          <input
-            type="text"
-            value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-            placeholder="클래스 코드 입력 (예: ABC123)"
-            maxLength={6}
-            className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500"
-          />
-          <button
-            type="submit"
-            disabled={joining || joinCode.length < 6}
-            className="px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50 cursor-pointer"
-          >
-            {joining ? '참여 중...' : '참여하기'}
-          </button>
-          {joinError && <span className="text-sm text-red-600">{joinError}</span>}
-        </form>
-      )}
-
-      {classrooms.length === 0 ? (
+{classrooms.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg shadow-sm">
           <Users className="mx-auto h-12 w-12 text-gray-400" />
           <p className="mt-4 text-gray-500">

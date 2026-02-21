@@ -10,9 +10,11 @@ import OAuthCallback from './pages/OAuthCallback';
 import ChooseRole from './pages/ChooseRole';
 import ClassroomList from './pages/Classrooms/ClassroomList';
 import ClassroomDetail from './pages/Classrooms/ClassroomDetail';
-import ChapterList from './pages/Chapters/ChapterList';
 import ChapterEditor from './pages/Chapters/Editor';
 import StudyViewer from './pages/Study/StudyViewer';
+import ChapterMonitor from './pages/Monitor/ChapterMonitor';
+import StudentWorkViewer from './pages/Monitor/StudentWorkViewer';
+import TeacherStudyViewer from './pages/Study/TeacherStudyViewer';
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -66,9 +68,21 @@ function App() {
             <Route element={<DashboardLayout />}>
               <Route path="/teacher/classrooms" element={<ClassroomList />} />
               <Route path="/teacher/classrooms/:id" element={<ClassroomDetail />} />
-              <Route path="/teacher/classrooms/:classroomId/chapters" element={<ChapterList />} />
               <Route path="/teacher/chapters/:id/edit" element={<ChapterEditor />} />
+              <Route
+                path="/teacher/classrooms/:classroomId/chapters/:chapterId/monitor"
+                element={<ChapterMonitor />}
+              />
             </Route>
+            {/* Fullscreen teacher views — no DashboardLayout */}
+            <Route
+              path="/teacher/classrooms/:classroomId/chapters/:chapterId/monitor/:studentId"
+              element={<StudentWorkViewer />}
+            />
+            <Route
+              path="/teacher/classrooms/:classroomId/chapters/:chapterId/study/page/:pageId"
+              element={<TeacherStudyViewer />}
+            />
           </Route>
 
           {/* Student Routes */}
