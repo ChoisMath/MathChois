@@ -20,7 +20,7 @@ const Home = () => {
         <div className="flex justify-center mb-6">
           <BookOpen className="h-20 w-20 text-blue-600" />
         </div>
-        <h1 className="text-5xl font-bold text-gray-900 mb-6 tracking-tight">MathChois</h1>
+        <h1 className="text-5xl font-bold text-gray-900 mb-6 tracking-tight">ClassChois</h1>
         <p className="text-xl text-gray-600 mb-12">
           미래 교육의 시작. 선생님과 학생이 함께 성장하는 공간입니다.<br/>
           지금 바로 시작해보세요.
