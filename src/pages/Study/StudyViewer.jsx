@@ -306,7 +306,7 @@ const StudyViewer = () => {
     /* 저장된 도구 설정 복원 */
     const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
     const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
-    const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.5');
+    const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.4');
     const validExcalidrawTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
     const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
       (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');

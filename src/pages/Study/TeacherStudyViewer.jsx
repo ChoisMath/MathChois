@@ -196,6 +196,8 @@ const TeacherStudyViewer = () => {
 
   /* ── 파생 값 ── */
   const currentIndex = pages.findIndex((p) => p.id === currentPage?.id);
+  const prevPage = currentIndex > 0                ? pages[currentIndex - 1] : null;
+  const nextPage = currentIndex < pages.length - 1 ? pages[currentIndex + 1] : null;
 
   if (loading) {
     return (
@@ -219,9 +221,6 @@ const TeacherStudyViewer = () => {
           </button>
           <span className="font-semibold text-gray-900">{chapter?.title}</span>
           <span className="text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full font-medium">교사 필기</span>
-          {pages.length > 0 && (
-            <span className="text-sm text-gray-400">{currentIndex + 1} / {pages.length}</span>
-          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -239,6 +238,29 @@ const TeacherStudyViewer = () => {
             {toolbarCollapsed
               ? <ChevronDown className="h-4 w-4" />
               : <ChevronUp className="h-4 w-4" />}
+          </button>
+
+          {/* 이전/다음 페이지 */}
+          <button
+            onClick={() => prevPage && navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/study/page/${prevPage.id}`)}
+            disabled={!prevPage}
+            title="이전 페이지"
+            className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          {pages.length > 0 && (
+            <span className="text-sm text-gray-400 min-w-[3rem] text-center">
+              {currentIndex + 1} / {pages.length}
+            </span>
+          )}
+          <button
+            onClick={() => nextPage && navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/study/page/${nextPage.id}`)}
+            disabled={!nextPage}
+            title="다음 페이지"
+            className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer"
+          >
+            <ChevronRight className="h-4 w-4" />
           </button>
 
           <button onClick={() => setSidebarOpen((v) => !v)}

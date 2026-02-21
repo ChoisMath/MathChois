@@ -310,9 +310,6 @@ const StudentWorkViewer = () => {
           </button>
           <span className="font-semibold text-gray-900">{chapter?.title}</span>
           <span className="text-sm text-gray-500">— {studentProfile?.name || '학생'}</span>
-          {pages.length > 0 && (
-            <span className="text-sm text-gray-400">{currentPageIndex + 1} / {pages.length}</span>
-          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -349,16 +346,23 @@ const StudentWorkViewer = () => {
           <button
             onClick={() => goPage(currentPageIndex - 1)}
             disabled={currentPageIndex === 0}
-            className="p-1.5 text-gray-500 hover:text-gray-700 disabled:opacity-40 cursor-pointer"
+            title="이전 페이지"
+            className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer"
           >
-            <ChevronLeft className="h-5 w-5" />
+            <ChevronLeft className="h-4 w-4" />
           </button>
+          {pages.length > 0 && (
+            <span className="text-sm text-gray-400 min-w-[3rem] text-center">
+              {currentPageIndex + 1} / {pages.length}
+            </span>
+          )}
           <button
             onClick={() => goPage(currentPageIndex + 1)}
             disabled={currentPageIndex >= pages.length - 1}
-            className="p-1.5 text-gray-500 hover:text-gray-700 disabled:opacity-40 cursor-pointer"
+            title="다음 페이지"
+            className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer"
           >
-            <ChevronRight className="h-5 w-5" />
+            <ChevronRight className="h-4 w-4" />
           </button>
 
           {/* 페이지 목록 사이드바 토글 */}
