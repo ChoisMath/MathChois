@@ -412,8 +412,13 @@ const StudyViewer = () => {
     prefetchImages([prevPage?.image_url, nextPage?.image_url].filter(Boolean));
   }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ── */
+  /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ──
+     loading이 의존성에 포함된 이유:
+     캐시에서 빠르게 로드될 때 setCurrentPage와 setLoading(false)가 별도 렌더에서
+     실행되어, currentPage.id가 변해도 loading=true 상태에선 사이드바가 숨겨져 있음.
+     loading=false로 전환되는 시점(사이드바가 나타나는 시점)에 스크롤을 실행해야 함. */
   useEffect(() => {
+    if (loading) return; // 사이드바가 숨겨진 상태에서는 스크롤 불필요
     const raf = requestAnimationFrame(() => {
       const container = sidebarScrollRef.current;
       const item      = activeSidebarItemRef.current;
@@ -424,7 +429,7 @@ const StudyViewer = () => {
       container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
     });
     return () => cancelAnimationFrame(raf);
-  }, [currentPage?.id, sidebarOpen]);
+  }, [currentPage?.id, sidebarOpen, loading]);
 
   if (loading) {
     return (

@@ -225,6 +225,7 @@ const TeacherStudyViewer = () => {
 
   /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ── */
   useEffect(() => {
+    if (loading) return;
     const raf = requestAnimationFrame(() => {
       const container = sidebarScrollRef.current;
       const item      = activeSidebarItemRef.current;
@@ -235,7 +236,7 @@ const TeacherStudyViewer = () => {
       container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
     });
     return () => cancelAnimationFrame(raf);
-  }, [currentPage?.id, sidebarOpen]);
+  }, [currentPage?.id, sidebarOpen, loading]);
 
   if (loading) {
     return (
