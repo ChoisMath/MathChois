@@ -189,10 +189,10 @@ const TeacherStudyViewer = () => {
   }
 
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100dvh' }}>
+    <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
 
       {/* ── 내비게이션 바 ── */}
-      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b z-10 flex-shrink-0">
+      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-20">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor`)}

@@ -181,7 +181,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
   };
 
   return (
-    <div className="flex items-center gap-1 px-3 h-11 bg-white border-b shadow-sm flex-shrink-0 z-10 overflow-x-auto">
+    <div className="flex items-center gap-1 px-3 h-11 bg-white border-b shadow-sm flex-shrink-0 overflow-x-auto sticky top-14 z-10">
 
       {/* ① 기본 도구 */}
       {TOOLS.map(({ type, label }) => {

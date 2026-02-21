@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Pencil, ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, ChevronUp, ChevronDown, Menu } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { supabase } from '../../lib/supabase';
@@ -28,6 +28,7 @@ const StudentWorkViewer = () => {
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [studentProfile, setStudentProfile] = useState(null);
   const [commentMode, setCommentMode]     = useState(false);
+  const [sidebarOpen, setSidebarOpen]     = useState(false);
   const [saveStatus, setSaveStatus]       = useState('saved');
   const [showExcalidrawPanel, setShowExcalidrawPanel] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
@@ -250,10 +251,10 @@ const StudentWorkViewer = () => {
   }
 
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100dvh' }}>
+    <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
 
       {/* ── 내비게이션 바 ── */}
-      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b z-10 flex-shrink-0">
+      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-20">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor`)}
@@ -313,6 +314,15 @@ const StudentWorkViewer = () => {
           >
             <ChevronRight className="h-5 w-5" />
           </button>
+
+          {/* 페이지 목록 사이드바 토글 */}
+          <button
+            onClick={() => setSidebarOpen((v) => !v)}
+            title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+            className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer"
+          >
+            {sidebarOpen ? <ChevronRight className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
       </div>
 
@@ -325,48 +335,82 @@ const StudentWorkViewer = () => {
         />
       )}
 
-      {/* ── 캔버스 ── */}
-      <div
-        ref={containerRef}
-        style={GRID_STYLE}
-        className="flex-1 relative overflow-hidden"
-      >
-        <style>{ALWAYS_HIDE_CSS}{showExcalidrawPanel ? '' : PANEL_HIDE_CSS}</style>
+      {/* ── 본문: 사이드바 + 캔버스 ── */}
+      <div className="flex flex-1 overflow-hidden">
 
-        {currentPage ? (
-          <Excalidraw
-            key={currentPage.id}
-            excalidrawAPI={handleExcalidrawMount}
-            initialData={{
-              elements: [],
-              appState: {
-                viewBackgroundColor:    'transparent',
-                currentItemStrokeColor: '#e03131',
-                currentItemStrokeWidth: 2,
-                scrollX:                0,
-                scrollY:                0,
-              },
-            }}
-            viewModeEnabled={!commentMode}
-            onChange={handleExcalidrawChange}
-            UIOptions={{
-              canvasActions: {
-                changeViewBackgroundColor: false,
-                clearCanvas:               false,
-                export:                    false,
-                loadScene:                 false,
-                saveToActiveFile:          false,
-                toggleTheme:               false,
-                saveAsImage:               false,
-              },
-              tools: { image: false },
-            }}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-400">
-            페이지가 없습니다.
+        {/* 페이지 목록 사이드바 */}
+        {sidebarOpen && (
+          <div className="w-44 bg-white border-r overflow-y-auto flex-shrink-0">
+            <div className="px-3 py-2 border-b flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">페이지</span>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                title="목록 숨기기"
+                className="text-gray-400 hover:text-gray-600 cursor-pointer"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-2 p-2">
+              {pages.map((pg, idx) => (
+                <button
+                  key={pg.id}
+                  onClick={() => goPage(idx)}
+                  className={`block w-full rounded-md overflow-hidden border-2 transition-colors text-left ${
+                    idx === currentPageIndex ? 'border-indigo-500' : 'border-transparent hover:border-gray-300'
+                  }`}
+                >
+                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full aspect-[3/4] object-cover" />
+                  <div className="bg-gray-50 text-center text-xs py-1 text-gray-600">{idx + 1}</div>
+                </button>
+              ))}
+            </div>
           </div>
         )}
+
+        {/* 캔버스 */}
+        <div
+          ref={containerRef}
+          style={GRID_STYLE}
+          className="flex-1 relative overflow-hidden"
+        >
+          <style>{ALWAYS_HIDE_CSS}{showExcalidrawPanel ? '' : PANEL_HIDE_CSS}</style>
+
+          {currentPage ? (
+            <Excalidraw
+              key={currentPage.id}
+              excalidrawAPI={handleExcalidrawMount}
+              initialData={{
+                elements: [],
+                appState: {
+                  viewBackgroundColor:    'transparent',
+                  currentItemStrokeColor: '#e03131',
+                  currentItemStrokeWidth: 2,
+                  scrollX:                0,
+                  scrollY:                0,
+                },
+              }}
+              viewModeEnabled={!commentMode}
+              onChange={handleExcalidrawChange}
+              UIOptions={{
+                canvasActions: {
+                  changeViewBackgroundColor: false,
+                  clearCanvas:               false,
+                  export:                    false,
+                  loadScene:                 false,
+                  saveToActiveFile:          false,
+                  toggleTheme:               false,
+                  saveAsImage:               false,
+                },
+                tools: { image: false },
+              }}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-400">
+              페이지가 없습니다.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

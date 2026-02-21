@@ -6,6 +6,12 @@ body {
   overscroll-behavior: none;
 }
 
+body {
+  /* 문서에 스크롤 가능 영역을 부여해야 Chrome이 주소창 숨김 제스처를 인식함.
+     모바일 Chrome에서 100vh > 100dvh (주소창 표시 중) 이므로 자연스러운 overflow 발생 */
+  overflow-y: auto;
+}
+
 /* safe-area-inset: viewport-fit=cover 시 하드웨어 노치/시스템바 보상 */
 #root {
   padding-top: env(safe-area-inset-top, 0px);
