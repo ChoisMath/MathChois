@@ -40,15 +40,16 @@ const TeacherStudyViewer = () => {
   const [saveStatus, setSaveStatus]   = useState('saved');
   const [showExcalidrawPanel, setShowExcalidrawPanel] = useState(false);
 
-  const containerRef     = useRef(null);
-  const saveTimerRef     = useRef(null);
-  const excalidrawAPIRef = useRef(null);
-  const currentPageRef   = useRef(null);
-  const noteElementsRef  = useRef([]);
-  const bgPositionRef    = useRef(null);
-  const savedFilesRef    = useRef({}); // 저장된 사용자 삽입 이미지 파일
-  const mountedRef       = useRef(true);
-  const lastSavedRef     = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
+  const containerRef          = useRef(null);
+  const saveTimerRef          = useRef(null);
+  const excalidrawAPIRef      = useRef(null);
+  const currentPageRef        = useRef(null);
+  const noteElementsRef       = useRef([]);
+  const bgPositionRef         = useRef(null);
+  const savedFilesRef         = useRef({}); // 저장된 사용자 삽입 이미지 파일
+  const mountedRef            = useRef(true);
+  const lastSavedRef          = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
+  const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
 
   useEffect(() => {
     mountedRef.current = true;
@@ -219,6 +220,12 @@ const TeacherStudyViewer = () => {
     prefetchImages([prevPage?.image_url, nextPage?.image_url].filter(Boolean));
   }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ── */
+  useEffect(() => {
+    if (!activeSidebarItemRef.current) return;
+    activeSidebarItemRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [currentPage?.id, sidebarOpen]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -317,6 +324,7 @@ const TeacherStudyViewer = () => {
               {pages.map((pg, idx) => (
                 <Link
                   key={pg.id}
+                  ref={pg.id === currentPage?.id ? activeSidebarItemRef : null}
                   to={`/teacher/classrooms/${classroomId}/chapters/${chapterId}/study/page/${pg.id}`}
                   className={`block rounded-md overflow-hidden border-2 transition-colors ${
                     pg.id === currentPage?.id ? 'border-indigo-500' : 'border-transparent hover:border-gray-300'

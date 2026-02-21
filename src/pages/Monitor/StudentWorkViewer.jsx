@@ -36,16 +36,17 @@ const StudentWorkViewer = () => {
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [loading, setLoading]             = useState(true);
 
-  const excalidrawAPIRef     = useRef(null);
-  const saveTimerRef         = useRef(null);
-  const currentPageRef       = useRef(null);
-  const bgPositionRef        = useRef(null);
-  const containerRef         = useRef(null);
-  const mountedRef           = useRef(true);
-  const commentModeRef       = useRef(false);
-  const lastSavedRef         = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
-  const savedStudentFilesRef = useRef({});   // 학생이 삽입한 이미지 파일
-  const savedTeacherFilesRef = useRef({});   // 교사가 삽입한 이미지 파일
+  const excalidrawAPIRef      = useRef(null);
+  const saveTimerRef          = useRef(null);
+  const currentPageRef        = useRef(null);
+  const bgPositionRef         = useRef(null);
+  const containerRef          = useRef(null);
+  const mountedRef            = useRef(true);
+  const commentModeRef        = useRef(false);
+  const lastSavedRef          = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
+  const savedStudentFilesRef  = useRef({});   // 학생이 삽입한 이미지 파일
+  const savedTeacherFilesRef  = useRef({});   // 교사가 삽입한 이미지 파일
+  const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
 
   /* scene data refs — avoid re-render loops */
   const studentEls = useRef([]);
@@ -297,6 +298,12 @@ const StudentWorkViewer = () => {
     );
   }, [currentPageIndex, pages]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ── */
+  useEffect(() => {
+    if (!activeSidebarItemRef.current) return;
+    activeSidebarItemRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [currentPageIndex, sidebarOpen]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -414,6 +421,7 @@ const StudentWorkViewer = () => {
               {pages.map((pg, idx) => (
                 <button
                   key={pg.id}
+                  ref={idx === currentPageIndex ? activeSidebarItemRef : null}
                   onClick={() => goPage(idx)}
                   className={`block w-full rounded-md overflow-hidden border-2 transition-colors text-left ${
                     idx === currentPageIndex ? 'border-indigo-500' : 'border-transparent hover:border-gray-300'

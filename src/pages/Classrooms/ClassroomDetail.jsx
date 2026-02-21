@@ -351,7 +351,10 @@ const ClassroomDetail = () => {
     if (isTeacher) {
       navigate(`/teacher/classrooms/${id}/chapters/${ch.id}/monitor`);
     } else if (ch.firstPage) {
-      navigate(`/student/study/${ch.id}/page/${ch.firstPage.id}`);
+      /* 마지막 방문 페이지가 있으면 이어보기, 없으면 첫 페이지 */
+      const savedPageId = localStorage.getItem(`mc_lastPage_${ch.id}`);
+      const savedPageValid = savedPageId && ch.pages?.some((p) => p.id === savedPageId);
+      navigate(`/student/study/${ch.id}/page/${savedPageValid ? savedPageId : ch.firstPage.id}`);
     }
   };
 

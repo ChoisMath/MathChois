@@ -153,17 +153,18 @@ const StudyViewer = () => {
   const [showTeacherNotesModal, setShowTeacherNotesModal] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
 
-  const containerRef        = useRef(null);
-  const saveTimerRef        = useRef(null);
-  const excalidrawAPIRef    = useRef(null);
-  const currentPageRef      = useRef(null);
-  const noteElementsRef     = useRef([]);
-  const bgPositionRef       = useRef(null);
-  const savedFilesRef       = useRef({}); // 저장된 사용자 삽입 이미지 파일
-  const teacherCommentsRef  = useRef([]); // 교사 코멘트 (fetchData에서 미리 로드)
-  const userRef             = useRef(user);
-  const drawModeRef         = useRef(false);
-  const lastSavedRef        = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
+  const containerRef          = useRef(null);
+  const saveTimerRef          = useRef(null);
+  const excalidrawAPIRef      = useRef(null);
+  const currentPageRef        = useRef(null);
+  const noteElementsRef       = useRef([]);
+  const bgPositionRef         = useRef(null);
+  const savedFilesRef         = useRef({}); // 저장된 사용자 삽입 이미지 파일
+  const teacherCommentsRef    = useRef([]); // 교사 코멘트 (fetchData에서 미리 로드)
+  const userRef               = useRef(user);
+  const drawModeRef           = useRef(false);
+  const lastSavedRef          = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
+  const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
 
   useEffect(() => { currentPageRef.current  = currentPage;  }, [currentPage]);
   useEffect(() => { noteElementsRef.current = noteElements; }, [noteElements]);
@@ -202,6 +203,8 @@ const StudyViewer = () => {
         const found = pgs.find((p) => p.id === pageId);
         if (found) {
           setCurrentPage(found);
+          /* 마지막 방문 페이지 저장 (재접속 시 이어보기에 사용) */
+          localStorage.setItem(`mc_lastPage_${chapterId}`, found.id);
           if (user) {
             const nk = `${user.id}_${pageId}`;
             const ck = `${user.id}_${pageId}`;
@@ -408,6 +411,12 @@ const StudyViewer = () => {
     prefetchImages([prevPage?.image_url, nextPage?.image_url].filter(Boolean));
   }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ── */
+  useEffect(() => {
+    if (!activeSidebarItemRef.current) return;
+    activeSidebarItemRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [currentPage?.id, sidebarOpen]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -531,10 +540,14 @@ const StudyViewer = () => {
             </div>
             <div className="space-y-2 p-2">
               {pages.map((pg, idx) => (
-                <Link key={pg.id} to={`/student/study/${chapterId}/page/${pg.id}`}
+                <Link
+                  key={pg.id}
+                  ref={pg.id === currentPage?.id ? activeSidebarItemRef : null}
+                  to={`/student/study/${chapterId}/page/${pg.id}`}
                   className={`block rounded-md overflow-hidden border-2 transition-colors ${
                     pg.id === currentPage?.id ? 'border-blue-500' : 'border-transparent hover:border-gray-300'
-                  }`}>
+                  }`}
+                >
                   <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full aspect-[3/4] object-cover" loading="lazy" decoding="async" />
                   <div className="bg-gray-50 text-center text-xs py-1 text-gray-600">{idx + 1}</div>
                 </Link>
