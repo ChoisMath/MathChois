@@ -19,10 +19,19 @@ const TOOL_ICONS = {
   rectangle: Square,
 };
 
+const SAVEABLE_TOOLS = ['freedraw', 'selection', 'text', 'line', 'rectangle'];
+
 function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
-  const [activeTool, setActiveTool]       = useState('freedraw');
-  const [color, setColor]                 = useState('#1e1e1e');
-  const [strokeWidth, setStrokeWidth]     = useState(2);
+  const [activeTool, setActiveTool]       = useState(() => {
+    const saved = localStorage.getItem('mc_active_tool') || 'freedraw';
+    return SAVEABLE_TOOLS.includes(saved) ? saved : 'freedraw';
+  });
+  const [color, setColor]                 = useState(() =>
+    localStorage.getItem('mc_tool_color') || '#1e1e1e'
+  );
+  const [strokeWidth, setStrokeWidth]     = useState(() =>
+    parseFloat(localStorage.getItem('mc_stroke_width') || '0.5')
+  );
   const [imageMoveMode, setImageMoveMode] = useState(false);
   const [customColors, setCustomColors]   = useState(() => {
     try { return JSON.parse(localStorage.getItem('mc_custom_colors') || '[]'); }
@@ -85,6 +94,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
     const api = apiRef.current;
     if (imageMoveMode && api) disableImageMove(api);
     setActiveTool(type);
+    if (SAVEABLE_TOOLS.includes(type)) localStorage.setItem('mc_active_tool', type);
     if (type === 'eraser_area') {
       api?.setActiveTool({ type: 'selection' });
     } else {
@@ -95,15 +105,18 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
 
   const applyColor = (hex) => {
     setColor(hex);
+    localStorage.setItem('mc_tool_color', hex);
     apiRef.current?.updateScene({ appState: { currentItemStrokeColor: hex } });
     if (['eraser', 'eraser_area', 'selection', 'image_move'].includes(activeTool)) {
       setActiveTool('freedraw');
+      localStorage.setItem('mc_active_tool', 'freedraw');
       apiRef.current?.setActiveTool({ type: 'freedraw' });
     }
   };
 
   const applyWidth = (w) => {
     setStrokeWidth(w);
+    localStorage.setItem('mc_stroke_width', String(w));
     apiRef.current?.updateScene({ appState: { currentItemStrokeWidth: w } });
   };
 
@@ -258,8 +271,8 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
       <div className="flex items-center gap-1.5 flex-shrink-0">
         <input
           type="range"
-          min="0.5"
-          max="16"
+          min="0"
+          max="8"
           step="0.5"
           value={strokeWidth}
           title={`굵기: ${strokeWidth}`}
@@ -270,7 +283,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
           <line
             x1="1" y1="8" x2="21" y2="8"
             stroke={color}
-            strokeWidth={Math.min(strokeWidth, 14)}
+            strokeWidth={Math.max(Math.min(strokeWidth, 8), 0.5)}
             strokeLinecap="round"
           />
         </svg>

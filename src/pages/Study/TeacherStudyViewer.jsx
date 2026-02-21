@@ -143,7 +143,14 @@ const TeacherStudyViewer = () => {
   /* ── Excalidraw 마운트 ── */
   const handleExcalidrawMount = useCallback(async (api) => {
     excalidrawAPIRef.current = api;
-    api.setActiveTool({ type: 'freedraw' });
+
+    /* 저장된 도구 설정 복원 */
+    const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
+    const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
+    const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.5');
+    const validTools = ['freedraw', 'selection', 'text', 'line', 'rectangle'];
+    api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth }, commitToHistory: false });
+    api.setActiveTool({ type: validTools.includes(savedTool) ? savedTool : 'freedraw' });
 
     const page = currentPageRef.current;
     if (!page?.image_url || !containerRef.current) return;

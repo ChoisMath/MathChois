@@ -161,10 +161,16 @@ const StudyViewer = () => {
   useEffect(() => { userRef.current         = user;         }, [user]);
   useEffect(() => { drawModeRef.current     = drawMode;     }, [drawMode]);
 
-  /* 필기 모드 전환 시 freedraw 도구 활성화 */
+  /* 필기 모드 전환 시 저장된 도구/색상/굵기 복원 */
   useEffect(() => {
     if (drawMode && excalidrawAPIRef.current) {
-      excalidrawAPIRef.current.setActiveTool({ type: 'freedraw' });
+      const api = excalidrawAPIRef.current;
+      const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
+      const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
+      const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.5');
+      const validTools = ['freedraw', 'selection', 'text', 'line', 'rectangle'];
+      api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth }, commitToHistory: false });
+      api.setActiveTool({ type: validTools.includes(savedTool) ? savedTool : 'freedraw' });
     }
   }, [drawMode]);
 
@@ -288,7 +294,14 @@ const StudyViewer = () => {
   /* ── Excalidraw 마운트: bg + 학생 필기 + 교사 코멘트 ── */
   const handleExcalidrawMount = useCallback(async (api) => {
     excalidrawAPIRef.current = api;
-    api.setActiveTool({ type: 'freedraw' });
+
+    /* 저장된 도구 설정 복원 */
+    const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
+    const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
+    const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.5');
+    const validTools = ['freedraw', 'selection', 'text', 'line', 'rectangle'];
+    api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth }, commitToHistory: false });
+    api.setActiveTool({ type: validTools.includes(savedTool) ? savedTool : 'freedraw' });
 
     const page = currentPageRef.current;
     const cu   = userRef.current;
