@@ -117,11 +117,13 @@ const ChapterMonitor = () => {
     return () => { supabase.removeChannel(channel); };
   }, [chapterId, pages]);
 
-  /* ── 교사 필기 버튼 → 첫 페이지 ── */
+  /* ── 교사 필기 버튼 → 마지막 방문 페이지 (없으면 첫 페이지) ── */
   const handleTeacherNote = () => {
     if (pages.length === 0) return;
+    const savedPageId   = localStorage.getItem(`mc_teacherLastPage_${chapterId}`);
+    const savedPageValid = savedPageId && pages.some((p) => p.id === savedPageId);
     navigate(
-      `/teacher/classrooms/${classroomId}/chapters/${chapterId}/study/page/${pages[0].id}`
+      `/teacher/classrooms/${classroomId}/chapters/${chapterId}/study/page/${savedPageValid ? savedPageId : pages[0].id}`
     );
   };
 
@@ -139,7 +141,7 @@ const ChapterMonitor = () => {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/teacher/classrooms/${classroomId}/chapters`)}
+            onClick={() => navigate(`/teacher/classrooms/${classroomId}`)}
             className="p-1.5 text-gray-400 hover:text-gray-600 cursor-pointer"
           >
             <ArrowLeft className="h-5 w-5" />

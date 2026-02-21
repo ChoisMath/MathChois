@@ -47,6 +47,7 @@ const StudentWorkViewer = () => {
   const savedStudentFilesRef  = useRef({});   // 학생이 삽입한 이미지 파일
   const savedTeacherFilesRef  = useRef({});   // 교사가 삽입한 이미지 파일
   const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
+  const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
 
   /* scene data refs — avoid re-render loops */
   const studentEls = useRef([]);
@@ -300,8 +301,16 @@ const StudentWorkViewer = () => {
 
   /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ── */
   useEffect(() => {
-    if (!activeSidebarItemRef.current) return;
-    activeSidebarItemRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const raf = requestAnimationFrame(() => {
+      const container = sidebarScrollRef.current;
+      const item      = activeSidebarItemRef.current;
+      if (!container || !item) return;
+      const cRect = container.getBoundingClientRect();
+      const iRect = item.getBoundingClientRect();
+      const target = container.scrollTop + (iRect.top - cRect.top) - cRect.height / 2 + iRect.height / 2;
+      container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(raf);
   }, [currentPageIndex, sidebarOpen]);
 
   if (loading) {
@@ -319,7 +328,7 @@ const StudentWorkViewer = () => {
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-20">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor`)}
+            onClick={() => navigate(`/teacher/classrooms/${classroomId}`)}
             className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -406,7 +415,7 @@ const StudentWorkViewer = () => {
 
         {/* 페이지 목록 사이드바 */}
         {sidebarOpen && (
-          <div className="w-44 bg-white border-r overflow-y-auto flex-shrink-0">
+          <div ref={sidebarScrollRef} className="w-44 bg-white border-r overflow-y-auto flex-shrink-0">
             <div className="px-3 py-2 border-b flex items-center justify-between">
               <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">페이지</span>
               <button

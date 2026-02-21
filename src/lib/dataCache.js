@@ -21,7 +21,7 @@ export async function getCachedChapterAndPages(chapterId, supabase) {
   }
 
   const [chapRes, pgsRes] = await Promise.all([
-    supabase.from('chapters').select('id, title').eq('id', chapterId).single(),
+    supabase.from('chapters').select('id, title, classroom_id').eq('id', chapterId).single(),
     supabase.from('pages').select('id, image_url, position')
       .eq('chapter_id', chapterId).order('position'),
   ]);
