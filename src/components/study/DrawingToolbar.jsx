@@ -35,7 +35,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
   const activeToolRef   = useRef(activeTool);
   const applyToolRef    = useRef(null);
   activeToolRef.current = activeTool;   // 매 렌더마다 최신값으로 갱신
-  applyToolRef.current  = applyTool;    // 매 렌더마다 최신값으로 갱신 (stale closure 방지)
+  // applyToolRef.current 는 applyTool 정의 직후에 갱신 (정의 전 참조 불가)
 
   useEffect(() => {
     const onSPenDown = (e) => {
@@ -91,6 +91,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
       api?.setActiveTool({ type });
     }
   };
+  applyToolRef.current = applyTool; // 매 렌더마다 최신값으로 갱신 (stale closure 방지)
 
   const applyColor = (hex) => {
     setColor(hex);
@@ -124,8 +125,16 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
     }
   };
 
-  const handleUndo = () => apiRef.current?.history?.undo();
-  const handleRedo = () => apiRef.current?.history?.redo();
+  /* Excalidraw 공개 API에 undo/redo 메서드가 없으므로
+     document에 키보드 이벤트를 dispatch하여 Excalidraw 내부 핸들러를 트리거 */
+  const handleUndo = () =>
+    document.dispatchEvent(new KeyboardEvent('keydown', {
+      code: 'KeyZ', key: 'z', ctrlKey: true, bubbles: true, cancelable: true,
+    }));
+  const handleRedo = () =>
+    document.dispatchEvent(new KeyboardEvent('keydown', {
+      code: 'KeyY', key: 'y', ctrlKey: true, bubbles: true, cancelable: true,
+    }));
 
   const handleClear = () => {
     if (!window.confirm('필기 내용을 모두 지우시겠습니까?')) return;
