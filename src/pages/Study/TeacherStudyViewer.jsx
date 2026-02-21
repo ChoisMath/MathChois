@@ -207,6 +207,8 @@ const TeacherStudyViewer = () => {
       api.addFiles([{ id: '__bg_file__', dataURL: dataUrl, mimeType, created: Date.now() }]);
       const userFilesList = Object.values(savedFilesRef.current);
       if (userFilesList.length > 0) api.addFiles(userFilesList);
+      /* addFiles의 React 상태 커밋 후 updateScene — 별도 렌더 사이클에서 실행해야 이미지가 표시됨 */
+      await new Promise((r) => requestAnimationFrame(r));
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
       api.updateScene({ elements: [bgEl, ...noteElementsRef.current], commitToHistory: false });
 
@@ -256,7 +258,7 @@ const TeacherStudyViewer = () => {
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-20">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/teacher/classrooms/${classroomId}`)}
+            onClick={() => navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor`)}
             className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer"
           >
             <ChevronLeft className="h-5 w-5" />

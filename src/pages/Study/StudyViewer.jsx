@@ -73,12 +73,12 @@ function TeacherNotesModal({ page, onClose }) {
       const bgH = iH * scale;
       const bgX = (W - bgW) / 2;
       const bgY = (H - bgH) / 2;
-      /* 캐시된 DataURL 타이밍 이슈 방지 */
-      await new Promise((r) => setTimeout(r, 0));
       api.addFiles([{ id: '__bg_file__', dataURL: dataUrl, mimeType, created: Date.now() }]);
       /* 교사 필기에 삽입된 이미지 파일 복원 */
       const noteFilesList = Object.values(noteFiles);
       if (noteFilesList.length > 0) api.addFiles(noteFilesList);
+      /* addFiles의 React 상태 커밋 후 updateScene — 별도 렌더 사이클에서 실행해야 이미지가 표시됨 */
+      await new Promise((r) => requestAnimationFrame(r));
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
       api.updateScene({ elements: [bgEl, ...noteElements] });
     } catch (err) {
@@ -417,6 +417,8 @@ const StudyViewer = () => {
       /* 교사 코멘트 이미지 파일 복원 */
       const teacherFilesList = Object.values(teacherCommentFilesRef.current);
       if (teacherFilesList.length > 0) api.addFiles(teacherFilesList);
+      /* addFiles의 React 상태 커밋 후 updateScene — 별도 렌더 사이클에서 실행해야 이미지가 표시됨 */
+      await new Promise((r) => requestAnimationFrame(r));
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
 
       /* 교사 코멘트: fetchData에서 미리 로드되어 ref에 저장됨 — 추가 Supabase 요청 없음 */
