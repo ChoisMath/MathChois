@@ -9,8 +9,6 @@ export const TOOLS = [
   { type: 'selection', label: '선택' },
   { type: 'freedraw',  label: '자유 필기' },
   { type: 'text',      label: '텍스트' },
-  { type: 'line',      label: '직선' },
-  { type: 'rectangle', label: '사각형' },
 ];
 
 /* ─────────── Excalidraw CSS ─────────── */

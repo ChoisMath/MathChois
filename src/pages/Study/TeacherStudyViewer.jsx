@@ -148,9 +148,11 @@ const TeacherStudyViewer = () => {
     const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
     const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
     const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.5');
-    const validTools = ['freedraw', 'selection', 'text', 'line', 'rectangle'];
-    api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth }, commitToHistory: false });
-    api.setActiveTool({ type: validTools.includes(savedTool) ? savedTool : 'freedraw' });
+    const validExcalidrawTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
+    const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
+      (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');
+    api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
+    api.setActiveTool({ type: excalidrawTool });
 
     const page = currentPageRef.current;
     if (!page?.image_url || !containerRef.current) return;
