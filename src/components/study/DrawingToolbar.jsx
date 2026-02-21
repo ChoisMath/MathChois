@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   MousePointer, Pen, Type, Square,
   Eraser, Minus, Undo2, Redo2, Trash2, Pipette, Plus, Scissors,
@@ -29,6 +29,47 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
     catch { return []; }
   });
   const colorPickerRef = useRef(null);
+
+  /* ── S Pen 사이드 버튼 → 지우개 모드 ── */
+  const sPenPrevToolRef = useRef(null); // 버튼 누르기 전 도구 저장
+  const activeToolRef   = useRef(activeTool);
+  const applyToolRef    = useRef(null);
+  activeToolRef.current = activeTool;   // 매 렌더마다 최신값으로 갱신
+  applyToolRef.current  = applyTool;    // 매 렌더마다 최신값으로 갱신 (stale closure 방지)
+
+  useEffect(() => {
+    const onSPenDown = (e) => {
+      if (e.pointerType !== 'pen' || e.button !== 2) return; // 사이드(배럴) 버튼만
+      if (sPenPrevToolRef.current !== null) return;          // 중복 방지
+
+      const current = activeToolRef.current;
+      if (current === 'eraser') return; // 이미 지우개 모드면 스킵
+
+      /* 'image_move', 'eraser_area' 는 복잡한 상태이므로 freedraw로 복원 */
+      sPenPrevToolRef.current = ['image_move', 'eraser_area'].includes(current)
+        ? 'freedraw'
+        : current;
+
+      applyToolRef.current('eraser');
+    };
+
+    const onSPenUp = (e) => {
+      if (e.pointerType !== 'pen' || sPenPrevToolRef.current === null) return;
+      applyToolRef.current(sPenPrevToolRef.current);
+      sPenPrevToolRef.current = null;
+    };
+
+    /* capture: true → Excalidraw 내부 핸들러보다 먼저 실행되어 도구 전환이 즉시 반영됨 */
+    document.addEventListener('pointerdown',  onSPenDown, { capture: true });
+    document.addEventListener('pointerup',    onSPenUp);
+    document.addEventListener('pointercancel', onSPenUp); // 펜 추적 취소 시에도 복원
+
+    return () => {
+      document.removeEventListener('pointerdown',  onSPenDown, { capture: true });
+      document.removeEventListener('pointerup',    onSPenUp);
+      document.removeEventListener('pointercancel', onSPenUp);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const allColors = [...DEFAULT_COLORS, ...customColors];
 
