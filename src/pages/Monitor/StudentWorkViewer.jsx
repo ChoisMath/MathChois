@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, ChevronUp, ChevronDown } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { supabase } from '../../lib/supabase';
@@ -30,6 +30,7 @@ const StudentWorkViewer = () => {
   const [commentMode, setCommentMode]     = useState(false);
   const [saveStatus, setSaveStatus]       = useState('saved');
   const [showExcalidrawPanel, setShowExcalidrawPanel] = useState(false);
+  const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [loading, setLoading]             = useState(true);
 
   const excalidrawAPIRef = useRef(null);
@@ -249,7 +250,7 @@ const StudentWorkViewer = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
+    <div className="fixed inset-0 flex flex-col bg-gray-100">
 
       {/* ── 내비게이션 바 ── */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b z-10 flex-shrink-0">
@@ -284,6 +285,20 @@ const StudentWorkViewer = () => {
           >
             <Pencil className="h-4 w-4" />
           </button>
+
+          {/* 툴바 접기/펼치기 (코멘트 모드에서만) */}
+          {commentMode && (
+            <button
+              onClick={() => setToolbarCollapsed((v) => !v)}
+              title={toolbarCollapsed ? '툴바 펼치기' : '툴바 접기'}
+              className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+            >
+              {toolbarCollapsed
+                ? <ChevronDown className="h-4 w-4" />
+                : <ChevronUp className="h-4 w-4" />}
+            </button>
+          )}
+
           <button
             onClick={() => goPage(currentPageIndex - 1)}
             disabled={currentPageIndex === 0}
@@ -301,8 +316,8 @@ const StudentWorkViewer = () => {
         </div>
       </div>
 
-      {/* ── 필기 툴바 (코멘트 모드) ── */}
-      {commentMode && (
+      {/* ── 필기 툴바 (코멘트 모드 + 펼침 상태일 때만) ── */}
+      {commentMode && !toolbarCollapsed && (
         <DrawingToolbar
           apiRef={excalidrawAPIRef}
           showPanel={showExcalidrawPanel}

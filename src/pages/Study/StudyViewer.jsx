@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ChevronLeft, ChevronRight, Menu, Pencil, X, GraduationCap,
+  ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
@@ -143,6 +144,7 @@ const StudyViewer = () => {
   const [saveStatus, setSaveStatus]     = useState('saved');
   const [showExcalidrawPanel, setShowExcalidrawPanel] = useState(false);
   const [showTeacherNotesModal, setShowTeacherNotesModal] = useState(false);
+  const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
 
   const containerRef     = useRef(null);
   const saveTimerRef     = useRef(null);
@@ -350,7 +352,7 @@ const StudyViewer = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
+    <div className="fixed inset-0 flex flex-col bg-gray-100">
 
       {/* ── 내비게이션 바 ── */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b z-10 flex-shrink-0">
@@ -397,6 +399,19 @@ const StudyViewer = () => {
             <Pencil className="h-4 w-4" />
           </button>
 
+          {/* 툴바 접기/펼치기 (필기 모드에서만) */}
+          {drawMode && (
+            <button
+              onClick={() => setToolbarCollapsed((v) => !v)}
+              title={toolbarCollapsed ? '툴바 펼치기' : '툴바 접기'}
+              className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+            >
+              {toolbarCollapsed
+                ? <ChevronDown className="h-4 w-4" />
+                : <ChevronUp className="h-4 w-4" />}
+            </button>
+          )}
+
           {/* 이전/다음 페이지 */}
           <button
             onClick={() => prevPage && navigate(`/student/study/${chapterId}/page/${prevPage.id}`)}
@@ -427,8 +442,8 @@ const StudyViewer = () => {
         </div>
       </div>
 
-      {/* ── 필기 툴바 (필기 모드일 때만) ── */}
-      {drawMode && (
+      {/* ── 필기 툴바 (필기 모드 + 펼침 상태일 때만) ── */}
+      {drawMode && !toolbarCollapsed && (
         <DrawingToolbar
           apiRef={excalidrawAPIRef}
           showPanel={showExcalidrawPanel}

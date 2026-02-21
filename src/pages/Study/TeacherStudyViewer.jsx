@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
-  ChevronLeft, ChevronRight, Menu,
+  ChevronLeft, ChevronRight, Menu, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
@@ -28,7 +28,8 @@ const TeacherStudyViewer = () => {
   const [pages, setPages]             = useState([]);
   const [currentPage, setCurrentPage] = useState(null);
   const [loading, setLoading]         = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen]         = useState(true);
+  const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [noteElements, setNoteElements] = useState([]);
   const [saveStatus, setSaveStatus]   = useState('saved');
   const [showExcalidrawPanel, setShowExcalidrawPanel] = useState(false);
@@ -188,7 +189,7 @@ const TeacherStudyViewer = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
+    <div className="fixed inset-0 flex flex-col bg-gray-100">
 
       {/* ── 내비게이션 바 ── */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b z-10 flex-shrink-0">
@@ -212,6 +213,17 @@ const TeacherStudyViewer = () => {
             {saveStatus === 'saving' && '저장 중...'}
           </span>
 
+          {/* 툴바 접기/펼치기 */}
+          <button
+            onClick={() => setToolbarCollapsed((v) => !v)}
+            title={toolbarCollapsed ? '툴바 펼치기' : '툴바 접기'}
+            className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors cursor-pointer"
+          >
+            {toolbarCollapsed
+              ? <ChevronDown className="h-4 w-4" />
+              : <ChevronUp className="h-4 w-4" />}
+          </button>
+
           <button onClick={() => setSidebarOpen((v) => !v)}
             title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
             className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer">
@@ -220,12 +232,14 @@ const TeacherStudyViewer = () => {
         </div>
       </div>
 
-      {/* ── 필기 툴바 ── */}
-      <DrawingToolbar
-        apiRef={excalidrawAPIRef}
-        showPanel={showExcalidrawPanel}
-        onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
-      />
+      {/* ── 필기 툴바 (접힘 상태이면 숨김) ── */}
+      {!toolbarCollapsed && (
+        <DrawingToolbar
+          apiRef={excalidrawAPIRef}
+          showPanel={showExcalidrawPanel}
+          onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
+        />
+      )}
 
       {/* ── 본문 ── */}
       <div className="flex flex-1 overflow-hidden">
