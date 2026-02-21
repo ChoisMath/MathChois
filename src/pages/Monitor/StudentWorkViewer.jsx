@@ -15,6 +15,7 @@ import {
   fetchAsDataUrl,
   getImageNaturalSize,
   createBgElement,
+  prefetchImages,
 } from '../../lib/excalidrawUtils';
 
 const STUDENT_NOTE_PREFIX = '__sn_';
@@ -288,6 +289,14 @@ const StudentWorkViewer = () => {
     setCurrentPageIndex(idx);
   };
 
+  /* ── 인접 페이지 이미지 백그라운드 프리패치 ── */
+  useEffect(() => {
+    if (pages.length === 0) return;
+    prefetchImages(
+      [pages[currentPageIndex - 1]?.image_url, pages[currentPageIndex + 1]?.image_url].filter(Boolean)
+    );
+  }, [currentPageIndex, pages]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -410,7 +419,7 @@ const StudentWorkViewer = () => {
                     idx === currentPageIndex ? 'border-indigo-500' : 'border-transparent hover:border-gray-300'
                   }`}
                 >
-                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full aspect-[3/4] object-cover" />
+                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full aspect-[3/4] object-cover" loading="lazy" decoding="async" />
                   <div className="bg-gray-50 text-center text-xs py-1 text-gray-600">{idx + 1}</div>
                 </button>
               ))}

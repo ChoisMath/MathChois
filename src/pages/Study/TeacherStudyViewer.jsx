@@ -17,7 +17,12 @@ import {
   fetchAsDataUrl,
   getImageNaturalSize,
   createBgElement,
+  prefetchImages,
 } from '../../lib/excalidrawUtils';
+import { getCachedChapterAndPages } from '../../lib/dataCache';
+
+/* ── 세션 내 캐시 ── */
+const _notesCache = new Map(); // `${teacherId}_${pageId}` → { elements, bgPosition, files }
 
 /* ─────────── 메인 컴포넌트 ─────────── */
 const TeacherStudyViewer = () => {
@@ -61,16 +66,11 @@ const TeacherStudyViewer = () => {
       bgPositionRef.current = null;
       lastSavedRef.current  = null;
 
-      const { data: chap } = await supabase
-        .from('chapters').select('id, title').eq('id', chapterId).single();
+      /* 챕터·페이지 목록: 캐시 우선 → 없으면 병렬 fetch */
+      const { chapter: chap, pages: pgs } = await getCachedChapterAndPages(chapterId, supabase);
       if (!mountedRef.current) return;
       setChapter(chap);
-
-      const { data: pgs } = await supabase
-        .from('pages').select('id, image_url, position')
-        .eq('chapter_id', chapterId).order('position');
-      if (!mountedRef.current) return;
-      setPages(pgs || []);
+      setPages(pgs);
 
       if (pgs && pgs.length > 0) {
         const found = pgs.find((p) => p.id === pageId);
@@ -87,16 +87,25 @@ const TeacherStudyViewer = () => {
         setCurrentPage(target);
 
         if (user) {
-          const { data: note } = await supabase
-            .from('teacher_notes')
-            .select('excalidraw_data')
-            .eq('teacher_id', user.id)
-            .eq('page_id', target.id)
-            .maybeSingle();
-          if (!mountedRef.current) return;
-          setNoteElements(note?.excalidraw_data?.elements || []);
-          bgPositionRef.current = note?.excalidraw_data?.bgPosition ?? null;
-          savedFilesRef.current  = note?.excalidraw_data?.files ?? {};
+          const nk = `${user.id}_${target.id}`;
+          let noteData;
+          if (_notesCache.has(nk)) {
+            noteData = _notesCache.get(nk);
+          } else {
+            const { data: note } = await supabase
+              .from('teacher_notes').select('excalidraw_data')
+              .eq('teacher_id', user.id).eq('page_id', target.id).maybeSingle();
+            if (!mountedRef.current) return;
+            noteData = {
+              elements:   note?.excalidraw_data?.elements   || [],
+              bgPosition: note?.excalidraw_data?.bgPosition ?? null,
+              files:      note?.excalidraw_data?.files      ?? {},
+            };
+            _notesCache.set(nk, noteData);
+          }
+          setNoteElements(noteData.elements);
+          bgPositionRef.current = noteData.bgPosition;
+          savedFilesRef.current = noteData.files;
         }
       }
       if (mountedRef.current) setLoading(false);
@@ -140,7 +149,13 @@ const TeacherStudyViewer = () => {
         { onConflict: 'teacher_id,page_id' }
       );
       if (mountedRef.current) {
-        lastSavedRef.current = serialized; // 저장 성공 시 기준점 갱신
+        /* 노트 캐시 갱신 — 다음 방문 시 즉시 표시 */
+        _notesCache.set(`${user.id}_${page.id}`, {
+          elements:   teacherEls,
+          bgPosition: bgPositionRef.current,
+          files:      userFiles,
+        });
+        lastSavedRef.current = serialized;
         setSaveStatus('saved');
       }
     }, 1500);
@@ -198,6 +213,11 @@ const TeacherStudyViewer = () => {
   const currentIndex = pages.findIndex((p) => p.id === currentPage?.id);
   const prevPage = currentIndex > 0                ? pages[currentIndex - 1] : null;
   const nextPage = currentIndex < pages.length - 1 ? pages[currentIndex + 1] : null;
+
+  /* ── 인접 페이지 이미지 백그라운드 프리패치 ── */
+  useEffect(() => {
+    prefetchImages([prevPage?.image_url, nextPage?.image_url].filter(Boolean));
+  }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (
@@ -302,7 +322,7 @@ const TeacherStudyViewer = () => {
                     pg.id === currentPage?.id ? 'border-indigo-500' : 'border-transparent hover:border-gray-300'
                   }`}
                 >
-                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full aspect-[3/4] object-cover" />
+                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full aspect-[3/4] object-cover" loading="lazy" decoding="async" />
                   <div className="bg-gray-50 text-center text-xs py-1 text-gray-600">{idx + 1}</div>
                 </Link>
               ))}

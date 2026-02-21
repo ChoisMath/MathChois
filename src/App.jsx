@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import { Component, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import MainLayout from './layouts/MainLayout';
@@ -10,11 +10,20 @@ import OAuthCallback from './pages/OAuthCallback';
 import ChooseRole from './pages/ChooseRole';
 import ClassroomList from './pages/Classrooms/ClassroomList';
 import ClassroomDetail from './pages/Classrooms/ClassroomDetail';
-import ChapterEditor from './pages/Chapters/Editor';
-import StudyViewer from './pages/Study/StudyViewer';
 import ChapterMonitor from './pages/Monitor/ChapterMonitor';
-import StudentWorkViewer from './pages/Monitor/StudentWorkViewer';
-import TeacherStudyViewer from './pages/Study/TeacherStudyViewer';
+
+/* Excalidraw를 사용하는 페이지는 lazy loading으로 분리
+   — 대시보드 진입 시 Excalidraw 번들을 로드하지 않아 초기 속도 향상 */
+const ChapterEditor      = lazy(() => import('./pages/Chapters/Editor'));
+const StudyViewer        = lazy(() => import('./pages/Study/StudyViewer'));
+const TeacherStudyViewer = lazy(() => import('./pages/Study/TeacherStudyViewer'));
+const StudentWorkViewer  = lazy(() => import('./pages/Monitor/StudentWorkViewer'));
+
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-screen bg-gray-50">
+    <p className="text-gray-500">로딩 중...</p>
+  </div>
+);
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -52,6 +61,7 @@ function App() {
     <ErrorBoundary>
       <AuthProvider>
         <BrowserRouter>
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* OAuth Callback */}
           <Route path="/auth/callback" element={<OAuthCallback />} />
@@ -95,6 +105,7 @@ function App() {
             <Route path="/student/study/:chapterId/page/:pageId" element={<StudyViewer />} />
           </Route>
         </Routes>
+        </Suspense>
         </BrowserRouter>
       </AuthProvider>
     </ErrorBoundary>

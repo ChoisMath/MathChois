@@ -45,24 +45,46 @@ export const GRID_STYLE = {
   backgroundSize: '20px 20px',
 };
 
-/* ─────────── 유틸: 이미지 URL → DataURL ─────────── */
+/* ─────────── 이미지 캐시 (세션 내 유지, 새로고침 시 초기화) ─────────── */
+const _imgCache  = new Map(); // url → { dataUrl, mimeType }
+const _sizeCache = new Map(); // dataUrl → { w, h }
+
+/* ─────────── 유틸: 이미지 URL → DataURL (캐시 적용) ─────────── */
 export async function fetchAsDataUrl(url) {
+  if (_imgCache.has(url)) return _imgCache.get(url);
   const res  = await fetch(url, { mode: 'cors' });
   const blob = await res.blob();
   return new Promise((resolve) => {
     const reader = new FileReader();
-    reader.onloadend = () =>
-      resolve({ dataUrl: reader.result, mimeType: blob.type || 'image/jpeg' });
+    reader.onloadend = () => {
+      const result = { dataUrl: reader.result, mimeType: blob.type || 'image/jpeg' };
+      _imgCache.set(url, result);
+      resolve(result);
+    };
     reader.readAsDataURL(blob);
   });
 }
 
-/* ─────────── 유틸: DataURL → 이미지 자연 크기 ─────────── */
+/* ─────────── 유틸: DataURL → 이미지 자연 크기 (캐시 적용) ─────────── */
 export function getImageNaturalSize(dataUrl) {
+  if (_sizeCache.has(dataUrl)) return Promise.resolve(_sizeCache.get(dataUrl));
   return new Promise((resolve) => {
     const img = new Image();
-    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onload = () => {
+      const result = { w: img.naturalWidth, h: img.naturalHeight };
+      _sizeCache.set(dataUrl, result);
+      resolve(result);
+    };
     img.src = dataUrl;
+  });
+}
+
+/* ─────────── 인접 페이지 이미지 백그라운드 프리패치 ─────────── */
+export function prefetchImages(urls) {
+  urls.forEach((url) => {
+    if (url && !_imgCache.has(url)) {
+      fetchAsDataUrl(url).catch(() => {});
+    }
   });
 }
 

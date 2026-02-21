@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, PenLine, Users, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { getCachedChapterAndPages } from '../../lib/dataCache';
 
 function formatTime(iso) {
   if (!iso) return null;
@@ -40,17 +41,15 @@ const ChapterMonitor = () => {
     const fetchData = async () => {
       setLoading(true);
 
-      const [chapRes, pgsRes, membersRes] = await Promise.all([
-        supabase.from('chapters').select('id, title').eq('id', chapterId).single(),
-        supabase.from('pages').select('id, position').eq('chapter_id', chapterId).order('position'),
+      /* 챕터+페이지는 공유 캐시 활용, 학생 목록은 항상 최신 데이터 */
+      const [{ chapter: chap, pages: pgs }, membersRes] = await Promise.all([
+        getCachedChapterAndPages(chapterId, supabase),
         supabase
           .from('classroom_members')
           .select('student_id, profiles(id, name, avatar_url)')
           .eq('classroom_id', classroomId),
       ]);
 
-      const chap = chapRes.data;
-      const pgs  = pgsRes.data || [];
       const mems = membersRes.data || [];
 
       setChapter(chap);

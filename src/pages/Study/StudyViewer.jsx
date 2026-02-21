@@ -18,7 +18,13 @@ import {
   fetchAsDataUrl,
   getImageNaturalSize,
   createBgElement,
+  prefetchImages,
 } from '../../lib/excalidrawUtils';
+import { getCachedChapterAndPages } from '../../lib/dataCache';
+
+/* ── 세션 내 캐시 (컴포넌트 unmount 후에도 유지) ── */
+const _notesCache    = new Map(); // `${userId}_${pageId}` → { elements, bgPosition, files }
+const _commentsCache = new Map(); // `${userId}_${pageId}` → commentEls[]
 
 const TEACHER_NOTE_PREFIX = '__tn_';
 
@@ -147,16 +153,17 @@ const StudyViewer = () => {
   const [showTeacherNotesModal, setShowTeacherNotesModal] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
 
-  const containerRef     = useRef(null);
-  const saveTimerRef     = useRef(null);
-  const excalidrawAPIRef = useRef(null);
-  const currentPageRef   = useRef(null);
-  const noteElementsRef  = useRef([]);
-  const bgPositionRef    = useRef(null);
-  const savedFilesRef    = useRef({}); // 저장된 사용자 삽입 이미지 파일
-  const userRef          = useRef(user);
-  const drawModeRef      = useRef(false);
-  const lastSavedRef     = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
+  const containerRef        = useRef(null);
+  const saveTimerRef        = useRef(null);
+  const excalidrawAPIRef    = useRef(null);
+  const currentPageRef      = useRef(null);
+  const noteElementsRef     = useRef([]);
+  const bgPositionRef       = useRef(null);
+  const savedFilesRef       = useRef({}); // 저장된 사용자 삽입 이미지 파일
+  const teacherCommentsRef  = useRef([]); // 교사 코멘트 (fetchData에서 미리 로드)
+  const userRef             = useRef(user);
+  const drawModeRef         = useRef(false);
+  const lastSavedRef        = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
 
   useEffect(() => { currentPageRef.current  = currentPage;  }, [currentPage]);
   useEffect(() => { noteElementsRef.current = noteElements; }, [noteElements]);
@@ -183,29 +190,57 @@ const StudyViewer = () => {
     const fetchData = async () => {
       setLoading(true);
       bgPositionRef.current = null;
-      lastSavedRef.current  = null; // 페이지 변경 시 저장 기준점 초기화
+      lastSavedRef.current  = null;
       setShowTeacherNotesModal(false);
 
-      const { data: chap } = await supabase
-        .from('chapters').select('id, title').eq('id', chapterId).single();
+      /* 챕터·페이지 목록: 캐시 우선 → 없으면 병렬 fetch */
+      const { chapter: chap, pages: pgs } = await getCachedChapterAndPages(chapterId, supabase);
       setChapter(chap);
-
-      const { data: pgs } = await supabase
-        .from('pages').select('id, image_url, position')
-        .eq('chapter_id', chapterId).order('position');
-      setPages(pgs || []);
+      setPages(pgs);
 
       if (pgs && pgs.length > 0) {
         const found = pgs.find((p) => p.id === pageId);
         if (found) {
           setCurrentPage(found);
           if (user) {
-            const { data: note } = await supabase
-              .from('student_notes').select('excalidraw_data')
-              .eq('student_id', user.id).eq('page_id', pageId).maybeSingle();
-            setNoteElements(note?.excalidraw_data?.elements || []);
-            bgPositionRef.current = note?.excalidraw_data?.bgPosition ?? null;
-            savedFilesRef.current  = note?.excalidraw_data?.files ?? {};
+            const nk = `${user.id}_${pageId}`;
+            const ck = `${user.id}_${pageId}`;
+
+            /* 학생 노트 + 교사 코멘트 — 캐시 히트면 0 round-trips, 미스면 병렬 fetch */
+            const notePromise = _notesCache.has(nk)
+              ? Promise.resolve(_notesCache.get(nk))
+              : supabase.from('student_notes').select('excalidraw_data')
+                  .eq('student_id', user.id).eq('page_id', pageId).maybeSingle()
+                  .then(({ data: note }) => {
+                    const nd = {
+                      elements:   note?.excalidraw_data?.elements   || [],
+                      bgPosition: note?.excalidraw_data?.bgPosition ?? null,
+                      files:      note?.excalidraw_data?.files      ?? {},
+                    };
+                    _notesCache.set(nk, nd);
+                    return nd;
+                  });
+
+            const commentPromise = _commentsCache.has(ck)
+              ? Promise.resolve(_commentsCache.get(ck))
+              : supabase.from('teacher_student_comments').select('excalidraw_data')
+                  .eq('page_id', pageId).eq('student_id', user.id)
+                  .then(({ data: comments }) => {
+                    const els = (comments || []).flatMap((n) =>
+                      (n.excalidraw_data?.elements || []).map((el) => ({
+                        ...el, id: TEACHER_NOTE_PREFIX + el.id, locked: true, opacity: 60,
+                      }))
+                    );
+                    _commentsCache.set(ck, els);
+                    return els;
+                  });
+
+            const [noteData, commentEls] = await Promise.all([notePromise, commentPromise]);
+
+            setNoteElements(noteData.elements);
+            bgPositionRef.current    = noteData.bgPosition;
+            savedFilesRef.current    = noteData.files;
+            teacherCommentsRef.current = commentEls;
           }
         } else {
           navigate(`/student/study/${chapterId}/page/${pgs[0].id}`, { replace: true });
@@ -241,6 +276,9 @@ const StudyViewer = () => {
           const newCommentEls = (row.excalidraw_data?.elements || []).map((el) => ({
             ...el, id: TEACHER_NOTE_PREFIX + el.id, locked: true, opacity: 60,
           }));
+          /* 코멘트 캐시 갱신 — 다음 방문 시 최신 데이터 즉시 표시 */
+          _commentsCache.set(`${user.id}_${currentPage.id}`, newCommentEls);
+          teacherCommentsRef.current = newCommentEls;
           const preserved = api.getSceneElements().filter(
             (el) => !el.id.startsWith(TEACHER_NOTE_PREFIX)
           );
@@ -294,7 +332,13 @@ const StudyViewer = () => {
         },
         { onConflict: 'student_id,page_id' }
       );
-      lastSavedRef.current = serialized; // 저장 성공 시 기준점 갱신
+      /* 노트 캐시 갱신 — 다음 방문 시 즉시 표시 */
+      _notesCache.set(`${cu.id}_${page.id}`, {
+        elements:   userEls,
+        bgPosition: bgPositionRef.current,
+        files:      userFiles,
+      });
+      lastSavedRef.current = serialized;
       setSaveStatus('saved');
     }, 1500);
   }, []);
@@ -336,27 +380,17 @@ const StudyViewer = () => {
         bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
       }
 
-      api.addFiles([{ id: '__bg_file__', dataURL: dataUrl, mimeType, created: Date.now() }]);
+      api.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);
       /* 저장된 사용자 삽입 이미지 복원 */
       const userFilesList = Object.values(savedFilesRef.current);
       if (userFilesList.length > 0) api.addFiles(userFilesList);
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
 
-      let commentEls = [];
-      if (cu) {
-        const { data: comments } = await supabase
-          .from('teacher_student_comments')
-          .select('excalidraw_data')
-          .eq('page_id', page.id)
-          .eq('student_id', cu.id);
-        commentEls = (comments || []).flatMap((n) =>
-          (n.excalidraw_data?.elements || []).map((el) => ({
-            ...el, id: TEACHER_NOTE_PREFIX + el.id, locked: true, opacity: 60,
-          }))
-        );
-      }
-
-      api.updateScene({ elements: [bgEl, ...noteElementsRef.current, ...commentEls], commitToHistory: false });
+      /* 교사 코멘트: fetchData에서 미리 로드되어 ref에 저장됨 — 추가 Supabase 요청 없음 */
+      api.updateScene({
+        elements: [bgEl, ...noteElementsRef.current, ...teacherCommentsRef.current],
+        commitToHistory: false,
+      });
 
     } catch (err) {
       console.error('배경 이미지 로드 실패:', err);
@@ -368,6 +402,11 @@ const StudyViewer = () => {
   const currentIndex = pages.findIndex((p) => p.id === currentPage?.id);
   const prevPage = currentIndex > 0                ? pages[currentIndex - 1] : null;
   const nextPage = currentIndex < pages.length - 1 ? pages[currentIndex + 1] : null;
+
+  /* ── 인접 페이지 이미지 백그라운드 프리패치 ── */
+  useEffect(() => {
+    prefetchImages([prevPage?.image_url, nextPage?.image_url].filter(Boolean));
+  }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (
@@ -496,7 +535,7 @@ const StudyViewer = () => {
                   className={`block rounded-md overflow-hidden border-2 transition-colors ${
                     pg.id === currentPage?.id ? 'border-blue-500' : 'border-transparent hover:border-gray-300'
                   }`}>
-                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full aspect-[3/4] object-cover" />
+                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full aspect-[3/4] object-cover" loading="lazy" decoding="async" />
                   <div className="bg-gray-50 text-center text-xs py-1 text-gray-600">{idx + 1}</div>
                 </Link>
               ))}
