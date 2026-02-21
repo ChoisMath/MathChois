@@ -201,6 +201,9 @@ const TeacherStudyViewer = () => {
         bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
       }
 
+      /* 캐시된 DataURL은 즉시 반환되어 Excalidraw 초기 렌더 전에 addFiles가 호출될 수 있음.
+         한 이벤트 루프 후에 실행하여 Excalidraw가 렌더링 준비를 완료하도록 보장 */
+      await new Promise((r) => setTimeout(r, 0));
       api.addFiles([{ id: '__bg_file__', dataURL: dataUrl, mimeType, created: Date.now() }]);
       const userFilesList = Object.values(savedFilesRef.current);
       if (userFilesList.length > 0) api.addFiles(userFilesList);

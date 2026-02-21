@@ -33,6 +33,7 @@ function TeacherNotesModal({ page, onClose }) {
   const containerRef = useRef(null);
   const [status, setStatus] = useState('loading'); // 'loading' | 'empty' | 'ok'
   const [noteElements, setNoteElements] = useState([]);
+  const [noteFiles, setNoteFiles] = useState({});
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -51,7 +52,9 @@ function TeacherNotesModal({ page, onClose }) {
       if (els.length === 0) {
         setStatus('empty');
       } else {
+        const files = Object.assign({}, ...(data || []).map((n) => n.excalidraw_data?.files ?? {}));
         setNoteElements(els);
+        setNoteFiles(files);
         setStatus('ok');
       }
     };
@@ -70,14 +73,19 @@ function TeacherNotesModal({ page, onClose }) {
       const bgH = iH * scale;
       const bgX = (W - bgW) / 2;
       const bgY = (H - bgH) / 2;
+      /* 캐시된 DataURL 타이밍 이슈 방지 */
+      await new Promise((r) => setTimeout(r, 0));
       api.addFiles([{ id: '__bg_file__', dataURL: dataUrl, mimeType, created: Date.now() }]);
+      /* 교사 필기에 삽입된 이미지 파일 복원 */
+      const noteFilesList = Object.values(noteFiles);
+      if (noteFilesList.length > 0) api.addFiles(noteFilesList);
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
       api.updateScene({ elements: [bgEl, ...noteElements] });
     } catch (err) {
       console.error('교사 필기 모달 bg 로드 실패:', err);
       api.updateScene({ elements: noteElements });
     }
-  }, [page.image_url, noteElements]);
+  }, [page.image_url, noteElements, noteFiles]);
 
   return (
     <div
@@ -160,7 +168,8 @@ const StudyViewer = () => {
   const noteElementsRef       = useRef([]);
   const bgPositionRef         = useRef(null);
   const savedFilesRef         = useRef({}); // 저장된 사용자 삽입 이미지 파일
-  const teacherCommentsRef    = useRef([]); // 교사 코멘트 (fetchData에서 미리 로드)
+  const teacherCommentsRef      = useRef([]); // 교사 코멘트 elements
+  const teacherCommentFilesRef  = useRef({}); // 교사 코멘트 이미지 파일
   const userRef               = useRef(user);
   const drawModeRef           = useRef(false);
   const lastSavedRef          = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
@@ -235,16 +244,19 @@ const StudyViewer = () => {
                         ...el, id: TEACHER_NOTE_PREFIX + el.id, locked: true, opacity: 60,
                       }))
                     );
-                    _commentsCache.set(ck, els);
-                    return els;
+                    const files = Object.assign({}, ...(comments || []).map((n) => n.excalidraw_data?.files ?? {}));
+                    const cd = { elements: els, files };
+                    _commentsCache.set(ck, cd);
+                    return cd;
                   });
 
-            const [noteData, commentEls] = await Promise.all([notePromise, commentPromise]);
+            const [noteData, commentData] = await Promise.all([notePromise, commentPromise]);
 
             setNoteElements(noteData.elements);
-            bgPositionRef.current    = noteData.bgPosition;
-            savedFilesRef.current    = noteData.files;
-            teacherCommentsRef.current = commentEls;
+            bgPositionRef.current          = noteData.bgPosition;
+            savedFilesRef.current          = noteData.files;
+            teacherCommentsRef.current     = commentData.elements;
+            teacherCommentFilesRef.current = commentData.files;
           }
         } else {
           navigate(`/student/study/${chapterId}/page/${pgs[0].id}`, { replace: true });
@@ -280,8 +292,16 @@ const StudyViewer = () => {
           const newCommentEls = (row.excalidraw_data?.elements || []).map((el) => ({
             ...el, id: TEACHER_NOTE_PREFIX + el.id, locked: true, opacity: 60,
           }));
+          const newCommentFiles = row.excalidraw_data?.files ?? {};
+          /* 교사 코멘트 이미지 파일 — Excalidraw에 즉시 등록 */
+          if (Object.keys(newCommentFiles).length > 0) {
+            api.addFiles(Object.values(newCommentFiles));
+            teacherCommentFilesRef.current = { ...teacherCommentFilesRef.current, ...newCommentFiles };
+          }
           /* 코멘트 캐시 갱신 — 다음 방문 시 최신 데이터 즉시 표시 */
-          _commentsCache.set(`${user.id}_${currentPage.id}`, newCommentEls);
+          _commentsCache.set(`${user.id}_${currentPage.id}`, {
+            elements: newCommentEls, files: teacherCommentFilesRef.current,
+          });
           teacherCommentsRef.current = newCommentEls;
           const preserved = api.getSceneElements().filter(
             (el) => !el.id.startsWith(TEACHER_NOTE_PREFIX)
@@ -321,8 +341,11 @@ const StudyViewer = () => {
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setSaveStatus('saving');
-      const allFiles  = excalidrawAPIRef.current?.getFiles() ?? {};
-      const { [BG_FILE_ID]: _bgf, ...userFiles } = allFiles;
+      const allFiles = excalidrawAPIRef.current?.getFiles() ?? {};
+      const teacherFileIds = new Set(Object.keys(teacherCommentFilesRef.current));
+      const userFiles = Object.fromEntries(
+        Object.entries(allFiles).filter(([id]) => id !== BG_FILE_ID && !teacherFileIds.has(id))
+      );
       await supabase.from('student_notes').upsert(
         {
           student_id:      cu.id,
@@ -384,10 +407,16 @@ const StudyViewer = () => {
         bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
       }
 
+      /* 캐시된 DataURL은 즉시 반환되어 Excalidraw 초기 렌더 전에 addFiles가 호출될 수 있음.
+         한 이벤트 루프 후에 실행하여 Excalidraw가 렌더링 준비를 완료하도록 보장 */
+      await new Promise((r) => setTimeout(r, 0));
       api.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);
       /* 저장된 사용자 삽입 이미지 복원 */
       const userFilesList = Object.values(savedFilesRef.current);
       if (userFilesList.length > 0) api.addFiles(userFilesList);
+      /* 교사 코멘트 이미지 파일 복원 */
+      const teacherFilesList = Object.values(teacherCommentFilesRef.current);
+      if (teacherFilesList.length > 0) api.addFiles(teacherFilesList);
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
 
       /* 교사 코멘트: fetchData에서 미리 로드되어 ref에 저장됨 — 추가 Supabase 요청 없음 */

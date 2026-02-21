@@ -234,6 +234,9 @@ const StudentWorkViewer = () => {
     api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
     api.setActiveTool({ type: excalidrawTool });
 
+    /* 캐시된 DataURL은 즉시 반환되어 Excalidraw 초기 렌더 전에 addFiles가 호출될 수 있음.
+       한 이벤트 루프 후에 실행하여 Excalidraw가 렌더링 준비를 완료하도록 보장 */
+    await new Promise((r) => setTimeout(r, 0));
     await rebuildScene();
   }, [rebuildScene]);
 

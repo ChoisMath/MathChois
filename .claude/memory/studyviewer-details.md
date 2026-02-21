@@ -10,15 +10,15 @@
 ## 레이아웃 구조
 
 ```
-h-screen flex flex-col
-├── 상단 네비바 (h-14)
-│   ├── 뒤로가기 버튼 (navigate(-1))
-│   ├── 챕터 제목 + 페이지 번호 (N / total)
-│   ├── 저장 상태 표시 ('저장됨' / '저장 중...')
-│   └── 필기 모드 토글 버튼
-├── 필기 툴바 (h-11, drawMode=true 시에만 표시)
+flex flex-col overflow-hidden (height: 100dvh)
+├── 상단 네비바 (h-14, flex-shrink-0)
+│   ├── 뒤로가기 / 챕터 제목 / 페이지 번호
+│   ├── 저장 상태 표시
+│   ├── 툴바 접기/펼치기 버튼 (ChevronUp/Down, draw 모드에서만)
+│   └── 필기 모드 토글 버튼 (Pencil 아이콘)
+├── 필기 툴바 (h-11, drawMode=true && !toolbarCollapsed 시에만 표시)
 │   └── DrawingToolbar 컴포넌트
-└── 본문 (flex-1)
+└── 본문 (flex-1 overflow-hidden)
     ├── 페이지 목록 사이드바 (w-44, sidebarOpen=true 시)
     ├── 뷰 모드: 페이지 이미지 + 이전/다음 버튼
     └── 필기 모드: 모눈종이 배경(GRID_STYLE) + Excalidraw
@@ -74,14 +74,59 @@ GRID_STYLE = {
 | 이미지 이동 | Hand | BG element의 `locked` 속성 토글 |
 | 색상 팔레트 | — | DEFAULT_COLORS 6개 + 커스텀 최대 6개 + EyeDropper |
 | 선 굵기 | — | S(1)/M(2)/L(4)/XL(8) → `api.updateScene({ appState: { currentItemStrokeWidth } })` |
-| 실행 취소 | Undo2 | `api.history.undo()` |
-| 다시 실행 | Redo2 | `api.history.redo()` |
+| 실행 취소 | Undo2 | `document.dispatchEvent(new KeyboardEvent('keydown', { code:'KeyZ', ctrlKey:true, bubbles:true }))` |
+| 다시 실행 | Redo2 | `document.dispatchEvent(new KeyboardEvent('keydown', { code:'KeyY', ctrlKey:true, bubbles:true }))` |
 | 전체 지우기 | Trash2 | BG element 유지, 나머지 elements 모두 제거 |
 | 세부 설정 | SlidersHorizontal | `showExcalidrawPanel` 토글 (PANEL_HIDE_CSS 적용 여부) |
 
 ### EyeDropper (스포이드)
 - `window.EyeDropper` 존재 여부로 Chrome/Edge 95+ 감지
 - 색상 선택 후 커스텀 색상 목록에 추가, `localStorage` 동기화
+
+> 주의: Excalidraw v0.18 API에 `history.undo()` / `history.redo()` 없음. `history`는 `clear()` 만 있음.
+
+---
+
+## S Pen 배럴(Side) 버튼 지원 (DrawingToolbar.jsx)
+
+Samsung Galaxy Tab S Pen의 배럴 버튼(옆 버튼)을 누른 동안 자동으로 지우개 모드로 전환.
+
+### 구현 패턴
+- 감지: `pointerType === 'pen' && button === 2`
+- `capture: true` — Excalidraw 내부 핸들러보다 먼저 실행됨
+- Stale closure 방지: `activeToolRef.current = activeTool` (매 렌더) + `applyToolRef.current = applyTool` (함수 정의 직후)
+- `sPenPrevToolRef` — 버튼 누르기 전 도구 저장 → 버튼 뗄 때 복원
+
+```js
+// 중요: applyToolRef.current = applyTool 은 반드시 함수 정의 후에 위치해야 함
+// const applyTool = ... 보다 앞에 applyToolRef.current = applyTool 을 두면
+// ReferenceError: Cannot access 'applyTool' before initialization 발생
+const applyTool = (type) => { ... };
+applyToolRef.current = applyTool; // ← 함수 정의 바로 다음!
+```
+
+이벤트 리스너는 `useEffect` 내에서 등록 (deps: []):
+- `pointerdown` (capture) → 배럴 버튼 감지 → 지우개로 전환
+- `pointerup`, `pointercancel` → 이전 도구 복원
+
+---
+
+## 모바일 Chrome 뷰포트 처리
+
+### 문제
+- `h-screen` (= `100vh`): 모바일 Chrome에서 주소창 표시 여부와 무관하게 고정 높이 → 주소창이 표시될 때 레이아웃이 화면 아래로 넘쳐 네비바가 스크롤되어 올라감
+- `fixed inset-0`: 네비바 고정 성공하지만 Chrome의 "캔버스를 위로 스와이프하여 주소창 숨기기" 제스처 차단
+
+### 해결책
+```jsx
+<div className="flex flex-col overflow-hidden bg-gray-100" style={{ height: '100dvh' }}>
+```
+- `100dvh` (dynamic viewport height): 주소창 표시/숨김에 따라 자동으로 높이 조절
+- `overflow-hidden`: 실제 페이지 스크롤 방지 (네비바 고정)
+- `position: static` (기본값): Chrome의 스와이프 제스처 감지 허용
+
+### 지원
+Chrome 108+, Firefox 101+, Safari 15.4+
 
 ---
 
@@ -170,6 +215,13 @@ student_notes.upsert({
 }, { onConflict: 'student_id,page_id' })
 ```
 
+### 더티체크 (중복 저장 방지)
+- `lastSavedRef.current` — 마지막 성공 저장 내용의 JSON 문자열
+- 직렬화 키: `{ id, type, x, y, points, text, width, height, strokeColor, strokeWidth }`
+- `onChange` 시 `serialized === lastSavedRef.current` 이면 debounce 타이머 설정 안 함
+- 저장 성공 시 `lastSavedRef.current = serialized` 갱신
+- 페이지 변경 시 `lastSavedRef.current = null` 초기화
+
 ### 저장 상태
 - `'saved'` → "저장됨" (green)
 - `'saving'` → "저장 중..." (gray)
@@ -194,5 +246,8 @@ student_notes.upsert({
 1. **EyeDropper**: Chrome/Edge 95+만 지원, Firefox 미지원
 2. **이미지 이동**: BG element locked 해제로 이동 가능하나, 이동 후 별도 re-lock 필요
 3. **필기→뷰 모드 전환**: debounce 1500ms 중 전환 시 마지막 필기 손실 가능성
-4. **Excalidraw 버전**: 0.18 기준 — 업그레이드 시 API 변경(`history.undo`, `setActiveTool` 등) 확인 필요
+4. **Excalidraw v0.18 API 주의사항**:
+   - `history.undo()` / `history.redo()` 없음 → `document.dispatchEvent(KeyboardEvent)` 사용
+   - `history`는 `clear()` 만 있음
+   - `updateScene()` 기본값은 `commitToHistory: true` → 프로그래매틱 호출 시 반드시 `commitToHistory: false` 명시
 5. **CORS**: `fetchAsDataUrl`은 Storage 버킷이 public이고 CORS 허용이어야 작동
