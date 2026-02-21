@@ -19,6 +19,14 @@ const StudyViewer        = lazy(() => import('./pages/Study/StudyViewer'));
 const TeacherStudyViewer = lazy(() => import('./pages/Study/TeacherStudyViewer'));
 const StudentWorkViewer  = lazy(() => import('./pages/Monitor/StudentWorkViewer'));
 
+/* Phase 5 — 게시판 & 과제 */
+const TeacherBoard           = lazy(() => import('./pages/Board/TeacherBoard'));
+const BoardPostEditor        = lazy(() => import('./pages/Board/BoardPostEditor'));
+const AssignmentEditor       = lazy(() => import('./pages/Assignment/AssignmentEditor'));
+const AssignmentMonitor      = lazy(() => import('./pages/Assignment/AssignmentMonitor'));
+const AssignmentWorkViewer   = lazy(() => import('./pages/Assignment/AssignmentWorkViewer'));
+const AssignmentStudyViewer  = lazy(() => import('./pages/Assignment/AssignmentStudyViewer'));
+
 const PageLoader = () => (
   <div className="flex items-center justify-center min-h-screen bg-gray-50">
     <p className="text-gray-500">로딩 중...</p>
@@ -83,6 +91,19 @@ function App() {
                 path="/teacher/classrooms/:classroomId/chapters/:chapterId/monitor"
                 element={<ChapterMonitor />}
               />
+              {/* Phase 5 — 게시판 */}
+              <Route path="/teacher/board" element={<TeacherBoard />} />
+              <Route path="/teacher/board/new" element={<BoardPostEditor />} />
+              <Route path="/teacher/board/:postId/edit" element={<BoardPostEditor />} />
+              {/* Phase 5 — 과제 편집·모니터 (DashboardLayout) */}
+              <Route
+                path="/teacher/classrooms/:classroomId/assignments/:assignmentId/edit"
+                element={<AssignmentEditor />}
+              />
+              <Route
+                path="/teacher/classrooms/:classroomId/assignments/:assignmentId/monitor"
+                element={<AssignmentMonitor />}
+              />
             </Route>
             {/* Fullscreen teacher views — no DashboardLayout */}
             <Route
@@ -92,6 +113,11 @@ function App() {
             <Route
               path="/teacher/classrooms/:classroomId/chapters/:chapterId/study/page/:pageId"
               element={<TeacherStudyViewer />}
+            />
+            {/* Phase 5 — 학생 과제 필기 확인 (전체화면) */}
+            <Route
+              path="/teacher/classrooms/:classroomId/assignments/:assignmentId/monitor/:studentId"
+              element={<AssignmentWorkViewer />}
             />
           </Route>
 
@@ -103,6 +129,11 @@ function App() {
             </Route>
             {/* StudyViewer: 전체화면 레이아웃, DashboardLayout 제외 */}
             <Route path="/student/study/:chapterId/page/:pageId" element={<StudyViewer />} />
+            {/* Phase 5 — 학생 과제 필기 (전체화면) */}
+            <Route
+              path="/student/assignments/:assignmentId/page/:pageId"
+              element={<AssignmentStudyViewer />}
+            />
           </Route>
         </Routes>
         </Suspense>

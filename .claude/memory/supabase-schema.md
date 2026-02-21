@@ -7,6 +7,7 @@
 ## 테이블 스키마
 
 ### profiles
+
 ```sql
 id         uuid  PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE
 name       text
@@ -14,10 +15,12 @@ email      text
 avatar_url text
 role       text  -- 'teacher' | 'student' | null
 ```
+
 - Google OAuth 가입 시 `auth.users` trigger로 자동 생성
 - `updateRole(role)` 호출 시 role 컬럼 업데이트
 
 ### classrooms
+
 ```sql
 id         uuid  PRIMARY KEY DEFAULT gen_random_uuid()
 name       text  NOT NULL
@@ -27,6 +30,7 @@ created_at timestamptz DEFAULT now()
 ```
 
 ### classroom_members
+
 ```sql
 id           uuid  PRIMARY KEY DEFAULT gen_random_uuid()
 classroom_id uuid  REFERENCES classrooms(id) ON DELETE CASCADE
@@ -36,6 +40,7 @@ UNIQUE (classroom_id, student_id)
 ```
 
 ### chapters
+
 ```sql
 id           uuid  PRIMARY KEY DEFAULT gen_random_uuid()
 classroom_id uuid  REFERENCES classrooms(id) ON DELETE CASCADE
@@ -45,6 +50,7 @@ position     int   NOT NULL DEFAULT 0
 ```
 
 ### pages
+
 ```sql
 -- 주의: 테이블명은 'pages' (chapter_pages 아님!)
 id         uuid  PRIMARY KEY DEFAULT gen_random_uuid()
@@ -54,6 +60,7 @@ position   int   NOT NULL DEFAULT 0
 ```
 
 ### student_notes
+
 ```sql
 id               uuid  PRIMARY KEY DEFAULT gen_random_uuid()
 student_id       uuid  REFERENCES profiles(id) ON DELETE CASCADE
@@ -64,7 +71,9 @@ UNIQUE (student_id, page_id)  -- upsert onConflict 사용
 ```
 
 ### teacher_notes (Phase 4 — 수동 설정 필요)
+
 교사가 수업 전체 대상으로 작성하는 필기 (class-wide). 학생은 모달로 열람.
+
 ```sql
 CREATE TABLE teacher_notes (
   id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -78,7 +87,9 @@ ALTER TABLE teacher_notes ENABLE ROW LEVEL SECURITY;
 ```
 
 ### teacher_student_comments (Phase 4 — 수동 설정 필요)
+
 교사가 특정 학생 필기에 남기는 개인 코멘트. 학생 StudyViewer에서 자동 로드 + Realtime 표시.
+
 ```sql
 CREATE TABLE teacher_student_comments (
   id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -97,6 +108,7 @@ ALTER TABLE teacher_student_comments ENABLE ROW LEVEL SECURITY;
 ## RLS 정책 (Row Level Security)
 
 ### profiles
+
 ```sql
 -- 본인만 읽기/수정
 SELECT: auth.uid() = id
@@ -111,6 +123,7 @@ SELECT: EXISTS (
 ```
 
 ### classrooms
+
 ```sql
 -- 교사: 자신의 classroom CRUD
 SELECT: teacher_id = auth.uid()
@@ -126,6 +139,7 @@ SELECT: EXISTS (
 ```
 
 ### classroom_members
+
 ```sql
 -- 교사: 자신의 classroom 멤버 조회
 SELECT: EXISTS (
@@ -138,6 +152,7 @@ DELETE: student_id = auth.uid()
 ```
 
 ### chapters
+
 ```sql
 -- 교사: 자신의 classroom 챕터 CRUD
 SELECT/INSERT/UPDATE/DELETE: EXISTS (
@@ -152,6 +167,7 @@ SELECT: EXISTS (
 ```
 
 ### pages
+
 ```sql
 -- 교사: 챕터 소유자 CRUD
 SELECT/INSERT/UPDATE/DELETE: EXISTS (
@@ -168,6 +184,7 @@ SELECT: EXISTS (
 ```
 
 ### student_notes
+
 ```sql
 -- 본인 노트만 CRUD
 SELECT/INSERT/UPDATE/DELETE: student_id = auth.uid()
@@ -185,6 +202,7 @@ CREATE POLICY "student_notes_teacher_read" ON student_notes
 ```
 
 ### teacher_notes (Phase 4)
+
 ```sql
 -- 교사: 본인 노트 전체 CRUD
 CREATE POLICY "teacher_notes_teacher_all" ON teacher_notes
@@ -203,6 +221,7 @@ CREATE POLICY "teacher_notes_student_read" ON teacher_notes
 ```
 
 ### teacher_student_comments (Phase 4)
+
 ```sql
 -- 교사: 본인이 작성한 코멘트 전체 CRUD
 CREATE POLICY "tsc_teacher_all" ON teacher_student_comments
@@ -243,6 +262,7 @@ CREATE TRIGGER on_auth_user_created
 ## RPC 함수
 
 ### join_classroom_by_code
+
 ```sql
 CREATE OR REPLACE FUNCTION join_classroom_by_code(code text)
 RETURNS void AS $$
@@ -269,27 +289,44 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 ## Storage 설정
 
 ### 버킷: chapter-pages
+
 - **공개 여부:** Public (이미지 URL 직접 접근 가능)
 - **업로드 경로:** `chapters/{chapterId}/{timestamp}.{ext}`
 - **삭제 경로 추출 로직 (Editor.jsx):**
   ```js
   const url = new URL(page.image_url);
-  const marker = '/object/public/chapter-pages/';
-  const storagePath = url.pathname.slice(url.pathname.indexOf(marker) + marker.length);
-  supabase.storage.from('chapter-pages').remove([storagePath]);
+  const marker = "/object/public/chapter-pages/";
+  const storagePath = url.pathname.slice(
+    url.pathname.indexOf(marker) + marker.length,
+  );
+  supabase.storage.from("chapter-pages").remove([storagePath]);
   ```
 
 ### Storage RLS 정책 (chapter-pages 버킷)
+
 ```sql
 -- 교사만 업로드/삭제 가능
-INSERT: auth.role() = 'authenticated' AND EXISTS (
-  SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'teacher'
-)
-DELETE: auth.role() = 'authenticated' AND EXISTS (
-  SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'teacher'
-)
+CREATE POLICY "chapter_pages_teacher_insert" ON storage.objects
+  FOR INSERT USING (
+    bucket_id = 'chapter-pages'
+    AND auth.role() = 'authenticated'
+    AND EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'teacher')
+  ) WITH CHECK (
+    bucket_id = 'chapter-pages'
+    AND auth.role() = 'authenticated'
+    AND EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'teacher')
+  );
+
+CREATE POLICY "chapter_pages_teacher_delete" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'chapter-pages'
+    AND auth.role() = 'authenticated'
+    AND EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'teacher')
+  );
+
 -- 모든 사람 읽기 가능 (Public 버킷)
-SELECT: true
+CREATE POLICY "chapter_pages_public_select" ON storage.objects
+  FOR SELECT USING (bucket_id = 'chapter-pages');
 ```
 
 ---
@@ -303,9 +340,9 @@ SELECT: true
 4. 코드에서 사용 (AuthContext.jsx):
    ```js
    supabase.auth.signInWithOAuth({
-     provider: 'google',
-     options: { redirectTo: `${window.location.origin}/auth/callback` }
-   })
+     provider: "google",
+     options: { redirectTo: `${window.location.origin}/auth/callback` },
+   });
    ```
 
 ---
@@ -313,6 +350,7 @@ SELECT: true
 ## Realtime 설정 (Phase 4)
 
 Supabase SQL Editor에서 실행:
+
 ```sql
 ALTER PUBLICATION supabase_realtime ADD TABLE student_notes;
 ALTER PUBLICATION supabase_realtime ADD TABLE teacher_student_comments;
@@ -320,6 +358,251 @@ ALTER PUBLICATION supabase_realtime ADD TABLE teacher_student_comments;
 
 - `student_notes`: ChapterMonitor(교사)가 학생 필기를 실시간 수신, StudentWorkViewer도 사용
 - `teacher_student_comments`: StudyViewer(학생)가 교사 코멘트를 실시간 수신
+
+---
+
+## Phase 5 — 게시판 & 과제 (수동 설정 필요)
+
+### 신규 테이블 (8개)
+
+```sql
+-- ── 게시판 ─────────────────────────────────────────────
+CREATE TABLE posts (
+  id         uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  teacher_id uuid REFERENCES auth.users NOT NULL,
+  title      text NOT NULL,
+  content    text DEFAULT '',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE post_files (
+  id        uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  post_id   uuid REFERENCES posts(id) ON DELETE CASCADE NOT NULL,
+  file_name text NOT NULL,
+  file_url  text NOT NULL,
+  file_size integer NOT NULL,
+  mime_type text,
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE post_files ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE post_classrooms (
+  post_id      uuid REFERENCES posts(id) ON DELETE CASCADE,
+  classroom_id uuid REFERENCES classrooms(id) ON DELETE CASCADE,
+  PRIMARY KEY (post_id, classroom_id)
+);
+ALTER TABLE post_classrooms ENABLE ROW LEVEL SECURITY;
+
+-- ── 과제 ─────────────────────────────────────────────
+CREATE TABLE assignments (
+  id           uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  classroom_id uuid REFERENCES classrooms(id) ON DELETE CASCADE NOT NULL,
+  teacher_id   uuid REFERENCES auth.users NOT NULL,
+  title        text NOT NULL,
+  description  text DEFAULT '',
+  deadline     timestamptz,
+  max_score    integer DEFAULT 100,
+  position     integer DEFAULT 0,
+  created_at   timestamptz DEFAULT now(),
+  updated_at   timestamptz DEFAULT now()
+);
+ALTER TABLE assignments ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE assignment_pages (
+  id            uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  assignment_id uuid REFERENCES assignments(id) ON DELETE CASCADE NOT NULL,
+  image_url     text NOT NULL,
+  position      integer DEFAULT 0,
+  created_at    timestamptz DEFAULT now()
+);
+ALTER TABLE assignment_pages ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE assignment_submissions (
+  id                 uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  assignment_id      uuid REFERENCES assignments(id) ON DELETE CASCADE NOT NULL,
+  student_id         uuid REFERENCES auth.users NOT NULL,
+  status             text DEFAULT 'draft',  -- 'draft'|'submitted'|'late_submitted'|'rejected'|'graded'
+  submitted_at       timestamptz,
+  is_late            boolean DEFAULT false,
+  score              integer,
+  max_score          integer,
+  rejection_comment  text,
+  created_at         timestamptz DEFAULT now(),
+  updated_at         timestamptz DEFAULT now(),
+  UNIQUE (assignment_id, student_id)
+);
+ALTER TABLE assignment_submissions ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE assignment_notes (
+  id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  assignment_id   uuid REFERENCES assignments(id) ON DELETE CASCADE NOT NULL,
+  page_id         uuid REFERENCES assignment_pages(id) ON DELETE CASCADE NOT NULL,
+  student_id      uuid REFERENCES auth.users NOT NULL,
+  excalidraw_data jsonb DEFAULT '{}',
+  created_at      timestamptz DEFAULT now(),
+  updated_at      timestamptz DEFAULT now(),
+  UNIQUE (assignment_id, page_id, student_id)
+);
+ALTER TABLE assignment_notes ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE assignment_teacher_comments (
+  id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  teacher_id      uuid REFERENCES auth.users NOT NULL,
+  student_id      uuid REFERENCES auth.users NOT NULL,
+  page_id         uuid REFERENCES assignment_pages(id) ON DELETE CASCADE NOT NULL,
+  excalidraw_data jsonb DEFAULT '{}',
+  updated_at      timestamptz DEFAULT now(),
+  UNIQUE (teacher_id, student_id, page_id)
+);
+ALTER TABLE assignment_teacher_comments ENABLE ROW LEVEL SECURITY;
+```
+
+### RLS 정책 (Phase 5)
+
+```sql
+-- ── posts ──
+-- 교사: 본인 글 전체
+CREATE POLICY "posts_teacher_all" ON posts
+  FOR ALL USING (teacher_id = auth.uid()) WITH CHECK (teacher_id = auth.uid());
+-- 학생: post_classrooms 통해 소속 클래스 글만 읽기
+CREATE POLICY "posts_student_read" ON posts
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM post_classrooms pc
+      JOIN classroom_members cm ON cm.classroom_id = pc.classroom_id
+      WHERE pc.post_id = posts.id AND cm.student_id = auth.uid()
+    )
+  );
+
+-- ── post_files ──
+CREATE POLICY "post_files_teacher_all" ON post_files
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM posts WHERE id = post_id AND teacher_id = auth.uid())
+  ) WITH CHECK (
+    EXISTS (SELECT 1 FROM posts WHERE id = post_id AND teacher_id = auth.uid())
+  );
+CREATE POLICY "post_files_student_read" ON post_files
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM post_classrooms pc
+      JOIN classroom_members cm ON cm.classroom_id = pc.classroom_id
+      WHERE pc.post_id = post_files.post_id AND cm.student_id = auth.uid()
+    )
+  );
+
+-- ── post_classrooms ──
+CREATE POLICY "post_classrooms_teacher_all" ON post_classrooms
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM posts WHERE id = post_id AND teacher_id = auth.uid())
+  ) WITH CHECK (
+    EXISTS (SELECT 1 FROM posts WHERE id = post_id AND teacher_id = auth.uid())
+  );
+CREATE POLICY "post_classrooms_student_read" ON post_classrooms
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM classroom_members
+      WHERE classroom_id = post_classrooms.classroom_id AND student_id = auth.uid()
+    )
+  );
+
+-- ── assignments ──
+CREATE POLICY "assignments_teacher_all" ON assignments
+  FOR ALL USING (teacher_id = auth.uid()) WITH CHECK (teacher_id = auth.uid());
+CREATE POLICY "assignments_student_read" ON assignments
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM classroom_members
+      WHERE classroom_id = assignments.classroom_id AND student_id = auth.uid()
+    )
+  );
+
+-- ── assignment_pages ──
+CREATE POLICY "assignment_pages_teacher_all" ON assignment_pages
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM assignments WHERE id = assignment_id AND teacher_id = auth.uid())
+  ) WITH CHECK (
+    EXISTS (SELECT 1 FROM assignments WHERE id = assignment_id AND teacher_id = auth.uid())
+  );
+CREATE POLICY "assignment_pages_student_read" ON assignment_pages
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM assignments a
+      JOIN classroom_members cm ON cm.classroom_id = a.classroom_id
+      WHERE a.id = assignment_pages.assignment_id AND cm.student_id = auth.uid()
+    )
+  );
+
+-- ── assignment_submissions ──
+-- 교사: 자기 클래스룸 과제 제출 전체
+CREATE POLICY "assignment_submissions_teacher_all" ON assignment_submissions
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM assignments WHERE id = assignment_id AND teacher_id = auth.uid())
+  ) WITH CHECK (
+    EXISTS (SELECT 1 FROM assignments WHERE id = assignment_id AND teacher_id = auth.uid())
+  );
+-- 학생: 본인 제출
+CREATE POLICY "assignment_submissions_student_own" ON assignment_submissions
+  FOR ALL USING (student_id = auth.uid()) WITH CHECK (student_id = auth.uid());
+
+-- ── assignment_notes ──
+CREATE POLICY "assignment_notes_teacher_read" ON assignment_notes
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM assignments WHERE id = assignment_id AND teacher_id = auth.uid())
+  );
+CREATE POLICY "assignment_notes_student_own" ON assignment_notes
+  FOR ALL USING (student_id = auth.uid()) WITH CHECK (student_id = auth.uid());
+
+-- ── assignment_teacher_comments ──
+CREATE POLICY "atc_teacher_all" ON assignment_teacher_comments
+  FOR ALL USING (teacher_id = auth.uid()) WITH CHECK (teacher_id = auth.uid());
+CREATE POLICY "atc_student_read" ON assignment_teacher_comments
+  FOR SELECT USING (student_id = auth.uid());
+```
+
+### Storage (Phase 5)
+
+#### 버킷: chapter-pages (기존 재사용)
+
+과제 이미지는 동일 버킷 사용, 경로만 구분:
+
+- **업로드 경로:** `assignments/{assignmentId}/{timestamp}_{i}.{ext}`
+
+#### 버킷: post-files (신규 생성)
+
+- **공개 여부:** Public
+- **Storage RLS:**
+
+```sql
+-- 교사만 업로드
+CREATE POLICY "post_files_teacher_insert" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'post-files'
+    AND auth.role() = 'authenticated'
+    AND EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'teacher')
+  );
+
+-- 교사만 삭제
+CREATE POLICY "post_files_teacher_delete" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'post-files'
+    AND auth.role() = 'authenticated'
+    AND EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'teacher')
+  );
+
+-- 모든 사람 읽기 가능 (Public 버킷)
+CREATE POLICY "post_files_public_select" ON storage.objects
+  FOR SELECT USING (bucket_id = 'post-files');
+```
+
+### Realtime (Phase 5)
+
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE assignment_notes;
+ALTER PUBLICATION supabase_realtime ADD TABLE assignment_submissions;
+ALTER PUBLICATION supabase_realtime ADD TABLE assignment_teacher_comments;
+```
 
 ---
 

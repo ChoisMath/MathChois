@@ -1,9 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Users, BookOpen, Copy, Check, Trash2, FileText,
   Plus, Hash, ChevronDown, ChevronUp, Edit2, GripVertical,
+  Newspaper, ClipboardList,
 } from 'lucide-react';
+
+const BoardTab      = lazy(() => import('../../components/board/BoardTab'));
+const AssignmentTab = lazy(() => import('../../components/assignment/AssignmentTab'));
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors,
@@ -112,7 +116,6 @@ const ClassroomDetail = () => {
 
   const [showCode, setShowCode]     = useState(false);
   const [copied, setCopied]         = useState(false);
-  const [studentsOpen, setStudentsOpen] = useState(false);
 
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput]     = useState('');
@@ -131,9 +134,13 @@ const ClassroomDetail = () => {
   const [importSelectedChid, setImportSelectedChid] = useState('');
   const [importing, setImporting]                 = useState(false);
 
+  const [activeTab, setActiveTab]   = useState('chapters'); // 'chapters' | 'board' | 'assignments' | 'students'
+
   const [deleteTarget, setDeleteTarget]         = useState(null);
   const [showDeleteClassroom, setShowDeleteClassroom] = useState(false);
   const [deleting, setDeleting]     = useState(false);
+  const [creatingAssignment, setCreatingAssignment] = useState(false);
+  const [unsubmittedCount, setUnsubmittedCount] = useState(0);
 
   /* ── dnd-kit sensors ── */
   const sensors = useSensors(
@@ -169,6 +176,23 @@ const ClassroomDetail = () => {
         firstPage: ch.pages?.sort((a, b) => a.position - b.position)[0] || null,
       }))
     );
+
+    /* 학생: 미제출 과제 수 (탭 배지용, 페이지 로드 시 즉시 계산) */
+    if (!isTeacher && user) {
+      const { data: asns } = await supabase
+        .from('assignments').select('id').eq('classroom_id', id);
+      if (asns?.length > 0) {
+        const { data: subs } = await supabase
+          .from('assignment_submissions')
+          .select('assignment_id, status')
+          .eq('student_id', user.id)
+          .in('assignment_id', asns.map((a) => a.id));
+        const submittedIds = new Set(
+          (subs || []).filter((s) => s.assignment_id && s.status !== 'rejected').map((s) => s.assignment_id)
+        );
+        setUnsubmittedCount(asns.filter((a) => !submittedIds.has(a.id)).length);
+      }
+    }
 
     setLoading(false);
   };
@@ -375,6 +399,31 @@ const ClassroomDetail = () => {
   if (loading) return <p className="text-gray-500">로딩 중...</p>;
   if (!classroom) return <p className="text-gray-500">클래스룸을 찾을 수 없습니다.</p>;
 
+  /* ── 과제 생성 핸들러 (── 탭 버튼용) ── */
+  const handleCreateAssignment = async () => {
+    setCreatingAssignment(true);
+    const { data: asns } = await supabase
+      .from('assignments')
+      .select('position')
+      .eq('classroom_id', id)
+      .order('position', { ascending: false })
+      .limit(1);
+    const maxPos = asns?.length > 0 ? asns[0].position + 1 : 0;
+    const { data: newAsn } = await supabase
+      .from('assignments')
+      .insert({
+        classroom_id: id,
+        teacher_id:   user.id,
+        title:        '새 과제',
+        position:     maxPos,
+      })
+      .select().single();
+    setCreatingAssignment(false);
+    if (newAsn) {
+      navigate(`/teacher/classrooms/${id}/assignments/${newAsn.id}/edit`);
+    }
+  };
+
   return (
     <>
       <div className="max-w-5xl mx-auto space-y-6">
@@ -433,46 +482,36 @@ const ClassroomDetail = () => {
               </div>
             )}
 
-            <button
-              onClick={() => setStudentsOpen((v) => !v)}
-              className="flex items-center gap-1.5 mt-2 text-sm text-gray-500 hover:text-gray-700 cursor-pointer"
-            >
-              <Users className="h-4 w-4" />
-              학생 ({members.length}명)
-              {studentsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            </button>
-
-            {studentsOpen && (
-              <div className="mt-2 ml-1 space-y-2">
-                {members.length === 0 ? (
-                  <p className="text-sm text-gray-400">아직 참여한 학생이 없습니다.</p>
-                ) : members.map((m) => (
-                  <div key={m.id} className="flex items-center gap-2">
-                    {m.student?.avatar_url ? (
-                      <img src={m.student.avatar_url} alt={m.student.name}
-                        className="h-7 w-7 rounded-full object-cover" referrerPolicy="no-referrer" />
-                    ) : (
-                      <div className="h-7 w-7 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-500 font-medium">
-                        {m.student?.name?.charAt(0)}
-                      </div>
-                    )}
-                    <span className="text-sm text-gray-700">{m.student?.name}</span>
-                    <span className="text-xs text-gray-400">{m.student?.email}</span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
             {isTeacher ? (
               <>
-                <button
-                  onClick={() => setShowCreateModal(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 cursor-pointer"
-                >
-                  <Plus className="h-4 w-4" />새 챕터
-                </button>
+                {activeTab === 'chapters' && (
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />새 챕터
+                  </button>
+                )}
+                {activeTab === 'board' && (
+                  <button
+                    onClick={() => navigate('/teacher/board/new')}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />새 게시글
+                  </button>
+                )}
+                {activeTab === 'assignments' && (
+                  <button
+                    onClick={handleCreateAssignment}
+                    disabled={creatingAssignment}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />{creatingAssignment ? '생성 중...' : '새 과제'}
+                  </button>
+                )}
                 <button
                   onClick={() => setShowDeleteClassroom(true)} title="클래스룸 삭제"
                   className="p-2 text-gray-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors cursor-pointer"
@@ -491,17 +530,37 @@ const ClassroomDetail = () => {
           </div>
         </div>
 
-        {/* ── 챕터 섹션 ── */}
+        {/* ── 탭 네비게이션 ── */}
+        <div className="flex border-b border-gray-200 mb-5">
+          {[
+            { key: 'chapters',    label: '챕터',  Icon: BookOpen },
+            { key: 'board',       label: '게시판', Icon: Newspaper },
+            { key: 'assignments', label: '과제',  Icon: ClipboardList },
+            { key: 'students',    label: '학생',  Icon: Users },
+          ].map(({ key, label, Icon }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors cursor-pointer ${
+                activeTab === key
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+              {key === 'assignments' && !isTeacher && unsubmittedCount > 0 && (
+                <span className="ml-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full leading-none">
+                  {unsubmittedCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* ── 챕터 탭 ── */}
+        {activeTab === 'chapters' && (
         <div>
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            <BookOpen className="h-4 w-4" />
-            교재 챕터
-            {isTeacher && chapters.length > 1 && (
-              <span className="text-xs font-normal text-gray-400 normal-case tracking-normal ml-1">
-                — 드래그하여 순서 변경
-              </span>
-            )}
-          </h3>
 
           {chapters.length === 0 ? (
             <div
@@ -551,6 +610,57 @@ const ClassroomDetail = () => {
             </div>
           )}
         </div>
+        )}
+
+        {/* ── 게시판 탭 ── */}
+        {activeTab === 'board' && (
+          <Suspense fallback={<p className="text-gray-400 text-sm">로딩 중...</p>}>
+            <BoardTab classroomId={id} isTeacher={isTeacher} />
+          </Suspense>
+        )}
+
+        {/* ── 과제 탭 ── */}
+        {activeTab === 'assignments' && (
+          <Suspense fallback={<p className="text-gray-400 text-sm">로딩 중...</p>}>
+            <AssignmentTab
+              classroomId={id}
+              isTeacher={isTeacher}
+              hideCreateButton
+              onUnsubmittedCount={!isTeacher ? setUnsubmittedCount : undefined}
+            />
+          </Suspense>
+        )}
+
+        {/* ── 학생 탭 ── */}
+        {activeTab === 'students' && (
+          <div>
+            {members.length === 0 ? (
+              <div className="border-2 border-dashed border-gray-200 rounded-xl h-40 flex flex-col items-center justify-center text-gray-400 text-sm gap-2">
+                <Users className="h-8 w-8" />
+                <span>아직 참여한 학생이 없습니다.</span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {members.map((m) => (
+                  <div key={m.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 flex items-center gap-3">
+                    {m.student?.avatar_url ? (
+                      <img src={m.student.avatar_url} alt={m.student.name}
+                        className="h-9 w-9 rounded-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="h-9 w-9 rounded-full bg-gray-200 flex items-center justify-center text-sm text-gray-500 font-medium">
+                        {m.student?.name?.charAt(0)}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">{m.student?.name}</p>
+                      <p className="text-xs text-gray-400 truncate">{m.student?.email}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── 모달: 새 챕터 ── */}

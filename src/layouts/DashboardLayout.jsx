@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Users, LogIn } from 'lucide-react';
+import { Users, LogIn, LayoutList } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -154,6 +154,19 @@ function TeacherSidebar() {
       </h2>
 
       <div>
+        {/* 게시판 */}
+        <Link
+          to="/teacher/board"
+          className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors mb-1 ${
+            location.pathname.startsWith('/teacher/board')
+              ? 'bg-blue-50 text-blue-700'
+              : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+          }`}
+        >
+          <LayoutList className={`mr-2 h-4 w-4 ${location.pathname.startsWith('/teacher/board') ? 'text-blue-500' : 'text-gray-400'}`} />
+          게시판
+        </Link>
+
         <Link
           to="/teacher/classrooms"
           className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors mb-2 ${
@@ -199,14 +212,48 @@ function TeacherSidebar() {
 const DashboardLayout = () => {
   const { profile } = useAuth();
   const isTeacher = profile?.role === 'teacher';
+  const location = useLocation();
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  /* 페이지 이동 시 모바일 사이드바 자동 닫기 */
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <Navbar />
+      <Navbar onToggleSidebar={() => setSidebarOpen((v) => !v)} />
       <div className="flex flex-1">
+        {/* 데스크톱 사이드바 (md 이상) */}
         <aside className="w-64 bg-white shadow-sm hidden md:block flex-shrink-0">
           {isTeacher ? <TeacherSidebar /> : <StudentSidebar />}
         </aside>
+
+        {/* 모바일 사이드바 오버레이 (md 미만) */}
+        {sidebarOpen && (
+          <>
+            {/* 배경 딤 */}
+            <div
+              className="fixed inset-0 z-40 bg-black/40 md:hidden"
+              onClick={() => setSidebarOpen(false)}
+            />
+            {/* 사이드바 패널 */}
+            <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl md:hidden overflow-y-auto">
+              <div className="flex items-center justify-between px-4 h-16 border-b border-gray-200">
+                <span className="text-lg font-bold text-gray-900">메뉴</span>
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-md cursor-pointer"
+                  aria-label="메뉴 닫기"
+                >
+                  ✕
+                </button>
+              </div>
+              {isTeacher ? <TeacherSidebar /> : <StudentSidebar />}
+            </aside>
+          </>
+        )}
 
         <main className="flex-1 p-8">
           <Outlet />
