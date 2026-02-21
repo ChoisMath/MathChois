@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
 import {
   BG_ELEMENT_ID,
+  BG_FILE_ID,
   ALWAYS_HIDE_CSS,
   PANEL_HIDE_CSS,
   GRID_STYLE,
@@ -34,14 +35,16 @@ const StudentWorkViewer = () => {
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [loading, setLoading]             = useState(true);
 
-  const excalidrawAPIRef = useRef(null);
-  const saveTimerRef     = useRef(null);
-  const currentPageRef   = useRef(null);
-  const bgPositionRef    = useRef(null);
-  const containerRef     = useRef(null);
-  const mountedRef       = useRef(true);
-  const commentModeRef   = useRef(false);
-  const lastSavedRef     = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
+  const excalidrawAPIRef     = useRef(null);
+  const saveTimerRef         = useRef(null);
+  const currentPageRef       = useRef(null);
+  const bgPositionRef        = useRef(null);
+  const containerRef         = useRef(null);
+  const mountedRef           = useRef(true);
+  const commentModeRef       = useRef(false);
+  const lastSavedRef         = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
+  const savedStudentFilesRef = useRef({});   // 학생이 삽입한 이미지 파일
+  const savedTeacherFilesRef = useRef({});   // 교사가 삽입한 이미지 파일
 
   /* scene data refs — avoid re-render loops */
   const studentEls = useRef([]);
@@ -62,7 +65,7 @@ const StudentWorkViewer = () => {
       const api = excalidrawAPIRef.current;
       const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
       const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
-      const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.5');
+      const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.4');
       const validExcalidrawTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
       const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
         (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');
@@ -166,8 +169,10 @@ const StudentWorkViewer = () => {
       studentEls.current = (snRes.data?.excalidraw_data?.elements || []).map((el) => ({
         ...el, id: STUDENT_NOTE_PREFIX + el.id, locked: true, opacity: 60,
       }));
-      bgPositionRef.current = snRes.data?.excalidraw_data?.bgPosition ?? null;
-      teacherEls.current = tscRes.data?.excalidraw_data?.elements || [];
+      bgPositionRef.current      = snRes.data?.excalidraw_data?.bgPosition ?? null;
+      savedStudentFilesRef.current = snRes.data?.excalidraw_data?.files ?? {};
+      teacherEls.current           = tscRes.data?.excalidraw_data?.elements || [];
+      savedTeacherFilesRef.current = tscRes.data?.excalidraw_data?.files ?? {};
 
       rebuildScene();
     };
@@ -198,7 +203,12 @@ const StudentWorkViewer = () => {
         bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
       }
 
-      api.addFiles([{ id: '__bg_file__', dataURL: dataUrl, mimeType, created: Date.now() }]);
+      api.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);
+      const studentFilesList = Object.values(savedStudentFilesRef.current);
+      const teacherFilesList = Object.values(savedTeacherFilesRef.current);
+      if (studentFilesList.length > 0 || teacherFilesList.length > 0) {
+        api.addFiles([...studentFilesList, ...teacherFilesList]);
+      }
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
       api.updateScene({ elements: [bgEl, ...studentEls.current, ...teacherEls.current], commitToHistory: false });
     } catch (err) {
@@ -214,7 +224,7 @@ const StudentWorkViewer = () => {
     /* 저장된 도구 설정 복원 */
     const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
     const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
-    const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.5');
+    const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.4');
     const validExcalidrawTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
     const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
       (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');
@@ -246,12 +256,22 @@ const StudentWorkViewer = () => {
       if (!mountedRef.current) return;
       setSaveStatus('saving');
       teacherEls.current = filtered;
+      const allFiles = excalidrawAPIRef.current?.getFiles() ?? {};
+      const teacherFiles = Object.fromEntries(
+        Object.entries(allFiles).filter(
+          ([id]) => id !== BG_FILE_ID && !savedStudentFilesRef.current[id]
+        )
+      );
+      savedTeacherFilesRef.current = teacherFiles;
       await supabase.from('teacher_student_comments').upsert(
         {
           teacher_id:      user.id,
           student_id:      studentId,
           page_id:         page.id,
-          excalidraw_data: { elements: filtered },
+          excalidraw_data: {
+            elements: filtered,
+            ...(Object.keys(teacherFiles).length > 0 && { files: teacherFiles }),
+          },
           updated_at:      new Date().toISOString(),
         },
         { onConflict: 'teacher_id,student_id,page_id' }

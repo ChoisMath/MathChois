@@ -11,6 +11,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
 import {
   BG_ELEMENT_ID,
+  BG_FILE_ID,
   ALWAYS_HIDE_CSS,
   PANEL_HIDE_CSS,
   GRID_STYLE,
@@ -152,6 +153,7 @@ const StudyViewer = () => {
   const currentPageRef   = useRef(null);
   const noteElementsRef  = useRef([]);
   const bgPositionRef    = useRef(null);
+  const savedFilesRef    = useRef({}); // 저장된 사용자 삽입 이미지 파일
   const userRef          = useRef(user);
   const drawModeRef      = useRef(false);
   const lastSavedRef     = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
@@ -167,7 +169,7 @@ const StudyViewer = () => {
       const api = excalidrawAPIRef.current;
       const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
       const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
-      const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.5');
+      const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.4');
       const validExcalidrawTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
       const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
         (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');
@@ -203,6 +205,7 @@ const StudyViewer = () => {
               .eq('student_id', user.id).eq('page_id', pageId).maybeSingle();
             setNoteElements(note?.excalidraw_data?.elements || []);
             bgPositionRef.current = note?.excalidraw_data?.bgPosition ?? null;
+            savedFilesRef.current  = note?.excalidraw_data?.files ?? {};
           }
         } else {
           navigate(`/student/study/${chapterId}/page/${pgs[0].id}`, { replace: true });
@@ -276,6 +279,8 @@ const StudyViewer = () => {
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setSaveStatus('saving');
+      const allFiles  = excalidrawAPIRef.current?.getFiles() ?? {};
+      const { [BG_FILE_ID]: _bgf, ...userFiles } = allFiles;
       await supabase.from('student_notes').upsert(
         {
           student_id:      cu.id,
@@ -283,6 +288,7 @@ const StudyViewer = () => {
           excalidraw_data: {
             elements:   userEls,
             bgPosition: bgPositionRef.current,
+            ...(Object.keys(userFiles).length > 0 && { files: userFiles }),
           },
           updated_at: new Date().toISOString(),
         },
@@ -331,6 +337,9 @@ const StudyViewer = () => {
       }
 
       api.addFiles([{ id: '__bg_file__', dataURL: dataUrl, mimeType, created: Date.now() }]);
+      /* 저장된 사용자 삽입 이미지 복원 */
+      const userFilesList = Object.values(savedFilesRef.current);
+      if (userFilesList.length > 0) api.addFiles(userFilesList);
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
 
       let commentEls = [];
