@@ -175,6 +175,8 @@ const StudyViewer = () => {
   const lastSavedRef          = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
   const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
+  const lastZoomRef           = useRef(1);
+  const lastScrollXRef        = useRef(0);
 
   useEffect(() => { currentPageRef.current  = currentPage;  }, [currentPage]);
   useEffect(() => { noteElementsRef.current = noteElements; }, [noteElements]);
@@ -314,8 +316,28 @@ const StudyViewer = () => {
     return () => { supabase.removeChannel(channel); };
   }, [currentPage?.id, user?.id]);
 
-  /* ── Excalidraw onChange ── */
-  const handleExcalidrawChange = useCallback((elements) => {
+  /* ── Excalidraw onChange & 스마트 좌우 패닝 잠금 ── */
+  const handleExcalidrawChange = useCallback((elements, appState) => {
+    if (appState) {
+      const isEditing = appState.editingLinearElement || appState.draggingElement || 
+                        appState.resizingElement || appState.multiElement || 
+                        appState.selectionElement || appState.editingElement || 
+                        appState.newElement;
+      
+      if (!isEditing) {
+        if (appState.zoom.value !== lastZoomRef.current) {
+          lastZoomRef.current = appState.zoom.value;
+          lastScrollXRef.current = appState.scrollX;
+        } else if (appState.scrollX !== lastScrollXRef.current) {
+          excalidrawAPIRef.current?.updateScene({
+            appState: { scrollX: lastScrollXRef.current }
+          });
+        }
+      } else {
+        lastZoomRef.current = appState.zoom.value;
+        lastScrollXRef.current = appState.scrollX;
+      }
+    }
     /* 뷰 모드에서는 저장하지 않음 */
     if (!drawModeRef.current) return;
 

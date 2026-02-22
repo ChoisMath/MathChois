@@ -51,6 +51,8 @@ const TeacherStudyViewer = () => {
   const lastSavedRef          = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
   const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
+  const lastZoomRef           = useRef(1);
+  const lastScrollXRef        = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -117,8 +119,31 @@ const TeacherStudyViewer = () => {
     fetchData();
   }, [chapterId, pageId, navigate, classroomId, user]);
 
-  /* ── onChange → teacher_notes upsert ── */
-  const handleExcalidrawChange = useCallback((elements) => {
+  /* ── onChange → teacher_notes upsert & 스마트 좌우 패닝 잠금 ── */
+  const handleExcalidrawChange = useCallback((elements, appState) => {
+    if (appState) {
+      const isEditing = appState.editingLinearElement || appState.draggingElement || 
+                        appState.resizingElement || appState.multiElement || 
+                        appState.selectionElement || appState.editingElement || 
+                        appState.newElement;
+      
+      if (!isEditing) {
+        if (appState.zoom.value !== lastZoomRef.current) {
+          // 줌 변경 발생 시, Excalidraw 내부의 중심점 유지를 위한 scrollX 보정을 허용
+          lastZoomRef.current = appState.zoom.value;
+          lastScrollXRef.current = appState.scrollX;
+        } else if (appState.scrollX !== lastScrollXRef.current) {
+          // 줌 변경도 없고 상호작용(도형편집/드래그)도 없는데 scrollX가 변했다면 -> 좌우 패닝 시도 중
+          excalidrawAPIRef.current?.updateScene({
+            appState: { scrollX: lastScrollXRef.current }
+          });
+        }
+      } else {
+        // 사용자가 명시적으로 도형을 편집/드래그하는 중 발생한 스크롤(오토스크롤 등)은 허용
+        lastZoomRef.current = appState.zoom.value;
+        lastScrollXRef.current = appState.scrollX;
+      }
+    }
     const bgEl = elements.find((el) => el.id === BG_ELEMENT_ID);
     if (bgEl) {
       bgPositionRef.current = { x: bgEl.x, y: bgEl.y, width: bgEl.width, height: bgEl.height };
