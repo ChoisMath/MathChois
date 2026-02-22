@@ -33,10 +33,10 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
     return SAVEABLE_TOOLS.includes(saved) ? saved : 'freedraw';
   });
   const [color, setColor]                 = useState(() =>
-    localStorage.getItem('mc_tool_color') || '#1e1e1e'
+    localStorage.getItem('mc_tool_color') || '#000000'
   );
   const [strokeWidth, setStrokeWidth]     = useState(() =>
-    parseFloat(localStorage.getItem('mc_stroke_width') || '0.4')
+    parseFloat(localStorage.getItem('mc_stroke_width') || '0.2')
   );
   const [imageMoveMode, setImageMoveMode] = useState(false);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
@@ -56,39 +56,99 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
   const sPenPrevToolRef = useRef(null);
   const activeToolRef   = useRef(activeTool);
   const applyToolRef    = useRef(null);
-  activeToolRef.current = activeTool;
+  useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
 
-  /* ── S Pen 사이드 버튼 → 지우개 모드 ── */
+  /* ── S Pen 사이드 버튼 → 지우개 모드 (개선) ── */
+  const sPenBtnActiveRef = useRef(false);   // 버튼이 눌린 상태 추적
+
   useEffect(() => {
-    const onSPenDown = (e) => {
-      if (e.pointerType !== 'pen' || e.button !== 2) return;
-      if (sPenPrevToolRef.current !== null) return;
+    /* 헬퍼: 지우개 모드 진입 */
+    const enterEraser = () => {
+      if (sPenPrevToolRef.current !== null) return; // 이미 진입됨
       const current = activeToolRef.current;
       if (current === 'eraser') return;
       sPenPrevToolRef.current = ['image_move', 'eraser_area'].includes(current)
         ? 'freedraw'
         : current;
-      applyToolRef.current('eraser');
+      sPenBtnActiveRef.current = true;
+      applyToolRef.current?.('eraser');
     };
-    const onSPenUp = (e) => {
-      if (e.pointerType !== 'pen' || sPenPrevToolRef.current === null) return;
-      applyToolRef.current(sPenPrevToolRef.current);
+
+    /* 헬퍼: 이전 도구 복원 */
+    const restoreTool = () => {
+      if (sPenPrevToolRef.current === null) return;
+      applyToolRef.current?.(sPenPrevToolRef.current);
       sPenPrevToolRef.current = null;
+      sPenBtnActiveRef.current = false;
     };
+
+    /* ① pointerdown: button===2 (기존 방식) 또는 button===5 (eraser tip) */
+    const onSPenDown = (e) => {
+      if (e.pointerType !== 'pen') return;
+      if (e.button === 2 || e.button === 5) {
+        e.preventDefault();
+        enterEraser();
+      }
+      /* ② 호버 감지: 공중에서 버튼 누른 채 터치 (button===1, pressure===0 상태에서 진입) */
+      if (sPenBtnActiveRef.current && sPenPrevToolRef.current !== null) {
+        e.preventDefault();
+      }
+    };
+
+    /* ③ pointermove: buttons 비트마스크 모니터링 */
+    const onSPenMove = (e) => {
+      if (e.pointerType !== 'pen') return;
+      const hasBtn = (e.buttons & 2) !== 0 || (e.buttons & 32) !== 0;
+
+      if (hasBtn && !sPenBtnActiveRef.current) {
+        /* 버튼이 방금 눌림 → 지우개 전환 */
+        enterEraser();
+      } else if (!hasBtn && sPenBtnActiveRef.current && e.pressure > 0) {
+        /* 화면에 터치 중인데 버튼이 풀림 → 도구 복원 */
+        restoreTool();
+      }
+
+      /* 호버 상태에서 버튼 감지 (공중에서 버튼 누르기) */
+      if (e.pressure === 0 && (e.buttons & 2) !== 0) {
+        enterEraser();
+      }
+    };
+
+    /* ④ pointerup / pointercancel: 펜을 들었을 때 도구 복원 */
+    const onSPenUp = (e) => {
+      if (e.pointerType !== 'pen') return;
+      restoreTool();
+    };
+
+    /* ⑤ contextmenu: S Pen 버튼 + 터치 후 릴리스 시 발생 → 지우개 전환 트리거 */
     const onContextMenu = (e) => {
-      if (sPenPrevToolRef.current !== null) e.preventDefault();
+      if (sPenBtnActiveRef.current || sPenPrevToolRef.current !== null) {
+        e.preventDefault();
+        return;
+      }
+      /* S Pen 컨텍스트 메뉴를 지우개 토글로 활용 */
+      const lastPointerType = e.pointerType || '';
+      if (lastPointerType === 'pen' || (e.sourceCapabilities && !e.sourceCapabilities.firesTouchEvents)) {
+        e.preventDefault();
+        enterEraser();
+        /* 짧은 시간 후 자동 복원 (컨텍스트메뉴는 일회성 이벤트이므로) */
+        setTimeout(restoreTool, 100);
+      }
     };
-    document.addEventListener('pointerdown',   onSPenDown,    { capture: true });
-    document.addEventListener('pointerup',     onSPenUp,      { capture: true });
-    document.addEventListener('pointercancel', onSPenUp,      { capture: true });
+
+    document.addEventListener('pointerdown',   onSPenDown, { capture: true });
+    document.addEventListener('pointermove',   onSPenMove, { capture: true });
+    document.addEventListener('pointerup',     onSPenUp,   { capture: true });
+    document.addEventListener('pointercancel', onSPenUp,   { capture: true });
     document.addEventListener('contextmenu',   onContextMenu, { capture: true });
     return () => {
-      document.removeEventListener('pointerdown',   onSPenDown,    { capture: true });
-      document.removeEventListener('pointerup',     onSPenUp,      { capture: true });
-      document.removeEventListener('pointercancel', onSPenUp,      { capture: true });
+      document.removeEventListener('pointerdown',   onSPenDown, { capture: true });
+      document.removeEventListener('pointermove',   onSPenMove, { capture: true });
+      document.removeEventListener('pointerup',     onSPenUp,   { capture: true });
+      document.removeEventListener('pointercancel', onSPenUp,   { capture: true });
       document.removeEventListener('contextmenu',   onContextMenu, { capture: true });
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ── 삼각형 모드: pointerup 후 freedraw → 삼각형 line 으로 변환 ── */
   useEffect(() => {
@@ -152,7 +212,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
       api?.setActiveTool({ type });
     }
   };
-  applyToolRef.current = applyTool;
+  useEffect(() => { applyToolRef.current = applyTool; });
 
   const applyColor = (hex) => {
     setColor(hex);
@@ -335,14 +395,15 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
             { type: 'ellipse',   Icon: Circle,   label: '원' },
             { type: 'triangle',  Icon: Triangle, label: '삼각형 (그린 후 자동 변환)' },
             { type: 'line',      Icon: Minus,    label: '직선' },
-          ].map(({ type, Icon, label }) => (
+          // eslint-disable-next-line no-unused-vars
+          ].map(({ type, Icon: ShapeIcon, label }) => (
             <button key={type}
               onClick={() => { applyTool(type); setShapeMenuOpen(false); }}
               title={label}
               className={`p-1.5 rounded-md transition-colors cursor-pointer flex-shrink-0 ${
                 activeTool === type ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
               }`}>
-              <Icon className="h-4 w-4" />
+              <ShapeIcon className="h-4 w-4" />
             </button>
           ))}
           <div className="w-px h-6 bg-gray-200 mx-0.5 flex-shrink-0" />
@@ -418,16 +479,16 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
       {/* ④ 선 굵기 슬라이더 */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
         <input
-          type="range" min="0.1" max="8" step="0.1"
+          type="range" min="0.1" max="2" step="0.1"
           value={strokeWidth}
           title={`굵기: ${strokeWidth}`}
           onChange={(e) => applyWidth(parseFloat(e.target.value))}
-          className="w-20 accent-blue-500 cursor-pointer"
+          className="w-32 accent-blue-500 cursor-pointer"
         />
         <svg width="22" height="16" className="flex-shrink-0" style={{ overflow: 'visible' }}>
           <line x1="1" y1="8" x2="21" y2="8"
             stroke={color}
-            strokeWidth={Math.max(Math.min(strokeWidth, 8), 0.1)}
+            strokeWidth={Math.max(Math.min(strokeWidth, 2), 0.1)}
             strokeLinecap="round"
           />
         </svg>

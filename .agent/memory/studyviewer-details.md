@@ -14,7 +14,15 @@
 
 - **BG_ELEMENT_ID (`__bg_image__`)**: 배경 이미지 Excalidraw element ID. 이미지를 배경 CSS로 깔지 않고 객체로 삽입해 확대/축소 시 펜 획과 어긋나지 않게 함.
 - **모바일 100dvh**: 상단/하단 툴바가 브라우저 주소창 스크롤에 의해 가려지는 문제를 막기 위해 `height: 100dvh` 적용.
-- **DrawingToolbar.jsx**: 펜, 텍스트, 지우개, 색상 팔레트 등 담당. Samsung S Pen 배럴 버튼(사이드 버튼)을 누르면 지우개로 전환되는 로직 내장.
+- **DrawingToolbar.jsx**: 펜, 텍스트, 지우개, 색상 팔레트 등 담당.
+  - **펜 기본값**: 두께 `0.2`, 색상 `#000000` (순수 검정). localStorage(`mc_stroke_width`, `mc_tool_color`)에 값이 있으면 그 값 사용 (페이지 이동 시 설정 유지).
+  - **두께 슬라이더**: 범위 `0.1 ~ 2.0` (step 0.1), 넓이 `w-32` (Tailwind).
+  - **Samsung S Pen 사이드 버튼 → 지우개 전환**: Chromium에서 화면 터치 중 S Pen 버튼 이벤트가 소실되는 제한이 있어, 5가지 감지 전략을 병행:
+    1. `pointerdown` `button === 2 || 5` (기본)
+    2. `pointermove` `buttons` 비트마스크 (`& 2`, `& 32`) 실시간 모니터링
+    3. 호버 상태 감지 (`pressure === 0`, `buttons & 2`)
+    4. `pointerup`/`pointercancel` 시 이전 도구 자동 복원
+    5. `contextmenu` 이벤트를 S Pen 버튼 대체 트리거로 활용
 
 ## 자동 저장 로직 (일반 학습)
 
