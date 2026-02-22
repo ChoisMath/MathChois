@@ -1,13 +1,26 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Loader } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader, Save } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
+import SortablePageItem from '../../components/common/SortablePageItem';
 
 const AssignmentEditor = () => {
   const { classroomId, assignmentId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const fileInputRef = useRef(null);
 
   const [assignment, setAssignment] = useState(null);
@@ -23,6 +36,41 @@ const AssignmentEditor = () => {
   const [deadline, setDeadline]     = useState('');
   const [maxScore, setMaxScore]     = useState(100);
   const [savingMeta, setSavingMeta] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    if (!over) return;
+    
+    if (active.id !== over.id) {
+      const oldIndex = pages.findIndex((p) => p.id === active.id);
+      const newIndex = pages.findIndex((p) => p.id === over.id);
+
+      const newPages = arrayMove(pages, oldIndex, newIndex);
+      
+      const updatedPages = newPages.map((p, idx) => ({ ...p, position: idx }));
+      setPages(updatedPages);
+
+      const updates = updatedPages.map((pg) => ({
+        id: pg.id,
+        assignment_id: assignmentId,
+        image_url: pg.image_url,
+        position: pg.position,
+      }));
+
+      await supabase.from('assignment_pages').upsert(updates);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -52,7 +100,11 @@ const AssignmentEditor = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, [assignmentId]);
+  useEffect(() => {
+    const timer = setTimeout(fetchData, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignmentId]);
 
   const handleSaveMeta = async (e) => {
     e.preventDefault();
@@ -176,10 +228,9 @@ const AssignmentEditor = () => {
           </div>
         </div>
         <div className="flex justify-end">
-          <button type="submit" disabled={savingMeta || !title.trim()}
-            className="px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 cursor-pointer flex items-center gap-1.5">
-            {savingMeta && <Loader className="animate-spin h-3.5 w-3.5" />}
-            {savingMeta ? '저장 중...' : '설정 저장'}
+          <button type="submit" disabled={savingMeta || !title.trim()} title="설정 저장"
+            className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer flex items-center justify-center">
+            {savingMeta ? <Loader className="animate-spin h-5 w-5" /> : <Save className="h-5 w-5" />}
           </button>
         </div>
       </form>
@@ -194,18 +245,10 @@ const AssignmentEditor = () => {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+            title={uploading ? `업로드 중... (${uploadProgress.done}/${uploadProgress.total})` : "페이지 추가"}
+            className="inline-flex items-center justify-center p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
           >
-            {uploading ? (
-              <>
-                <Loader className="animate-spin h-4 w-4 mr-2" />
-                {uploadProgress.total > 1
-                  ? `업로드 중... (${uploadProgress.done}/${uploadProgress.total})`
-                  : '업로드 중...'}
-              </>
-            ) : (
-              <><Plus className="h-4 w-4 mr-2" />페이지 추가</>
-            )}
+            {uploading ? <Loader className="animate-spin h-5 w-5" /> : <Plus className="h-5 w-5" />}
           </button>
         </div>
       </div>
@@ -216,26 +259,29 @@ const AssignmentEditor = () => {
           {pages.length === 0 ? (
             <p className="p-4 text-sm text-gray-400 text-center">페이지 없음</p>
           ) : (
-            <div className="space-y-2 p-2">
-              {pages.map((pg, idx) => (
-                <div
-                  key={pg.id}
-                  onClick={() => setSelectedPage(pg)}
-                  className={`relative group rounded-md overflow-hidden cursor-pointer border-2 transition-colors ${
-                    selectedPage?.id === pg.id ? 'border-blue-500' : 'border-transparent hover:border-gray-300'
-                  }`}
+            <div className="space-y-2 p-2 hidden-scroll">
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={pages.map((p) => p.id)}
+                  strategy={verticalListSortingStrategy}
                 >
-                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full aspect-[3/4] object-cover" />
-                  <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">{idx + 1}</div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDeletePage(pg); }}
-                    disabled={deleting}
-                    className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer disabled:opacity-50"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
+                  {pages.map((pg, idx) => (
+                    <SortablePageItem
+                      key={pg.id}
+                      page={pg}
+                      index={idx}
+                      isSelected={selectedPage?.id === pg.id}
+                      onSelectPage={setSelectedPage}
+                      onDeletePage={handleDeletePage}
+                      isDeleting={deleting}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
             </div>
           )}
         </div>

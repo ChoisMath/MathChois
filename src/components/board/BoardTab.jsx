@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, ChevronDown, ChevronUp, Paperclip, Newspaper } from 'lucide-react';
+import { Plus, ChevronDown, ChevronUp, Paperclip, Newspaper, Pencil } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 function formatDate(iso) {
@@ -40,9 +40,10 @@ function PostCard({ post, isTeacher, navigate }) {
           {isTeacher && (
             <button
               onClick={(e) => { e.stopPropagation(); navigate(`/teacher/board/${post.id}/edit`); }}
-              className="text-xs text-blue-500 hover:text-blue-700 px-2 py-0.5 rounded hover:bg-blue-50 cursor-pointer"
+              title="수정"
+              className="text-blue-500 hover:text-blue-700 p-1.5 rounded hover:bg-blue-50 cursor-pointer"
             >
-              수정
+              <Pencil className="w-4 h-4" />
             </button>
           )}
           {open

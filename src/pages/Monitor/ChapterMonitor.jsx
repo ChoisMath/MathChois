@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, PenLine, Users, FileText } from 'lucide-react';
+import { ArrowLeft, PenLine, Users, FileText, Download } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
+import { usePdfDownloader } from '../../lib/pdfDownloader';
+import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 
 function formatTime(iso) {
   if (!iso) return null;
@@ -32,6 +34,9 @@ const ChapterMonitor = () => {
   const [members, setMembers]         = useState([]);
   const [notesSummary, setNotesSummary] = useState({});
   const [loading, setLoading]         = useState(true);
+
+  const { downloadMultiplePages } = usePdfDownloader();
+  const [downloadingStudentId, setDownloadingStudentId] = useState(null);
 
   const pagesRef = useRef([]);
   useEffect(() => { pagesRef.current = pages; }, [pages]);
@@ -127,6 +132,37 @@ const ChapterMonitor = () => {
     );
   };
 
+  /* ── 학생 PDF 다운로드 ── */
+  const handleDownloadStudentPdf = async (e, student) => {
+    e.stopPropagation();
+    if (pages.length === 0) return;
+    setDownloadingStudentId(student.student_id);
+
+    try {
+      const { data: notes } = await supabase
+        .from('student_notes')
+        .select('page_id, excalidraw_data')
+        .eq('student_id', student.student_id)
+        .in('page_id', pages.map(p => p.id));
+
+      const notesMap = {};
+      (notes || []).forEach(n => { notesMap[n.page_id] = n.excalidraw_data; });
+
+      const pageDataList = pages.map((p) => ({
+        elements: notesMap[p.id]?.elements || [],
+        files: notesMap[p.id]?.files || {},
+        bgUrl: p.image_url
+      }));
+
+      await downloadMultiplePages(`${student.profiles?.name || '학생'}_${chapter?.title || '챕터'}_필기`, pageDataList);
+    } catch (err) {
+      console.error(err);
+      alert('PDF 다운로드 중 오류가 발생했습니다.');
+    } finally {
+      setDownloadingStudentId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -141,8 +177,8 @@ const ChapterMonitor = () => {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/teacher/classrooms/${classroomId}`)}
-            className="p-1.5 text-gray-400 hover:text-gray-600 cursor-pointer"
+            onClick={() => navigate(`/teacher/classrooms/${classroomId}`)} title="뒤로 가기"
+            className="p-1.5 text-gray-400 hover:text-gray-600 cursor-pointer flex items-center justify-center"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
@@ -150,11 +186,10 @@ const ChapterMonitor = () => {
         </div>
         <button
           onClick={handleTeacherNote}
-          disabled={pages.length === 0}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
+          disabled={pages.length === 0} title="교사 필기"
+          className="inline-flex items-center justify-center p-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
         >
-          <PenLine className="h-4 w-4" />
-          교사 필기
+          <PenLine className="h-5 w-5" />
         </button>
       </div>
 
@@ -177,7 +212,7 @@ const ChapterMonitor = () => {
 
       {/* 학생 카드 그리드 */}
       {pages.length > 0 && members.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {members.map((m) => {
             const profile = m.profiles;
             const summary = notesSummary[m.student_id] || { pagesWithNotes: new Set(), updatedAt: null };
@@ -191,27 +226,30 @@ const ChapterMonitor = () => {
                 onClick={() => navigate(
                   `/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor/${m.student_id}`
                 )}
-                className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all"
+                className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all flex flex-col h-full"
               >
-                <div className="flex items-center gap-3 mb-3">
-                  {profile?.avatar_url ? (
-                    <img
-                      src={profile.avatar_url}
-                      alt={profile.name}
-                      className="w-9 h-9 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm font-bold">
-                      {(profile?.name || '?')[0]}
-                    </div>
-                  )}
-                  <p className="font-medium text-gray-900 text-sm truncate flex-1">
-                    {profile?.name || '이름 없음'}
-                  </p>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {profile?.avatar_url ? (
+                      <img src={profile.avatar_url} alt={profile.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm font-bold shrink-0">
+                        {(profile?.name || '?')[0]}
+                      </div>
+                    )}
+                    <p className="font-medium text-gray-900 text-sm truncate">
+                      {profile?.name || '이름 없음'}
+                    </p>
+                  </div>
+                  <PdfDownloadButton
+                    onClick={(e) => handleDownloadStudentPdf(e, m)}
+                    isDownloading={downloadingStudentId === m.student_id}
+                    className="p-1 shrink-0 text-gray-400 hover:text-blue-600 bg-transparent hover:bg-blue-50"
+                  />
                 </div>
 
                 {/* 진도 바 */}
-                <div className="w-full bg-gray-100 rounded-full h-1.5 mb-2">
+                <div className="w-full bg-gray-100 rounded-full h-1.5 mb-2 mt-auto">
                   <div
                     className={`h-1.5 rounded-full transition-all ${
                       pct === 1 ? 'bg-green-500' : pct > 0 ? 'bg-yellow-400' : 'bg-gray-300'
@@ -220,7 +258,7 @@ const ChapterMonitor = () => {
                   />
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mt-2 pt-1">
                   <ProgressBadge done={done} total={total} />
                   {summary.updatedAt && (
                     <span className="text-xs text-gray-400">{formatTime(summary.updatedAt)}</span>

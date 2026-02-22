@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Clock } from 'lucide-react';
+import { ArrowLeft, Users, Clock, Download } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { usePdfDownloader } from '../../lib/pdfDownloader';
+import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 
 function formatTime(iso) {
   if (!iso) return null;
@@ -32,6 +34,10 @@ const AssignmentMonitor = () => {
   const [members, setMembers]           = useState([]);
   const [submissions, setSubmissions]   = useState({}); // studentId → submission
   const [loading, setLoading]           = useState(true);
+  
+  const { downloadMultiplePages } = usePdfDownloader();
+  const [downloadingStudentId, setDownloadingStudentId] = useState(null);
+  const [pages, setPages] = useState([]);
 
   const subsRef = useRef({});
   useEffect(() => { subsRef.current = submissions; }, [submissions]);
@@ -39,8 +45,9 @@ const AssignmentMonitor = () => {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const [asnRes, membersRes, subsRes] = await Promise.all([
+      const [asnRes, pgsRes, membersRes, subsRes] = await Promise.all([
         supabase.from('assignments').select('id, title, deadline, max_score').eq('id', assignmentId).single(),
+        supabase.from('assignment_pages').select('id, image_url, position').eq('assignment_id', assignmentId).order('position'),
         supabase.from('classroom_members')
           .select('student_id, profiles(id, name, avatar_url)')
           .eq('classroom_id', classroomId),
@@ -50,6 +57,7 @@ const AssignmentMonitor = () => {
       ]);
 
       setAssignment(asnRes.data);
+      setPages(pgsRes.data || []);
       setMembers(membersRes.data || []);
 
       const map = {};
@@ -89,6 +97,37 @@ const AssignmentMonitor = () => {
     </div>
   );
 
+  /* ── 학생 PDF 다운로드 ── */
+  const handleDownloadStudentPdf = async (e, student) => {
+    e.stopPropagation();
+    if (pages.length === 0) return;
+    setDownloadingStudentId(student.student_id);
+
+    try {
+      const { data: notes } = await supabase
+        .from('assignment_notes')
+        .select('page_id, excalidraw_data')
+        .eq('student_id', student.student_id)
+        .in('page_id', pages.map(p => p.id));
+
+      const notesMap = {};
+      (notes || []).forEach(n => { notesMap[n.page_id] = n.excalidraw_data; });
+
+      const pageDataList = pages.map((p) => ({
+        elements: notesMap[p.id]?.elements || [],
+        files: notesMap[p.id]?.files || {},
+        bgUrl: p.image_url
+      }));
+
+      await downloadMultiplePages(`${student.profiles?.name || '학생'}_${assignment?.title || '과제'}_필기`, pageDataList);
+    } catch (err) {
+      console.error(err);
+      alert('PDF 다운로드 중 오류가 발생했습니다.');
+    } finally {
+      setDownloadingStudentId(null);
+    }
+  };
+
   const submitted   = Object.values(submissions).filter((s) => ['submitted', 'late_submitted', 'rejected', 'graded'].includes(s.status)).length;
   const graded      = Object.values(submissions).filter((s) => s.status === 'graded').length;
 
@@ -125,7 +164,7 @@ const AssignmentMonitor = () => {
           <p className="mt-4 text-gray-500">이 클래스룸에 학생이 없습니다.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {members.map((m) => {
             const profile = m.profiles;
             const sub = submissions[m.student_id] || null;
@@ -137,27 +176,34 @@ const AssignmentMonitor = () => {
                 onClick={() => navigate(
                   `/teacher/classrooms/${classroomId}/assignments/${assignmentId}/monitor/${m.student_id}`
                 )}
-                className={`rounded-xl shadow-sm border p-4 cursor-pointer hover:shadow-md transition-all ${bg} ${border}`}
+                className={`flex flex-col h-full rounded-xl shadow-sm border p-4 cursor-pointer hover:shadow-md transition-all ${bg} ${border}`}
               >
-                <div className="flex items-center gap-3 mb-3">
-                  {profile?.avatar_url ? (
-                    <img src={profile.avatar_url} alt={profile.name}
-                      className="w-9 h-9 rounded-full object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm font-bold">
-                      {(profile?.name || '?')[0]}
-                    </div>
-                  )}
-                  <p className="font-medium text-gray-900 text-sm truncate flex-1">
-                    {profile?.name || '이름 없음'}
-                  </p>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {profile?.avatar_url ? (
+                      <img src={profile.avatar_url} alt={profile.name}
+                        className="w-9 h-9 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm font-bold shrink-0">
+                        {(profile?.name || '?')[0]}
+                      </div>
+                    )}
+                    <p className="font-medium text-gray-900 text-sm truncate">
+                      {profile?.name || '이름 없음'}
+                    </p>
+                  </div>
+                  <PdfDownloadButton
+                    onClick={(e) => handleDownloadStudentPdf(e, m)}
+                    isDownloading={downloadingStudentId === m.student_id}
+                    className="p-1 shrink-0 text-gray-400 hover:text-blue-600 bg-transparent hover:bg-blue-50"
+                  />
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mt-auto pt-2 border-t border-transparent text-gray-400 hover:border-gray-100">
                   <span className={`text-xs font-medium ${text}`}>{label}</span>
                   <div className="text-right">
                     {sub?.status === 'graded' && sub.score != null && (
-                      <span className="text-xs font-semibold text-blue-700">
+                      <span className="text-xs font-semibold text-blue-700 block mb-0.5">
                         {sub.score}/{sub.max_score ?? assignment?.max_score}점
                       </span>
                     )}

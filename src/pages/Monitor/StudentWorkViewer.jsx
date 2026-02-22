@@ -6,6 +6,8 @@ import '@excalidraw/excalidraw/index.css';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
+import { usePdfDownloader } from '../../lib/pdfDownloader';
+import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 import {
   BG_ELEMENT_ID,
   BG_FILE_ID,
@@ -35,6 +37,8 @@ const StudentWorkViewer = () => {
   const [showExcalidrawPanel, setShowExcalidrawPanel] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [loading, setLoading]             = useState(true);
+
+  const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
 
   const excalidrawAPIRef      = useRef(null);
   const saveTimerRef          = useRef(null);
@@ -302,7 +306,7 @@ const StudentWorkViewer = () => {
     prefetchImages(
       [pages[currentPageIndex - 1]?.image_url, pages[currentPageIndex + 1]?.image_url].filter(Boolean)
     );
-  }, [currentPageIndex, pages]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentPageIndex, pages]);
 
   /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ── */
   useEffect(() => {
@@ -331,11 +335,11 @@ const StudentWorkViewer = () => {
     <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
 
       {/* ── 내비게이션 바 ── */}
-      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-20">
+      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor`)}
-            className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer"
+            onClick={() => navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor`)} title="뒤로 가기"
+            className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer flex items-center justify-center"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -349,6 +353,54 @@ const StudentWorkViewer = () => {
               {saveStatus === 'saved' ? '저장됨' : '저장 중...'}
             </span>
           )}
+          {/* PDF 다운로드 */}
+          {currentPage && studentEls.current && (
+            <PdfDownloadButton
+              onClick={() => {
+                const title = `${studentProfile?.name || '학생'}_${chapter?.title || '챕터'}_${currentPage.position + 1}p`;
+                const elsToDownload = [...studentEls.current, ...teacherEls.current];
+                const filesToDownload = { ...savedStudentFilesRef.current, ...savedTeacherFilesRef.current };
+                downloadPage(title, elsToDownload, filesToDownload, currentPage.image_url, bgPositionRef.current);
+              }}
+              onDownloadAll={async () => {
+                const title = `${studentProfile?.name || '학생'}_${chapter?.title || '챕터'}_전체`;
+                // Fetch all notes for this student in this chapter
+                const { data: studentNotes } = await supabase
+                  .from('student_notes')
+                  .select('page_id, excalidraw_data')
+                  .eq('student_id', studentProfile.id)
+                  .in('page_id', pages.map(p => p.id));
+                const studentNotesMap = Object.fromEntries((studentNotes || []).map(n => [n.page_id, n.excalidraw_data]));
+
+                // Fetch all teacher comments for this student in this chapter
+                const { data: teacherNotes } = await supabase
+                  .from('teacher_comments')
+                  .select('page_id, excalidraw_data')
+                  .eq('student_id', studentProfile.id)
+                  .in('page_id', pages.map(p => p.id));
+                const teacherNotesMap = Object.fromEntries((teacherNotes || []).map(n => [n.page_id, n.excalidraw_data]));
+
+                const pageDataList = pages.map(pg => {
+                  const sNote = studentNotesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
+                  const tNote = teacherNotesMap[pg.id] || { elements: [], files: {} };
+                  
+                  const sEls = sNote.elements || [];
+                  const tEls = (tNote.elements || []).map(el => ({ ...el, id: '__tc_' + el.id, locked: true, opacity: 60 }));
+                  
+                  return {
+                    bgUrl: pg.image_url,
+                    elements: [...sEls, ...tEls],
+                    files: { ...(sNote.files || {}), ...(tNote.files || {}) },
+                    bgPosition: sNote.bgPosition,
+                  };
+                });
+                downloadMultiplePages(title, pageDataList);
+              }}
+              isDownloading={isDownloading}
+              className="py-1 px-2 text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+            />
+          )}
+
           <button
             onClick={() => setCommentMode((v) => !v)}
             title={commentMode ? '코멘트 모드 (클릭하여 보기 모드로)' : '보기 모드 (클릭하여 코멘트 모드로)'}

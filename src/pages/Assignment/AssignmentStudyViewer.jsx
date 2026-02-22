@@ -2,13 +2,15 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, ChevronRight, Menu, Pencil, Send,
-  ChevronUp, ChevronDown, GraduationCap, X,
+  ChevronUp, ChevronDown, GraduationCap, X, Download, Loader
 } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
+import { usePdfDownloader } from '../../lib/pdfDownloader';
+import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 import {
   BG_ELEMENT_ID, BG_FILE_ID,
   ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE,
@@ -21,11 +23,168 @@ const _commentsCache = new Map(); // `${userId}_${pageId}` → { elements, files
 
 const TEACHER_COMMENT_PREFIX = '__atc_';
 
+/* ─────────── 교사 필기 모달 ─────────── */
+function TeacherNotesModal({ page, onClose }) {
+  const containerRef = useRef(null);
+  const [status, setStatus] = useState('loading'); // 'loading' | 'empty' | 'ok'
+  const [noteElements, setNoteElements] = useState([]);
+  const [noteFiles, setNoteFiles] = useState({});
+  const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
+  const bgPositionRef = useRef(null);
+  const [dbBgPosition, setDbBgPosition] = useState(null);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    const load = async () => {
+      setStatus('loading');
+      const { data } = await supabase
+        .from('assignment_teacher_notes')
+        .select('excalidraw_data')
+        .eq('page_id', page.id);
+      const els = (data || []).flatMap((n) => n.excalidraw_data?.elements || []);
+      if (els.length === 0) {
+        setStatus('empty');
+      } else {
+        const files = Object.assign({}, ...(data || []).map((n) => n.excalidraw_data?.files ?? {}));
+        const bgPos = (data || []).find((n) => n.excalidraw_data?.bgPosition)?.excalidraw_data.bgPosition;
+        setNoteElements(els);
+        setNoteFiles(files);
+        setDbBgPosition(bgPos || null);
+        setStatus('ok');
+      }
+    };
+    load();
+  }, [page.id]);
+
+  const handleMount = useCallback(async (api) => {
+    if (!page.image_url || !containerRef.current) return;
+    try {
+      const { dataUrl, mimeType } = await fetchAsDataUrl(page.image_url);
+      const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
+      const W = containerRef.current.clientWidth  || 800;
+      const H = containerRef.current.clientHeight || 900;
+      const scale = Math.min(W / iW, H / iH);
+      
+      let bgW, bgH, bgX, bgY;
+      if (dbBgPosition) {
+        ({ width: bgW, height: bgH, x: bgX, y: bgY } = dbBgPosition);
+      } else {
+        bgW = iW * scale;
+        bgH = iH * scale;
+        bgX = (W - bgW) / 2;
+        bgY = (H - bgH) / 2;
+      }
+      
+      bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
+      api.addFiles([{ id: '__bg_file__', dataURL: dataUrl, mimeType, created: Date.now() }]);
+      /* 교사 필기에 삽입된 이미지 파일 복원 */
+      const noteFilesList = Object.values(noteFiles);
+      if (noteFilesList.length > 0) api.addFiles(noteFilesList);
+      /* addFiles의 React 상태 커밋 후 updateScene — 별도 렌더 사이클에서 실행해야 이미지가 표시됨 */
+      await new Promise((r) => requestAnimationFrame(r));
+      const bgEl = createBgElement(bgX, bgY, bgW, bgH);
+      api.updateScene({ elements: [bgEl, ...noteElements] });
+    } catch (err) {
+      console.error('교사 필기 모달 bg 로드 실패:', err);
+      api.updateScene({ elements: noteElements });
+    }
+  }, [page.image_url, noteElements, noteFiles, dbBgPosition]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center"
+      onClick={onClose}
+    >
+      <div
+        className="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="h-12 flex items-center justify-between px-4 border-b flex-shrink-0">
+          <span className="font-semibold text-gray-800">교사 필기</span>
+          <div className="flex items-center gap-2">
+            {status === 'ok' && (
+              <PdfDownloadButton
+                onClick={() => downloadPage('교사_필기', noteElements, noteFiles, page.image_url, bgPositionRef.current)}
+                onDownloadAll={async () => {
+                   const title = `교사_필기_전체`;
+                   // Fetch all teacher notes for this assignment
+                   const { data: teacherNotes } = await supabase
+                     .from('assignment_teacher_notes')
+                     .select('page_id, excalidraw_data')
+                     .in('page_id', page.assignment_pages.map(p => p.id)); // Assuming page.assignment_pages is available and contains all pages for the assignment
+                   const teacherNotesMap = Object.fromEntries((teacherNotes || []).map(n => [n.page_id, n.excalidraw_data]));
+
+                   const pageDataList = page.assignment_pages.map(pg => { // Assuming page.assignment_pages is available
+                     const tNote = teacherNotesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
+                     return {
+                       bgUrl: pg.image_url,
+                       elements: tNote.elements || [],
+                       files: tNote.files || {},
+                       bgPosition: tNote.bgPosition,
+                     };
+                   });
+                   downloadMultiplePages(title, pageDataList);
+                }}
+                isDownloading={isDownloading}
+                label="PDF 다운로드"
+                className="py-1 px-2 text-xs"
+              />
+            )}
+            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+        <div ref={containerRef} className="flex-1 relative overflow-hidden bg-gray-50">
+          {status === 'loading' && (
+            <div className="flex items-center justify-center h-full text-gray-400">불러오는 중...</div>
+          )}
+          {status === 'empty' && (
+            <div className="flex items-center justify-center h-full text-gray-400">
+              이 페이지에 교사 필기가 없습니다.
+            </div>
+          )}
+          {status === 'ok' && (
+            <>
+              <style>{ALWAYS_HIDE_CSS}{PANEL_HIDE_CSS}</style>
+              <Excalidraw
+                key={page.id + '_modal'}
+                excalidrawAPI={handleMount}
+                initialData={{
+                  elements: noteElements,
+                  appState: { viewBackgroundColor: 'transparent', scrollX: 0, scrollY: 0 },
+                }}
+                viewModeEnabled={true}
+                UIOptions={{
+                  canvasActions: {
+                    changeViewBackgroundColor: false,
+                    clearCanvas:               false,
+                    export:                    false,
+                    loadScene:                 false,
+                    saveToActiveFile:          false,
+                    toggleTheme:               false,
+                    saveAsImage:               false,
+                  },
+                  tools: { image: false },
+                }}
+              />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const AssignmentStudyViewer = () => {
   const { assignmentId, pageId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-
   const [assignment, setAssignment]   = useState(null);
   const [pages, setPages]             = useState([]);
   const [currentPage, setCurrentPage] = useState(null);
@@ -36,8 +195,10 @@ const AssignmentStudyViewer = () => {
   const [noteElements, setNoteElements] = useState([]);
   const [saveStatus, setSaveStatus]   = useState('saved');
   const [showExcalidrawPanel, setShowExcalidrawPanel] = useState(false);
+  const [showTeacherNotesModal, setShowTeacherNotesModal] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [submitting, setSubmitting]   = useState(false);
+  const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
 
   const containerRef         = useRef(null);
   const saveTimerRef         = useRef(null);
@@ -184,7 +345,7 @@ const AssignmentStudyViewer = () => {
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [currentPage?.id, user?.id]);
+  }, [currentPage, user]);
 
   /* onChange: 저장 */
   const handleExcalidrawChange = useCallback((elements) => {
@@ -242,7 +403,6 @@ const AssignmentStudyViewer = () => {
     api.setActiveTool({ type: excTool });
 
     const page = currentPageRef.current;
-    const cu   = userRef.current;
     if (!page?.image_url || !containerRef.current) return;
 
     try {
@@ -308,7 +468,7 @@ const AssignmentStudyViewer = () => {
 
   useEffect(() => {
     prefetchImages([prevPage?.image_url, nextPage?.image_url].filter(Boolean));
-  }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [prevPage?.image_url, nextPage?.image_url]); // Include image URLs to fix lint warning
 
   /* 사이드바 자동 스크롤 */
   useEffect(() => {
@@ -357,13 +517,12 @@ const AssignmentStudyViewer = () => {
   };
 
   const canSubmit = !isLocked && submission?.status !== 'submitted';
-  const canEdit   = !isLocked || submission?.status === 'rejected';
 
   return (
     <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
 
       {/* 내비게이션 바 */}
-      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-20">
+      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate(`/student/classrooms/${assignment?.classroom_id}`)}
@@ -380,17 +539,63 @@ const AssignmentStudyViewer = () => {
             </span>
           )}
 
+          {/* PDF 다운로드 */}
+          {currentPage && noteElements && (
+            <PdfDownloadButton
+              onClick={() => {
+                const title = `${user?.name || '학생'}_${assignment?.title || '과제'}_${currentPage.position + 1}p`;
+                downloadPage(title, noteElements, savedFilesRef.current, currentPage.image_url, bgPositionRef.current);
+              }}
+              onDownloadAll={async () => {
+                const title = `${user?.name || '학생'}_${assignment?.title || '과제'}_전체`;
+                // Fetch all notes for this student in this assignment
+                const { data: notes } = await supabase
+                  .from('assignment_notes')
+                  .select('page_id, excalidraw_data')
+                  .eq('student_id', user.id)
+                  .in('page_id', pages.map(p => p.id));
+                const notesMap = Object.fromEntries((notes || []).map(n => [n.page_id, n.excalidraw_data]));
+
+                const pageDataList = pages.map(pg => {
+                  const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
+                  return {
+                    bgUrl: pg.image_url,
+                    elements: note.elements || [],
+                    files: note.files || {},
+                    bgPosition: note.bgPosition,
+                  };
+                });
+                downloadMultiplePages(title, pageDataList);
+              }}
+              isDownloading={isDownloading}
+              className="mt-0 ml-1 py-1 px-2 text-[10px]"
+            />
+          )}
+
           {/* 제출 버튼 */}
           {canSubmit && (
             <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50 cursor-pointer"
+              title={submitting ? '제출 중...' : '제출하기'}
+              className="flex items-center justify-center p-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 cursor-pointer"
             >
-              <Send className="h-3.5 w-3.5" />
-              {submitting ? '제출 중...' : '제출하기'}
+              {submitting ? <Loader className="animate-spin h-5 w-5" /> : <Send className="h-5 w-5" />}
             </button>
           )}
+
+          {/* 교사 필기 모달 */}
+          <button
+            onClick={() => setShowTeacherNotesModal((v) => !v)}
+            title="교사 필기"
+            className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+              showTeacherNotesModal
+                ? 'bg-amber-100 text-amber-700'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <GraduationCap className="h-5 w-5" />
+          </button>
 
           {/* 필기 모드 토글 (편집 가능할 때만) */}
           {!isLocked && (
@@ -503,6 +708,14 @@ const AssignmentStudyViewer = () => {
           )}
         </div>
       </div>
+
+      {/* 교사 필기 모달 */}
+      {showTeacherNotesModal && currentPage && (
+        <TeacherNotesModal
+          page={currentPage}
+          onClose={() => setShowTeacherNotesModal(false)}
+        />
+      )}
     </div>
   );
 };

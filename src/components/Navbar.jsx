@@ -19,7 +19,7 @@ const Navbar = ({ onToggleSidebar }) => {
             {onToggleSidebar && (
               <button
                 onClick={onToggleSidebar}
-                className="md:hidden p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors cursor-pointer"
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors cursor-pointer"
                 aria-label="메뉴 열기"
               >
                 <Menu className="h-5 w-5" />
@@ -46,10 +46,10 @@ const Navbar = ({ onToggleSidebar }) => {
                 </span>
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors cursor-pointer"
+                  title="로그아웃"
+                  className="flex items-center justify-center p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors cursor-pointer"
                 >
-                  <LogOut className="h-4 w-4" />
-                  <span className="hidden sm:inline">로그아웃</span>
+                  <LogOut className="h-5 w-5" />
                 </button>
               </div>
             )}

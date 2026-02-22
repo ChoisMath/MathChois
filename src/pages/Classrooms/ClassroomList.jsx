@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Users, ArrowRight } from 'lucide-react';
+import { Plus, Users, ArrowRight, Loader, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -69,7 +69,9 @@ const fetchClassrooms = async () => {
   };
 
   useEffect(() => {
-    fetchClassrooms();
+    const timer = setTimeout(fetchClassrooms, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCreate = async (e) => {
@@ -107,11 +109,10 @@ const getMemberCount = (classroom) => {
         <h1 className="text-2xl font-bold text-gray-900">클래스룸</h1>
         {isTeacher && (
           <button
-            onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 cursor-pointer"
+            onClick={() => setShowCreateModal(true)} title="새 클래스룸"
+            className="inline-flex items-center justify-center p-2 border border-transparent rounded-md shadow-sm bg-blue-600 text-white hover:bg-blue-700 cursor-pointer"
           >
-            <Plus className="-ml-1 mr-2 h-5 w-5" />
-            새 클래스룸
+            <Plus className="h-5 w-5" />
           </button>
         )}
       </div>
@@ -124,7 +125,7 @@ const getMemberCount = (classroom) => {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
           {classrooms.map((classroom) => (
             <Link key={classroom.id} to={`${prefix}/classrooms/${classroom.id}`} className="block hover:no-underline">
               <div className="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-shadow">
@@ -174,17 +175,17 @@ const getMemberCount = (classroom) => {
             <div className="flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => { setShowCreateModal(false); setCreateError(''); }}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer"
+                onClick={() => { setShowCreateModal(false); setCreateError(''); }} title="취소"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer flex items-center justify-center"
               >
-                취소
+                <X className="h-5 w-5" />
               </button>
               <button
                 type="submit"
-                disabled={creating || !newName.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                disabled={creating || !newName.trim()} title={creating ? '생성 중...' : '만들기'}
+                className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer flex items-center justify-center"
               >
-                {creating ? '생성 중...' : '만들기'}
+                {creating ? <Loader className="animate-spin h-5 w-5" /> : <Plus className="h-5 w-5" />}
               </button>
             </div>
           </form>

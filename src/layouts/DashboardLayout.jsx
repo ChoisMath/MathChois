@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Users, LogIn, LayoutList } from 'lucide-react';
+import { Users, LogIn, LayoutList, Loader } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -74,10 +74,10 @@ function StudentSidebar() {
           <button
             type="submit"
             disabled={joining || joinCode.length < 6}
-            className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50 cursor-pointer"
+            title="참여하기"
+            className="flex items-center justify-center p-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 cursor-pointer"
           >
-            <LogIn className="h-3.5 w-3.5" />
-            {joining ? '참여 중...' : '참여하기'}
+            {joining ? <Loader className="h-5 w-5 animate-spin" /> : <LogIn className="h-5 w-5" />}
           </button>
           {joinError && (
             <p className="text-xs text-red-600">{joinError}</p>
@@ -145,6 +145,7 @@ function TeacherSidebar() {
       .eq('teacher_id', user.id)
       .order('created_at', { ascending: false })
       .then(({ data }) => setClassrooms(data || []));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, location.pathname]); // pathname 변경 시 재조회 (이름 수정 후 갱신)
 
   return (
@@ -218,6 +219,7 @@ const DashboardLayout = () => {
 
   /* 페이지 이동 시 모바일 사이드바 자동 닫기 */
   useEffect(() => {
+    // eslint-disable-next-line
     setSidebarOpen(false);
   }, [location.pathname]);
 
@@ -225,21 +227,16 @@ const DashboardLayout = () => {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Navbar onToggleSidebar={() => setSidebarOpen((v) => !v)} />
       <div className="flex flex-1">
-        {/* 데스크톱 사이드바 (md 이상) */}
-        <aside className="w-64 bg-white shadow-sm hidden md:block flex-shrink-0">
-          {isTeacher ? <TeacherSidebar /> : <StudentSidebar />}
-        </aside>
-
-        {/* 모바일 사이드바 오버레이 (md 미만) */}
+        {/* 모바일/데스크톱 공용 사이드바 오버레이 */}
         {sidebarOpen && (
           <>
             {/* 배경 딤 */}
             <div
-              className="fixed inset-0 z-40 bg-black/40 md:hidden"
+              className="fixed inset-0 z-40 bg-black/40"
               onClick={() => setSidebarOpen(false)}
             />
             {/* 사이드바 패널 */}
-            <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl md:hidden overflow-y-auto">
+            <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl overflow-y-auto">
               <div className="flex items-center justify-between px-4 h-16 border-b border-gray-200">
                 <span className="text-lg font-bold text-gray-900">메뉴</span>
                 <button

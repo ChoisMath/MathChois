@@ -109,7 +109,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
     };
     document.addEventListener('pointerup', onPointerUp, { capture: true });
     return () => document.removeEventListener('pointerup', onPointerUp, { capture: true });
-  }, []);
+  }, [apiRef]);
 
   /* ── 레이저 포인터 모드 ── */
   const laserCanvasRef = useRef(null);
@@ -509,9 +509,9 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
       </button>
 
       {activeTool === 'eraser_area' && (
-        <button onClick={handleDeleteSelected}
-          className="px-2 h-7 rounded text-xs font-medium bg-orange-500 text-white hover:bg-orange-600 cursor-pointer flex-shrink-0">
-          선택 삭제
+        <button onClick={handleDeleteSelected} title="선택 삭제"
+          className="p-1.5 rounded-md bg-orange-500 text-white hover:bg-orange-600 cursor-pointer flex-shrink-0 flex items-center justify-center">
+          <Trash2 className="h-4 w-4" />
         </button>
       )}
 

@@ -1,6 +1,7 @@
 import { Component, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { Home as HomeIcon } from 'lucide-react';
 import MainLayout from './layouts/MainLayout';
 import DashboardLayout from './layouts/DashboardLayout';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -53,9 +54,10 @@ class ErrorBoundary extends Component {
           <p className="text-sm text-gray-400 font-mono mt-4">{this.state.error?.message}</p>
           <button
             onClick={() => window.location.href = '/'}
-            className="mt-6 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
+            title="홈으로 이동"
+            className="mt-6 p-2 flex items-center justify-center bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
           >
-            홈으로 이동
+            <HomeIcon className="w-5 h-5" />
           </button>
         </div>
       );

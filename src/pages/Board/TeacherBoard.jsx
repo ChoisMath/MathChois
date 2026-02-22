@@ -170,20 +170,20 @@ const TeacherBoard = () => {
         </h1>
         <button
           onClick={() => navigate('/teacher/board/new')}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 cursor-pointer"
+          title="새 게시글"
+          className="inline-flex items-center justify-center p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
         >
-          <Plus className="h-4 w-4" />
-          새 게시글
+          <Plus className="h-5 w-5" />
         </button>
       </div>
 
       {posts.length === 0 ? (
         <div
           onClick={() => navigate('/teacher/board/new')}
-          className="border-2 border-dashed border-gray-300 rounded-xl h-40 flex flex-col items-center justify-center text-gray-400 text-sm gap-2 cursor-pointer hover:border-blue-300 hover:text-blue-400 transition-colors"
+          title="첫 게시글 작성하기"
+          className="border-2 border-dashed border-gray-300 rounded-xl h-40 flex flex-col items-center justify-center text-gray-400 gap-2 cursor-pointer hover:border-blue-300 hover:text-blue-400 transition-colors"
         >
-          <Plus className="h-8 w-8" />
-          <span>첫 게시글 작성하기</span>
+          <Plus className="h-10 w-10" />
         </div>
       ) : (
         <div className="space-y-3">

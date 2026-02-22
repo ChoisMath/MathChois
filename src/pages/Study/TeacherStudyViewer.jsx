@@ -20,6 +20,8 @@ import {
   prefetchImages,
 } from '../../lib/excalidrawUtils';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
+import { usePdfDownloader } from '../../lib/pdfDownloader';
+import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 
 /* ── 세션 내 캐시 ── */
 const _notesCache = new Map(); // `${teacherId}_${pageId}` → { elements, bgPosition, files }
@@ -39,6 +41,7 @@ const TeacherStudyViewer = () => {
   const [noteElements, setNoteElements] = useState([]);
   const [saveStatus, setSaveStatus]   = useState('saved');
   const [showExcalidrawPanel, setShowExcalidrawPanel] = useState(false);
+  const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
 
   const containerRef          = useRef(null);
   const saveTimerRef          = useRef(null);
@@ -283,11 +286,11 @@ const TeacherStudyViewer = () => {
     <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
 
       {/* ── 내비게이션 바 ── */}
-      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-20">
+      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor`)}
-            className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer"
+            onClick={() => navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor`)} title="뒤로 가기"
+            className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer flex items-center justify-center"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -300,6 +303,38 @@ const TeacherStudyViewer = () => {
             {saveStatus === 'saved'  && '저장됨'}
             {saveStatus === 'saving' && '저장 중...'}
           </span>
+
+          {/* PDF 다운로드 */}
+          {currentPage && noteElements && (
+            <PdfDownloadButton
+              onClick={() => {
+                const title = `${user?.name || '교사'}_${chapter?.title || '챕터'}_${currentPage.position + 1}p`;
+                downloadPage(title, noteElementsRef.current, savedFilesRef.current, currentPage.image_url, bgPositionRef.current);
+              }}
+              onDownloadAll={async () => {
+                const title = `${user?.name || '교사'}_${chapter?.title || '챕터'}_전체`;
+                const { data: notes } = await supabase
+                  .from('teacher_notes')
+                  .select('page_id, excalidraw_data')
+                  .eq('teacher_id', user.id)
+                  .in('page_id', pages.map(p => p.id));
+                const notesMap = Object.fromEntries((notes || []).map(n => [n.page_id, n.excalidraw_data]));
+
+                const pageDataList = pages.map(pg => {
+                  const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
+                  return {
+                    bgUrl: pg.image_url,
+                    elements: note.elements || [],
+                    files: note.files || {},
+                    bgPosition: note.bgPosition,
+                  };
+                });
+                downloadMultiplePages(title, pageDataList);
+              }}
+              isDownloading={isDownloading}
+              className="py-1 px-2 text-xs"
+            />
+          )}
 
           {/* 툴바 접기/펼치기 */}
           <button

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Paperclip, X, Loader } from 'lucide-react';
+import { ArrowLeft, Paperclip, X, Loader, Plus, Save, Send } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -263,10 +263,10 @@ const BoardPostEditor = () => {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="mt-1 flex items-center gap-1.5 px-3 py-1.5 border border-dashed border-gray-300 rounded-md text-sm text-gray-500 hover:border-blue-300 hover:text-blue-500 transition-colors cursor-pointer"
+                title={`파일 추가 (최대 ${remainingSlots}개 더)`}
+                className="mt-1 flex items-center justify-center p-2 border border-dashed border-gray-300 rounded-md text-gray-500 hover:border-blue-300 hover:text-blue-500 transition-colors cursor-pointer"
               >
-                <Paperclip className="h-4 w-4" />
-                파일 추가 (최대 {remainingSlots}개 더)
+                <Plus className="h-5 w-5" />
               </button>
             </>
           )}
@@ -300,17 +300,17 @@ const BoardPostEditor = () => {
 
         {/* 버튼 */}
         <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={() => navigate('/teacher/board')}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">
-            취소
+          <button type="button" onClick={() => navigate('/teacher/board')} title="취소"
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer flex items-center justify-center">
+            <X className="h-5 w-5" />
           </button>
           <button
             type="submit"
             disabled={saving || !title.trim()}
-            className="px-5 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+            title={saving ? '저장 중...' : (postId ? '수정 완료' : '게시하기')}
+            className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer flex items-center justify-center"
           >
-            {saving && <Loader className="animate-spin h-4 w-4" />}
-            {saving ? '저장 중...' : (postId ? '수정 완료' : '게시하기')}
+            {saving ? <Loader className="animate-spin h-5 w-5" /> : (postId ? <Save className="h-5 w-5" /> : <Send className="h-5 w-5" />)}
           </button>
         </div>
       </form>

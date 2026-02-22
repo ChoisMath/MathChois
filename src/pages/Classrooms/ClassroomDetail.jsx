@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Users, BookOpen, Copy, Check, Trash2, FileText,
   Plus, Hash, ChevronDown, ChevronUp, Edit2, GripVertical,
-  Newspaper, ClipboardList,
+  Newspaper, ClipboardList, LogOut, Loader, X, Save, Download
 } from 'lucide-react';
 
 const BoardTab      = lazy(() => import('../../components/board/BoardTab'));
@@ -19,9 +19,11 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePdfDownloader } from '../../lib/pdfDownloader';
+import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 
 /* ─── 정렬 가능한 챕터 카드 ─── */
-function SortableChapterCard({ ch, isTeacher, onDelete, onCardClick }) {
+function SortableChapterCard({ ch, isTeacher, onDelete, onCardClick, onDownloadPdf, downloadingId }) {
   const {
     attributes, listeners, setNodeRef,
     transform, transition, isDragging,
@@ -89,14 +91,27 @@ function SortableChapterCard({ ch, isTeacher, onDelete, onCardClick }) {
         <p className="text-xs text-gray-500 line-clamp-2">{ch.description}</p>
       )}
 
-      {/* 페이지 수 */}
-      <p className="text-xs text-gray-400 flex items-center gap-1 mt-auto pt-1">
-        <FileText className="h-3 w-3" />
-        {ch.pageCount}페이지
-      </p>
+      {/* 페이지 수 및 다운로드 버튼 */}
+      <div className="flex items-center justify-between mt-auto pt-1">
+        <p className="text-xs text-gray-400 flex items-center gap-1">
+          <FileText className="h-3 w-3" />
+          {ch.pageCount}페이지
+        </p>
+        
+        {!isTeacher && ch.firstPage && (
+          <PdfDownloadButton
+            onClick={(e) => {
+              e.stopPropagation();
+              onDownloadPdf && onDownloadPdf(ch);
+            }}
+            isDownloading={downloadingId === ch.id}
+            className="p-1 px-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+          />
+        )}
+      </div>
 
       {!isTeacher && !ch.firstPage && (
-        <span className="text-xs text-gray-400">페이지 없음</span>
+        <span className="text-xs text-gray-400 mt-1">페이지 없음</span>
       )}
     </div>
   );
@@ -141,6 +156,10 @@ const ClassroomDetail = () => {
   const [deleting, setDeleting]     = useState(false);
   const [creatingAssignment, setCreatingAssignment] = useState(false);
   const [unsubmittedCount, setUnsubmittedCount] = useState(0);
+
+  /* PDF 다운로드 */
+  const { downloadMultiplePages } = usePdfDownloader();
+  const [downloadingChapterId, setDownloadingChapterId] = useState(null);
 
   /* ── dnd-kit sensors ── */
   const sensors = useSensors(
@@ -396,6 +415,43 @@ const ClassroomDetail = () => {
     );
   };
 
+  /* ── 학생 챕터 PDF 일괄 다운로드 ── */
+  const handleDownloadStudentChapterPdf = async (ch) => {
+    if (!profile || !user) return;
+    setDownloadingChapterId(ch.id);
+    try {
+      const title = `${profile.name || '학생'}_${ch.title}_전체`;
+      const { data: pgs } = await supabase
+        .from('pages')
+        .select('id, image_url')
+        .eq('chapter_id', ch.id)
+        .order('position');
+        
+      if (!pgs || pgs.length === 0) return;
+      
+      const { data: notes } = await supabase
+        .from('student_notes')
+        .select('page_id, excalidraw_data')
+        .eq('student_id', user.id)
+        .in('page_id', pgs.map(p => p.id));
+        
+      const notesMap = Object.fromEntries((notes || []).map(n => [n.page_id, n.excalidraw_data]));
+      
+      const pageDataList = pgs.map(pg => {
+        const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
+        return {
+          bgUrl: pg.image_url,
+          elements: note.elements || [],
+          files: note.files || {},
+          bgPosition: note.bgPosition,
+        };
+      });
+      await downloadMultiplePages(title, pageDataList);
+    } finally {
+      setDownloadingChapterId(null);
+    }
+  };
+
   if (loading) return <p className="text-gray-500">로딩 중...</p>;
   if (!classroom) return <p className="text-gray-500">클래스룸을 찾을 수 없습니다.</p>;
 
@@ -489,27 +545,27 @@ const ClassroomDetail = () => {
               <>
                 {activeTab === 'chapters' && (
                   <button
-                    onClick={() => setShowCreateModal(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 cursor-pointer"
+                    onClick={() => setShowCreateModal(true)} title="새 챕터"
+                    className="inline-flex items-center justify-center p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
                   >
-                    <Plus className="h-4 w-4" />새 챕터
+                    <Plus className="h-5 w-5" />
                   </button>
                 )}
                 {activeTab === 'board' && (
                   <button
-                    onClick={() => navigate('/teacher/board/new')}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 cursor-pointer"
+                    onClick={() => navigate('/teacher/board/new')} title="새 게시글"
+                    className="inline-flex items-center justify-center p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
                   >
-                    <Plus className="h-4 w-4" />새 게시글
+                    <Plus className="h-5 w-5" />
                   </button>
                 )}
                 {activeTab === 'assignments' && (
                   <button
                     onClick={handleCreateAssignment}
-                    disabled={creatingAssignment}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                    disabled={creatingAssignment} title={creatingAssignment ? '생성 중...' : '새 과제'}
+                    className="inline-flex items-center justify-center p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
                   >
-                    <Plus className="h-4 w-4" />{creatingAssignment ? '생성 중...' : '새 과제'}
+                    {creatingAssignment ? <Loader className="animate-spin h-5 w-5" /> : <Plus className="h-5 w-5" /> }
                   </button>
                 )}
                 <button
@@ -521,10 +577,10 @@ const ClassroomDetail = () => {
               </>
             ) : (
               <button
-                onClick={handleLeave}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
+                onClick={handleLeave} title="나가기"
+                className="inline-flex items-center justify-center p-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
               >
-                나가기
+                <LogOut className="h-5 w-5" />
               </button>
             )}
           </div>
@@ -537,7 +593,7 @@ const ClassroomDetail = () => {
             { key: 'board',       label: '게시판', Icon: Newspaper },
             { key: 'assignments', label: '과제',  Icon: ClipboardList },
             { key: 'students',    label: '학생',  Icon: Users },
-          ].map(({ key, label, Icon }) => (
+          ].map(({ key, label, Icon: TabIcon }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
@@ -547,7 +603,7 @@ const ClassroomDetail = () => {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Icon className="h-4 w-4" />
+              <TabIcon className="h-4 w-4" />
               {label}
               {key === 'assignments' && !isTeacher && unsubmittedCount > 0 && (
                 <span className="ml-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full leading-none">
@@ -605,6 +661,8 @@ const ClassroomDetail = () => {
                   isTeacher={false}
                   onDelete={() => {}}
                   onCardClick={handleCardClick}
+                  onDownloadPdf={handleDownloadStudentChapterPdf}
+                  downloadingId={downloadingChapterId}
                 />
               ))}
             </div>
@@ -693,11 +751,11 @@ const ClassroomDetail = () => {
                   placeholder="설명 (선택)" rows={2}
                   className="w-full px-4 py-2 border border-gray-300 rounded-md mb-4 focus:ring-blue-500 focus:border-blue-500 resize-none" />
                 <div className="flex justify-end gap-3">
-                  <button type="button" onClick={closeCreateModal}
-                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">취소</button>
-                  <button type="submit" disabled={creating || !newTitle.trim()}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 cursor-pointer">
-                    {creating ? '생성 중...' : '만들기'}
+                  <button type="button" onClick={closeCreateModal} title="취소"
+                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer flex items-center justify-center"><X className="h-5 w-5" /></button>
+                  <button type="submit" disabled={creating || !newTitle.trim()} title={creating ? '생성 중...' : '만들기'}
+                    className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer flex items-center justify-center">
+                    {creating ? <Loader className="animate-spin h-5 w-5" /> : <Plus className="h-5 w-5" />}
                   </button>
                 </div>
               </form>
@@ -748,12 +806,12 @@ const ClassroomDetail = () => {
                 )}
 
                 <div className="flex justify-end gap-3 mt-2">
-                  <button type="button" onClick={closeCreateModal}
-                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">취소</button>
+                  <button type="button" onClick={closeCreateModal} title="취소"
+                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer flex items-center justify-center"><X className="h-5 w-5" /></button>
                   <button type="button" onClick={handleImportChapter}
-                    disabled={!importSelectedChid || importing}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 cursor-pointer">
-                    {importing ? '가져오는 중...' : '가져오기'}
+                    disabled={!importSelectedChid || importing} title={importing ? '가져오는 중...' : '가져오기'}
+                    className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer flex items-center justify-center">
+                    {importing ? <Loader className="animate-spin h-5 w-5" /> : <Download className="h-5 w-5" />}
                   </button>
                 </div>
               </div>
@@ -772,11 +830,11 @@ const ClassroomDetail = () => {
               해당 챕터의 모든 페이지·학생 필기·교사 필기가 영구 삭제됩니다. 계속하시겠습니까?
             </p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setDeleteTarget(null)} disabled={deleting}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 disabled:opacity-50 cursor-pointer">취소</button>
-              <button onClick={handleDeleteChapter} disabled={deleting}
-                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50 cursor-pointer">
-                {deleting ? '삭제 중...' : '삭제'}
+              <button onClick={() => setDeleteTarget(null)} disabled={deleting} title="취소"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer flex items-center justify-center disabled:opacity-50"><X className="h-5 w-5" /></button>
+              <button onClick={handleDeleteChapter} disabled={deleting} title={deleting ? '삭제 중...' : '삭제'}
+                className="p-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 cursor-pointer flex items-center justify-center">
+                {deleting ? <Loader className="animate-spin h-5 w-5" /> : <Trash2 className="h-5 w-5" />}
               </button>
             </div>
           </div>
@@ -793,11 +851,11 @@ const ClassroomDetail = () => {
               모든 챕터·페이지·학생 필기·교사 필기·멤버 정보가 영구 삭제됩니다. 계속하시겠습니까?
             </p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setShowDeleteClassroom(false)} disabled={deleting}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer disabled:opacity-50">취소</button>
-              <button onClick={handleDeleteClassroom} disabled={deleting}
-                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50 cursor-pointer">
-                {deleting ? '삭제 중...' : '삭제'}
+              <button onClick={() => setShowDeleteClassroom(false)} disabled={deleting} title="취소"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer flex items-center justify-center disabled:opacity-50"><X className="h-5 w-5" /></button>
+              <button onClick={handleDeleteClassroom} disabled={deleting} title={deleting ? '삭제 중...' : '삭제'}
+                className="p-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 cursor-pointer flex items-center justify-center">
+                {deleting ? <Loader className="animate-spin h-5 w-5" /> : <Trash2 className="h-5 w-5" />}
               </button>
             </div>
           </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Plus, Book, Trash2, Edit2, ArrowLeft, FileText } from 'lucide-react';
+import { Plus, Book, Trash2, Edit2, ArrowLeft, FileText, Loader, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 const ChapterList = () => {
@@ -86,10 +86,10 @@ const ChapterList = () => {
       <div className="flex justify-end mb-4">
         <button
           onClick={() => setShowModal(true)}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 cursor-pointer"
+          title="새 챕터"
+          className="inline-flex items-center justify-center p-2 border border-transparent rounded-md shadow-sm bg-blue-600 text-white hover:bg-blue-700 cursor-pointer"
         >
-          <Plus className="-ml-1 mr-2 h-5 w-5" />
-          새 챕터
+          <Plus className="h-5 w-5" />
         </button>
       </div>
 
@@ -119,15 +119,16 @@ const ChapterList = () => {
               <div className="flex items-center gap-2 flex-shrink-0">
                 <Link
                   to={`/teacher/chapters/${ch.id}/edit`}
-                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                  title="편집"
+                  className="inline-flex items-center justify-center p-1.5 border border-gray-300 rounded-md text-gray-500 bg-white hover:bg-gray-50 hover:text-blue-600 transition-colors"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <Edit2 className="h-4 w-4 mr-1" />
-                  편집
+                  <Edit2 className="h-4 w-4" />
                 </Link>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDelete(ch.id); }}
-                  className="p-1.5 text-gray-400 hover:text-red-600 cursor-pointer"
+                  title="삭제"
+                  className="p-1.5 text-gray-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors cursor-pointer"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -160,16 +161,18 @@ const ChapterList = () => {
               <button
                 type="button"
                 onClick={() => { setShowModal(false); setNewTitle(''); setNewDesc(''); }}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer"
+                title="취소"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer flex items-center justify-center"
               >
-                취소
+                <X className="h-5 w-5" />
               </button>
               <button
                 type="submit"
                 disabled={creating || !newTitle.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                title={creating ? '생성 중...' : '만들기'}
+                className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer flex items-center justify-center"
               >
-                {creating ? '생성 중...' : '만들기'}
+                {creating ? <Loader className="animate-spin h-5 w-5" /> : <Plus className="h-5 w-5" />}
               </button>
             </div>
           </form>

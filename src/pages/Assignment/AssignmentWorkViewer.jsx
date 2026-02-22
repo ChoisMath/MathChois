@@ -2,23 +2,27 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, ChevronRight, Pencil, ChevronUp, ChevronDown, Menu,
-  CheckCircle, XCircle, Trophy,
+  CheckCircle, XCircle, Trophy, Loader, X
 } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
+import { usePdfDownloader } from '../../lib/pdfDownloader';
+import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 import {
   BG_ELEMENT_ID, BG_FILE_ID,
   ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE,
   fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages,
 } from '../../lib/excalidrawUtils';
 
+const TEACHER_COMMENT_PREFIX = '__atc_';
+
 const STUDENT_NOTE_PREFIX = '__asn_sn_';
 
 const AssignmentWorkViewer = () => {
-  const { classroomId, assignmentId, studentId } = useParams();
+  const { assignmentId, studentId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -33,6 +37,7 @@ const AssignmentWorkViewer = () => {
   const [showExcalidrawPanel, setShowExcalidrawPanel] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [loading, setLoading]               = useState(true);
+  const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
 
   /* 채점 UI 상태 */
   const [scoreInput, setScoreInput]         = useState('');
@@ -302,10 +307,10 @@ const AssignmentWorkViewer = () => {
     <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
 
       {/* 내비게이션 바 */}
-      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-20">
+      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/teacher/classrooms/${classroomId}/assignments/${assignmentId}/monitor`)}
+            onClick={() => navigate(`/teacher/classrooms/${assignment?.classroom_id}/assignments/${assignmentId}/monitor`)}
             className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -341,17 +346,18 @@ const AssignmentWorkViewer = () => {
             <>
               <button
                 onClick={() => setShowRejectModal(true)}
-                className="px-2.5 py-1.5 text-xs font-medium bg-orange-100 text-orange-700 rounded-md hover:bg-orange-200 cursor-pointer"
+                title="반려"
+                className="p-1.5 text-orange-700 bg-orange-100 rounded-md hover:bg-orange-200 cursor-pointer flex items-center justify-center"
               >
-                <XCircle className="h-3.5 w-3.5 inline mr-1" />반려
+                <XCircle className="h-5 w-5" />
               </button>
               <button
                 onClick={handleGrade}
                 disabled={grading || scoreInput === ''}
-                className="px-2.5 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                title={grading ? '처리 중...' : '채점완료'}
+                className="p-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer flex items-center justify-center"
               >
-                <CheckCircle className="h-3.5 w-3.5 inline mr-1" />
-                {grading ? '처리 중...' : '채점완료'}
+                {grading ? <Loader className="animate-spin h-5 w-5" /> : <CheckCircle className="h-5 w-5" />}
               </button>
             </>
           )}
@@ -362,6 +368,54 @@ const AssignmentWorkViewer = () => {
           )}
           {submission?.status === 'rejected' && (
             <span className="text-xs font-medium text-orange-600 px-2 py-1 bg-orange-50 rounded-md">반려됨</span>
+          )}
+
+          {/* PDF 다운로드 */}
+          {currentPage && studentEls.current && (
+            <PdfDownloadButton
+              onClick={() => {
+                const title = `${studentProfile?.name || '학생'}_${assignment?.title || '과제'}_${currentPage.position + 1}p`;
+                const elsToDownload = [...studentEls.current, ...teacherEls.current];
+                const filesToDownload = { ...savedStudentFilesRef.current, ...savedTeacherFilesRef.current };
+                downloadPage(title, elsToDownload, filesToDownload, currentPage.image_url, bgPositionRef.current);
+              }}
+              onDownloadAll={async () => {
+                const title = `${studentProfile?.name || '학생'}_${assignment?.title || '과제'}_전체`;
+                // Fetch all notes for this student in this assignment
+                const { data: studentNotes } = await supabase
+                  .from('assignment_notes')
+                  .select('page_id, excalidraw_data')
+                  .eq('student_id', studentProfile.id)
+                  .in('page_id', pages.map(p => p.id));
+                const studentNotesMap = Object.fromEntries((studentNotes || []).map(n => [n.page_id, n.excalidraw_data]));
+
+                // Fetch all teacher comments for this student in this assignment
+                const { data: teacherNotes } = await supabase
+                  .from('assignment_teacher_comments')
+                  .select('page_id, excalidraw_data')
+                  .eq('student_id', studentProfile.id)
+                  .in('page_id', pages.map(p => p.id));
+                const teacherNotesMap = Object.fromEntries((teacherNotes || []).map(n => [n.page_id, n.excalidraw_data]));
+
+                const pageDataList = pages.map(pg => {
+                  const sNote = studentNotesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
+                  const tNote = teacherNotesMap[pg.id] || { elements: [], files: {} };
+                  
+                  const sEls = sNote.elements || [];
+                  const tEls = (tNote.elements || []).map(el => ({ ...el, id: TEACHER_COMMENT_PREFIX + el.id, locked: true, opacity: 60 }));
+                  
+                  return {
+                    bgUrl: pg.image_url,
+                    elements: [...sEls, ...tEls],
+                    files: { ...(sNote.files || {}), ...(tNote.files || {}) },
+                    bgPosition: sNote.bgPosition,
+                  };
+                });
+                downloadMultiplePages(title, pageDataList);
+              }}
+              isDownloading={isDownloading}
+              className="py-1 px-2 text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+            />
           )}
 
           <button
@@ -470,11 +524,13 @@ const AssignmentWorkViewer = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-orange-400 focus:border-orange-400 resize-none mb-4"
             />
             <div className="flex justify-end gap-3">
-              <button onClick={() => { setShowRejectModal(false); setRejectionText(''); }}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">취소</button>
-              <button onClick={handleReject} disabled={grading || !rejectionText.trim()}
-                className="px-4 py-2 bg-orange-500 text-white rounded-md text-sm font-medium hover:bg-orange-600 disabled:opacity-50 cursor-pointer">
-                {grading ? '처리 중...' : '반려하기'}
+              <button onClick={() => { setShowRejectModal(false); setRejectionText(''); }} title="취소"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer flex items-center justify-center">
+                <X className="h-5 w-5" />
+              </button>
+              <button onClick={handleReject} disabled={grading || !rejectionText.trim()} title={grading ? '처리 중...' : '반려하기'}
+                className="p-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 disabled:opacity-50 cursor-pointer flex items-center justify-center">
+                {grading ? <Loader className="animate-spin h-5 w-5" /> : <XCircle className="h-5 w-5" />}
               </button>
             </div>
           </div>

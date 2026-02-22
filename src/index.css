@@ -2,6 +2,7 @@
 
 html,
 body {
+  @apply whitespace-nowrap overflow-x-auto text-xs sm:text-sm md:text-base lg:text-lg;
   /* Chrome 주소창 스와이프 제스처는 허용하면서 rubber-band 스크롤만 방지 */
   overscroll-behavior: none;
 }

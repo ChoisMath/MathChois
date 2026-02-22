@@ -9,18 +9,10 @@ import '@excalidraw/excalidraw/index.css';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
-import {
-  BG_ELEMENT_ID,
-  BG_FILE_ID,
-  ALWAYS_HIDE_CSS,
-  PANEL_HIDE_CSS,
-  GRID_STYLE,
-  fetchAsDataUrl,
-  getImageNaturalSize,
-  createBgElement,
-  prefetchImages,
-} from '../../lib/excalidrawUtils';
+import { BG_ELEMENT_ID, BG_FILE_ID, ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE, fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages } from '../../lib/excalidrawUtils';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
+import { usePdfDownloader } from '../../lib/pdfDownloader';
+import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 
 /* ── 세션 내 캐시 (컴포넌트 unmount 후에도 유지) ── */
 const _notesCache    = new Map(); // `${userId}_${pageId}` → { elements, bgPosition, files }
@@ -29,11 +21,14 @@ const _commentsCache = new Map(); // `${userId}_${pageId}` → commentEls[]
 const TEACHER_NOTE_PREFIX = '__tn_';
 
 /* ─────────── 교사 필기 모달 ─────────── */
-function TeacherNotesModal({ page, onClose }) {
+function TeacherNotesModal({ page, pages, onClose }) {
   const containerRef = useRef(null);
   const [status, setStatus] = useState('loading'); // 'loading' | 'empty' | 'ok'
   const [noteElements, setNoteElements] = useState([]);
   const [noteFiles, setNoteFiles] = useState({});
+  const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
+  const bgPositionRef = useRef(null);
+  const [dbBgPosition, setDbBgPosition] = useState(null);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -53,8 +48,10 @@ function TeacherNotesModal({ page, onClose }) {
         setStatus('empty');
       } else {
         const files = Object.assign({}, ...(data || []).map((n) => n.excalidraw_data?.files ?? {}));
+        const bgPos = (data || []).find((n) => n.excalidraw_data?.bgPosition)?.excalidraw_data.bgPosition;
         setNoteElements(els);
         setNoteFiles(files);
+        setDbBgPosition(bgPos || null);
         setStatus('ok');
       }
     };
@@ -69,10 +66,18 @@ function TeacherNotesModal({ page, onClose }) {
       const W = containerRef.current.clientWidth  || 800;
       const H = containerRef.current.clientHeight || 900;
       const scale = Math.min(W / iW, H / iH);
-      const bgW = iW * scale;
-      const bgH = iH * scale;
-      const bgX = (W - bgW) / 2;
-      const bgY = (H - bgH) / 2;
+      
+      let bgW, bgH, bgX, bgY;
+      if (dbBgPosition) {
+        ({ width: bgW, height: bgH, x: bgX, y: bgY } = dbBgPosition);
+      } else {
+        bgW = iW * scale;
+        bgH = iH * scale;
+        bgX = (W - bgW) / 2;
+        bgY = (H - bgH) / 2;
+      }
+      
+      bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
       api.addFiles([{ id: '__bg_file__', dataURL: dataUrl, mimeType, created: Date.now() }]);
       /* 교사 필기에 삽입된 이미지 파일 복원 */
       const noteFilesList = Object.values(noteFiles);
@@ -85,7 +90,7 @@ function TeacherNotesModal({ page, onClose }) {
       console.error('교사 필기 모달 bg 로드 실패:', err);
       api.updateScene({ elements: noteElements });
     }
-  }, [page.image_url, noteElements, noteFiles]);
+  }, [page.image_url, noteElements, noteFiles, dbBgPosition]);
 
   return (
     <div
@@ -98,9 +103,38 @@ function TeacherNotesModal({ page, onClose }) {
       >
         <div className="h-12 flex items-center justify-between px-4 border-b flex-shrink-0">
           <span className="font-semibold text-gray-800">교사 필기</span>
-          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer">
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {status === 'ok' && (
+              <PdfDownloadButton
+                onClick={() => downloadPage('교사_필기', noteElements, noteFiles, page.image_url, bgPositionRef.current)}
+                onDownloadAll={async () => {
+                   const title = `교사_필기_전체`;
+                   // Fetch all teacher notes for this chapter
+                   const { data: teacherNotes } = await supabase
+                     .from('teacher_notes')
+                     .select('page_id, excalidraw_data')
+                     .in('page_id', pages.map(p => p.id));
+                   const teacherNotesMap = Object.fromEntries((teacherNotes || []).map(n => [n.page_id, n.excalidraw_data]));
+
+                   const pageDataList = pages.map(pg => {
+                     const tNote = teacherNotesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
+                     return {
+                       bgUrl: pg.image_url,
+                       elements: tNote.elements || [],
+                       files: tNote.files || {},
+                       bgPosition: tNote.bgPosition,
+                     };
+                   });
+                   downloadMultiplePages(title, pageDataList);
+                }}
+                isDownloading={isDownloading}
+                className="py-1 px-2 text-xs"
+              />
+            )}
+            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
         <div ref={containerRef} className="flex-1 relative overflow-hidden bg-gray-50">
           {status === 'loading' && (
@@ -160,6 +194,7 @@ const StudyViewer = () => {
   const [showExcalidrawPanel, setShowExcalidrawPanel] = useState(false);
   const [showTeacherNotesModal, setShowTeacherNotesModal] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
+  const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
 
   const containerRef          = useRef(null);
   const saveTimerRef          = useRef(null);
@@ -314,7 +349,7 @@ const StudyViewer = () => {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [currentPage?.id, user?.id]);
+  }, [currentPage, user]);
 
   /* ── Excalidraw onChange & 스마트 좌우 패닝 잠금 ── */
   const handleExcalidrawChange = useCallback((elements, appState) => {
@@ -497,7 +532,7 @@ const StudyViewer = () => {
     <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
 
       {/* ── 내비게이션 바 ── */}
-      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-20">
+      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate(`/student/classrooms/${chapter?.classroom_id}`)}
@@ -514,6 +549,39 @@ const StudyViewer = () => {
               {saveStatus === 'saved'  && '저장됨'}
               {saveStatus === 'saving' && '저장 중...'}
             </span>
+          )}
+
+          {/* PDF 다운로드 */}
+          {currentPage && noteElements && (
+            <PdfDownloadButton
+              onClick={() => {
+                const title = `${user?.name || '학생'}_${chapter?.title || '챕터'}_${currentPage.position + 1}p`;
+                downloadPage(title, noteElements, savedFilesRef.current, currentPage.image_url, bgPositionRef.current);
+              }}
+              onDownloadAll={async () => {
+                const title = `${user?.name || '학생'}_${chapter?.title || '챕터'}_전체`;
+                // Fetch all notes for this student in this chapter
+                const { data: notes } = await supabase
+                  .from('student_notes')
+                  .select('page_id, excalidraw_data')
+                  .eq('student_id', user.id)
+                  .in('page_id', pages.map(p => p.id));
+                const notesMap = Object.fromEntries((notes || []).map(n => [n.page_id, n.excalidraw_data]));
+
+                const pageDataList = pages.map(pg => {
+                  const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
+                  return {
+                    bgUrl: pg.image_url,
+                    elements: note.elements || [],
+                    files: note.files || {},
+                    bgPosition: note.bgPosition,
+                  };
+                });
+                downloadMultiplePages(title, pageDataList);
+              }}
+              isDownloading={isDownloading}
+              className="mt-0 ml-1 py-1 px-2 text-[10px]"
+            />
           )}
 
           {/* 교사 필기 모달 */}
@@ -674,6 +742,7 @@ const StudyViewer = () => {
       {showTeacherNotesModal && currentPage && (
         <TeacherNotesModal
           page={currentPage}
+          pages={pages}
           onClose={() => setShowTeacherNotesModal(false)}
         />
       )}

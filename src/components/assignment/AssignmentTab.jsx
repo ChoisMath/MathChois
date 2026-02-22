@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, ClipboardList, Clock, Trophy, Users } from 'lucide-react';
+import { Plus, Trash2, ClipboardList, Clock, Trophy, Users, Loader, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePdfDownloader } from '../../lib/pdfDownloader';
+import { PdfDownloadButton } from '../common/PdfDownloadButton';
 
 function formatDeadline(iso) {
   if (!iso) return null;
@@ -24,7 +26,7 @@ function statusStyle(status) {
 
 const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmittedCount }) => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   const [assignments, setAssignments] = useState([]);
   const [submissions, setSubmissions] = useState({}); // assignmentId → submission (student)
@@ -34,6 +36,10 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
   const [creating, setCreating]       = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting]         = useState(false);
+
+  /* PDF 다운로드 */
+  const { downloadMultiplePages } = usePdfDownloader();
+  const [downloadingAsnId, setDownloadingAsnId] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -140,6 +146,44 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
     }
   };
 
+  /* ── 학생 과제 PDF 일괄 다운로드 ── */
+  const handleDownloadStudentAssignmentPdf = async (e, asn) => {
+    e.stopPropagation();
+    if (!profile || !user) return;
+    setDownloadingAsnId(asn.id);
+    try {
+      const title = `${profile.name || '학생'}_${asn.title}_전체`;
+      const { data: pgs } = await supabase
+        .from('assignment_pages')
+        .select('id, image_url')
+        .eq('assignment_id', asn.id)
+        .order('position');
+        
+      if (!pgs || pgs.length === 0) return;
+      
+      const { data: notes } = await supabase
+        .from('assignment_notes')
+        .select('page_id, excalidraw_data')
+        .eq('student_id', user.id)
+        .in('page_id', pgs.map(p => p.id));
+        
+      const notesMap = Object.fromEntries((notes || []).map(n => [n.page_id, n.excalidraw_data]));
+      
+      const pageDataList = pgs.map(pg => {
+        const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
+        return {
+          bgUrl: pg.image_url,
+          elements: note.elements || [],
+          files: note.files || {},
+          bgPosition: note.bgPosition,
+        };
+      });
+      await downloadMultiplePages(title, pageDataList);
+    } finally {
+      setDownloadingAsnId(null);
+    }
+  };
+
   if (loading) return <p className="text-gray-400 text-sm">로딩 중...</p>;
 
   return (
@@ -149,10 +193,10 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
           <button
             onClick={handleCreate}
             disabled={creating}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+            title="새 과제"
+            className="inline-flex items-center justify-center p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
           >
-            <Plus className="h-4 w-4" />
-            {creating ? '생성 중...' : '새 과제'}
+            {creating ? <Loader className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}
           </button>
         </div>
       )}
@@ -224,10 +268,17 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
                     </span>
                   )}
                   {!isTeacher && (
-                    <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${bg} ${text}`}>
-                      {label}
-                      {sub?.status === 'graded' && sub.score != null && ` (${sub.score}/${sub.max_score ?? asn.max_score})`}
-                    </span>
+                    <div className="flex items-center gap-2 ml-auto">
+                      <PdfDownloadButton
+                        onClick={(e) => handleDownloadStudentAssignmentPdf(e, asn)}
+                        isDownloading={downloadingAsnId === asn.id}
+                        className="p-1 px-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                      />
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${bg} ${text}`}>
+                        {label}
+                        {sub?.status === 'graded' && sub.score != null && ` (${sub.score}/${sub.max_score ?? asn.max_score})`}
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -246,11 +297,13 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
               모든 페이지·학생 필기·제출 내역이 영구 삭제됩니다. 계속하시겠습니까?
             </p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setDeleteTarget(null)} disabled={deleting}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer disabled:opacity-50">취소</button>
-              <button onClick={handleDelete} disabled={deleting}
-                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50 cursor-pointer">
-                {deleting ? '삭제 중...' : '삭제'}
+              <button onClick={() => setDeleteTarget(null)} disabled={deleting} title="취소"
+                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md cursor-pointer disabled:opacity-50">
+                <X className="w-5 h-5" />
+              </button>
+              <button onClick={handleDelete} disabled={deleting} title="삭제"
+                className="p-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 cursor-pointer">
+                {deleting ? <Loader className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
               </button>
             </div>
           </div>

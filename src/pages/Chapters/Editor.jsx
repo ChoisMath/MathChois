@@ -1,8 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Loader, Upload } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader, Upload, Save, X } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import SortablePageItem from '../../components/common/SortablePageItem';
 
 const ChapterEditor = () => {
   const { id } = useParams(); // chapterId
@@ -28,6 +43,41 @@ const ChapterEditor = () => {
   const [exportTargetIds, setExportTargetIds]   = useState(new Set());
   const [exporting, setExporting]               = useState(false);
   const [exportDone, setExportDone]             = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    if (!over) return;
+    
+    if (active.id !== over.id) {
+      const oldIndex = pages.findIndex((p) => p.id === active.id);
+      const newIndex = pages.findIndex((p) => p.id === over.id);
+
+      const newPages = arrayMove(pages, oldIndex, newIndex);
+      
+      const updatedPages = newPages.map((p, idx) => ({ ...p, position: idx }));
+      setPages(updatedPages);
+
+      const updates = updatedPages.map((pg) => ({
+        id: pg.id,
+        chapter_id: id,
+        image_url: pg.image_url,
+        position: pg.position,
+      }));
+
+      await supabase.from('pages').upsert(updates);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -244,10 +294,10 @@ const ChapterEditor = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowExportModal(true)}
-            className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
+            title="내보내기"
+            className="inline-flex items-center justify-center p-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
           >
-            <Upload className="h-4 w-4 mr-1.5" />
-            내보내기
+            <Upload className="h-5 w-5" />
           </button>
           <input
             ref={fileInputRef}
@@ -260,21 +310,10 @@ const ChapterEditor = () => {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+            title={uploading ? (uploadProgress.total > 1 ? `업로드 중... (${uploadProgress.done}/${uploadProgress.total})` : '업로드 중...') : '페이지 추가'}
+            className="inline-flex items-center justify-center p-2 border border-transparent rounded-md shadow-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
           >
-            {uploading ? (
-              <>
-                <Loader className="animate-spin h-4 w-4 mr-2" />
-                {uploadProgress.total > 1
-                  ? `업로드 중... (${uploadProgress.done}/${uploadProgress.total})`
-                  : '업로드 중...'}
-              </>
-            ) : (
-              <>
-                <Plus className="h-4 w-4 mr-2" />
-                페이지 추가
-              </>
-            )}
+            {uploading ? <Loader className="animate-spin h-5 w-5" /> : <Plus className="h-5 w-5" />}
           </button>
         </div>
       </div>
@@ -290,34 +329,29 @@ const ChapterEditor = () => {
           {pages.length === 0 ? (
             <p className="p-4 text-sm text-gray-400 text-center">페이지 없음</p>
           ) : (
-            <div className="space-y-2 p-2">
-              {pages.map((pg, idx) => (
-                <div
-                  key={pg.id}
-                  onClick={() => setSelectedPage(pg)}
-                  className={`relative group rounded-md overflow-hidden cursor-pointer border-2 transition-colors ${
-                    selectedPage?.id === pg.id
-                      ? 'border-blue-500'
-                      : 'border-transparent hover:border-gray-300'
-                  }`}
+            <div className="space-y-2 p-2 hidden-scroll">
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={pages.map((p) => p.id)}
+                  strategy={verticalListSortingStrategy}
                 >
-                  <img
-                    src={pg.image_url}
-                    alt={`페이지 ${idx + 1}`}
-                    className="w-full aspect-[3/4] object-cover"
-                  />
-                  <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
-                    {idx + 1}
-                  </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDeletePage(pg); }}
-                    disabled={deleting}
-                    className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer disabled:opacity-50"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
+                  {pages.map((pg, idx) => (
+                    <SortablePageItem
+                      key={pg.id}
+                      page={pg}
+                      index={idx}
+                      isSelected={selectedPage?.id === pg.id}
+                      onSelectPage={setSelectedPage}
+                      onDeletePage={handleDeletePage}
+                      isDeleting={deleting}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
             </div>
           )}
         </div>
@@ -408,11 +442,11 @@ const ChapterEditor = () => {
                     {exportTargetIds.size > 0 ? `${exportTargetIds.size}개 선택됨` : ''}
                   </span>
                   <div className="flex gap-3">
-                    <button onClick={() => setShowExportModal(false)}
-                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">취소</button>
-                    <button onClick={handleExport} disabled={exportTargetIds.size === 0 || exporting}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 cursor-pointer">
-                      {exporting ? '내보내는 중...' : `내보내기${exportTargetIds.size > 1 ? ` (${exportTargetIds.size})` : ''}`}
+                    <button onClick={() => setShowExportModal(false)} title="취소"
+                      className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer flex items-center justify-center"><X className="h-5 w-5" /></button>
+                    <button onClick={handleExport} disabled={exportTargetIds.size === 0 || exporting} title={exporting ? '내보내는 중...' : `내보내기${exportTargetIds.size > 1 ? ` (${exportTargetIds.size})` : ''}`}
+                      className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer flex items-center justify-center">
+                      {exporting ? <Loader className="animate-spin h-5 w-5" /> : <Upload className="h-5 w-5" />}
                     </button>
                   </div>
                 </div>
