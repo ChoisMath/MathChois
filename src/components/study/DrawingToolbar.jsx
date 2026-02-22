@@ -74,7 +74,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
           type: 'line', id: 'tri_' + Math.random().toString(36).slice(2, 9),
           x, y, width: w, height: h, angle: 0,
           strokeColor: colorRef.current, backgroundColor: 'transparent',
-          fillStyle: 'solid', strokeWidth: Math.max(strokeWidthRef.current, 0.5),
+          fillStyle: 'solid', strokeWidth: 2,
           strokeStyle: 'solid', roughness: 0, opacity: 100,
           points: [[w / 2, 0], [w, h], [0, h], [w / 2, 0]],
           startArrowhead: null, endArrowhead: null,
@@ -250,7 +250,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
       api?.updateScene({
         appState: {
           currentItemRoughness: 0,
-          currentItemStrokeWidth: 1,
+          currentItemStrokeWidth: 2,
           ...(type === 'rectangle' ? { currentItemRoundness: 'sharp' } : {}),
         },
         commitToHistory: false,
