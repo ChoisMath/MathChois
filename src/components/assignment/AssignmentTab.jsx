@@ -92,7 +92,7 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchData(); }, [classroomId, user?.id]);
+  useEffect(() => { fetchData(); }, [classroomId]);
 
   const handleCreate = async () => {
     setCreating(true);

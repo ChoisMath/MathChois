@@ -53,6 +53,18 @@ const TeacherStudyViewer = () => {
   const mountedRef            = useRef(true);
   const lastSavedRef          = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
   const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
+
+  /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none'; // 브라우저 기본 터치 액션(스와이프 등) 차단
+    return () => {
+      document.body.style.overflow = originalStyle;
+      document.body.style.touchAction = '';
+    };
+  }, []);
+
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
   const lastZoomRef           = useRef(1);
   const lastScrollXRef        = useRef(0);
@@ -283,7 +295,7 @@ const TeacherStudyViewer = () => {
   }
 
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
+    <div className="flex flex-col bg-gray-100" style={{ height: '100dvh' }}>
 
       {/* ── 내비게이션 바 ── */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">

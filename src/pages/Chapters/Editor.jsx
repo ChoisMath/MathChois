@@ -105,7 +105,9 @@ const ChapterEditor = () => {
   };
 
   useEffect(() => {
-    fetchData();
+    const timer = setTimeout(fetchData, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const handleUpload = async (e) => {
@@ -162,8 +164,11 @@ const ChapterEditor = () => {
   /* ── 내보내기: 모달 열릴 때 다른 클래스 목록 로드 ── */
   useEffect(() => {
     if (!showExportModal || !user || !chapter) return;
-    setExportTargetIds(new Set());
-    setExportDone(false);
+    const timer = setTimeout(() => {
+      setExportTargetIds(new Set());
+      setExportDone(false);
+    }, 0);
+    
     supabase
       .from('classrooms')
       .select('id, name')
@@ -171,7 +176,9 @@ const ChapterEditor = () => {
       .neq('id', chapter.classroom_id)
       .order('created_at', { ascending: false })
       .then(({ data }) => setExportClassrooms(data || []));
-  }, [showExportModal, user?.id, chapter?.classroom_id]);
+      
+    return () => clearTimeout(timer);
+  }, [showExportModal, user, chapter]);
 
   /* ── 내보내기 실행 ── */
   const handleExport = async () => {
@@ -318,7 +325,7 @@ const ChapterEditor = () => {
         </div>
       </div>
 
-      <div className="flex gap-6" style={{ height: 'calc(100vh - 16rem)' }}>
+      <div className="flex gap-6" style={{ height: 'calc(100dvh - 16rem)' }}>
         {/* Sidebar — 페이지 썸네일 */}
         <div className="w-44 flex-shrink-0 bg-white rounded-lg shadow overflow-y-auto">
           <div className="px-3 py-2 border-b">

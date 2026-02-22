@@ -126,7 +126,11 @@ const TeacherBoard = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchPosts(); }, [user?.id]);
+  useEffect(() => { 
+    const timer = setTimeout(fetchPosts, 0); 
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const handleDelete = async (post) => {
     if (!confirm(`"${post.title}" 게시글을 삭제하시겠습니까?\n첨부파일도 함께 삭제됩니다.`)) return;

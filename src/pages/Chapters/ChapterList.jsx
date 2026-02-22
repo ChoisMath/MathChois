@@ -37,6 +37,7 @@ const ChapterList = () => {
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classroomId]);
 
   const getPageCount = (ch) => {

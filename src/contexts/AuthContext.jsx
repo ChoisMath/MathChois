@@ -47,7 +47,7 @@ export function AuthProvider({ children }) {
       } catch (err) {
         console.error('[Auth] 초기화 오류 (로그아웃 처리):', err.message);
         // 타임아웃이나 네트워크 오류 시: 만료된 세션 제거 후 로그인 화면으로
-        try { await supabase.auth.signOut(); } catch (_) { /* ignore */ }
+        try { await supabase.auth.signOut(); } catch { /* ignore */ }
         setUser(null);
         setProfile(null);
       } finally {
@@ -128,6 +128,7 @@ export function AuthProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

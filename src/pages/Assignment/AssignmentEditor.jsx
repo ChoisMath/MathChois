@@ -250,7 +250,7 @@ const AssignmentEditor = () => {
         </div>
       </div>
 
-      <div className="flex gap-6" style={{ height: 'calc(100vh - 22rem)' }}>
+      <div className="flex gap-6" style={{ height: 'calc(100dvh - 22rem)' }}>
         {/* 사이드바 — 페이지 썸네일 */}
         <div className="w-44 flex-shrink-0 bg-white rounded-lg shadow overflow-y-auto">
           {pages.length === 0 ? (

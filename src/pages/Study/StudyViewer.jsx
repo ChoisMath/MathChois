@@ -501,6 +501,17 @@ const StudyViewer = () => {
     prefetchImages([prevPage?.image_url, nextPage?.image_url].filter(Boolean));
   }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none'; // 브라우저 기본 터치 액션(스와이프 등) 차단
+    return () => {
+      document.body.style.overflow = originalStyle;
+      document.body.style.touchAction = '';
+    };
+  }, []);
+
   /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ──
      loading이 의존성에 포함된 이유:
      캐시에서 빠르게 로드될 때 setCurrentPage와 setLoading(false)가 별도 렌더에서
@@ -529,7 +540,7 @@ const StudyViewer = () => {
   }
 
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
+    <div className="flex flex-col bg-gray-100" style={{ height: '100dvh' }}>
 
       {/* ── 내비게이션 바 ── */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
