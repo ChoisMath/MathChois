@@ -374,15 +374,17 @@ const StudyViewer = () => {
   const handleExcalidrawMount = useCallback(async (api) => {
     excalidrawAPIRef.current = api;
 
-    /* 저장된 도구 설정 복원 */
-    const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
-    const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
-    const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.4');
-    const validExcalidrawTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
-    const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
-      (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');
-    api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
-    api.setActiveTool({ type: excalidrawTool });
+    /* 저장된 도구 설정 복원 (React 렌더 사이클 충돌 방지) */
+    setTimeout(() => {
+      const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
+      const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
+      const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.4');
+      const validExcalidrawTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
+      const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
+        (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');
+      api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
+      api.setActiveTool({ type: excalidrawTool });
+    }, 0);
 
     const page = currentPageRef.current;
     const cu   = userRef.current;
