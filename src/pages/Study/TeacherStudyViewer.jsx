@@ -117,8 +117,15 @@ const TeacherStudyViewer = () => {
     fetchData();
   }, [chapterId, pageId, navigate, classroomId, user]);
 
-  /* ── onChange → teacher_notes upsert ── */
-  const handleExcalidrawChange = useCallback((elements) => {
+  /* ── onChange → teacher_notes upsert & 좌우 패닝 잠금 ── */
+  const handleExcalidrawChange = useCallback((elements, appState) => {
+    /* 좌우 패닝(스크롤) 차단 로직: scrollX가 0이 아니면 강제로 0으로 되돌립니다. */
+    if (appState && appState.scrollX !== 0) {
+      excalidrawAPIRef.current?.updateScene({
+        appState: { scrollX: 0 }
+      });
+    }
+
     const bgEl = elements.find((el) => el.id === BG_ELEMENT_ID);
     if (bgEl) {
       bgPositionRef.current = { x: bgEl.x, y: bgEl.y, width: bgEl.width, height: bgEl.height };

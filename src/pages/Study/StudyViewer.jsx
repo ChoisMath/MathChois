@@ -314,8 +314,15 @@ const StudyViewer = () => {
     return () => { supabase.removeChannel(channel); };
   }, [currentPage?.id, user?.id]);
 
-  /* ── Excalidraw onChange ── */
-  const handleExcalidrawChange = useCallback((elements) => {
+  /* ── Excalidraw onChange & 좌우 패닝 잠금 ── */
+  const handleExcalidrawChange = useCallback((elements, appState) => {
+    /* 좌우 패닝(스크롤) 차단 로직: scrollX가 0이 아니면 강제로 0으로 되돌립니다. */
+    if (appState && appState.scrollX !== 0) {
+      excalidrawAPIRef.current?.updateScene({
+        appState: { scrollX: 0 }
+      });
+    }
+
     /* 뷰 모드에서는 저장하지 않음 */
     if (!drawModeRef.current) return;
 
@@ -387,7 +394,6 @@ const StudyViewer = () => {
     }, 0);
 
     const page = currentPageRef.current;
-    const cu   = userRef.current;
     if (!page?.image_url || !containerRef.current) return;
 
     try {
