@@ -228,11 +228,26 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
     setImageMoveMode(false);
   }, []);
 
+  const SHAPE_TYPES = ['rectangle', 'ellipse', 'triangle', 'line'];
+
   const applyTool = (type) => {
     const api = apiRef.current;
     if (imageMoveMode && api) disableImageMove(api);
     setActiveTool(type);
     if (SAVEABLE_TOOLS.includes(type)) localStorage.setItem('mc_active_tool', type);
+
+    /* 도형 도구 공통: roughness=0 (반듯한 선) + strokeWidth=1 (중간 두께) */
+    if (SHAPE_TYPES.includes(type)) {
+      api?.updateScene({
+        appState: {
+          currentItemRoughness: 0,
+          currentItemStrokeWidth: 1,
+          ...(type === 'rectangle' ? { currentItemRoundness: 'sharp' } : {}),
+        },
+        commitToHistory: false,
+      });
+    }
+
     if (type === 'laser_pointer') {
       api?.setActiveTool({ type: 'selection' });
     } else if (type === 'eraser_area') {
@@ -240,7 +255,6 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
     } else if (type === 'triangle') {
       api?.setActiveTool({ type: 'freedraw' });
     } else if (type === 'rectangle') {
-      api?.updateScene({ appState: { currentItemRoundness: 'sharp' }, commitToHistory: false });
       api?.setActiveTool({ type: 'rectangle' });
     } else {
       api?.setActiveTool({ type });
