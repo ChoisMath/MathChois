@@ -121,17 +121,25 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
     };
 
     const onDown = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       laserDrawing.current = true;
       const pos = getPos(e);
       if (pos) laserTrailRef.current.push(pos);
     };
     const onMove = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
       if (!laserDrawing.current) return;
       const pos = getPos(e);
       if (pos) laserTrailRef.current.push(pos);
     };
-    const onUp = () => { laserDrawing.current = false; };
+    const onUp = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      laserDrawing.current = false;
+    };
 
     /* 렌더 루프 */
     const render = () => {
