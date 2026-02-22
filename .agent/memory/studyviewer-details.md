@@ -17,12 +17,7 @@
 - **DrawingToolbar.jsx**: 펜, 텍스트, 지우개, 색상 팔레트 등 담당.
   - **펜 기본값**: 두께 `0.2`, 색상 `#000000` (순수 검정). localStorage(`mc_stroke_width`, `mc_tool_color`)에 값이 있으면 그 값 사용 (페이지 이동 시 설정 유지).
   - **두께 슬라이더**: 범위 `0.1 ~ 2.0` (step 0.1), 넓이 `w-32` (Tailwind).
-  - **Samsung S Pen 사이드 버튼 → 지우개 전환**: Chromium에서 화면 터치 중 S Pen 버튼 이벤트가 소실되는 제한이 있어, 5가지 감지 전략을 병행:
-    1. `pointerdown` `button === 2 || 5` (기본)
-    2. `pointermove` `buttons` 비트마스크 (`& 2`, `& 32`) 실시간 모니터링
-    3. 호버 상태 감지 (`pressure === 0`, `buttons & 2`)
-    4. `pointerup`/`pointercancel` 시 이전 도구 자동 복원
-    5. `contextmenu` 이벤트를 S Pen 버튼 대체 트리거로 활용
+  - **레이저 포인터 모드**: 선택한 색상의 네온 글로우 트레일이 2초에 걸쳐 서서히 사라짐. Canvas 오버레이(`fixed inset-0 z-50`)로 구현, Excalidraw 위에 겹침. 포인터 그리기 데이터는 저장하지 않음.
 
 ## 자동 저장 로직 (일반 학습)
 

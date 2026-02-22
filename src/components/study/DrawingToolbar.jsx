@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   MousePointer, Pen, Type, Square, Circle, Triangle,
   Eraser, Minus, Trash2, Pipette, Plus, Scissors,
-  SlidersHorizontal, Hand, Shapes, ChevronDown, ImagePlus,
+  SlidersHorizontal, Hand, Shapes, ChevronDown, ImagePlus, Dot,
 } from 'lucide-react';
 import {
   BG_ELEMENT_ID,
@@ -52,103 +52,9 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
   useEffect(() => { colorRef.current = color; },             [color]);
   useEffect(() => { strokeWidthRef.current = strokeWidth; }, [strokeWidth]);
 
-  /* ── S Pen refs ── */
-  const sPenPrevToolRef = useRef(null);
-  const activeToolRef   = useRef(activeTool);
-  const applyToolRef    = useRef(null);
+  /* ── 삼각형 모드용 ref ── */
+  const activeToolRef = useRef(activeTool);
   useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
-
-  /* ── S Pen 사이드 버튼 → 지우개 모드 (개선) ── */
-  const sPenBtnActiveRef = useRef(false);   // 버튼이 눌린 상태 추적
-
-  useEffect(() => {
-    /* 헬퍼: 지우개 모드 진입 */
-    const enterEraser = () => {
-      if (sPenPrevToolRef.current !== null) return; // 이미 진입됨
-      const current = activeToolRef.current;
-      if (current === 'eraser') return;
-      sPenPrevToolRef.current = ['image_move', 'eraser_area'].includes(current)
-        ? 'freedraw'
-        : current;
-      sPenBtnActiveRef.current = true;
-      applyToolRef.current?.('eraser');
-    };
-
-    /* 헬퍼: 이전 도구 복원 */
-    const restoreTool = () => {
-      if (sPenPrevToolRef.current === null) return;
-      applyToolRef.current?.(sPenPrevToolRef.current);
-      sPenPrevToolRef.current = null;
-      sPenBtnActiveRef.current = false;
-    };
-
-    /* ① pointerdown: button===2 (기존 방식) 또는 button===5 (eraser tip) */
-    const onSPenDown = (e) => {
-      if (e.pointerType !== 'pen') return;
-      if (e.button === 2 || e.button === 5) {
-        e.preventDefault();
-        enterEraser();
-      }
-      /* ② 호버 감지: 공중에서 버튼 누른 채 터치 (button===1, pressure===0 상태에서 진입) */
-      if (sPenBtnActiveRef.current && sPenPrevToolRef.current !== null) {
-        e.preventDefault();
-      }
-    };
-
-    /* ③ pointermove: buttons 비트마스크 모니터링 */
-    const onSPenMove = (e) => {
-      if (e.pointerType !== 'pen') return;
-      const hasBtn = (e.buttons & 2) !== 0 || (e.buttons & 32) !== 0;
-
-      if (hasBtn && !sPenBtnActiveRef.current) {
-        /* 버튼이 방금 눌림 → 지우개 전환 */
-        enterEraser();
-      } else if (!hasBtn && sPenBtnActiveRef.current && e.pressure > 0) {
-        /* 화면에 터치 중인데 버튼이 풀림 → 도구 복원 */
-        restoreTool();
-      }
-
-      /* 호버 상태에서 버튼 감지 (공중에서 버튼 누르기) */
-      if (e.pressure === 0 && (e.buttons & 2) !== 0) {
-        enterEraser();
-      }
-    };
-
-    /* ④ pointerup / pointercancel: 펜을 들었을 때 도구 복원 */
-    const onSPenUp = (e) => {
-      if (e.pointerType !== 'pen') return;
-      restoreTool();
-    };
-
-    /* ⑤ contextmenu: S Pen 버튼 + 터치 후 릴리스 시 발생 → 지우개 전환 트리거 */
-    const onContextMenu = (e) => {
-      if (sPenBtnActiveRef.current || sPenPrevToolRef.current !== null) {
-        e.preventDefault();
-        return;
-      }
-      /* S Pen 컨텍스트 메뉴를 지우개 토글로 활용 */
-      const lastPointerType = e.pointerType || '';
-      if (lastPointerType === 'pen' || (e.sourceCapabilities && !e.sourceCapabilities.firesTouchEvents)) {
-        e.preventDefault();
-        enterEraser();
-        /* 짧은 시간 후 자동 복원 (컨텍스트메뉴는 일회성 이벤트이므로) */
-        setTimeout(restoreTool, 100);
-      }
-    };
-
-    document.addEventListener('pointerdown',   onSPenDown, { capture: true });
-    document.addEventListener('pointermove',   onSPenMove, { capture: true });
-    document.addEventListener('pointerup',     onSPenUp,   { capture: true });
-    document.addEventListener('pointercancel', onSPenUp,   { capture: true });
-    document.addEventListener('contextmenu',   onContextMenu, { capture: true });
-    return () => {
-      document.removeEventListener('pointerdown',   onSPenDown, { capture: true });
-      document.removeEventListener('pointermove',   onSPenMove, { capture: true });
-      document.removeEventListener('pointerup',     onSPenUp,   { capture: true });
-      document.removeEventListener('pointercancel', onSPenUp,   { capture: true });
-      document.removeEventListener('contextmenu',   onContextMenu, { capture: true });
-    };
-  }, []);
 
   /* ── 삼각형 모드: pointerup 후 freedraw → 삼각형 line 으로 변환 ── */
   useEffect(() => {
@@ -184,7 +90,133 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
     };
     document.addEventListener('pointerup', onPointerUp, { capture: true });
     return () => document.removeEventListener('pointerup', onPointerUp, { capture: true });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ── 레이저 포인터 모드 ── */
+  const laserCanvasRef = useRef(null);
+  const laserTrailRef  = useRef([]);   // { x, y, time }[]
+  const laserRafRef    = useRef(null);
+  const laserDrawing   = useRef(false);
+
+  useEffect(() => {
+    if (activeTool !== 'laser_pointer') {
+      /* 포인터 모드 비활성 시 캔버스 정리 */
+      if (laserRafRef.current) cancelAnimationFrame(laserRafRef.current);
+      laserTrailRef.current = [];
+      const cvs = laserCanvasRef.current;
+      if (cvs) {
+        const ctx = cvs.getContext('2d');
+        ctx?.clearRect(0, 0, cvs.width, cvs.height);
+      }
+      return;
+    }
+
+    const FADE_MS  = 2000; // 궤적이 사라지는 시간
+
+    const getPos = (e) => {
+      const cvs = laserCanvasRef.current;
+      if (!cvs) return null;
+      const rect = cvs.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top, time: Date.now() };
+    };
+
+    const onDown = (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      laserDrawing.current = true;
+      const pos = getPos(e);
+      if (pos) laserTrailRef.current.push(pos);
+    };
+    const onMove = (e) => {
+      if (!laserDrawing.current) return;
+      const pos = getPos(e);
+      if (pos) laserTrailRef.current.push(pos);
+    };
+    const onUp = () => { laserDrawing.current = false; };
+
+    /* 렌더 루프 */
+    const render = () => {
+      const cvs = laserCanvasRef.current;
+      if (!cvs) { laserRafRef.current = requestAnimationFrame(render); return; }
+      const ctx = cvs.getContext('2d');
+      /* 캔버스 크기 동기화 */
+      const parent = cvs.parentElement;
+      if (parent && (cvs.width !== parent.clientWidth || cvs.height !== parent.clientHeight)) {
+        cvs.width  = parent.clientWidth;
+        cvs.height = parent.clientHeight;
+      }
+      ctx.clearRect(0, 0, cvs.width, cvs.height);
+
+      const now   = Date.now();
+      const trail = laserTrailRef.current;
+      /* 오래된 점 제거 */
+      while (trail.length > 0 && now - trail[0].time > FADE_MS) trail.shift();
+
+      if (trail.length > 1) {
+        const curColor = colorRef.current;
+        for (let i = 1; i < trail.length; i++) {
+          const prev = trail[i - 1];
+          const curr = trail[i];
+          /* 다른 획인지 판별 (시간 차이 > 100ms이고 이전 획 끝) */
+          if (curr.time - prev.time > 150) continue;
+          const age     = (now - curr.time) / FADE_MS;
+          const alpha   = Math.max(1 - age, 0);
+
+          /* 네온 글로우: 넓은 블러 + 밝은 중심선 */
+          ctx.save();
+          ctx.globalAlpha = alpha * 0.4;
+          ctx.strokeStyle = curColor;
+          ctx.lineWidth   = 14;
+          ctx.lineCap     = 'round';
+          ctx.lineJoin    = 'round';
+          ctx.shadowColor = curColor;
+          ctx.shadowBlur  = 20;
+          ctx.beginPath();
+          ctx.moveTo(prev.x, prev.y);
+          ctx.lineTo(curr.x, curr.y);
+          ctx.stroke();
+          ctx.restore();
+
+          /* 밝은 중심선 */
+          ctx.save();
+          ctx.globalAlpha = alpha * 0.9;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth   = 2;
+          ctx.lineCap     = 'round';
+          ctx.lineJoin    = 'round';
+          ctx.shadowColor = curColor;
+          ctx.shadowBlur  = 10;
+          ctx.beginPath();
+          ctx.moveTo(prev.x, prev.y);
+          ctx.lineTo(curr.x, curr.y);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      laserRafRef.current = requestAnimationFrame(render);
+    };
+
+    const cvs = laserCanvasRef.current;
+    if (cvs) {
+      cvs.addEventListener('pointerdown', onDown);
+      cvs.addEventListener('pointermove', onMove);
+      cvs.addEventListener('pointerup',   onUp);
+      cvs.addEventListener('pointercancel', onUp);
+      cvs.addEventListener('pointerleave', onUp);
+    }
+    laserRafRef.current = requestAnimationFrame(render);
+
+    return () => {
+      if (laserRafRef.current) cancelAnimationFrame(laserRafRef.current);
+      if (cvs) {
+        cvs.removeEventListener('pointerdown', onDown);
+        cvs.removeEventListener('pointermove', onMove);
+        cvs.removeEventListener('pointerup',   onUp);
+        cvs.removeEventListener('pointercancel', onUp);
+        cvs.removeEventListener('pointerleave', onUp);
+      }
+    };
+  }, [activeTool]);
 
   const allColors = [...DEFAULT_COLORS, ...customColors];
 
@@ -201,7 +233,9 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
     if (imageMoveMode && api) disableImageMove(api);
     setActiveTool(type);
     if (SAVEABLE_TOOLS.includes(type)) localStorage.setItem('mc_active_tool', type);
-    if (type === 'eraser_area') {
+    if (type === 'laser_pointer') {
+      api?.setActiveTool({ type: 'selection' });
+    } else if (type === 'eraser_area') {
       api?.setActiveTool({ type: 'selection' });
     } else if (type === 'triangle') {
       api?.setActiveTool({ type: 'freedraw' });
@@ -212,7 +246,6 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
       api?.setActiveTool({ type });
     }
   };
-  useEffect(() => { applyToolRef.current = applyTool; });
 
   const applyColor = (hex) => {
     setColor(hex);
@@ -410,6 +443,14 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
         </>
       )}
 
+      {/* 레이저 포인터 */}
+      <button onClick={() => applyTool('laser_pointer')} title="레이저 포인터"
+        className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+          activeTool === 'laser_pointer' ? 'bg-red-100 text-red-500' : 'text-gray-600 hover:bg-gray-100'
+        }`}>
+        <Dot className="h-4 w-4" />
+      </button>
+
       {/* 지우개 (획 단위) */}
       <button onClick={() => applyTool('eraser')} title="지우개 — 획 단위"
         className={`p-1.5 rounded-md transition-colors cursor-pointer ${
@@ -512,6 +553,15 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
         }`}>
         <SlidersHorizontal className="h-4 w-4" />
       </button>
+
+      {/* 레이저 포인터 캔버스 오버레이 */}
+      {activeTool === 'laser_pointer' && (
+        <canvas
+          ref={laserCanvasRef}
+          className="fixed inset-0 z-50 pointer-events-auto"
+          style={{ touchAction: 'none', cursor: 'crosshair' }}
+        />
+      )}
     </div>
   );
 }
