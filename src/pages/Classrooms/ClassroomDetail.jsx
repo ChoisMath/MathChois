@@ -216,7 +216,11 @@ const ClassroomDetail = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, [id]);
+  useEffect(() => {
+    const timer = setTimeout(fetchData, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   /* 가져오기 탭 전환 시 다른 클래스 목록 로드 */
   useEffect(() => {
@@ -233,7 +237,7 @@ const ClassroomDetail = () => {
         setImportChapters([]);
         setImportSelectedChid('');
       });
-  }, [createTab, user?.id, id]);
+  }, [createTab, user, id]);
 
   /* ── 모달 닫기 (상태 초기화 포함) ── */
   const closeCreateModal = () => {
@@ -593,25 +597,28 @@ const ClassroomDetail = () => {
             { key: 'board',       label: '게시판', Icon: Newspaper },
             { key: 'assignments', label: '과제',  Icon: ClipboardList },
             { key: 'students',    label: '학생',  Icon: Users },
-          ].map(({ key, label, Icon: TabIcon }) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors cursor-pointer ${
-                activeTab === key
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <TabIcon className="h-4 w-4" />
-              {label}
-              {key === 'assignments' && !isTeacher && unsubmittedCount > 0 && (
-                <span className="ml-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full leading-none">
-                  {unsubmittedCount}
-                </span>
-              )}
-            </button>
-          ))}
+          ].map((item) => {
+            const TabIcon = item.Icon;
+            return (
+              <button
+                key={item.key}
+                onClick={() => setActiveTab(item.key)}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors cursor-pointer ${
+                  activeTab === item.key
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <TabIcon className="h-4 w-4" />
+                {item.label}
+                {item.key === 'assignments' && !isTeacher && unsubmittedCount > 0 && (
+                  <span className="ml-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full leading-none">
+                    {unsubmittedCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* ── 챕터 탭 ── */}

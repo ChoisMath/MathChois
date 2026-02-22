@@ -33,7 +33,7 @@ const BoardPostEditor = () => {
       .eq('teacher_id', user.id)
       .order('created_at', { ascending: false })
       .then(({ data }) => setClassrooms(data || []));
-  }, [user?.id]);
+  }, [user]);
 
   /* 수정 시: 기존 게시글 데이터 로드 */
   useEffect(() => {
@@ -54,7 +54,7 @@ const BoardPostEditor = () => {
       setLoading(false);
     };
     fetchPost();
-  }, [postId, user?.id]);
+  }, [postId, user]);
 
   const toggleClassroom = (cid) => {
     setSelectedIds((prev) => {

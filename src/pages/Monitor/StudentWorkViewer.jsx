@@ -144,7 +144,7 @@ const StudentWorkViewer = () => {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [currentPage?.id, studentId]);
+  }, [currentPage, studentId]);
 
   /* ── 페이지 변경 시 scene 데이터 로드 ── */
   useEffect(() => {

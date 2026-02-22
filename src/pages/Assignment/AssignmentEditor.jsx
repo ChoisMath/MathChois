@@ -23,7 +23,6 @@ const AssignmentEditor = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
-  const [assignment, setAssignment] = useState(null);
   const [pages, setPages]           = useState([]);
   const [selectedPage, setSelectedPage] = useState(null);
   const [loading, setLoading]       = useState(true);
@@ -80,7 +79,6 @@ const AssignmentEditor = () => {
         .eq('assignment_id', assignmentId).order('position'),
     ]);
     if (assignRes.data) {
-      setAssignment(assignRes.data);
       setTitle(assignRes.data.title);
       setDescription(assignRes.data.description || '');
       setMaxScore(assignRes.data.max_score ?? 100);
@@ -118,7 +116,6 @@ const AssignmentEditor = () => {
       updated_at:  new Date().toISOString(),
     }).eq('id', assignmentId);
     setSavingMeta(false);
-    setAssignment((prev) => ({ ...prev, title: title.trim() }));
   };
 
   const handleUpload = async (e) => {
