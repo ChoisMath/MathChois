@@ -70,6 +70,11 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
         const newest = freedraws.reduce((a, b) => (a.updated > b.updated ? a : b));
         const { x, y, width: w, height: h } = newest;
         if (w < 5 || h < 5) return;
+        /* Excalidraw LinearElement 정규화 요구사항:
+           - 모든 point는 (x, y) 기준 상대 좌표
+           - point 배열 중 최소 하나의 점은 x=0 이고, 최소 하나의 점은 y=0 이어야 함
+           - 첫 번째 점이 (0,0)일 필요는 없지만, 바운딩 박스를 꽉 채워야 함
+        */
         const triangleEl = {
           type: 'line', id: 'tri_' + Math.random().toString(36).slice(2, 9),
           x, y, width: w, height: h, angle: 0,
@@ -81,7 +86,8 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
           groupIds: [], frameId: null, roundness: null,
           isDeleted: false, locked: false, link: null,
           version: 1, versionNonce: Math.floor(Math.random() * 2e9),
-          updated: Date.now(), seed: Math.floor(Math.random() * 2e9), boundElements: null,
+          updated: Date.now(), seed: Math.floor(Math.random() * 2e9),
+          boundElements: null, startBinding: null, endBinding: null,
         };
         const nextEls = els.map((el) =>
           el.id === newest.id ? { ...el, isDeleted: true } : el
