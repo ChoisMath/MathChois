@@ -71,21 +71,24 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
         const { x, y, width: w, height: h } = newest;
         if (w < 5 || h < 5) return;
         /* Excalidraw LinearElement 정규화 필수 요구사항:
-           1. points는 (0,0)을 포함하여 상대좌표로 정의되어야 함
-           2. x, y 좌표 이동과 별개로 points의 최소 x, 최소 y는 반드시 0이어야 함
-           3. 마지막 점이 닫히도록 완벽히 일치해야 함
-           4. 수동 생성 시 boundElements, startBinding, endBinding 외에 lastCommittedPoint 속성 필요
+           1. points[0]은 반드시 [0, 0] 이어야 함 (is not normalized 에러의 원인)
+           2. element의 x, y는 bounding box의 top-left가 아니라 첫 번째 점(points[0])의 절대 좌표임
+           3. 나머지 point들은 첫 번째 점을 기준으로 한 상대 좌표
+           4. 수동 생성 시 boundElements, startBinding, endBinding 외에 lastCommittedPoint 속성 유지
         */
+        // 꼭짓점 순서: 위(시작점) -> 오른쪽 아래 -> 왼쪽 아래 -> 위(끝점)
         const points = [
-          [w / 2, 0],
-          [w, h],
-          [0, h],
-          [w / 2, 0]
+          [0, 0],
+          [w / 2, h],
+          [-w / 2, h],
+          [0, 0]
         ];
 
         const triangleEl = {
           type: 'line', id: 'tri_' + Math.random().toString(36).slice(2, 9),
-          x, y, width: w, height: h, angle: 0,
+          x: x + w / 2, // 첫 번째 점(위쪽 꼭짓점)의 x좌표
+          y: y,         // 첫 번째 점(위쪽 꼭짓점)의 y좌표
+          width: w, height: h, angle: 0,
           strokeColor: colorRef.current, backgroundColor: 'transparent',
           fillStyle: 'solid', strokeWidth: 2,
           strokeStyle: 'solid', roughness: 0, opacity: 100,
