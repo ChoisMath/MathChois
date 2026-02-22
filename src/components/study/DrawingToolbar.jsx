@@ -417,7 +417,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
   const ShapeActiveIcon = isShapeActive ? SHAPE_TOOL_ICONS[activeTool] : Shapes;
 
   return (
-    <div className="flex items-center gap-1 px-3 h-11 bg-white border-b shadow-sm flex-shrink-0 overflow-x-auto sticky top-14 z-10">
+    <div className="flex items-center gap-1 px-3 h-11 bg-white border-b shadow-sm flex-shrink-0 overflow-x-auto sticky top-14 z-50">
 
       {/* ① 기본 도구 */}
       {TOOLS.map(({ type, label }) => {
@@ -581,7 +581,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
       {activeTool === 'laser_pointer' && createPortal(
         <canvas
           ref={laserCanvasRef}
-          className="fixed inset-0 z-50 pointer-events-auto"
+          className="fixed inset-0 z-40 pointer-events-auto"
           style={{ touchAction: 'none', cursor: 'crosshair' }}
         />,
         document.body
