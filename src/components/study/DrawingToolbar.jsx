@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   MousePointer, Pen, Type, Square, Circle, Triangle,
   Eraser, Minus, Trash2, Pipette, Plus, Scissors,
@@ -576,13 +577,14 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
         <SlidersHorizontal className="h-4 w-4" />
       </button>
 
-      {/* 레이저 포인터 캔버스 오버레이 */}
-      {activeTool === 'laser_pointer' && (
+      {/* 레이저 포인터 캔버스 오버레이 (포털을 통해 전체화면 최상단 렌더링) */}
+      {activeTool === 'laser_pointer' && createPortal(
         <canvas
           ref={laserCanvasRef}
           className="fixed inset-0 z-50 pointer-events-auto"
           style={{ touchAction: 'none', cursor: 'crosshair' }}
-        />
+        />,
+        document.body
       )}
     </div>
   );
