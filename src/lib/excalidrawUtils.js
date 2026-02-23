@@ -8,6 +8,7 @@ export const BG_FILE_ID      = '__bg_file__';
 export const TOOLS = [
   { type: 'selection', label: '선택' },
   { type: 'freedraw',  label: '자유 필기' },
+  { type: 'line',      label: '직선' },
   { type: 'text',      label: '텍스트' },
 ];
 

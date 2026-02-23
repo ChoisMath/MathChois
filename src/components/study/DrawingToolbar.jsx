@@ -15,6 +15,7 @@ import {
 const TOOL_ICONS = {
   selection: MousePointer,
   freedraw:  Pen,
+  line:      Minus,
   text:      Type,
 };
 
@@ -22,10 +23,9 @@ const SHAPE_TOOL_ICONS = {
   rectangle: Square,
   ellipse:   Circle,
   triangle:  Triangle,
-  line:      Minus,
 };
 
-const SHAPE_TOOLS    = ['rectangle', 'ellipse', 'triangle', 'line'];
+const SHAPE_TOOLS    = ['rectangle', 'ellipse', 'triangle'];
 const SAVEABLE_TOOLS = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse', 'triangle'];
 
 function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
@@ -90,7 +90,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
           y: y,         // 첫 번째 점(위쪽 꼭짓점)의 y좌표
           width: w, height: h, angle: 0,
           strokeColor: colorRef.current, backgroundColor: 'transparent',
-          fillStyle: 'solid', strokeWidth: 2,
+          fillStyle: 'solid', strokeWidth: strokeWidthRef.current,
           strokeStyle: 'solid', roughness: 0, opacity: 100,
           points,
           startArrowhead: null, endArrowhead: null,
@@ -263,14 +263,14 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
     setActiveTool(type);
     if (SAVEABLE_TOOLS.includes(type)) localStorage.setItem('mc_active_tool', type);
 
-    /* 도형 도구 공통: roughness=0 (반듯한 선) + strokeWidth=2 (중간 두께) + 도구 잠금 유지(locked: true) */
+    /* 도형 도구 공통: roughness=0 (반듯한 선) + 선택된 두께 유지 + 도구 잠금 유지(locked: true) */
     if (SHAPE_TYPES.includes(type)) {
       const targetType = type === 'triangle' ? 'freedraw' : type;
       api?.updateScene({
         appState: {
           activeTool: { type: targetType, locked: true },
           currentItemRoughness: 0,
-          currentItemStrokeWidth: 2,
+          currentItemStrokeWidth: strokeWidthRef.current,
           ...(type === 'rectangle' ? { currentItemRoundness: 'sharp' } : {}),
         },
         commitToHistory: false,
@@ -462,7 +462,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
       {/* ② 도형 버튼 + 인라인 서브메뉴 */}
       <button
         onClick={() => setShapeMenuOpen((v) => !v)}
-        title="도형 (사각형 / 원 / 삼각형 / 직선)"
+        title="도형 (사각형 / 원 / 삼각형)"
         className={`p-1.5 rounded-md transition-colors cursor-pointer flex-shrink-0 flex items-center gap-0.5 ${
           isShapeActive || shapeMenuOpen ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
         }`}
@@ -477,7 +477,6 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
             { type: 'rectangle', Icon: Square,   label: '사각형' },
             { type: 'ellipse',   Icon: Circle,   label: '원' },
             { type: 'triangle',  Icon: Triangle, label: '삼각형 (그린 후 자동 변환)' },
-            { type: 'line',      Icon: Minus,    label: '직선' },
           // eslint-disable-next-line no-unused-vars
           ].map(({ type, Icon: ShapeIcon, label }) => (
             <button key={type}
