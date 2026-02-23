@@ -535,11 +535,11 @@ const AssignmentWorkViewer = () => {
             <Excalidraw
               key={currentPage.id}
               excalidrawAPI={handleExcalidrawMount}
+              viewModeEnabled={false}
               initialData={{
                 elements: [],
                 appState: { viewBackgroundColor: 'transparent', currentItemStrokeColor: '#e03131', currentItemStrokeWidth: 2, scrollX: 0, scrollY: 0 },
               }}
-              viewModeEnabled={!commentMode}
               onChange={handleExcalidrawChange}
               UIOptions={{
                 canvasActions: { changeViewBackgroundColor: false, clearCanvas: false, export: false, loadScene: false, saveToActiveFile: false, toggleTheme: false, saveAsImage: false },

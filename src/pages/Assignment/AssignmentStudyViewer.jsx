@@ -727,7 +727,7 @@ const AssignmentStudyViewer = () => {
             <Excalidraw
               key={currentPage.id}
               excalidrawAPI={handleExcalidrawMount}
-              viewModeEnabled={!drawMode || isLocked}
+              viewModeEnabled={false}
               initialData={{
                 elements: noteElements,
                 appState: {

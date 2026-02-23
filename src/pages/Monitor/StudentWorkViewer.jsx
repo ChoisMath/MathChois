@@ -556,6 +556,7 @@ const StudentWorkViewer = () => {
             <Excalidraw
               key={currentPage.id}
               excalidrawAPI={handleExcalidrawMount}
+              viewModeEnabled={false}
               initialData={{
                 elements: [],
                 appState: {
@@ -566,7 +567,6 @@ const StudentWorkViewer = () => {
                   scrollY:                0,
                 },
               }}
-              viewModeEnabled={!commentMode}
               onChange={handleExcalidrawChange}
               UIOptions={{
                 canvasActions: {
