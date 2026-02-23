@@ -505,6 +505,24 @@ const StudyViewer = () => {
     // 빈 useEffect (이전 overflow hidden 코드 삭제)
   }, []);
 
+  /* --- 줌 패닝 이슈 해결을 위한 터치 인터셉터 --- */
+  useEffect(() => {
+    const handleTouchMove = (e) => {
+      const isExcalidraw = e.target.closest('.excalidraw');
+      if (!isExcalidraw) return;
+
+      if (e.touches && e.touches.length >= 2) {
+        e.stopPropagation();
+      }
+    };
+
+    document.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
+    
+    return () => {
+      document.removeEventListener('touchmove', handleTouchMove, { capture: true });
+    };
+  }, []);
+
   /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ──
      loading이 의존성에 포함된 이유:
      캐시에서 빠르게 로드될 때 setCurrentPage와 setLoading(false)가 별도 렌더에서

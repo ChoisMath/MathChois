@@ -137,6 +137,27 @@ const AssignmentWorkViewer = () => {
     // 삭제됨
   }, []);
 
+  /* --- 줌 패닝 이슈 해결을 위한 터치 인터셉터 --- */
+  useEffect(() => {
+    const handleTouchMove = (e) => {
+      // Excalidraw 내부에서 발생한 터치 이벤트인지 확인
+      const isExcalidraw = e.target.closest('.excalidraw');
+      if (!isExcalidraw) return;
+
+      // 두 손가락 터치(패닝/줌)인 경우 Excalidraw의 preventDefault를 차단하여 네이티브 스크롤 허용
+      if (e.touches && e.touches.length >= 2) {
+        e.stopPropagation();
+      }
+    };
+
+    // 캡처 페이즈에서 이벤트를 가로채어 Excalidraw가 먼저 처리하는 것을 막음
+    document.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
+    
+    return () => {
+      document.removeEventListener('touchmove', handleTouchMove, { capture: true });
+    };
+  }, []);
+
   /* 페이지 변경 시 데이터 로드 */
   useEffect(() => {
     if (!currentPage) return;
