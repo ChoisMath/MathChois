@@ -168,15 +168,22 @@ const TeacherStudyViewer = () => {
     };
   }, []);
 
-  /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
+  /* ── 전역 터치/스크롤 제어: 세로 스크롤은 브라우저(URL 바 숨김용)에 맡기고 가로/줌 기능은 CSS로 원천 차단 ── */
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
+    // 100dvh를 초과할 수 있도록 강제로 1px 더 크게 만들어 native scroll 이벤트 발생을 유도
+    document.body.style.minHeight = 'calc(100dvh + 1px)';
+    
+    // x축 줌/이동 방지 및 당겨서 새로고침(y축 오버스크롤) 방지
+    // URL 바 숨김을 위해 pan-y(세로 스크롤)는 허용
+    document.body.style.touchAction = 'pan-y';
     document.body.style.overscrollBehavior = 'none';
-    document.body.style.touchAction = 'none';
+    document.documentElement.style.overscrollBehavior = 'none';
+
     return () => {
-      document.body.style.overflow = '';
-      document.body.style.overscrollBehavior = '';
+      document.body.style.minHeight = '';
       document.body.style.touchAction = '';
+      document.body.style.overscrollBehavior = '';
+      document.documentElement.style.overscrollBehavior = '';
     };
   }, []);
 
@@ -410,7 +417,7 @@ const TeacherStudyViewer = () => {
   }
 
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
+    <div className="flex flex-col bg-gray-100 min-h-[100dvh] w-full max-w-[100vw] overflow-x-hidden">
 
       {/* ── 내비게이션 바 ── */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">

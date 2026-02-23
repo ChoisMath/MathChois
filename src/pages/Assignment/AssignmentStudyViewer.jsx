@@ -607,14 +607,18 @@ const AssignmentStudyViewer = () => {
     prefetchImages([prevPage?.image_url, nextPage?.image_url].filter(Boolean));
   }, [prevPage?.image_url, nextPage?.image_url]); // Include image URLs to fix lint warning
 
-  /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
+  /* ── 전역 터치/스크롤 제어: 모바일 URL바 숨김 허용 및 좌우 이동/줌 방지 ── */
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
+    document.body.style.overflow = '';
+    document.body.style.minHeight = 'calc(100dvh + 1px)';
     document.body.style.overscrollBehavior = 'none';
-    document.body.style.touchAction = 'none';
+    document.documentElement.style.overscrollBehavior = 'none';
+    document.body.style.touchAction = 'pan-y';
     return () => {
       document.body.style.overflow = '';
+      document.body.style.minHeight = '';
       document.body.style.overscrollBehavior = '';
+      document.documentElement.style.overscrollBehavior = '';
       document.body.style.touchAction = '';
     };
   }, []);
@@ -668,7 +672,7 @@ const AssignmentStudyViewer = () => {
   const canSubmit = !isLocked && submission?.status !== 'submitted';
 
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
+    <div className="flex flex-col bg-gray-100 min-h-[100dvh] w-full max-w-[100vw] overflow-x-hidden">
 
       {/* 내비게이션 바 */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
