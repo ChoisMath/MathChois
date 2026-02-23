@@ -22,7 +22,7 @@ const TEACHER_COMMENT_PREFIX = '__atc_';
 const STUDENT_NOTE_PREFIX = '__asn_sn_';
 
 const AssignmentWorkViewer = () => {
-  const { assignmentId, studentId } = useParams();
+  const { classroomId, assignmentId, studentId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -395,7 +395,7 @@ const AssignmentWorkViewer = () => {
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/teacher/classrooms/${assignment?.classroom_id}/assignments/${assignmentId}/monitor`)}
+            onClick={() => navigate(`/teacher/classrooms/${classroomId}/assignments/${assignmentId}/monitor`)}
             className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -564,8 +564,8 @@ const AssignmentWorkViewer = () => {
                   ref={idx === currentPageIndex ? activeSidebarItemRef : null}
                   onClick={() => goPage(idx)}
                   className={`block w-full rounded-md overflow-hidden border-2 transition-colors text-left ${idx === currentPageIndex ? 'border-indigo-500' : 'border-transparent hover:border-gray-300'}`}>
-                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full aspect-[3/4] object-cover" loading="lazy" decoding="async" />
-                  <div className="bg-gray-50 text-center text-xs py-1 text-gray-600">{idx + 1}</div>
+                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full max-h-64 object-contain bg-white" loading="lazy" decoding="async" />
+                  <div className="bg-gray-50 text-center text-xs py-1 text-gray-600 border-t">{idx + 1}</div>
                 </button>
               ))}
             </div>

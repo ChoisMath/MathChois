@@ -616,7 +616,7 @@ const AssignmentStudyViewer = () => {
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate(`/student/classrooms/${assignment?.classroom_id}`)}
+            onClick={() => navigate(assignment?.classroom_id ? `/student/classrooms/${assignment.classroom_id}?tab=assignments` : '/student/classrooms')}
             className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer">
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -755,14 +755,13 @@ const AssignmentStudyViewer = () => {
             </div>
             <div className="space-y-2 p-2">
               {pages.map((pg, idx) => (
-                <button
-                  key={pg.id}
+                <button key={pg.id}
                   ref={pg.id === currentPage?.id ? activeSidebarItemRef : null}
                   onClick={() => navigate(`/student/assignments/${assignmentId}/page/${pg.id}`)}
                   className={`block w-full rounded-md overflow-hidden border-2 transition-colors text-left ${pg.id === currentPage?.id ? 'border-blue-500' : 'border-transparent hover:border-gray-300'}`}
                 >
-                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full aspect-[3/4] object-cover" loading="lazy" decoding="async" />
-                  <div className="bg-gray-50 text-center text-xs py-1 text-gray-600">{idx + 1}</div>
+                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full max-h-64 object-contain" loading="lazy" decoding="async" />
+                  <div className="bg-gray-50 text-center text-xs py-1 text-gray-600 border-t">{idx + 1}</div>
                 </button>
               ))}
             </div>

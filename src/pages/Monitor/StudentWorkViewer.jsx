@@ -585,7 +585,7 @@ const StudentWorkViewer = () => {
                     idx === currentPageIndex ? 'border-indigo-500' : 'border-transparent hover:border-gray-300'
                   }`}
                 >
-                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full aspect-[3/4] object-cover" loading="lazy" decoding="async" />
+                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full max-h-64 object-contain" loading="lazy" decoding="async" />
                   <div className="bg-gray-50 text-center text-xs py-1 text-gray-600">{idx + 1}</div>
                 </button>
               ))}
