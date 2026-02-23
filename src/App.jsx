@@ -8,10 +8,10 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import OAuthCallback from './pages/OAuthCallback';
-import ChooseRole from './pages/ChooseRole';
-import ClassroomList from './pages/Classrooms/ClassroomList';
-import ClassroomDetail from './pages/Classrooms/ClassroomDetail';
-import ChapterMonitor from './pages/Monitor/ChapterMonitor';
+const ChooseRole      = lazy(() => import('./pages/ChooseRole'));
+const ClassroomList   = lazy(() => import('./pages/Classrooms/ClassroomList'));
+const ClassroomDetail = lazy(() => import('./pages/Classrooms/ClassroomDetail'));
+const ChapterMonitor  = lazy(() => import('./pages/Monitor/ChapterMonitor'));
 
 /* Excalidraw를 사용하는 페이지는 lazy loading으로 분리
    — 대시보드 진입 시 Excalidraw 번들을 로드하지 않아 초기 속도 향상 */

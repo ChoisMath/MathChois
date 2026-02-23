@@ -58,17 +58,20 @@ export function AuthProvider({ children }) {
 
     initializeAuth();
 
-    // 2단계: 이후 로그인/로그아웃 이벤트만 처리 (isLoading 변경 없음)
+    // 2단계: 이후 로그인/로그아웃 이벤트만 처리
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('[Auth] event:', event, '| user:', session?.user?.email ?? 'none');
 
         if (event === 'SIGNED_IN') {
+          setIsLoading(true);
           setUser(session.user);
-          fetchProfile(session.user.id); // await 제거: 로그인 UX 차단하지 않음
+          await fetchProfile(session.user.id);
+          setIsLoading(false);
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setProfile(null);
+          setIsLoading(false);
         } else if (event === 'TOKEN_REFRESHED' && session?.user) {
           setUser(session.user);
         }
