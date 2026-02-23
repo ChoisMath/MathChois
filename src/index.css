@@ -2,7 +2,12 @@
 
 html,
 body {
+  overscroll-behavior: none;
   @apply whitespace-nowrap text-xs sm:text-sm md:text-base lg:text-lg;
+}
+
+body {
+  overflow-y: auto;
 }
 
 /* safe-area-inset: viewport-fit=cover 시 하드웨어 노치/시스템바 보상 */
