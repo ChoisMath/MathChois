@@ -53,6 +53,25 @@ const TeacherStudyViewer = () => {
   const mountedRef            = useRef(true);
   const lastSavedRef          = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
   const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
+  const isTouchingRef         = useRef(false); // 터치 피드백루프 방지 상태
+
+  /* ── 전역 터치 상태 추적 (피드백루프 방지) ── */
+  useEffect(() => {
+    const handleTouchStart = () => { isTouchingRef.current = true; };
+    const handleTouchEnd = (e) => {
+      if (e.touches.length === 0) isTouchingRef.current = false;
+    };
+    
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, []);
 
   /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
   useEffect(() => {
@@ -141,14 +160,17 @@ const TeacherStudyViewer = () => {
       const isFreedraw = appState.activeTool.type === 'freedraw';
       
       if (isFreedraw) {
-        // 프리드로우(펜) 모드: 줌(확대축소) 및 가로 스크롤(좌우 이동) 차단 (상하 이동만 허용)
-        if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
-          excalidrawAPIRef.current?.updateScene({
-            appState: { 
-              zoom: { value: lastZoomRef.current }, 
-              scrollX: lastScrollXRef.current 
-            }
-          });
+        // 프리드로우(펜) 모드: 터치(패닝) 진행 중일 때는 강제 씬 업데이트를 생략하여 Excalidraw 좌표 피드백루프 파괴 방지.
+        // 손가락을 떼었을 때만 줌과 X오프셋을 원래대로 스냅백시킴.
+        if (!isTouchingRef.current) {
+          if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
+            excalidrawAPIRef.current?.updateScene({
+              appState: { 
+                zoom: { value: lastZoomRef.current }, 
+                scrollX: lastScrollXRef.current 
+              }
+            });
+          }
         }
       } else {
         // 프리드로우가 아닐 때(커서 등): 줌 및 좌우 스크롤 허용 (기준점 갱신)

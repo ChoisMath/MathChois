@@ -212,7 +212,27 @@ const StudyViewer = () => {
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
   const lastZoomRef           = useRef(1);
   const lastScrollXRef        = useRef(0);
+  const isTouchingRef         = useRef(false);
 
+  /* ── 전역 터치 상태 추적 (피드백루프 방지) ── */
+  useEffect(() => {
+    const handleTouchStart = () => { isTouchingRef.current = true; };
+    const handleTouchEnd = (e) => {
+      if (e.touches.length === 0) isTouchingRef.current = false;
+    };
+    
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, []);
+
+  /* ── 인접 페이지 이미지 백그라운드 프리패치 ── */
   useEffect(() => { currentPageRef.current  = currentPage;  }, [currentPage]);
   useEffect(() => { noteElementsRef.current = noteElements; }, [noteElements]);
   useEffect(() => { userRef.current         = user;         }, [user]);
@@ -357,14 +377,15 @@ const StudyViewer = () => {
       const isFreedraw = appState.activeTool.type === 'freedraw';
       
       if (isFreedraw) {
-        // 프리드로우(펜) 모드: 줌(확대축소) 및 가로 스크롤(좌우 이동) 차단 (상하 이동만 허용)
-        if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
-          excalidrawAPIRef.current?.updateScene({
-            appState: { 
-              zoom: { value: lastZoomRef.current }, 
-              scrollX: lastScrollXRef.current 
-            }
-          });
+        if (!isTouchingRef.current) {
+          if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
+            excalidrawAPIRef.current?.updateScene({
+              appState: { 
+                zoom: { value: lastZoomRef.current }, 
+                scrollX: lastScrollXRef.current 
+              }
+            });
+          }
         }
       } else {
         // 펜이 아닐 때(커서 등): 줌 및 좌우 스크롤 허용 (기준점 갱신)

@@ -52,6 +52,7 @@ const StudentWorkViewer = () => {
   const savedTeacherFilesRef  = useRef({});   // 교사가 삽입한 이미지 파일
   const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
+  const isTouchingRef         = useRef(false);
   const lastZoomRef           = useRef(1);
   const lastScrollXRef        = useRef(0);
 
@@ -147,6 +148,24 @@ const StudentWorkViewer = () => {
 
     return () => { supabase.removeChannel(channel); };
   }, [currentPage, studentId]);
+
+  /* ── 전역 터치 상태 추적 (피드백루프 방지) ── */
+  useEffect(() => {
+    const handleTouchStart = () => { isTouchingRef.current = true; };
+    const handleTouchEnd = (e) => {
+      if (e.touches.length === 0) isTouchingRef.current = false;
+    };
+    
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, []);
 
   /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
   useEffect(() => {
@@ -264,11 +283,17 @@ const StudentWorkViewer = () => {
   const handleExcalidrawChange = useCallback((elements, appState) => {
     if (appState) {
       const isFreedraw = appState.activeTool.type === 'freedraw';
+      
       if (isFreedraw) {
-        if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
-          excalidrawAPIRef.current?.updateScene({
-            appState: { zoom: { value: lastZoomRef.current }, scrollX: lastScrollXRef.current }
-          });
+        if (!isTouchingRef.current) {
+          if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
+            excalidrawAPIRef.current?.updateScene({
+              appState: { 
+                zoom: { value: lastZoomRef.current }, 
+                scrollX: lastScrollXRef.current 
+              }
+            });
+          }
         }
       } else {
         lastZoomRef.current = appState.zoom.value;

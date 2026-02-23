@@ -216,7 +216,26 @@ const AssignmentStudyViewer = () => {
   const sidebarScrollRef     = useRef(null);
   const lastZoomRef          = useRef(1);
   const lastScrollXRef       = useRef(0);
+  const isTouchingRef         = useRef(false);
   const mountedRef           = useRef(true);
+
+  /* ── 전역 터치 상태 추적 (피드백루프 방지) ── */
+  useEffect(() => {
+    const handleTouchStart = () => { isTouchingRef.current = true; };
+    const handleTouchEnd = (e) => {
+      if (e.touches.length === 0) isTouchingRef.current = false;
+    };
+    
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -353,11 +372,17 @@ const AssignmentStudyViewer = () => {
   const handleExcalidrawChange = useCallback((elements, appState) => {
     if (appState) {
       const isFreedraw = appState.activeTool.type === 'freedraw';
+      
       if (isFreedraw) {
-        if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
-          excalidrawAPIRef.current?.updateScene({
-            appState: { zoom: { value: lastZoomRef.current }, scrollX: lastScrollXRef.current }
-          });
+        if (!isTouchingRef.current) {
+          if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
+            excalidrawAPIRef.current?.updateScene({
+              appState: { 
+                zoom: { value: lastZoomRef.current }, 
+                scrollX: lastScrollXRef.current 
+              }
+            });
+          }
         }
       } else {
         lastZoomRef.current = appState.zoom.value;
