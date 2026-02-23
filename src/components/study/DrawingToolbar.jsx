@@ -90,7 +90,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
           y: y,         // 첫 번째 점(위쪽 꼭짓점)의 y좌표
           width: w, height: h, angle: 0,
           strokeColor: colorRef.current, backgroundColor: 'transparent',
-          fillStyle: 'solid', strokeWidth: strokeWidthRef.current,
+          fillStyle: 'solid', strokeWidth: 2,
           strokeStyle: 'solid', roughness: 0, opacity: 100,
           points,
           startArrowhead: null, endArrowhead: null,
@@ -263,14 +263,14 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
     setActiveTool(type);
     if (SAVEABLE_TOOLS.includes(type)) localStorage.setItem('mc_active_tool', type);
 
-    /* 도형 도구 공통: roughness=0 (반듯한 선) + 선택된 두께 유지 + 도구 잠금 유지(locked: true) */
+    /* 도형 도구 공통: roughness=0 (반듯한 선) + strokeWidth=2 (중간 두께) + 도구 잠금 유지(locked: true) */
     if (SHAPE_TYPES.includes(type)) {
       const targetType = type === 'triangle' ? 'freedraw' : type;
       api?.updateScene({
         appState: {
           activeTool: { type: targetType, locked: true },
           currentItemRoughness: 0,
-          currentItemStrokeWidth: strokeWidthRef.current,
+          currentItemStrokeWidth: 2,
           ...(type === 'rectangle' ? { currentItemRoundness: 'sharp' } : {}),
         },
         commitToHistory: false,
