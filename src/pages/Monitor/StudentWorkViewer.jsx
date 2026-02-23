@@ -167,6 +167,44 @@ const StudentWorkViewer = () => {
     };
   }, []);
 
+  /* ── 팜 리젝션 (넓은 면적 터치 무시) ── */
+  useEffect(() => {
+    const handlePalmReject = (e) => {
+      const isExcalidraw = e.target.closest('.excalidraw');
+      if (!isExcalidraw) return;
+
+      if (e.type === 'pointerdown' || e.type === 'pointermove') {
+        if (e.pointerType === 'touch' && (e.width > 25 || e.height > 25)) {
+          e.stopPropagation();
+        }
+      } else if (e.type === 'touchstart' || e.type === 'touchmove') {
+        let isPalm = false;
+        for (let i = 0; i < e.touches.length; i++) {
+          if (e.touches[i].radiusX > 25 || e.touches[i].radiusY > 25) {
+            isPalm = true;
+            break;
+          }
+        }
+        if (isPalm) {
+          e.stopPropagation();
+          if (e.cancelable) e.preventDefault();
+        }
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePalmReject, { capture: true, passive: false });
+    document.addEventListener('pointermove', handlePalmReject, { capture: true, passive: false });
+    document.addEventListener('touchstart', handlePalmReject, { capture: true, passive: false });
+    document.addEventListener('touchmove', handlePalmReject, { capture: true, passive: false });
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePalmReject, { capture: true });
+      document.removeEventListener('pointermove', handlePalmReject, { capture: true });
+      document.removeEventListener('touchstart', handlePalmReject, { capture: true });
+      document.removeEventListener('touchmove', handlePalmReject, { capture: true });
+    };
+  }, []);
+
   /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
   useEffect(() => {
     document.body.style.overflow = 'hidden';
