@@ -4,17 +4,19 @@ import { BookOpen } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const Login = () => {
-  const { isAuthenticated, profile, signInWithGoogle } = useAuth();
+  const { isAuthenticated, isLoading, profile, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (isLoading) return;
     if (!isAuthenticated) return;
+    
     if (profile?.role) {
       navigate(`/${profile.role}/classrooms`, { replace: true });
     } else {
       navigate('/choose-role', { replace: true });
     }
-  }, [isAuthenticated, profile, navigate]);
+  }, [isAuthenticated, isLoading, profile, navigate]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] bg-gray-50 p-4">
