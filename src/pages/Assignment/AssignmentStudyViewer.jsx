@@ -607,17 +607,6 @@ const AssignmentStudyViewer = () => {
     prefetchImages([prevPage?.image_url, nextPage?.image_url].filter(Boolean));
   }, [prevPage?.image_url, nextPage?.image_url]); // Include image URLs to fix lint warning
 
-  /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    document.body.style.overscrollBehavior = 'none';
-    document.body.style.touchAction = 'none';
-    return () => {
-      document.body.style.overflow = '';
-      document.body.style.overscrollBehavior = '';
-      document.body.style.touchAction = '';
-    };
-  }, []);
 
   /* 사이드바 자동 스크롤 */
   useEffect(() => {

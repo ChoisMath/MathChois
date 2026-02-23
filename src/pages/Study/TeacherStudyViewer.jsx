@@ -168,17 +168,6 @@ const TeacherStudyViewer = () => {
     };
   }, []);
 
-  /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    document.body.style.overscrollBehavior = 'none';
-    document.body.style.touchAction = 'none';
-    return () => {
-      document.body.style.overflow = '';
-      document.body.style.overscrollBehavior = '';
-      document.body.style.touchAction = '';
-    };
-  }, []);
 
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
   const lastZoomRef           = useRef(1);

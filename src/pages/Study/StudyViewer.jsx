@@ -616,17 +616,6 @@ const StudyViewer = () => {
     prefetchImages([prevPage?.image_url, nextPage?.image_url].filter(Boolean));
   }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    document.body.style.overscrollBehavior = 'none';
-    document.body.style.touchAction = 'none';
-    return () => {
-      document.body.style.overflow = '';
-      document.body.style.overscrollBehavior = '';
-      document.body.style.touchAction = '';
-    };
-  }, []);
 
   /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ──
      loading이 의존성에 포함된 이유:

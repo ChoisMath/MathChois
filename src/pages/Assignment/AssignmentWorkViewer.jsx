@@ -245,17 +245,6 @@ const AssignmentWorkViewer = () => {
     return () => { supabase.removeChannel(channel); };
   }, [currentPage, studentId]);
 
-  /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    document.body.style.overscrollBehavior = 'none';
-    document.body.style.touchAction = 'none';
-    return () => {
-      document.body.style.overflow = '';
-      document.body.style.overscrollBehavior = '';
-      document.body.style.touchAction = '';
-    };
-  }, []);
 
   /* 페이지 변경 시 데이터 로드 */
   useEffect(() => {
