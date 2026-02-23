@@ -502,24 +502,13 @@ const StudyViewer = () => {
 
   /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
   useEffect(() => {
-    // 빈 useEffect (이전 overflow hidden 코드 삭제)
-  }, []);
-
-  /* --- 줌 패닝 이슈 해결을 위한 터치 인터셉터 --- */
-  useEffect(() => {
-    const handleTouchMove = (e) => {
-      const isExcalidraw = e.target.closest('.excalidraw');
-      if (!isExcalidraw) return;
-
-      if (e.touches && e.touches.length >= 2) {
-        e.stopPropagation();
-      }
-    };
-
-    document.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
-    
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+    document.body.style.touchAction = 'none';
     return () => {
-      document.removeEventListener('touchmove', handleTouchMove, { capture: true });
+      document.body.style.overflow = '';
+      document.body.style.overscrollBehavior = '';
+      document.body.style.touchAction = '';
     };
   }, []);
 
