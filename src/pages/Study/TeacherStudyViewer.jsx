@@ -56,13 +56,7 @@ const TeacherStudyViewer = () => {
 
   /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
   useEffect(() => {
-    const originalStyle = window.getComputedStyle(document.body).overflow;
-    document.body.style.overflow = 'hidden';
-    document.body.style.touchAction = 'none'; // 브라우저 기본 터치 액션(스와이프 등) 차단
-    return () => {
-      document.body.style.overflow = originalStyle;
-      document.body.style.touchAction = '';
-    };
+    // 빈 useEffect (이전 overflow hidden 코드 삭제)
   }, []);
 
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
@@ -438,6 +432,7 @@ const TeacherStudyViewer = () => {
             <Excalidraw
               key={currentPage.id}
               excalidrawAPI={handleExcalidrawMount}
+              viewModeEnabled={false}
               initialData={{
                 elements: noteElements,
                 appState: {
