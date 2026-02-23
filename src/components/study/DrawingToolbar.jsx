@@ -263,26 +263,35 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
     setActiveTool(type);
     if (SAVEABLE_TOOLS.includes(type)) localStorage.setItem('mc_active_tool', type);
 
-    /* 도형 도구 공통: roughness=0 (반듯한 선) + strokeWidth=1 (중간 두께) */
+    /* 도형 도구 공통: roughness=0 (반듯한 선) + strokeWidth=2 (중간 두께) + 도구 잠금 유지(locked: true) */
     if (SHAPE_TYPES.includes(type)) {
+      const targetType = type === 'triangle' ? 'freedraw' : type;
       api?.updateScene({
         appState: {
+          activeTool: { type: targetType, locked: true },
           currentItemRoughness: 0,
           currentItemStrokeWidth: 2,
           ...(type === 'rectangle' ? { currentItemRoundness: 'sharp' } : {}),
         },
         commitToHistory: false,
       });
+      return;
+    } else if (type === 'freedraw') {
+      /* 펜 모드 복귀 시: 기존에 사용자가 지정했던 펜 두께(strokeWidth)로 복구 (기본 0.2) */
+      api?.updateScene({
+        appState: {
+          activeTool: { type: 'freedraw', locked: false },
+          currentItemStrokeWidth: strokeWidthRef.current,
+        },
+        commitToHistory: false,
+      });
+      return;
     }
 
     if (type === 'laser_pointer') {
       api?.setActiveTool({ type: 'selection' });
     } else if (type === 'eraser_area') {
       api?.setActiveTool({ type: 'selection' });
-    } else if (type === 'triangle') {
-      api?.setActiveTool({ type: 'freedraw' });
-    } else if (type === 'rectangle') {
-      api?.setActiveTool({ type: 'rectangle' });
     } else {
       api?.setActiveTool({ type });
     }

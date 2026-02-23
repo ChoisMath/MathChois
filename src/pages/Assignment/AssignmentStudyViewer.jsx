@@ -236,7 +236,7 @@ const AssignmentStudyViewer = () => {
       const api = excalidrawAPIRef.current;
       const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
       const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
-      const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.4');
+      const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.2');
       const validTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
       const excTool = savedTool === 'triangle' ? 'freedraw' : (validTools.includes(savedTool) ? savedTool : 'freedraw');
       api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
