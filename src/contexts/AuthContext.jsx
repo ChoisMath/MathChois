@@ -68,17 +68,11 @@ export function AuthProvider({ children }) {
         console.log('[Auth] event:', event, '| user:', session?.user?.email ?? 'none');
 
         if (event === 'SIGNED_IN') {
-          setIsLoading(true);
-          try {
-            setUser(session.user);
-            await fetchProfile(session.user.id);
-          } finally {
-            setIsLoading(false);
-          }
+          setUser(session.user);
+          fetchProfile(session.user.id);
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setProfile(null);
-          setIsLoading(false);
         } else if (event === 'TOKEN_REFRESHED' && session?.user) {
           setUser(session.user);
         }
