@@ -432,7 +432,6 @@ const TeacherStudyViewer = () => {
             <Excalidraw
               key={currentPage.id}
               excalidrawAPI={handleExcalidrawMount}
-              viewModeEnabled={false}
               initialData={{
                 elements: noteElements,
                 appState: {
