@@ -11,15 +11,23 @@ export function AuthProvider({ children }) {
   const fetchProfile = async (userId) => {
     // Retry logic: trigger 가 아직 profile을 생성하지 않았을 수 있음
     for (let i = 0; i < 3; i++) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
 
-      if (data) {
-        setProfile(data);
-        return data;
+        if (error && error.code !== 'PGRST116') {
+          console.error('[fetchProfile] error:', error);
+        }
+
+        if (data) {
+          setProfile(data);
+          return data;
+        }
+      } catch (err) {
+        console.error('[fetchProfile] Exception:', err);
       }
 
       if (i < 2) {
@@ -30,15 +38,12 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
-    // 1단계: 앱 시작 시 세션 로드 (5초 타임아웃 적용)
+    // 1단계: 앱 시작 시 세션 로드
     const initializeAuth = async () => {
       try {
-        // getSession()이 응답하지 않을 경우를 대비한 타임아웃 경쟁
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('getSession timeout')), 5000)
-        );
-        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) throw error;
 
         if (session?.user) {
           setUser(session.user);
@@ -46,7 +51,6 @@ export function AuthProvider({ children }) {
         }
       } catch (err) {
         console.error('[Auth] 초기화 오류 (로그아웃 처리):', err.message);
-        // 타임아웃이나 네트워크 오류 시: 만료된 세션 제거 후 로그인 화면으로
         try { await supabase.auth.signOut(); } catch { /* ignore */ }
         setUser(null);
         setProfile(null);
@@ -65,9 +69,12 @@ export function AuthProvider({ children }) {
 
         if (event === 'SIGNED_IN') {
           setIsLoading(true);
-          setUser(session.user);
-          await fetchProfile(session.user.id);
-          setIsLoading(false);
+          try {
+            setUser(session.user);
+            await fetchProfile(session.user.id);
+          } finally {
+            setIsLoading(false);
+          }
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setProfile(null);
