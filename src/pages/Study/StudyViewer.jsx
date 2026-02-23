@@ -354,21 +354,20 @@ const StudyViewer = () => {
   /* ── Excalidraw onChange & 스마트 좌우 패닝 잠금 ── */
   const handleExcalidrawChange = useCallback((elements, appState) => {
     if (appState) {
-      const isEditing = appState.editingLinearElement || appState.draggingElement || 
-                        appState.resizingElement || appState.multiElement || 
-                        appState.selectionElement || appState.editingElement || 
-                        appState.newElement;
+      const isFreedraw = appState.activeTool.type === 'freedraw';
       
-      if (!isEditing) {
-        if (appState.zoom.value !== lastZoomRef.current) {
-          lastZoomRef.current = appState.zoom.value;
-          lastScrollXRef.current = appState.scrollX;
-        } else if (appState.scrollX !== lastScrollXRef.current) {
+      if (isFreedraw) {
+        // 프리드로우(펜) 모드: 줌(확대축소) 및 가로 스크롤(좌우 이동) 차단 (상하 이동만 허용)
+        if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
           excalidrawAPIRef.current?.updateScene({
-            appState: { scrollX: lastScrollXRef.current }
+            appState: { 
+              zoom: { value: lastZoomRef.current }, 
+              scrollX: lastScrollXRef.current 
+            }
           });
         }
       } else {
+        // 펜이 아닐 때(커서 등): 줌 및 좌우 스크롤 허용 (기준점 갱신)
         lastZoomRef.current = appState.zoom.value;
         lastScrollXRef.current = appState.scrollX;
       }
@@ -540,7 +539,7 @@ const StudyViewer = () => {
   }
 
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100dvh' }}>
+    <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
 
       {/* ── 내비게이션 바 ── */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">

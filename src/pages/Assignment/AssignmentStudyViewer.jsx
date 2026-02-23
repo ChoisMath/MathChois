@@ -214,6 +214,8 @@ const AssignmentStudyViewer = () => {
   const lastSavedRef         = useRef(null);
   const activeSidebarItemRef = useRef(null);
   const sidebarScrollRef     = useRef(null);
+  const lastZoomRef          = useRef(1);
+  const lastScrollXRef       = useRef(0);
   const mountedRef           = useRef(true);
 
   useEffect(() => {
@@ -348,7 +350,21 @@ const AssignmentStudyViewer = () => {
   }, [currentPage, user]);
 
   /* onChange: 저장 */
-  const handleExcalidrawChange = useCallback((elements) => {
+  const handleExcalidrawChange = useCallback((elements, appState) => {
+    if (appState) {
+      const isFreedraw = appState.activeTool.type === 'freedraw';
+      if (isFreedraw) {
+        if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
+          excalidrawAPIRef.current?.updateScene({
+            appState: { zoom: { value: lastZoomRef.current }, scrollX: lastScrollXRef.current }
+          });
+        }
+      } else {
+        lastZoomRef.current = appState.zoom.value;
+        lastScrollXRef.current = appState.scrollX;
+      }
+    }
+
     if (!drawModeRef.current) return;
     if (isLocked) return;
     const bgEl = elements.find((el) => el.id === BG_ELEMENT_ID);
@@ -530,7 +546,7 @@ const AssignmentStudyViewer = () => {
   const canSubmit = !isLocked && submission?.status !== 'submitted';
 
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100dvh' }}>
+    <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
 
       {/* 내비게이션 바 */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">

@@ -137,24 +137,20 @@ const TeacherStudyViewer = () => {
   /* ── onChange → teacher_notes upsert & 스마트 좌우 패닝 잠금 ── */
   const handleExcalidrawChange = useCallback((elements, appState) => {
     if (appState) {
-      const isEditing = appState.editingLinearElement || appState.draggingElement || 
-                        appState.resizingElement || appState.multiElement || 
-                        appState.selectionElement || appState.editingElement || 
-                        appState.newElement;
+      const isFreedraw = appState.activeTool.type === 'freedraw';
       
-      if (!isEditing) {
-        if (appState.zoom.value !== lastZoomRef.current) {
-          // 줌 변경 발생 시, Excalidraw 내부의 중심점 유지를 위한 scrollX 보정을 허용
-          lastZoomRef.current = appState.zoom.value;
-          lastScrollXRef.current = appState.scrollX;
-        } else if (appState.scrollX !== lastScrollXRef.current) {
-          // 줌 변경도 없고 상호작용(도형편집/드래그)도 없는데 scrollX가 변했다면 -> 좌우 패닝 시도 중
+      if (isFreedraw) {
+        // 프리드로우(펜) 모드: 줌(확대축소) 및 가로 스크롤(좌우 이동) 차단 (상하 이동만 허용)
+        if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
           excalidrawAPIRef.current?.updateScene({
-            appState: { scrollX: lastScrollXRef.current }
+            appState: { 
+              zoom: { value: lastZoomRef.current }, 
+              scrollX: lastScrollXRef.current 
+            }
           });
         }
       } else {
-        // 사용자가 명시적으로 도형을 편집/드래그하는 중 발생한 스크롤(오토스크롤 등)은 허용
+        // 프리드로우가 아닐 때(커서 등): 줌 및 좌우 스크롤 허용 (기준점 갱신)
         lastZoomRef.current = appState.zoom.value;
         lastScrollXRef.current = appState.scrollX;
       }
@@ -295,7 +291,7 @@ const TeacherStudyViewer = () => {
   }
 
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100dvh' }}>
+    <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
 
       {/* ── 내비게이션 바 ── */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">

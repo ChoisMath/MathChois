@@ -52,6 +52,8 @@ const StudentWorkViewer = () => {
   const savedTeacherFilesRef  = useRef({});   // 교사가 삽입한 이미지 파일
   const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
+  const lastZoomRef           = useRef(1);
+  const lastScrollXRef        = useRef(0);
 
   /* scene data refs — avoid re-render loops */
   const studentEls = useRef([]);
@@ -148,13 +150,7 @@ const StudentWorkViewer = () => {
 
   /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
   useEffect(() => {
-    const originalStyle = window.getComputedStyle(document.body).overflow;
-    document.body.style.overflow = 'hidden';
-    document.body.style.touchAction = 'none'; // 브라우저 기 터치 액션(스와이프 등) 차단
-    return () => {
-      document.body.style.overflow = originalStyle;
-      document.body.style.touchAction = '';
-    };
+    // 빈 useEffect (이전 overflow hidden 코드 삭제)
   }, []);
 
   /* ── 페이지 변경 시 scene 데이터 로드 ── */
@@ -258,7 +254,21 @@ const StudentWorkViewer = () => {
   }, [rebuildScene]);
 
   /* ── onChange: 코멘트 모드 + 실제 변경 시에만 저장 ── */
-  const handleExcalidrawChange = useCallback((elements) => {
+  const handleExcalidrawChange = useCallback((elements, appState) => {
+    if (appState) {
+      const isFreedraw = appState.activeTool.type === 'freedraw';
+      if (isFreedraw) {
+        if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
+          excalidrawAPIRef.current?.updateScene({
+            appState: { zoom: { value: lastZoomRef.current }, scrollX: lastScrollXRef.current }
+          });
+        }
+      } else {
+        lastZoomRef.current = appState.zoom.value;
+        lastScrollXRef.current = appState.scrollX;
+      }
+    }
+
     if (!commentModeRef.current) return;
     const page = currentPageRef.current;
     if (!user || !page) return;
@@ -343,7 +353,7 @@ const StudentWorkViewer = () => {
   }
 
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100dvh' }}>
+    <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
 
       {/* ── 내비게이션 바 ── */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">

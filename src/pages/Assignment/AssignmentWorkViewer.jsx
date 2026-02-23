@@ -57,6 +57,8 @@ const AssignmentWorkViewer = () => {
   const savedTeacherFilesRef = useRef({});
   const activeSidebarItemRef = useRef(null);
   const sidebarScrollRef     = useRef(null);
+  const lastZoomRef          = useRef(1);
+  const lastScrollXRef       = useRef(0);
   const studentEls           = useRef([]);
   const teacherEls           = useRef([]);
 
@@ -132,13 +134,7 @@ const AssignmentWorkViewer = () => {
 
   /* ── body 스크롤 고정 (모바일에서 터치 시 UI 밀림 방지) ── */
   useEffect(() => {
-    const originalStyle = window.getComputedStyle(document.body).overflow;
-    document.body.style.overflow = 'hidden';
-    document.body.style.touchAction = 'none'; // 브라우저 기 터치 액션(스와이프 등) 차단
-    return () => {
-      document.body.style.overflow = originalStyle;
-      document.body.style.touchAction = '';
-    };
+    // 삭제됨
   }, []);
 
   /* 페이지 변경 시 데이터 로드 */
@@ -214,7 +210,21 @@ const AssignmentWorkViewer = () => {
     await rebuildScene();
   }, [rebuildScene]);
 
-  const handleExcalidrawChange = useCallback((elements) => {
+  const handleExcalidrawChange = useCallback((elements, appState) => {
+    if (appState) {
+      const isFreedraw = appState.activeTool.type === 'freedraw';
+      if (isFreedraw) {
+        if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
+          excalidrawAPIRef.current?.updateScene({
+            appState: { zoom: { value: lastZoomRef.current }, scrollX: lastScrollXRef.current }
+          });
+        }
+      } else {
+        lastZoomRef.current = appState.zoom.value;
+        lastScrollXRef.current = appState.scrollX;
+      }
+    }
+
     if (!commentModeRef.current) return;
     const page = currentPageRef.current;
     if (!user || !page) return;
@@ -315,7 +325,7 @@ const AssignmentWorkViewer = () => {
   const maxScore = assignment?.max_score ?? 100;
 
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100dvh' }}>
+    <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
 
       {/* 내비게이션 바 */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
