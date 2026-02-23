@@ -213,60 +213,116 @@ const StudyViewer = () => {
   const lastZoomRef           = useRef(1);
   const lastScrollXRef        = useRef(0);
   const isTouchingRef         = useRef(false);
+  const activeToolRef         = useRef('freedraw');
+  const activeTouchesRef      = useRef(0);
+  const lastTouchCenterYRef   = useRef(null);
 
-  /* ── 전역 터치 상태 추적 (피드백루프 방지) ── */
+  /* ── 터치 제어 (팜 리젝션 & 펜 모드 2핑거 세로 스크롤 하이재킹) ── */
   useEffect(() => {
-    const handleTouchStart = () => { isTouchingRef.current = true; };
-    const handleTouchEnd = (e) => {
-      if (e.touches.length === 0) isTouchingRef.current = false;
-    };
-    
-    document.addEventListener('touchstart', handleTouchStart, { passive: true });
-    document.addEventListener('touchend', handleTouchEnd, { passive: true });
-    document.addEventListener('touchcancel', handleTouchEnd, { passive: true });
-    
-    return () => {
-      document.removeEventListener('touchstart', handleTouchStart);
-      document.removeEventListener('touchend', handleTouchEnd);
-      document.removeEventListener('touchcancel', handleTouchEnd);
-    };
-  }, []);
-
-  /* ── 팜 리젝션 (넓은 면적 터치 무시) ── */
-  useEffect(() => {
-    const handlePalmReject = (e) => {
+    const handlePointerDown = (e) => {
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
+      if (e.pointerType === 'touch' && (e.width > 25 || e.height > 25)) {
+        e.stopPropagation();
+      }
+    };
 
-      if (e.type === 'pointerdown' || e.type === 'pointermove') {
-        if (e.pointerType === 'touch' && (e.width > 25 || e.height > 25)) {
+    const handlePointerMove = (e) => {
+      const isExcalidraw = e.target.closest('.excalidraw');
+      if (!isExcalidraw) return;
+      if (e.pointerType === 'touch') {
+        if (e.width > 25 || e.height > 25) {
           e.stopPropagation();
+          return;
         }
-      } else if (e.type === 'touchstart' || e.type === 'touchmove') {
-        let isPalm = false;
-        for (let i = 0; i < e.touches.length; i++) {
-          if (e.touches[i].radiusX > 25 || e.touches[i].radiusY > 25) {
-            isPalm = true;
-            break;
-          }
-        }
-        if (isPalm) {
+        if (activeTouchesRef.current >= 2 && activeToolRef.current === 'freedraw') {
           e.stopPropagation();
-          if (e.cancelable) e.preventDefault();
         }
       }
     };
 
-    document.addEventListener('pointerdown', handlePalmReject, { capture: true, passive: false });
-    document.addEventListener('pointermove', handlePalmReject, { capture: true, passive: false });
-    document.addEventListener('touchstart', handlePalmReject, { capture: true, passive: false });
-    document.addEventListener('touchmove', handlePalmReject, { capture: true, passive: false });
+    const handleTouchStart = (e) => {
+      activeTouchesRef.current = e.touches.length;
+      isTouchingRef.current = true;
+      const isExcalidraw = e.target.closest('.excalidraw');
+      if (!isExcalidraw) return;
+
+      let isPalm = false;
+      for (let i = 0; i < e.touches.length; i++) {
+        if (e.touches[i].radiusX > 25 || e.touches[i].radiusY > 25) {
+          isPalm = true; break;
+        }
+      }
+      if (isPalm) {
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
+        return;
+      }
+
+      if (activeToolRef.current === 'freedraw' && e.touches.length === 2) {
+        lastTouchCenterYRef.current = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      } else {
+        lastTouchCenterYRef.current = null;
+      }
+    };
+
+    const handleTouchMove = (e) => {
+      activeTouchesRef.current = e.touches.length;
+      const isExcalidraw = e.target.closest('.excalidraw');
+      if (!isExcalidraw) return;
+
+      let isPalm = false;
+      for (let i = 0; i < e.touches.length; i++) {
+        if (e.touches[i].radiusX > 25 || e.touches[i].radiusY > 25) {
+          isPalm = true; break;
+        }
+      }
+      if (isPalm) {
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
+        return;
+      }
+
+      // 펜 모드 2핑거 패닝 하이재킹 (수직 스크롤만 허용)
+      if (activeToolRef.current === 'freedraw' && e.touches.length === 2) {
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
+
+        const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        if (lastTouchCenterYRef.current !== null) {
+          const deltaY = centerY - lastTouchCenterYRef.current;
+          const api = excalidrawAPIRef.current;
+          if (api) {
+            const appState = api.getAppState();
+            api.updateScene({
+              appState: { scrollY: appState.scrollY + (deltaY / appState.zoom.value) }
+            });
+          }
+        }
+        lastTouchCenterYRef.current = centerY;
+      }
+    };
+
+    const handleTouchEnd = (e) => {
+      activeTouchesRef.current = e.touches.length;
+      if (e.touches.length === 0) isTouchingRef.current = false;
+      if (e.touches.length < 2) lastTouchCenterYRef.current = null;
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: false });
+    document.addEventListener('pointermove', handlePointerMove, { capture: true, passive: false });
+    document.addEventListener('touchstart', handleTouchStart, { capture: true, passive: false });
+    document.addEventListener('touchmove', handleTouchMove, { capture: true, passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { capture: true, passive: true });
+    document.addEventListener('touchcancel', handleTouchEnd, { capture: true, passive: true });
 
     return () => {
-      document.removeEventListener('pointerdown', handlePalmReject, { capture: true });
-      document.removeEventListener('pointermove', handlePalmReject, { capture: true });
-      document.removeEventListener('touchstart', handlePalmReject, { capture: true });
-      document.removeEventListener('touchmove', handlePalmReject, { capture: true });
+      document.removeEventListener('pointerdown', handlePointerDown, { capture: true });
+      document.removeEventListener('pointermove', handlePointerMove, { capture: true });
+      document.removeEventListener('touchstart', handleTouchStart, { capture: true });
+      document.removeEventListener('touchmove', handleTouchMove, { capture: true });
+      document.removeEventListener('touchend', handleTouchEnd, { capture: true });
+      document.removeEventListener('touchcancel', handleTouchEnd, { capture: true });
     };
   }, []);
 
@@ -412,6 +468,7 @@ const StudyViewer = () => {
   /* ── Excalidraw onChange & 스마트 좌우 패닝 잠금 ── */
   const handleExcalidrawChange = useCallback((elements, appState) => {
     if (appState) {
+      activeToolRef.current = appState.activeTool.type;
       const isFreedraw = appState.activeTool.type === 'freedraw';
       
       if (isFreedraw) {
