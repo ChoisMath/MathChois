@@ -284,11 +284,11 @@ const AssignmentEditor = () => {
         </div>
 
         {/* 미리보기 */}
-        <div className="flex-1 bg-white rounded-lg shadow flex items-center justify-center overflow-hidden">
+        <div className="flex-1 bg-gray-50 rounded-lg shadow overflow-y-auto p-4 relative">
           {selectedPage ? (
-            <img src={selectedPage.image_url} alt="선택된 페이지" className="max-w-full max-h-full object-contain" />
+            <img src={selectedPage.image_url} alt="선택된 페이지" className="w-full h-auto block shadow-sm bg-white" />
           ) : (
-            <div className="text-center text-gray-400">
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-gray-400">
               <p className="text-lg">페이지를 추가하세요</p>
               <p className="text-sm mt-1">JPG, PNG 이미지를 업로드할 수 있습니다</p>
             </div>

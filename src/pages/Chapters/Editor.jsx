@@ -364,15 +364,15 @@ const ChapterEditor = () => {
         </div>
 
         {/* Main — 선택된 페이지 미리보기 */}
-        <div className="flex-1 bg-white rounded-lg shadow flex items-center justify-center overflow-hidden">
+        <div className="flex-1 bg-gray-50 rounded-lg shadow overflow-y-auto p-4 relative">
           {selectedPage ? (
             <img
               src={selectedPage.image_url}
               alt="선택된 페이지"
-              className="max-w-full max-h-full object-contain"
+              className="w-full h-auto block shadow-sm bg-white"
             />
           ) : (
-            <div className="text-center text-gray-400">
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-gray-400">
               <p className="text-lg">페이지를 추가하세요</p>
               <p className="text-sm mt-1">JPG, PNG 이미지를 업로드할 수 있습니다</p>
             </div>
@@ -385,7 +385,7 @@ const ChapterEditor = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
             <h2 className="text-lg font-bold text-gray-900 mb-1">챕터 내보내기</h2>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-gray-500 mb-4 whitespace-normal break-keep">
               <span className="font-medium text-gray-700">"{chapter?.title}"</span>을(를) 복사할 클래스를 선택하세요.
             </p>
 

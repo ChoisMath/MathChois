@@ -292,7 +292,7 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
             <h2 className="text-lg font-bold text-gray-900 mb-2">과제 삭제</h2>
-            <p className="text-sm text-gray-600 mb-6">
+            <p className="text-sm text-gray-600 mb-6 whitespace-normal break-keep">
               <span className="font-medium text-gray-900">"{deleteTarget.title}"</span>을(를) 삭제하면
               모든 페이지·학생 필기·제출 내역이 영구 삭제됩니다. 계속하시겠습니까?
             </p>

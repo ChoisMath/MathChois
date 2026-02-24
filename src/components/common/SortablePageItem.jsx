@@ -25,8 +25,8 @@ const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage,
       ref={setNodeRef}
       style={style}
       onClick={() => onSelectPage(page)}
-      className={`relative group rounded-md overflow-hidden cursor-pointer border-2 transition-colors ${
-        isSelected ? 'border-blue-500' : 'border-transparent hover:border-gray-300'
+      className={`relative group rounded-md overflow-hidden cursor-pointer transition-colors ${
+        isSelected ? 'border-4 border-blue-500' : 'border-4 border-transparent hover:border-gray-300'
       }`}
     >
       <div 
@@ -40,7 +40,7 @@ const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage,
       <img
         src={page.image_url}
         alt={`페이지 ${index + 1}`}
-        className="w-full aspect-[3/4] object-cover"
+        className="w-full h-auto object-contain bg-white"
         draggable={false}
       />
       <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">

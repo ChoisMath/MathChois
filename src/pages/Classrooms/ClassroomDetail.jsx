@@ -750,14 +750,14 @@ const ClassroomDetail = () => {
 
             {/* 직접 만들기 */}
             {createTab === 'new' && (
-              <form onSubmit={handleCreateChapter}>
+              <form onSubmit={handleCreateChapter} className="flex flex-col">
                 <input autoFocus type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
                   placeholder="챕터 제목"
                   className="w-full px-4 py-2 border border-gray-300 rounded-md mb-3 focus:ring-blue-500 focus:border-blue-500" />
                 <textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)}
                   placeholder="설명 (선택)" rows={2}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md mb-4 focus:ring-blue-500 focus:border-blue-500 resize-none" />
-                <div className="flex justify-end gap-3">
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md mb-4 focus:ring-blue-500 focus:border-blue-500 resize-none whitespace-normal break-keep" />
+                <div className="flex justify-end gap-3 mt-auto">
                   <button type="button" onClick={closeCreateModal} title="취소"
                     className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer flex items-center justify-center"><X className="h-5 w-5" /></button>
                   <button type="submit" disabled={creating || !newTitle.trim()} title={creating ? '생성 중...' : '만들기'}
@@ -832,7 +832,7 @@ const ClassroomDetail = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
             <h2 className="text-lg font-bold text-gray-900 mb-2">챕터 삭제</h2>
-            <p className="text-sm text-gray-600 mb-6">
+            <p className="text-sm text-gray-600 mb-6 whitespace-normal break-keep">
               <span className="font-medium text-gray-900">{deleteTarget.title}</span>을(를) 삭제하면
               해당 챕터의 모든 페이지·학생 필기·교사 필기가 영구 삭제됩니다. 계속하시겠습니까?
             </p>
@@ -853,7 +853,7 @@ const ClassroomDetail = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
             <h2 className="text-lg font-bold text-gray-900 mb-2">클래스룸 삭제</h2>
-            <p className="text-sm text-gray-600 mb-6">
+            <p className="text-sm text-gray-600 mb-6 whitespace-normal break-keep">
               <span className="font-medium text-gray-900">{classroom.name}</span>을(를) 삭제하면
               모든 챕터·페이지·학생 필기·교사 필기·멤버 정보가 영구 삭제됩니다. 계속하시겠습니까?
             </p>

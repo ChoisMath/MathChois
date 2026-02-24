@@ -529,12 +529,14 @@ const TeacherStudyViewer = () => {
                   key={pg.id}
                   ref={pg.id === currentPage?.id ? activeSidebarItemRef : null}
                   to={`/teacher/classrooms/${classroomId}/chapters/${chapterId}/study/page/${pg.id}`}
-                  className={`block rounded-md overflow-hidden border-2 transition-colors ${
-                    pg.id === currentPage?.id ? 'border-indigo-500' : 'border-transparent hover:border-gray-300'
+                  className={`relative block rounded-md overflow-hidden transition-colors ${
+                    pg.id === currentPage?.id ? 'border-4 border-indigo-500' : 'border-4 border-transparent hover:border-gray-300'
                   }`}
                 >
-                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full max-h-64 object-contain bg-white" loading="lazy" decoding="async" />
-                  <div className="bg-gray-50 text-center text-xs py-1 text-gray-600 border-t">{idx + 1}</div>
+                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                  <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
+                    {idx + 1}
+                  </div>
                 </Link>
               ))}
             </div>

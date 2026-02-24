@@ -1,0 +1,294 @@
+﻿commit ecefeb2ad68625200431952c58f1bf18ba1cc589
+Author: ChoisMath <complete860127@gmail.com>
+Date:   Mon Feb 23 16:46:56 2026 +0900
+
+    fix(Study): restore android chrome address bar hide by removing global and component-level overflow constraints
+
+diff --git a/.agent/memory/architecture.md b/.agent/memory/architecture.md
+index a6328c8..a6f0a5d 100644
+--- a/.agent/memory/architecture.md
++++ b/.agent/memory/architecture.md
+@@ -6,13 +6,14 @@
+ E:\Projects\MathChois\
+ ?쒋?? src/
+ ??  ?쒋?? main.jsx                    # ReactDOM.createRoot ??App
+-??  ?쒋?? App.jsx                     # ErrorBoundary + AuthProvider + BrowserRouter + Routes
+-??  ?쒋?? index.css                   # 湲濡쒕쾶 ?ㅽ???(Tailwind)
++??  ?쒋?? App.jsx                     # ErrorBoundary + AuthProvider + BrowserRouter + Routes (React.lazy 遺꾪븷)
++??  ?쒋?? index.css                   # 湲濡쒕쾶 ?ㅽ???(Tailwind) ???곗튂 媛???ㅽ겕濡?諛⑹?
+ ??  ?쒋?? lib/
+ ??  ??  ?쒋?? supabase.js             # createClient(VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)
+-??  ??  ?붴?? excalidrawUtils.js      # BG_ELEMENT_ID, GRID_STYLE ??怨듭쑀 ?곸닔/?⑥닔
++??  ??  ?쒋?? excalidrawUtils.js      # BG_ELEMENT_ID, GRID_STYLE ??怨듭쑀 ?곸닔/?⑥닔
++??  ??  ?붴?? pdfDownloader.js        # exportToCanvas 湲곕컲 PDF 蹂??濡쒖쭅
+ ??  ?쒋?? contexts/
+-??  ??  ?붴?? AuthContext.jsx         # AuthProvider, useAuth hook
++??  ??  ?붴?? AuthContext.jsx         # AuthProvider, useAuth hook (Race condition 諛⑹? 濡쒖쭅 ?곸슜??
+ ??  ?쒋?? components/
+ ??  ??  ?쒋?? Navbar.jsx              # ?곷떒 ?ㅻ퉬 (濡쒓퀬, ?좎?紐? ?꾨컮?, 濡쒓렇?꾩썐)
+ ??  ??  ?쒋?? ProtectedRoute.jsx      # ??븷蹂??쇱슦??媛??@@ -40,73 +41,61 @@ E:\Projects\MathChois\
+ ??  ?붴?? memory/                     # ???덈∼寃??뺤쓽???꾨줈?앺듃 濡쒖뺄 ?곸꽭 臾몄꽌 ?대뜑
+ ??      ?쒋?? architecture.md         # ???뚯씪
+ ??      ?쒋?? supabase-schema.md      # DB ?ㅽ궎留? RLS, RPC, Storage
+-??      ?붴?? studyviewer-details.md  # Excalidraw ?듯빀 ?곸꽭
++??      ?붴?? studyviewer-details.md  # Excalidraw ?듯빀 ?곸꽭 (?곗튂 濡쒖쭅, PDF ?ы븿)
+ ?쒋?? GEMINI.md                       # Gemini ?멸났吏???먯씠?꾪듃 ?뺤쟻 ?꾪궎?띿쿂 媛?대뱶
+ ?붴?? ...
+ ```
+ 
+ ---
+ 
+-## ?쇱슦??援ъ“ (App.jsx)
++## ?쇱슦??諛?理쒖쟻??援ъ“ (App.jsx)
++
++MathChois???깅뒫 理쒖쟻?붾? ?꾪빐 **濡쒓렇????理쒖큹 ?묎렐?섎뒗 ??쒕낫???붾㈃ ?댁쇅??臾닿굅??而댄룷?뚰듃 ?꾩껜(Excalidraw ????`React.lazy()` 諛?`Suspense`瑜??듯빐 鍮꾨룞湲?泥?겕(Chunk)濡?遺꾪븷 濡쒕뱶**?⑸땲?? TTI(Time-to-Interactive)瑜??⑥텞?쒗궎???꾪궎?띿쿂媛 ?곸슜?섏뼱 ?덉뒿?덈떎.
+ 
+ ```jsx
+ ErrorBoundary
+   AuthProvider
+     BrowserRouter
+-      /auth/callback ??OAuthCallback (?덉씠?꾩썐 ?놁쓬)
+-
+-      MainLayout (Navbar留?
+-        /            ??Home
+-        /login       ??Login
+-        /choose-role ??ChooseRole
+-
+-      ProtectedRoute (allowedRole="teacher")
+-        DashboardLayout (Navbar + ?ъ씠?쒕컮)
+-          /teacher/classrooms                                             ??ClassroomList
+-          /teacher/classrooms/:id                                         ??ClassroomDetail
+-          /teacher/chapters/:id/edit                                      ??Editor (ChapterEditor)
+-          /teacher/classrooms/:classroomId/chapters/:chapterId/monitor    ??ChapterMonitor
+-          /teacher/board                                                  ??TeacherBoard ??-          /teacher/board/new                                              ??BoardPostEditor ??-          /teacher/board/:postId/edit                                     ??BoardPostEditor ??-          /teacher/classrooms/:classroomId/assignments/:assignmentId/edit       ??AssignmentEditor ??-          /teacher/classrooms/:classroomId/assignments/:assignmentId/monitor    ??AssignmentMonitor ??-
+-        /teacher/classrooms/:classroomId/chapters/:chapterId/monitor/:studentId ??StudentWorkViewer (?꾩껜?붾㈃)
+-        /teacher/classrooms/:classroomId/chapters/:chapterId/study/page/:pageId ??TeacherStudyViewer (?꾩껜?붾㈃)
+-        /teacher/classrooms/:classroomId/assignments/:assignmentId/monitor/:studentId ??AssignmentWorkViewer (?꾩껜?붾㈃) ??-
+-      ProtectedRoute (allowedRole="student")
+-        DashboardLayout
+-          /student/classrooms                        ??ClassroomList
+-          /student/classrooms/:id                    ??ClassroomDetail
+-        /student/study/:chapterId/page/:pageId       ??StudyViewer (?꾩껜?붾㈃)
+-        /student/assignments/:assignmentId/page/:pageId ??AssignmentStudyViewer (?꾩껜?붾㈃) ??+      <Suspense fallback={<PageLoader />}>
++        /auth/callback ??OAuthCallback
++
++        MainLayout (Navbar留?
++          /            ??Home
++          /login       ??Login
++          /choose-role ??ChooseRole (Lazy)
++
++        ProtectedRoute (allowedRole="teacher")
++          DashboardLayout (Navbar + ?ъ씠?쒕컮)
++            /teacher/classrooms                                             ??ClassroomList (Lazy)
++            ... [寃뚯떆??/ 怨쇱젣 Monitor ?쇱슦??援ъ꽦] ...
++
++          /* Fullscreen Views (No Dashboard Layout) */
++          /teacher/classrooms/:classroomId/chapters/:chapterId/monitor/:studentId ??StudentWorkViewer (Lazy)
++          /teacher/classrooms/:classroomId/chapters/:chapterId/study/page/:pageId ??TeacherStudyViewer (Lazy)
++          /teacher/classrooms/:classroomId/assignments/:assignmentId/monitor/:studentId ??AssignmentWorkViewer (Lazy)
++
++        ProtectedRoute (allowedRole="student")
++          DashboardLayout
++            /student/classrooms                        ??ClassroomList (Lazy)
++          /student/study/:chapterId/page/:pageId       ??StudyViewer (Lazy)
++          /student/assignments/:assignmentId/page/:pageId ??AssignmentStudyViewer (Lazy)
+ ```
+ 
+ ---
+ 
+-## 二쇱슂 ?꾨찓??濡쒖쭅 ?낅뜲?댄듃 (Phase 5: 寃뚯떆??& 怨쇱젣)
+-
+-### 寃뚯떆??(Board)
+-
+-- **援먯궗留?湲 ?묒꽦 媛??*. 援먯궗媛 ?뚯냽???대옒?ㅻ８(?좏깮吏) ??곸쑝濡?怨듭?瑜??④린怨?泥⑤??뚯씪 怨듭쑀.
+-- 泥⑤??뚯씪? `post-files` Storage 踰꾪궥????λ릺硫? ?낅줈??沅뚰븳? 援먯궗?먭쾶 ?쒖젙?섏?留??ㅼ슫濡쒕뱶??Public.
+-- ?숈깮?ㅼ? ?먯떊???랁븳 ?대옒?ㅻ８???곌껐??`post_classrooms` ?뚯씠釉? 寃뚯떆臾쇰쭔 ?쎌쓣 ???덈룄濡?RLS媛 援ъ꽦?섏뼱 ?덉쓬.
++## ?꾩뿭 ?곹깭 愿由?諛?踰꾧렇 ?꾪솕 (AuthContext)
+ 
+-### 怨쇱젣 (Assignment)
++**OAuth 臾댄븳 猷⑦봽 李⑤떒 濡쒖쭅 ?곸슜:**
+ 
+-- **援먯궗**: ?대옒?ㅻ８ ?댁뿉???덈줈???뚯뒪?몄꽦/?숈젣??而⑦뀗痢?Assignment) 援ъ꽦 (`assignments`, `assignment_pages` ?뚯씠釉?. 湲곗〈 梨뺥꽣? ?좎궗?섍쾶 ?대?吏瑜??낅줈?쒗븯吏留??숈깮?ㅼ쓽 ?쒖텧 諛?梨꾩젏 ?곹깭(`status`, `score`, `deadline` ?? 愿由ш? ?ы븿??
+-- **AssignmentEditor**: 援먯궗媛 ?대?吏瑜?異붽??섍퀬 怨쇱젣瑜??앹꽦/?섏젙?섎뒗 ?붾㈃.
+-- **AssignmentMonitor**: ?숈깮?ㅼ쓽 ?ㅼ떆媛?臾몄젣???吏꾩쿃??諛??곹깭(?? 誘몄젣異? ??? ?쒖텧 ??瑜??대엺?섍퀬 媛쒕퀎 ?숈깮 梨꾩젏 酉곗뼱濡?吏꾩엯 媛?ν븳 ?꾪솴??
+-- **AssignmentStudyViewer**: ?숈깮 ?꾩슜 UI. ?쇰컲 StudyViewer? 嫄곗쓽 援ъ“媛 ?≪궗?섎굹 `assignment_notes` ?뚯씠釉붿쓣 ?ъ슜???꾧린瑜???ν븯怨??곗긽?⑥뿉 `?쒖텧?섍린` 踰꾪듉 ?깆쓽 ?곹깭 ?꾪솚 濡쒖쭅??異붽??섏뿀??寃껋쑝濡??덉긽.
+-- **AssignmentWorkViewer**: 援먯궗媛 ?쒖텧???숈깮??怨쇱젣 ????꾧린瑜?`assignment_notes`? `assignment_teacher_comments` ?듯빐) 議고쉶?섎㈃???먯닔瑜?二쇨퀬 肄붾찘??泥⑥궘)?????덈뒗 ?꾩껜?붾㈃.
++- 釉뚮씪?곗? 荑좏궎/?댁떆???꾩갑??Supabase Session ?뺣낫媛 `AuthContext`??`initializeAuth()` ?ㅽ뻾蹂대떎 ??쾶 ?뚯떛?섎뒗 寃쎌웳 ?곹깭(Race Condition)瑜?怨좊젮?섏뿬, `onAuthStateChange('SIGNED_IN')` ?대깽???대??먯꽌 `fetchProfile` Promise媛 ?꾩쟾???닿껐(`await`)???뚭퉴吏 `<AuthProvider>`???꾩뿭 `isLoading` 蹂?섎? `true`濡?遺숈옟?꾨몼?덈떎.
++- ?대젃寃??⑥쑝濡쒖뜥 `OAuthCallback` ?뚯씪??"?ъ슜???몄뀡? 議댁옱?섎뒗??DB??Profile(??븷) ?곗씠?곌? 鍮꾩뼱 ?덉뼱?? ?꾩쭅 ?좏깮?섏? ?딆? 以?李⑷컖??`/choose-role` 寃쎈줈濡?遺덊븘?뷀븯寃??ъ슜?먮? ?뺢꺼踰꾨━???꾩긽"???곴뎄?곸쑝濡?諛⑹??⑸땲??
+ 
+-### 湲곗〈 StudyViewer???李⑥씠??-
+-- 湲곗〈 StudyViewer ?먮쫫? `student_notes` ?뚯씠釉붿쓣 ?댁슜???숈뒿 湲곕줉 異붿쟻?댁뿀?쇰굹, Phase 5??怨쇱젣 湲곕뒫? ?곹깭(status) 蹂?붿? ?먯닔(score), ?쇰뱶諛??깆쓽 Workflow瑜?異붽?濡?媛먮떦?섎뒗 蹂꾨룄???뚯씠釉?怨꾩링(`assignment_submissions`, `assignment_notes`)?쇰줈 寃⑸━??
++---
+ 
+-## ?꾪궎?띿쿂 寃곗젙 ?ы빆
++## 而댄룷?뚰듃 ?붿옄??媛?대뱶
+ 
+-- 湲곗〈 `.claude/memory` 臾몄꽌瑜??밴퀎?섏뿬 **`.agent/memory`**濡??꾪솚?섍퀬, ?대? ?듯빐 AI ?섏뼱 ?꾨줈洹몃옒諛??곗냽???뺣낫.
+-- 紐⑤컮?????`100dvh` ??Excalidraw Element ?쎌엯 ?깆쓽 湲곕쾿? 洹몃?濡?怨쇱젣 酉곗뼱?먮룄 ?곸슜?섏뿀??
++1. **?꾩씠肄?湲곕컲 ?ㅻ퉬寃뚯씠??*:
++   - 湲곗〈??紐⑤뱺 '???, '?쒖텧', '?ㅻ줈媛湲? ?띿뒪???고듃 踰꾪듉?ㅼ? ?듭씪??`lucide-react` ?꾩씠肄섏쑝濡??꾪솚?섏뿀?듬땲??
++   - 酉곗뼱 ?몃꽕?쇰뱾? `object-contain max-h-64` ?꾨줈?쇳떚瑜??곸슜諛쏆븘 湲곗씠?섍쾶 李뚭렇?ъ?嫄곕굹 ?섎━???꾩긽???꾩쟾???뚮㈇?덉뒿?덈떎.
++2. **諛섏쓳???쒖빟 & 媛濡??ㅽ겕濡?*:
++   - ?꾨컲?곸씤 而⑦뀒?대꼫?먮뒗 `word-break` 諛?紐⑤컮??湲곌린瑜?諛곕젮??Text wrapping 諛⑹???媛濡??ㅽ겕濡?overflow-x-auto)???쎌엯?섏뼱 ?덉뒿?덈떎.
+diff --git a/.agent/memory/studyviewer-details.md b/.agent/memory/studyviewer-details.md
+index 46563b0..c37afd0 100644
+--- a/.agent/memory/studyviewer-details.md
++++ b/.agent/memory/studyviewer-details.md
+@@ -29,5 +29,27 @@
+ 
+ - ?쇰컲 ?숈뒿怨??숈씪??酉곗뼱 硫붿빱?덉쬁???ъ슜?섎릺 ?뚯씠釉붽낵 ?ㅽ넗由ъ? 寃쎈줈媛 ?ㅻ쫫.
+ - `assignment_notes` ?뚯씠釉붿쓣 ?ъ슜???꾧린 ?곗씠?????(?붾컮?댁뒪 ?숈씪)
+-- ?쒖텧 ???곹깭('draft')?먯꽌 ?숈깮??吏곸젒 "?쒖텧?섍린" 踰꾪듉 ?깆쓣 ?듯빐 `assignment_submissions` ?뚯씠釉붿쓽 `status`瑜?'submitted'濡?蹂寃쏀븷 寃껋쑝濡??덉긽.
++- ?쒖텧 ???곹깭('draft')?먯꽌 ?숈깮??吏곸젒 "?쒖텧?섍린" 踰꾪듉 ?깆쓣 ?듯빐 `assignment_submissions` ?뚯씠釉붿쓽 `status`瑜?'submitted'濡?蹂寃?
+ - 援먯궗??`AssignmentWorkViewer` (怨쇱젣 ?뺤씤 酉곗뼱)瑜??듯빐 ?숈깮??`assignment_notes`瑜??뚮뜑留곹븯怨? ?щ챸?꾧? ?ㅼ뼱媛?`assignment_teacher_comments`瑜??㏐렇???쇰뱶諛깊븷 ???덉쓬.
++
++---
++
++## 以묒슂: 紐⑤컮???곗튂 泥섎━ 諛??쒖뒪泥??섏씠?ы궧 (Palm Rejection & Vertical Panning)
++
++紐⑤뱺 ?꾩껜?붾㈃ 酉곗뼱(援먯궗/?숈깮, ?쇰컲/怨쇱젣)?먮뒗 ?숈씪???곗튂 ?고쉶 濡쒖쭅???쎌엯?섏뼱 ?덉뒿?덈떎. Excalidraw ?먯껜 臾쇰━ ?붿쭊???쇱쑝?ㅻ뒗 以?媛?띾룄 ?뺢?(Feedback Loop) ?꾩긽???먯쿇 李⑤떒?섍린 ?꾪븳 寃껋엯?덈떎.
++
++1. **Palm Rejection (?먮컮???볦? 硫댁쟻 ?몄떇 李⑤떒)**
++   - `pointerdown`, `pointermove`, `touchstart`, `touchmove`瑜?capture(=true) ?④퀎?먯꽌 媛먯?.
++   - ?ъ씤?곗쓽 `width`/`height` ?먮뒗 ?곗튂??`radiusX`/`radiusY`媛 25瑜?珥덇낵?섎㈃ ?대떦 ?대깽?몃? `e.stopPropagation()` ?쒖폒 Excalidraw 罹붾쾭??媛앹껜???꾨떖?섏? ?딅룄濡?留됱븘, ?먮ぉ???우븯?????좎씠 洹몄뼱吏??寃껋쓣 諛⑹??⑸땲??
++
++2. **2-Finger ??紐⑤뱶 ?섏씠?ы궧 (Strict Vertical Panning)**
++   - **臾몄젣??** ??Freedraw) 紐⑤뱶 ?곹깭?먯꽌 ???먭??쎌쑝濡??붾㈃???대룞(Panning)?쒗궗 ?? Excalidraw???뺣?/異뺤냼(Zoom)? ?대룞(Scroll)???숈떆???곗궛?섏뿬 ?붾㈃??湲됯꺽?섍쾶 異뺤냼?섍굅??媛濡쒕줈 ??댁???踰꾧렇媛 議댁옱?덉뒿?덈떎.
++   - **?닿껐梨?** `activeTool === 'freedraw'` ?곹깭???? ?곗튂媛 2媛?媛먯??섎㈃ `e.stopPropagation()`?쇰줈 Excalidraw??怨좎쑀 ?쒖뒪泥?泥섎━瑜?利됱떆 以묐떒?쒗궢?덈떎. 洹??? ?댁쟾 ?대깽???鍮??곸듅/?섍컯??Y醫뚰몴??蹂?붾웾(deltaY)留뚯쓣 異붿텧??`excalidrawAPI.updateScene({ appState: { scrollY: ... } })`濡?以?鍮꾩쑉(`appState.zoom.value`)??留욎떠 ?섎룞 二쇱엯?⑸땲?? ?대? ?듯빐 **?ъ슜?먮뒗 ??紐⑤뱶?먯꽌 ?꾩쟾??怨좎젙??媛濡????ш린濡?源붾걫???곹븯 ?ㅽ겕濡ㅻ쭅留?寃쏀뿕**?섍쾶 ?⑸땲??
++
++## PDF ?앹꽦 ?먮쫫 (usePdfDownloader)
++
++?숈깮(StudyViewer, AssignmentStudyViewer) 諛?援먯궗(TeacherStudyViewer) ?ъ씠?쒕컮?먯꽌 ?뱀젙 ?섏씠吏 ?ㅼ슫濡쒕뱶 諛??꾧텒 ?ㅼ슫濡쒕뱶 湲곕뒫??議댁옱?⑸땲??
++
++- `html2canvas`? `jspdf`瑜?寃고빀?섏뿬 ?ъ슜?⑸땲??
++- `<Excalidraw>`??`exportToCanvas` API ?⑥닔瑜?蹂댁씠吏 ?딅뒗 硫붾え由??곷떒??諛깃렇?쇱슫??罹붾쾭???붿냼濡??쒕뜑留?議곕┰ ??PNG 踰꾪띁濡??좎꽌 A4 鍮꾩쑉 PDF濡?戮묒븘?낅땲??
++- **?꾧텒 ?ㅼ슫濡쒕뱶:** ?대떦 梨뺥꽣/怨쇱젣???꾩껜 Array 湲몄씠瑜??쒗쉶?섎㈃??諛곌꼍 諛??ъ슜??Elements ?곗씠?곕? 紐⑤몢 ?⑹꽦?섏뿬 ?⑥씪 PDF??Multi-page濡?Add?쒗궢?덈떎.
+diff --git a/src/index.css b/src/index.css
+index 6f279df..83cb782 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -2,14 +2,9 @@
+ 
+ html,
+ body {
+-  overscroll-behavior: none;
+   @apply whitespace-nowrap text-xs sm:text-sm md:text-base lg:text-lg;
+ }
+ 
+-body {
+-  overflow-y: auto;
+-}
+-
+ /* safe-area-inset: viewport-fit=cover ???섎뱶?⑥뼱 ?몄튂/?쒖뒪?쒕컮 蹂댁긽 */
+ #root {
+   padding-top: env(safe-area-inset-top, 0px);
+diff --git a/src/pages/Assignment/AssignmentStudyViewer.jsx b/src/pages/Assignment/AssignmentStudyViewer.jsx
+index 28ac7f3..971ecbb 100644
+--- a/src/pages/Assignment/AssignmentStudyViewer.jsx
++++ b/src/pages/Assignment/AssignmentStudyViewer.jsx
+@@ -607,17 +607,6 @@ const AssignmentStudyViewer = () => {
+     prefetchImages([prevPage?.image_url, nextPage?.image_url].filter(Boolean));
+   }, [prevPage?.image_url, nextPage?.image_url]); // Include image URLs to fix lint warning
+ 
+-  /* ?? body ?ㅽ겕濡?怨좎젙 (紐⑤컮?쇱뿉???곗튂 ??UI 諛由?諛⑹?) ?? */
+-  useEffect(() => {
+-    document.body.style.overflow = 'hidden';
+-    document.body.style.overscrollBehavior = 'none';
+-    document.body.style.touchAction = 'none';
+-    return () => {
+-      document.body.style.overflow = '';
+-      document.body.style.overscrollBehavior = '';
+-      document.body.style.touchAction = '';
+-    };
+-  }, []);
+ 
+   /* ?ъ씠?쒕컮 ?먮룞 ?ㅽ겕濡?*/
+   useEffect(() => {
+diff --git a/src/pages/Assignment/AssignmentWorkViewer.jsx b/src/pages/Assignment/AssignmentWorkViewer.jsx
+index 1f2dec5..3b0116d 100644
+--- a/src/pages/Assignment/AssignmentWorkViewer.jsx
++++ b/src/pages/Assignment/AssignmentWorkViewer.jsx
+@@ -245,17 +245,6 @@ const AssignmentWorkViewer = () => {
+     return () => { supabase.removeChannel(channel); };
+   }, [currentPage, studentId]);
+ 
+-  /* ?? body ?ㅽ겕濡?怨좎젙 (紐⑤컮?쇱뿉???곗튂 ??UI 諛由?諛⑹?) ?? */
+-  useEffect(() => {
+-    document.body.style.overflow = 'hidden';
+-    document.body.style.overscrollBehavior = 'none';
+-    document.body.style.touchAction = 'none';
+-    return () => {
+-      document.body.style.overflow = '';
+-      document.body.style.overscrollBehavior = '';
+-      document.body.style.touchAction = '';
+-    };
+-  }, []);
+ 
+   /* ?섏씠吏 蹂寃????곗씠??濡쒕뱶 */
+   useEffect(() => {
+diff --git a/src/pages/Monitor/StudentWorkViewer.jsx b/src/pages/Monitor/StudentWorkViewer.jsx
+index e640fc1..751dc65 100644
+--- a/src/pages/Monitor/StudentWorkViewer.jsx
++++ b/src/pages/Monitor/StudentWorkViewer.jsx
+@@ -262,17 +262,6 @@ const StudentWorkViewer = () => {
+     };
+   }, []);
+ 
+-  /* ?? body ?ㅽ겕濡?怨좎젙 (紐⑤컮?쇱뿉???곗튂 ??UI 諛由?諛⑹?) ?? */
+-  useEffect(() => {
+-    document.body.style.overflow = 'hidden';
+-    document.body.style.overscrollBehavior = 'none';
+-    document.body.style.touchAction = 'none';
+-    return () => {
+-      document.body.style.overflow = '';
+-      document.body.style.overscrollBehavior = '';
+-      document.body.style.touchAction = '';
+-    };
+-  }, []);
+ 
+   /* ?? ?섏씠吏 蹂寃???scene ?곗씠??濡쒕뱶 ?? */
+   useEffect(() => {
+diff --git a/src/pages/Study/StudyViewer.jsx b/src/pages/Study/StudyViewer.jsx
+index ba99fab..8b47cd3 100644
+--- a/src/pages/Study/StudyViewer.jsx
++++ b/src/pages/Study/StudyViewer.jsx
+@@ -616,17 +616,6 @@ const StudyViewer = () => {
+     prefetchImages([prevPage?.image_url, nextPage?.image_url].filter(Boolean));
+   }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+ 
+-  /* ?? body ?ㅽ겕濡?怨좎젙 (紐⑤컮?쇱뿉???곗튂 ??UI 諛由?諛⑹?) ?? */
+-  useEffect(() => {
+-    document.body.style.overflow = 'hidden';
+-    document.body.style.overscrollBehavior = 'none';
+-    document.body.style.touchAction = 'none';
+-    return () => {
+-      document.body.style.overflow = '';
+-      document.body.style.overscrollBehavior = '';
+-      document.body.style.touchAction = '';
+-    };
+-  }, []);
+ 
+   /* ?? ?ъ씠?쒕컮: ?꾩옱 ?섏씠吏媛 ?몃줈 以묒븰???ㅻ룄濡??먮룞 ?ㅽ겕濡???
+      loading???섏〈?깆뿉 ?ы븿???댁쑀:
+diff --git a/src/pages/Study/TeacherStudyViewer.jsx b/src/pages/Study/TeacherStudyViewer.jsx
+index c2ad986..45994a1 100644
+--- a/src/pages/Study/TeacherStudyViewer.jsx
++++ b/src/pages/Study/TeacherStudyViewer.jsx
+@@ -168,17 +168,6 @@ const TeacherStudyViewer = () => {
+     };
+   }, []);
+ 
+-  /* ?? body ?ㅽ겕濡?怨좎젙 (紐⑤컮?쇱뿉???곗튂 ??UI 諛由?諛⑹?) ?? */
+-  useEffect(() => {
+-    document.body.style.overflow = 'hidden';
+-    document.body.style.overscrollBehavior = 'none';
+-    document.body.style.touchAction = 'none';
+-    return () => {
+-      document.body.style.overflow = '';
+-      document.body.style.overscrollBehavior = '';
+-      document.body.style.touchAction = '';
+-    };
+-  }, []);
+ 
+   const sidebarScrollRef      = useRef(null); // ?ъ씠?쒕컮 ?ㅽ겕濡?而⑦뀒?대꼫
+   const lastZoomRef           = useRef(1);

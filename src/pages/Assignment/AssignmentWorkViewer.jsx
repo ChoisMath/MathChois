@@ -613,12 +613,18 @@ const AssignmentWorkViewer = () => {
             </div>
             <div className="space-y-2 p-2">
               {pages.map((pg, idx) => (
-                <button key={pg.id}
+                <button
+                  key={pg.id}
                   ref={idx === currentPageIndex ? activeSidebarItemRef : null}
                   onClick={() => goPage(idx)}
-                  className={`block w-full rounded-md overflow-hidden border-2 transition-colors text-left ${idx === currentPageIndex ? 'border-indigo-500' : 'border-transparent hover:border-gray-300'}`}>
-                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full max-h-64 object-contain bg-white" loading="lazy" decoding="async" />
-                  <div className="bg-gray-50 text-center text-xs py-1 text-gray-600 border-t">{idx + 1}</div>
+                  className={`relative block w-full rounded-md overflow-hidden transition-colors text-left ${
+                    idx === currentPageIndex ? 'border-4 border-indigo-500' : 'border-4 border-transparent hover:border-gray-300'
+                  }`}
+                >
+                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                  <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
+                    {idx + 1}
+                  </div>
                 </button>
               ))}
             </div>

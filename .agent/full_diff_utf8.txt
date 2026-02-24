@@ -1,0 +1,146 @@
+﻿diff --git a/src/pages/Assignment/AssignmentStudyViewer.jsx b/src/pages/Assignment/AssignmentStudyViewer.jsx
+index 09b7bca..d3354ff 100644
+--- a/src/pages/Assignment/AssignmentStudyViewer.jsx
++++ b/src/pages/Assignment/AssignmentStudyViewer.jsx
+@@ -488,7 +488,14 @@ const AssignmentStudyViewer = () => {
+ 
+   /* ?? body ?ㅽ겕濡?怨좎젙 (紐⑤컮?쇱뿉???곗튂 ??UI 諛由?諛⑹?) ?? */
+   useEffect(() => {
+-    // 鍮?useEffect (?댁쟾 overflow hidden 肄붾뱶 ??젣)
++    document.body.style.overflow = 'hidden';
++    document.body.style.overscrollBehavior = 'none';
++    document.body.style.touchAction = 'none';
++    return () => {
++      document.body.style.overflow = '';
++      document.body.style.overscrollBehavior = '';
++      document.body.style.touchAction = '';
++    };
+   }, []);
+ 
+   /* ?ъ씠?쒕컮 ?먮룞 ?ㅽ겕濡?*/
+@@ -706,7 +713,7 @@ const AssignmentStudyViewer = () => {
+             <Excalidraw
+               key={currentPage.id}
+               excalidrawAPI={handleExcalidrawMount}
+-              viewModeEnabled={!drawMode || isLocked}
++              viewModeEnabled={false}
+               initialData={{
+                 elements: noteElements,
+                 appState: {
+diff --git a/src/pages/Assignment/AssignmentWorkViewer.jsx b/src/pages/Assignment/AssignmentWorkViewer.jsx
+index ff41613..9b38279 100644
+--- a/src/pages/Assignment/AssignmentWorkViewer.jsx
++++ b/src/pages/Assignment/AssignmentWorkViewer.jsx
+@@ -134,7 +134,14 @@ const AssignmentWorkViewer = () => {
+ 
+   /* ?? body ?ㅽ겕濡?怨좎젙 (紐⑤컮?쇱뿉???곗튂 ??UI 諛由?諛⑹?) ?? */
+   useEffect(() => {
+-    // ??젣??+    document.body.style.overflow = 'hidden';
++    document.body.style.overscrollBehavior = 'none';
++    document.body.style.touchAction = 'none';
++    return () => {
++      document.body.style.overflow = '';
++      document.body.style.overscrollBehavior = '';
++      document.body.style.touchAction = '';
++    };
+   }, []);
+ 
+   /* ?섏씠吏 蹂寃????곗씠??濡쒕뱶 */
+@@ -514,11 +521,11 @@ const AssignmentWorkViewer = () => {
+             <Excalidraw
+               key={currentPage.id}
+               excalidrawAPI={handleExcalidrawMount}
++              viewModeEnabled={false}
+               initialData={{
+                 elements: [],
+                 appState: { viewBackgroundColor: 'transparent', currentItemStrokeColor: '#e03131', currentItemStrokeWidth: 2, scrollX: 0, scrollY: 0 },
+               }}
+-              viewModeEnabled={!commentMode}
+               onChange={handleExcalidrawChange}
+               UIOptions={{
+                 canvasActions: { changeViewBackgroundColor: false, clearCanvas: false, export: false, loadScene: false, saveToActiveFile: false, toggleTheme: false, saveAsImage: false },
+diff --git a/src/pages/Monitor/StudentWorkViewer.jsx b/src/pages/Monitor/StudentWorkViewer.jsx
+index 61caeb8..e52276f 100644
+--- a/src/pages/Monitor/StudentWorkViewer.jsx
++++ b/src/pages/Monitor/StudentWorkViewer.jsx
+@@ -150,7 +150,14 @@ const StudentWorkViewer = () => {
+ 
+   /* ?? body ?ㅽ겕濡?怨좎젙 (紐⑤컮?쇱뿉???곗튂 ??UI 諛由?諛⑹?) ?? */
+   useEffect(() => {
+-    // 鍮?useEffect (?댁쟾 overflow hidden 肄붾뱶 ??젣)
++    document.body.style.overflow = 'hidden';
++    document.body.style.overscrollBehavior = 'none';
++    document.body.style.touchAction = 'none';
++    return () => {
++      document.body.style.overflow = '';
++      document.body.style.overscrollBehavior = '';
++      document.body.style.touchAction = '';
++    };
+   }, []);
+ 
+   /* ?? ?섏씠吏 蹂寃???scene ?곗씠??濡쒕뱶 ?? */
+@@ -535,6 +542,7 @@ const StudentWorkViewer = () => {
+             <Excalidraw
+               key={currentPage.id}
+               excalidrawAPI={handleExcalidrawMount}
++              viewModeEnabled={false}
+               initialData={{
+                 elements: [],
+                 appState: {
+@@ -545,7 +553,6 @@ const StudentWorkViewer = () => {
+                   scrollY:                0,
+                 },
+               }}
+-              viewModeEnabled={!commentMode}
+               onChange={handleExcalidrawChange}
+               UIOptions={{
+                 canvasActions: {
+diff --git a/src/pages/Study/StudyViewer.jsx b/src/pages/Study/StudyViewer.jsx
+index e65b497..6394782 100644
+--- a/src/pages/Study/StudyViewer.jsx
++++ b/src/pages/Study/StudyViewer.jsx
+@@ -502,7 +502,14 @@ const StudyViewer = () => {
+ 
+   /* ?? body ?ㅽ겕濡?怨좎젙 (紐⑤컮?쇱뿉???곗튂 ??UI 諛由?諛⑹?) ?? */
+   useEffect(() => {
+-    // 鍮?useEffect (?댁쟾 overflow hidden 肄붾뱶 ??젣)
++    document.body.style.overflow = 'hidden';
++    document.body.style.overscrollBehavior = 'none';
++    document.body.style.touchAction = 'none';
++    return () => {
++      document.body.style.overflow = '';
++      document.body.style.overscrollBehavior = '';
++      document.body.style.touchAction = '';
++    };
+   }, []);
+ 
+   /* ?? ?ъ씠?쒕컮: ?꾩옱 ?섏씠吏媛 ?몃줈 以묒븰???ㅻ룄濡??먮룞 ?ㅽ겕濡???
+@@ -709,7 +716,7 @@ const StudyViewer = () => {
+             <Excalidraw
+               key={currentPage.id}
+               excalidrawAPI={handleExcalidrawMount}
+-              viewModeEnabled={!drawMode}
++              viewModeEnabled={false}
+               initialData={{
+                 elements: noteElements,
+                 appState: {
+diff --git a/src/pages/Study/TeacherStudyViewer.jsx b/src/pages/Study/TeacherStudyViewer.jsx
+index 0223967..71b7caf 100644
+--- a/src/pages/Study/TeacherStudyViewer.jsx
++++ b/src/pages/Study/TeacherStudyViewer.jsx
+@@ -56,7 +56,14 @@ const TeacherStudyViewer = () => {
+ 
+   /* ?? body ?ㅽ겕濡?怨좎젙 (紐⑤컮?쇱뿉???곗튂 ??UI 諛由?諛⑹?) ?? */
+   useEffect(() => {
+-    // 鍮?useEffect (?댁쟾 overflow hidden 肄붾뱶 ??젣)
++    document.body.style.overflow = 'hidden';
++    document.body.style.overscrollBehavior = 'none';
++    document.body.style.touchAction = 'none';
++    return () => {
++      document.body.style.overflow = '';
++      document.body.style.overscrollBehavior = '';
++      document.body.style.touchAction = '';
++    };
+   }, []);
+ 
+   const sidebarScrollRef      = useRef(null); // ?ъ씠?쒕컮 ?ㅽ겕濡?而⑦뀒?대꼫
