@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Pencil, Newspaper, Paperclip, ChevronDown, ChevronUp } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 function formatDate(iso) {
@@ -20,7 +20,7 @@ function formatFileSize(bytes) {
 /* ─── 게시글 카드 (펼치기/접기 지원) ─── */
 function PostCard({ post, navigate, deleting, onDelete }) {
   const [open, setOpen] = useState(false);
-  const classrooms = post.post_classrooms?.map((pc) => pc.classroom?.name).filter(Boolean) || [];
+  const classroomNameList = post.classroomNames || [];
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
@@ -32,19 +32,19 @@ function PostCard({ post, navigate, deleting, onDelete }) {
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-gray-900 truncate">{post.title}</p>
           <div className="flex items-center gap-3 mt-1">
-            <span className="text-xs text-gray-400">{formatDate(post.created_at)}</span>
-            {classrooms.length > 0 && (
+            <span className="text-xs text-gray-400">{formatDate(post.createdAt)}</span>
+            {classroomNameList.length > 0 && (
               <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                {classrooms.join(', ')}
+                {classroomNameList.join(', ')}
               </span>
             )}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {post.post_files?.length > 0 && (
+          {post.files?.length > 0 && (
             <span className="flex items-center gap-1 text-xs text-gray-400">
               <Paperclip className="h-3.5 w-3.5" />
-              {post.post_files.length}
+              {post.files.length}
             </span>
           )}
           <button
@@ -77,20 +77,20 @@ function PostCard({ post, navigate, deleting, onDelete }) {
             <p className="text-sm text-gray-400 mt-3 italic">내용 없음</p>
           )}
 
-          {post.post_files?.length > 0 && (
+          {post.files?.length > 0 && (
             <div className="mt-3 space-y-1.5">
               <p className="text-xs font-medium text-gray-500 mb-1">첨부파일</p>
-              {post.post_files.map((f) => (
+              {post.files.map((f) => (
                 <a
                   key={f.id}
-                  href={f.file_url}
+                  href={f.fileUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-2 p-2 bg-gray-50 rounded-md hover:bg-blue-50 transition-colors"
                 >
                   <Paperclip className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                  <span className="text-sm text-blue-600 hover:underline truncate flex-1">{f.file_name}</span>
-                  <span className="text-xs text-gray-400 flex-shrink-0">{formatFileSize(f.file_size)}</span>
+                  <span className="text-sm text-blue-600 hover:underline truncate flex-1">{f.fileName}</span>
+                  <span className="text-xs text-gray-400 flex-shrink-0">{formatFileSize(f.fileSize)}</span>
                 </a>
               ))}
             </div>
@@ -113,21 +113,17 @@ const TeacherBoard = () => {
   const fetchPosts = async () => {
     if (!user) return;
     setLoading(true);
-    const { data } = await supabase
-      .from('posts')
-      .select(`
-        id, title, content, created_at,
-        post_classrooms(classroom:classrooms(id, name)),
-        post_files(id, file_name, file_url, file_size)
-      `)
-      .eq('teacher_id', user.id)
-      .order('created_at', { ascending: false });
-    setPosts(data || []);
+    try {
+      const data = await api.get('/api/posts');
+      setPosts(data || []);
+    } catch (err) {
+      console.error('[TeacherBoard] fetchPosts error:', err);
+    }
     setLoading(false);
   };
 
-  useEffect(() => { 
-    const timer = setTimeout(fetchPosts, 0); 
+  useEffect(() => {
+    const timer = setTimeout(fetchPosts, 0);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
@@ -136,28 +132,13 @@ const TeacherBoard = () => {
     if (!confirm(`"${post.title}" 게시글을 삭제하시겠습니까?\n첨부파일도 함께 삭제됩니다.`)) return;
     setDeleting(post.id);
 
-    /* 첨부파일 Storage 삭제 */
-    const { data: files } = await supabase
-      .from('post_files')
-      .select('file_url')
-      .eq('post_id', post.id);
-    if (files?.length > 0) {
-      const paths = files
-        .map((f) => {
-          try {
-            const url = new URL(f.file_url);
-            const marker = '/object/public/post-files/';
-            const idx = url.pathname.indexOf(marker);
-            return idx !== -1 ? url.pathname.slice(idx + marker.length) : null;
-          } catch { return null; }
-        })
-        .filter(Boolean);
-      if (paths.length > 0) {
-        await supabase.storage.from('post-files').remove(paths);
-      }
+    try {
+      // Server handles Storage file cleanup on DELETE /api/posts/:id
+      await api.delete(`/api/posts/${post.id}`);
+    } catch (err) {
+      console.error('[TeacherBoard] delete error:', err);
     }
 
-    await supabase.from('posts').delete().eq('id', post.id);
     setDeleting(null);
     fetchPosts();
   };

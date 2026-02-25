@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, ClipboardList, Clock, Trophy, Users, Loader, X } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../common/PdfDownloadButton';
@@ -43,49 +43,39 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
 
   const fetchData = async () => {
     setLoading(true);
-    const { data: asns } = await supabase
-      .from('assignments')
-      .select('id, title, description, deadline, max_score, position')
-      .eq('classroom_id', classroomId)
-      .order('position');
-    setAssignments(asns || []);
+    try {
+      const asns = await api.get(`/api/classrooms/${classroomId}/assignments`);
+      setAssignments(asns || []);
 
-    if (isTeacher && asns?.length > 0) {
-      /* 교사: 총 학생 수 */
-      const { count } = await supabase
-        .from('classroom_members')
-        .select('id', { count: 'exact', head: true })
-        .eq('classroom_id', classroomId);
-      setTotalStudents(count || 0);
+      if (isTeacher && asns?.length > 0) {
+        /* 교사: 총 학생 수 */
+        const members = await api.get(`/api/classrooms/${classroomId}/members`);
+        setTotalStudents(members?.length || 0);
 
-      /* 교사: 과제별 제출 수 */
-      const { data: allSubs } = await supabase
-        .from('assignment_submissions')
-        .select('assignment_id')
-        .in('assignment_id', asns.map((a) => a.id));
-      const countMap = {};
-      for (const s of (allSubs || [])) {
-        countMap[s.assignment_id] = (countMap[s.assignment_id] || 0) + 1;
+        /* 교사: 과제별 제출 수 */
+        const allSubs = await api.get(`/api/submissions/counts?assignmentIds=${asns.map((a) => a.id).join(',')}`);
+        const countMap = {};
+        for (const s of (allSubs || [])) {
+          countMap[s.assignmentId] = (countMap[s.assignmentId] || 0) + 1;
+        }
+        setSubmissionCounts(countMap);
       }
-      setSubmissionCounts(countMap);
-    }
 
-    /* 학생: 본인 제출 현황 */
-    if (!isTeacher && user && asns?.length > 0) {
-      const { data: subs } = await supabase
-        .from('assignment_submissions')
-        .select('assignment_id, status, score, max_score, rejection_comment')
-        .eq('student_id', user.id)
-        .in('assignment_id', asns.map((a) => a.id));
-      const map = {};
-      for (const s of (subs || [])) map[s.assignment_id] = s;
-      setSubmissions(map);
+      /* 학생: 본인 제출 현황 */
+      if (!isTeacher && user && asns?.length > 0) {
+        const subs = await api.get(`/api/submissions/student?assignmentIds=${asns.map((a) => a.id).join(',')}`);
+        const map = {};
+        for (const s of (subs || [])) map[s.assignmentId] = s;
+        setSubmissions(map);
 
-      /* 미제출 개수 계산 → 부모에게 알림 */
-      if (onUnsubmittedCount) {
-        const unsubmitted = (asns || []).filter((a) => !map[a.id] || map[a.id].status === 'rejected').length;
-        onUnsubmittedCount(unsubmitted);
+        /* 미제출 개수 계산 → 부모에게 알림 */
+        if (onUnsubmittedCount) {
+          const unsubmitted = (asns || []).filter((a) => !map[a.id] || map[a.id].status === 'rejected').length;
+          onUnsubmittedCount(unsubmitted);
+        }
       }
+    } catch (err) {
+      console.error('[AssignmentTab] fetchData error:', err);
     }
 
     setLoading(false);
@@ -96,42 +86,31 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
 
   const handleCreate = async () => {
     setCreating(true);
-    const maxPos = assignments.length > 0 ? Math.max(...assignments.map((a) => a.position)) + 1 : 0;
-    const { data: newAsn } = await supabase
-      .from('assignments')
-      .insert({
-        classroom_id: classroomId,
-        teacher_id:   user.id,
-        title:        '새 과제',
-        position:     maxPos,
-      })
-      .select().single();
-    setCreating(false);
-    if (newAsn) {
-      navigate(`/teacher/classrooms/${classroomId}/assignments/${newAsn.id}/edit`);
+    try {
+      const maxPos = assignments.length > 0 ? Math.max(...assignments.map((a) => a.position)) + 1 : 0;
+      const newAsn = await api.post(`/api/classrooms/${classroomId}/assignments`, {
+        title:    '새 과제',
+        position: maxPos,
+      });
+      if (newAsn) {
+        navigate(`/teacher/classrooms/${classroomId}/assignments/${newAsn.id}/edit`);
+      }
+    } catch (err) {
+      console.error('[AssignmentTab] create error:', err);
     }
+    setCreating(false);
   };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
 
-    /* Storage 파일 정리 */
-    const { data: pgs } = await supabase
-      .from('assignment_pages').select('image_url').eq('assignment_id', deleteTarget.id);
-    const paths = (pgs || [])
-      .map((p) => {
-        try {
-          const url = new URL(p.image_url);
-          const marker = '/object/public/chapter-pages/';
-          const idx = url.pathname.indexOf(marker);
-          return idx !== -1 ? url.pathname.slice(idx + marker.length) : null;
-        } catch { return null; }
-      })
-      .filter(Boolean);
-    if (paths.length > 0) await supabase.storage.from('chapter-pages').remove(paths);
+    try {
+      await api.delete(`/api/assignments/${deleteTarget.id}`);
+    } catch (err) {
+      console.error('[AssignmentTab] delete error:', err);
+    }
 
-    await supabase.from('assignments').delete().eq('id', deleteTarget.id);
     setDeleting(false);
     setDeleteTarget(null);
     fetchData();
@@ -139,10 +118,13 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
 
   /* 학생: 과제 카드 클릭 → 첫 페이지로 이동 */
   const handleStudentClick = async (asn) => {
-    const { data: pgs } = await supabase
-      .from('assignment_pages').select('id').eq('assignment_id', asn.id).order('position').limit(1);
-    if (pgs?.length > 0) {
-      navigate(`/student/assignments/${asn.id}/page/${pgs[0].id}`);
+    try {
+      const pgs = await api.get(`/api/assignments/${asn.id}/pages`);
+      if (pgs?.length > 0) {
+        navigate(`/student/assignments/${asn.id}/page/${pgs[0].id}`);
+      }
+    } catch (err) {
+      console.error('[AssignmentTab] student click error:', err);
     }
   };
 
@@ -153,26 +135,20 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
     setDownloadingAsnId(asn.id);
     try {
       const title = `${profile.name || '학생'}_${asn.title}_전체`;
-      const { data: pgs } = await supabase
-        .from('assignment_pages')
-        .select('id, image_url')
-        .eq('assignment_id', asn.id)
-        .order('position');
-        
+      const pgs = await api.get(`/api/assignments/${asn.id}/pages`);
+
       if (!pgs || pgs.length === 0) return;
-      
-      const { data: notes } = await supabase
-        .from('assignment_notes')
-        .select('page_id, excalidraw_data')
-        .eq('student_id', user.id)
-        .in('page_id', pgs.map(p => p.id));
-        
-      const notesMap = Object.fromEntries((notes || []).map(n => [n.page_id, n.excalidraw_data]));
-      
+
+      const notes = await api.get(
+        `/api/assignment-notes/${asn.id}/bulk?pageIds=${pgs.map(p => p.id).join(',')}`
+      );
+
+      const notesMap = Object.fromEntries((notes || []).map(n => [n.pageId, n.excalidrawData]));
+
       const pageDataList = pgs.map(pg => {
         const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
         return {
-          bgUrl: pg.image_url,
+          bgUrl: pg.imageUrl,
           elements: note.elements || [],
           files: note.files || {},
           bgPosition: note.bgPosition,
@@ -259,7 +235,7 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
                   )}
                   <span className="flex items-center gap-1 text-xs text-gray-400">
                     <Trophy className="h-3 w-3" />
-                    {asn.max_score}점
+                    {asn.maxScore}점
                   </span>
                   {isTeacher && (
                     <span className="flex items-center gap-1 text-xs text-blue-600 ml-auto">
@@ -276,7 +252,7 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
                       />
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${bg} ${text}`}>
                         {label}
-                        {sub?.status === 'graded' && sub.score != null && ` (${sub.score}/${sub.max_score ?? asn.max_score})`}
+                        {sub?.status === 'graded' && sub.score != null && ` (${sub.score}/${sub.maxScore ?? asn.maxScore})`}
                       </span>
                     </div>
                   )}
@@ -314,4 +290,3 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
 };
 
 export default AssignmentTab;
-

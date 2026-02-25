@@ -144,6 +144,19 @@ export async function getAssignmentNote(assignmentId: string, pageId: string, st
   return rows[0] ?? null;
 }
 
+/** 과제 학생 필기 일괄 조회 (복수 페이지) */
+export async function getAssignmentNotesBulk(assignmentId: string, studentId: string, pageIds: string[]) {
+  if (pageIds.length === 0) return [];
+  return db
+    .select()
+    .from(assignmentNotes)
+    .where(and(
+      eq(assignmentNotes.assignmentId, assignmentId),
+      eq(assignmentNotes.studentId, studentId),
+      inArray(assignmentNotes.pageId, pageIds),
+    ));
+}
+
 /** 과제 학생 필기 upsert */
 export async function upsertAssignmentNote(
   assignmentId: string, pageId: string, studentId: string, excalidrawData: ExcalidrawData,

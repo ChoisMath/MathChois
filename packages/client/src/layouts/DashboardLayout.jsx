@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Users, LogIn, LayoutList, Loader } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 /* ── 학생 전용 사이드바 ── */
 function StudentSidebar() {
@@ -18,11 +18,12 @@ function StudentSidebar() {
 
   const fetchClassrooms = async () => {
     if (!user) return;
-    const { data, error } = await supabase
-      .from('classroom_members')
-      .select('classroom:classrooms(id, name)')
-      .eq('student_id', user.id);
-    if (!error) setClassrooms(data?.map((d) => d.classroom) || []);
+    try {
+      const data = await api.get('/api/classrooms');
+      setClassrooms(data || []);
+    } catch {
+      // ignore
+    }
   };
 
   useEffect(() => {
@@ -35,22 +36,22 @@ function StudentSidebar() {
     if (!joinCode.trim()) return;
     setJoining(true);
     setJoinError('');
-    const { error } = await supabase.rpc('join_classroom_by_code', {
-      code: joinCode.trim().toUpperCase(),
-    });
-    setJoining(false);
-    if (error) {
-      setJoinError(
-        error.message === 'Classroom not found'
-          ? '클래스룸을 찾을 수 없습니다.'
-          : error.message
-      );
-    } else {
+    try {
+      await api.post('/api/classrooms/join', {
+        code: joinCode.trim().toUpperCase(),
+      });
       setJoinCode('');
       await fetchClassrooms();
       // re-fetch list page if currently on it
       navigate('/student/classrooms', { replace: true });
+    } catch (err) {
+      setJoinError(
+        err.message === 'Classroom not found' || err.message === '해당 코드의 클래스를 찾을 수 없습니다.'
+          ? '클래스룸을 찾을 수 없습니다.'
+          : err.message
+      );
     }
+    setJoining(false);
   };
 
   return (
@@ -139,12 +140,9 @@ function TeacherSidebar() {
 
   useEffect(() => {
     if (!user) return;
-    supabase
-      .from('classrooms')
-      .select('id, name')
-      .eq('teacher_id', user.id)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setClassrooms(data || []));
+    api.get('/api/classrooms')
+      .then((data) => setClassrooms(data || []))
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, location.pathname]); // pathname 변경 시 재조회 (이름 수정 후 갱신)
 

@@ -1,6 +1,31 @@
 import { eq, desc, inArray, and } from 'drizzle-orm';
 import { db } from '../config/database.js';
-import { posts, postFiles, postClassrooms, classroomMembers } from '../db/schema.js';
+import { posts, postFiles, postClassrooms, classroomMembers, classrooms } from '../db/schema.js';
+
+/** 특정 교실에 게시된 글 조회 (BoardTab용) */
+export async function getPostsByClassroom(classroomId: string) {
+  const links = await db
+    .select({ postId: postClassrooms.postId })
+    .from(postClassrooms)
+    .where(eq(postClassrooms.classroomId, classroomId));
+
+  if (links.length === 0) return [];
+  const postIds = links.map((l) => l.postId);
+
+  const rows = await db
+    .select()
+    .from(posts)
+    .where(inArray(posts.id, postIds))
+    .orderBy(desc(posts.createdAt));
+
+  return Promise.all(rows.map(async (post) => {
+    const files = await db
+      .select()
+      .from(postFiles)
+      .where(eq(postFiles.postId, post.id));
+    return { ...post, files };
+  }));
+}
 
 /** 교사: 자신의 게시글 전체 조회 */
 export async function getTeacherPosts(teacherId: string) {
@@ -17,14 +42,19 @@ export async function getTeacherPosts(teacherId: string) {
       .where(eq(postFiles.postId, post.id));
 
     const classroomLinks = await db
-      .select({ classroomId: postClassrooms.classroomId })
+      .select({
+        classroomId: postClassrooms.classroomId,
+        classroomName: classrooms.name,
+      })
       .from(postClassrooms)
+      .innerJoin(classrooms, eq(postClassrooms.classroomId, classrooms.id))
       .where(eq(postClassrooms.postId, post.id));
 
     return {
       ...post,
       files,
       classroomIds: classroomLinks.map((l) => l.classroomId),
+      classroomNames: classroomLinks.map((l) => l.classroomName),
     };
   }));
 }

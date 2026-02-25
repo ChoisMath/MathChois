@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Plus, Book, Trash2, Edit2, ArrowLeft, FileText, Loader, X } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 
 const ChapterList = () => {
   const { classroomId } = useParams();
@@ -18,19 +18,16 @@ const ChapterList = () => {
   const fetchData = async () => {
     setLoading(true);
 
-    const { data: cls } = await supabase
-      .from('classrooms')
-      .select('id, name')
-      .eq('id', classroomId)
-      .single();
-    setClassroom(cls);
-
-    const { data: chaps } = await supabase
-      .from('chapters')
-      .select('id, title, description, position, pages(count)')
-      .eq('classroom_id', classroomId)
-      .order('position');
-    setChapters(chaps || []);
+    try {
+      const [cls, chaps] = await Promise.all([
+        api.get(`/api/classrooms/${classroomId}`),
+        api.get(`/api/classrooms/${classroomId}/chapters`),
+      ]);
+      setClassroom(cls);
+      setChapters(chaps || []);
+    } catch (err) {
+      console.error('[ChapterList] fetchData error:', err);
+    }
 
     setLoading(false);
   };
@@ -41,33 +38,39 @@ const ChapterList = () => {
   }, [classroomId]);
 
   const getPageCount = (ch) => {
-    if (Array.isArray(ch.pages) && ch.pages.length > 0) return ch.pages[0].count;
-    return 0;
+    // Server returns ch.pages as an array of {id, position}
+    return ch.pages?.length ?? 0;
   };
 
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
     setCreating(true);
-    const maxPosition = chapters.length > 0 ? Math.max(...chapters.map((c) => c.position)) + 1 : 0;
-    const { error } = await supabase.from('chapters').insert({
-      classroom_id: classroomId,
-      title: newTitle.trim(),
-      description: newDesc.trim() || null,
-      position: maxPosition,
-    });
-    setCreating(false);
-    if (!error) {
+    try {
+      const maxPosition = chapters.length > 0 ? Math.max(...chapters.map((c) => c.position)) + 1 : 0;
+      await api.post(`/api/classrooms/${classroomId}/chapters`, {
+        title: newTitle.trim(),
+        description: newDesc.trim() || null,
+        position: maxPosition,
+      });
       setNewTitle('');
       setNewDesc('');
       setShowModal(false);
       fetchData();
+    } catch (err) {
+      console.error('[ChapterList] create error:', err);
     }
+    setCreating(false);
   };
 
   const handleDelete = async (chapterId) => {
     if (!confirm('이 챕터를 삭제하시겠습니까? 포함된 모든 페이지도 삭제됩니다.')) return;
-    await supabase.from('chapters').delete().eq('id', chapterId);
+    try {
+      // Server handles Storage file cleanup on DELETE /api/chapters/:id
+      await api.delete(`/api/chapters/${chapterId}`);
+    } catch (err) {
+      console.error('[ChapterList] delete error:', err);
+    }
     fetchData();
   };
 

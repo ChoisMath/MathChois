@@ -10,6 +10,7 @@ import {
   getTeacherNote,
   upsertTeacherNote,
   getAssignmentNote,
+  getAssignmentNotesBulk,
   upsertAssignmentNote,
 } from '../services/note.service.js';
 import { getPagesByChapter } from '../services/page.service.js';
@@ -104,6 +105,21 @@ export async function noteRoutes(app: FastifyInstance) {
   });
 
   // ─── Assignment Notes ─────────────────────────
+
+  /** GET /api/assignment-notes/:assignmentId/bulk?pageIds=... — 과제 필기 일괄 조회 */
+  app.get<{
+    Params: { assignmentId: string };
+    Querystring: { pageIds: string };
+  }>('/api/assignment-notes/:assignmentId/bulk', {
+    preHandler: [authenticate],
+  }, async (request) => {
+    const ids = request.query.pageIds?.split(',').filter(Boolean) ?? [];
+    return getAssignmentNotesBulk(
+      request.params.assignmentId,
+      request.user.sub,
+      ids,
+    );
+  });
 
   /** GET /api/assignment-notes/:assignmentId/:pageId — 과제 학생 필기 */
   app.get<{

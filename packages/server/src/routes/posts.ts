@@ -4,6 +4,7 @@ import { requireRole } from '../middleware/roleGuard.js';
 import {
   getTeacherPosts,
   getStudentPosts,
+  getPostsByClassroom,
   createPost,
   updatePost,
   deletePost,
@@ -23,6 +24,14 @@ export async function postRoutes(app: FastifyInstance) {
       return getTeacherPosts(sub);
     }
     return getStudentPosts(sub);
+  });
+
+  // ─── GET /api/classrooms/:cid/posts — 교실별 게시글 목록
+
+  app.get<{ Params: { cid: string } }>('/api/classrooms/:cid/posts', {
+    preHandler: [authenticate],
+  }, async (request) => {
+    return getPostsByClassroom(request.params.cid);
   });
 
   // ─── POST /api/posts — 게시글 생성 ────────────

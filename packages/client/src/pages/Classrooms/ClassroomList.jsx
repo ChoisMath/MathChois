@@ -1,20 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Plus, Users, ArrowRight, Loader, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 
-function generateClassCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
-
 const ClassroomList = () => {
-  const { user, profile } = useAuth();
+  const { profile } = useAuth();
   const isTeacher = profile?.role === 'teacher';
   const prefix = isTeacher ? '/teacher' : '/student';
 
@@ -25,45 +16,14 @@ const ClassroomList = () => {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
 
-const fetchClassrooms = async () => {
+  const fetchClassrooms = async () => {
     setLoading(true);
-    if (isTeacher) {
-      const { data, error } = await supabase
-        .from('classrooms')
-        .select('*')
-        .eq('teacher_id', user.id)
-        .order('created_at', { ascending: false });
-      if (error) { console.error('[ClassroomList] 목록 조회 오류:', error); setLoading(false); return; }
-
-      // 각 클래스룸의 학생 수를 별도 조회
-      const withCounts = await Promise.all(
-        (data || []).map(async (classroom) => {
-          const { count } = await supabase
-            .from('classroom_members')
-            .select('*', { count: 'exact', head: true })
-            .eq('classroom_id', classroom.id);
-          return { ...classroom, memberCount: count ?? 0 };
-        })
-      );
-      setClassrooms(withCounts);
-    } else {
-      const { data, error } = await supabase
-        .from('classroom_members')
-        .select('classroom:classrooms(*)')
-        .eq('student_id', user.id);
-      if (error) { console.error('[ClassroomList] 목록 조회 오류:', error); setLoading(false); return; }
-
-      const rows = data?.map((d) => d.classroom) || [];
-      const withCounts = await Promise.all(
-        rows.map(async (classroom) => {
-          const { count } = await supabase
-            .from('classroom_members')
-            .select('*', { count: 'exact', head: true })
-            .eq('classroom_id', classroom.id);
-          return { ...classroom, memberCount: count ?? 0 };
-        })
-      );
-      setClassrooms(withCounts);
+    try {
+      // GET /api/classrooms returns classrooms with memberCount already included
+      const data = await api.get('/api/classrooms');
+      setClassrooms(data || []);
+    } catch (err) {
+      console.error('[ClassroomList] 목록 조회 오류:', err);
     }
     setLoading(false);
   };
@@ -79,23 +39,19 @@ const fetchClassrooms = async () => {
     if (!newName.trim()) return;
     setCreating(true);
     setCreateError('');
-    const { error } = await supabase.from('classrooms').insert({
-      name: newName.trim(),
-      teacher_id: user.id,
-      class_code: generateClassCode(),
-    });
-    setCreating(false);
-    if (error) {
-      console.error('[ClassroomList] 클래스룸 생성 오류:', error);
-      setCreateError(error.message);
-    } else {
+    try {
+      await api.post('/api/classrooms', { name: newName.trim() });
       setNewName('');
       setShowCreateModal(false);
       fetchClassrooms();
+    } catch (err) {
+      console.error('[ClassroomList] 클래스룸 생성 오류:', err);
+      setCreateError(err.message);
     }
+    setCreating(false);
   };
 
-const getMemberCount = (classroom) => {
+  const getMemberCount = (classroom) => {
     return classroom.memberCount ?? 0;
   };
 
@@ -139,7 +95,7 @@ const getMemberCount = (classroom) => {
                     <div className="ml-5 w-0 flex-1">
                       <div className="text-lg font-medium text-gray-900">{classroom.name}</div>
                       {isTeacher && (
-                        <div className="text-xs text-gray-400 font-mono mt-1">코드: {classroom.class_code}</div>
+                        <div className="text-xs text-gray-400 font-mono mt-1">코드: {classroom.classCode}</div>
                       )}
                     </div>
                   </div>

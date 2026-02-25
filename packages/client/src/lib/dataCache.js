@@ -4,15 +4,17 @@
  * 브라우저 세션 동안 유지되며 새로고침 시 자동 초기화됩니다.
  */
 
+import { api } from './api';
+
 const _chapterCache = new Map(); // chapterId → chapter
 const _pagesCache   = new Map(); // chapterId → pages[]
 
 /**
  * chapterId에 해당하는 챕터와 페이지 목록을 반환합니다.
- * 캐시 히트 시 Supabase 요청을 건너뜁니다.
- * 항상 image_url, id, position을 포함한 전체 페이지 데이터를 반환합니다.
+ * 캐시 히트 시 API 요청을 건너뜁니다.
+ * 항상 imageUrl, id, position을 포함한 전체 페이지 데이터를 반환합니다.
  */
-export async function getCachedChapterAndPages(chapterId, supabase) {
+export async function getCachedChapterAndPages(chapterId) {
   if (_chapterCache.has(chapterId) && _pagesCache.has(chapterId)) {
     return {
       chapter: _chapterCache.get(chapterId),
@@ -20,19 +22,15 @@ export async function getCachedChapterAndPages(chapterId, supabase) {
     };
   }
 
-  const [chapRes, pgsRes] = await Promise.all([
-    supabase.from('chapters').select('id, title, classroom_id').eq('id', chapterId).single(),
-    supabase.from('pages').select('id, image_url, position')
-      .eq('chapter_id', chapterId).order('position'),
+  const [chapter, pages] = await Promise.all([
+    api.get(`/api/chapters/${chapterId}`),
+    api.get(`/api/chapters/${chapterId}/pages`),
   ]);
 
-  const chapter = chapRes.data;
-  const pages   = pgsRes.data || [];
-
   if (chapter) _chapterCache.set(chapterId, chapter);
-  _pagesCache.set(chapterId, pages);
+  _pagesCache.set(chapterId, pages || []);
 
-  return { chapter, pages };
+  return { chapter, pages: pages || [] };
 }
 
 /**

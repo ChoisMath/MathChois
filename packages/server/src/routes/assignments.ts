@@ -13,6 +13,7 @@ import {
   createAssignmentPage,
   deleteAssignmentPage,
   getSubmissionsByAssignment,
+  getSubmissionCounts,
   getStudentSubmissions,
   upsertSubmission,
 } from '../services/assignment.service.js';
@@ -164,6 +165,17 @@ export async function assignmentRoutes(app: FastifyInstance) {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request) => {
     return getSubmissionsByAssignment(request.params.id);
+  });
+
+  // ─── GET /api/submissions/counts — 과제별 제출 수 (교사)
+
+  app.get<{
+    Querystring: { assignmentIds: string };
+  }>('/api/submissions/counts', {
+    preHandler: [authenticate, requireRole('teacher')],
+  }, async (request) => {
+    const ids = request.query.assignmentIds?.split(',').filter(Boolean) ?? [];
+    return getSubmissionCounts(ids);
   });
 
   // ─── GET /api/submissions/student — 학생 제출 상태 조회

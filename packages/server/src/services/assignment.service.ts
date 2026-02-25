@@ -162,6 +162,17 @@ export async function getSubmissionsByAssignment(assignmentId: string) {
     .where(eq(assignmentSubmissions.assignmentId, assignmentId));
 }
 
+/** 과제별 제출 수 카운트 (교사 모니터링) */
+export async function getSubmissionCounts(assignmentIds: string[]) {
+  if (assignmentIds.length === 0) return [];
+  return db
+    .select({
+      assignmentId: assignmentSubmissions.assignmentId,
+    })
+    .from(assignmentSubmissions)
+    .where(inArray(assignmentSubmissions.assignmentId, assignmentIds));
+}
+
 /** 학생의 제출 상태 조회 */
 export async function getStudentSubmissions(studentId: string, assignmentIds: string[]) {
   if (assignmentIds.length === 0) return [];
