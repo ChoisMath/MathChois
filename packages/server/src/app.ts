@@ -8,6 +8,11 @@ import { authRoutes } from './routes/auth.js';
 import { classroomRoutes } from './routes/classrooms.js';
 import { chapterRoutes } from './routes/chapters.js';
 import { pageRoutes } from './routes/pages.js';
+import { storageRoutes } from './routes/storage.js';
+import { postRoutes } from './routes/posts.js';
+import { assignmentRoutes } from './routes/assignments.js';
+import { noteRoutes } from './routes/notes.js';
+import { commentRoutes } from './routes/comments.js';
 
 export function buildApp() {
   const app = Fastify({
@@ -33,6 +38,11 @@ export function buildApp() {
   app.register(classroomRoutes);
   app.register(chapterRoutes);
   app.register(pageRoutes);
+  app.register(storageRoutes);
+  app.register(postRoutes);
+  app.register(assignmentRoutes);
+  app.register(noteRoutes);
+  app.register(commentRoutes);
 
   // ─── Health check ───────────────────────────────────
 

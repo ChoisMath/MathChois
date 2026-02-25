@@ -5,9 +5,9 @@
 
 ## 현재 상태
 
-- **현재 Phase**: Phase 2 (서버측 완료) → Phase 3 시작 예정
+- **현재 Phase**: Phase 3-4 서버측 완료 → Phase 5 Socket.IO 시작 예정
 - **마지막 작업 세션**: 2026-02-25
-- **다음 할 일**: Phase 3 파일 저장소 + 게시판/과제 라우트
+- **다음 할 일**: Phase 5 Socket.IO 서버 구현, 이후 클라이언트 전환 (2-5 일괄)
 - **블로커**: 없음
 - **참고**: Supabase는 현재 서비스 중이나, 이전할 데이터 없음. 새 백엔드를 처음부터 구축.
 
@@ -154,33 +154,35 @@
 ## Phase 3: 파일 저장소
 
 ### 3-1. 서버 파일 저장소
-- [ ] `services/storage.service.ts` — Volume 파일 처리
-  - [ ] upload(bucket, directory, file) → URL 반환
-  - [ ] serve(bucket, path) → 파일 스트림 + Cache-Control
-  - [ ] remove(bucket, path) → 파일 삭제
-  - [ ] 경로 traversal 방지 로직
-- [ ] `routes/storage.ts`
-  - [ ] POST /api/files/upload (multipart, 교사 전용)
-  - [ ] GET /api/files/:bucket/* (public, 캐시 헤더)
-  - [ ] DELETE /api/files/:bucket/* (교사 전용)
-- [ ] chapters 라우트에 이미지 업로드 연동: POST /api/chapters/:id/pages (multipart)
-- [ ] chapters DELETE에 Storage 파일 정리 추가
+- [x] `services/storage.service.ts` — Volume 파일 처리
+  - [x] upload(bucket, directory, file) → URL 반환
+  - [x] readFile(bucket, path) → Buffer + mimeType + Cache-Control
+  - [x] remove(bucket, path) → 파일 삭제
+  - [x] 경로 traversal 방지 로직
+  - [x] urlToStoragePath() — URL→storage path 변환
+- [x] `routes/storage.ts`
+  - [x] POST /api/files/upload (단일, 교사 전용)
+  - [x] POST /api/files/upload-multiple (복수, 교사 전용)
+  - [x] GET /api/files/:bucket/* (public, immutable 캐시 헤더)
+  - [x] DELETE /api/files/:bucket/* (교사 전용)
+- [ ] chapters DELETE에 Storage 파일 정리 추가 (TODO in route)
 
 ### 3-2. 게시판/과제 라우트
-- [ ] `services/post.service.ts` + `routes/posts.ts`
-  - [ ] GET /api/posts (교사: 전체, 학생: 소속 교실 글만)
-  - [ ] POST /api/posts (파일 첨부 + post_classrooms)
-  - [ ] PATCH /api/posts/:id
-  - [ ] DELETE /api/posts/:id (파일 정리 포함)
-- [ ] `services/assignment.service.ts` + `routes/assignments.ts`
-  - [ ] GET /api/classrooms/:cid/assignments
-  - [ ] POST /api/classrooms/:cid/assignments
-  - [ ] PATCH /api/assignments/:id
-  - [ ] DELETE /api/assignments/:id (파일 정리)
-  - [ ] POST /api/assignments/:id/pages (이미지 업로드)
-  - [ ] GET /api/assignments/:id/pages
-  - [ ] GET /api/assignments/:id/submissions
-  - [ ] PUT /api/submissions/:assignmentId/:studentId
+- [x] `services/post.service.ts` + `routes/posts.ts`
+  - [x] GET /api/posts (교사: 전체, 학생: 소속 교실 글만)
+  - [x] POST /api/posts (파일 첨부 + post_classrooms)
+  - [x] PATCH /api/posts/:id
+  - [x] DELETE /api/posts/:id (파일 정리 포함)
+- [x] `services/assignment.service.ts` + `routes/assignments.ts`
+  - [x] GET /api/classrooms/:cid/assignments
+  - [x] POST /api/classrooms/:cid/assignments
+  - [x] PATCH /api/assignments/:id
+  - [x] DELETE /api/assignments/:id
+  - [x] POST /api/assignments/:id/pages (이미지 업로드)
+  - [x] GET /api/assignments/:id/pages
+  - [x] GET /api/assignments/:id/submissions
+  - [x] GET /api/submissions/student?assignmentIds=...
+  - [x] PUT /api/submissions/:assignmentId
 
 ### 3-3. 클라이언트 전환
 - [ ] `ChapterEditor` — supabase.storage → api.uploadFiles + api 호출
@@ -203,20 +205,20 @@
 ## Phase 4: 필기/코멘트 API
 
 ### 4-1. 서버 필기/코멘트 라우트
-- [ ] `services/note.service.ts` + `routes/notes.ts`
-  - [ ] GET /api/notes/student/:pageId (학생 본인 필기)
-  - [ ] PUT /api/notes/student/:pageId (upsert — onConflictDoUpdate)
-  - [ ] GET /api/notes/teacher/:pageId (교사 필기)
-  - [ ] PUT /api/notes/teacher/:pageId (upsert)
-  - [ ] GET /api/notes/student-summary/:chapterId (전체 학생 진도)
-  - [ ] GET /api/notes/student-bulk?pageIds=... (복수 페이지 필기 일괄)
-- [ ] `services/comment.service.ts` + `routes/comments.ts`
-  - [ ] GET /api/comments/:pageId/:studentId (교사 코멘트)
-  - [ ] PUT /api/comments/:pageId/:studentId (upsert)
-  - [ ] GET /api/assignment-comments/:pageId/:studentId
-  - [ ] PUT /api/assignment-comments/:pageId/:studentId
-  - [ ] GET /api/assignment-notes/:pageId (학생 과제 필기)
-  - [ ] PUT /api/assignment-notes/:pageId (upsert)
+- [x] `services/note.service.ts` + `routes/notes.ts`
+  - [x] GET /api/notes/student/:pageId (학생 본인 필기)
+  - [x] PUT /api/notes/student/:pageId (upsert — onConflictDoUpdate)
+  - [x] GET /api/notes/teacher/:pageId (교사 필기)
+  - [x] PUT /api/notes/teacher/:pageId (upsert)
+  - [x] GET /api/notes/student-summary/:chapterId (전체 학생 진도)
+  - [x] GET /api/notes/student-bulk?pageIds=... (복수 페이지 필기 일괄)
+- [x] `routes/comments.ts` (note.service.ts에 통합)
+  - [x] GET /api/comments/:pageId/:studentId (교사 코멘트)
+  - [x] PUT /api/comments/:pageId/:studentId (upsert)
+  - [x] GET /api/assignment-comments/:pageId/:studentId
+  - [x] PUT /api/assignment-comments/:pageId/:studentId
+  - [x] GET /api/assignment-notes/:assignmentId/:pageId (학생 과제 필기)
+  - [x] PUT /api/assignment-notes/:assignmentId/:pageId (upsert)
 
 ### 4-2. 클라이언트 전환
 - [ ] `dataCache.ts` — supabase → api 호출로 교체
