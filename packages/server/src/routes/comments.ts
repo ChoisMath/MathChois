@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
 import {
   getTeacherStudentComment,
+  getCommentsForStudent,
   upsertTeacherStudentComment,
   getAssignmentTeacherComment,
   upsertAssignmentTeacherComment,
@@ -14,6 +15,18 @@ import type { ExcalidrawData } from '@mathchois/shared';
 export async function commentRoutes(app: FastifyInstance) {
 
   // ─── Teacher-Student Comments ─────────────────
+
+  /** GET /api/comments/:pageId/for-student — 학생이 자기 코멘트 조회 (request.user.sub = studentId) */
+  app.get<{
+    Params: { pageId: string };
+  }>('/api/comments/:pageId/for-student', {
+    preHandler: [authenticate],
+  }, async (request) => {
+    return getCommentsForStudent(
+      request.user.sub,
+      request.params.pageId,
+    );
+  });
 
   /** GET /api/comments/:pageId/:studentId — 교사 코멘트 조회 */
   app.get<{

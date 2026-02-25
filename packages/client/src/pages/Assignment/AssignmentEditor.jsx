@@ -15,8 +15,9 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import SortablePageItem from '../../components/common/SortablePageItem';
+
 
 const AssignmentEditor = () => {
   const { classroomId, assignmentId } = useParams();
@@ -50,50 +51,56 @@ const AssignmentEditor = () => {
   const handleDragEnd = async (event) => {
     const { active, over } = event;
     if (!over) return;
-    
+
     if (active.id !== over.id) {
       const oldIndex = pages.findIndex((p) => p.id === active.id);
       const newIndex = pages.findIndex((p) => p.id === over.id);
 
       const newPages = arrayMove(pages, oldIndex, newIndex);
-      
+
       const updatedPages = newPages.map((p, idx) => ({ ...p, position: idx }));
       setPages(updatedPages);
 
-      const updates = updatedPages.map((pg) => ({
+      const items = updatedPages.map((pg) => ({
         id: pg.id,
-        assignment_id: assignmentId,
-        image_url: pg.image_url,
         position: pg.position,
       }));
 
-      await supabase.from('assignment_pages').upsert(updates);
+      try {
+        await api.put('/api/assignment-pages/reorder', { items });
+      } catch (err) {
+        console.error('순서 변경 실패:', err.message);
+      }
     }
   };
 
   const fetchData = async () => {
     setLoading(true);
-    const [assignRes, pagesRes] = await Promise.all([
-      supabase.from('assignments').select('*').eq('id', assignmentId).single(),
-      supabase.from('assignment_pages').select('id, image_url, position')
-        .eq('assignment_id', assignmentId).order('position'),
-    ]);
-    if (assignRes.data) {
-      setTitle(assignRes.data.title);
-      setDescription(assignRes.data.description || '');
-      setMaxScore(assignRes.data.max_score ?? 100);
-      if (assignRes.data.deadline) {
-        // datetime-local input format: YYYY-MM-DDTHH:mm
-        setDeadline(assignRes.data.deadline.slice(0, 16));
+    try {
+      const [assignData, pagesData] = await Promise.all([
+        api.get(`/api/assignments/${assignmentId}`),
+        api.get(`/api/assignments/${assignmentId}/pages`),
+      ]);
+      if (assignData) {
+        setTitle(assignData.title);
+        setDescription(assignData.description || '');
+        setMaxScore(assignData.maxScore ?? 100);
+        if (assignData.deadline) {
+          // datetime-local input format: YYYY-MM-DDTHH:mm
+          setDeadline(assignData.deadline.slice(0, 16));
+        }
       }
-    }
-    setPages(pagesRes.data || []);
-    if (pagesRes.data?.length > 0) {
-      setSelectedPage((prev) =>
-        pagesRes.data.find((p) => p.id === prev?.id) || pagesRes.data[0]
-      );
-    } else {
-      setSelectedPage(null);
+      const pageList = pagesData || [];
+      setPages(pageList);
+      if (pageList.length > 0) {
+        setSelectedPage((prev) =>
+          pageList.find((p) => p.id === prev?.id) || pageList[0]
+        );
+      } else {
+        setSelectedPage(null);
+      }
+    } catch (err) {
+      console.error('데이터 로드 실패:', err.message);
     }
     setLoading(false);
   };
@@ -108,13 +115,16 @@ const AssignmentEditor = () => {
     e.preventDefault();
     if (!title.trim()) return;
     setSavingMeta(true);
-    await supabase.from('assignments').update({
-      title:       title.trim(),
-      description: description.trim() || null,
-      deadline:    deadline || null,
-      max_score:   maxScore,
-      updated_at:  new Date().toISOString(),
-    }).eq('id', assignmentId);
+    try {
+      await api.patch(`/api/assignments/${assignmentId}`, {
+        title:       title.trim(),
+        description: description.trim() || null,
+        deadline:    deadline || null,
+        maxScore:    maxScore,
+      });
+    } catch (err) {
+      console.error('설정 저장 실패:', err.message);
+    }
     setSavingMeta(false);
   };
 
@@ -131,29 +141,26 @@ const AssignmentEditor = () => {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const ext  = file.name.split('.').pop();
-      const path = `assignments/${assignmentId}/${Date.now()}_${i}.${ext}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('chapter-pages')
-        .upload(path, file);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
 
-      if (uploadError) {
-        console.error(`업로드 실패 (${file.name}):`, uploadError.message);
-        setUploadProgress((prev) => ({ ...prev, done: prev.done + 1 }));
-        continue;
+        const uploadResult = await api.upload(
+          `/api/files/upload?bucket=chapter-pages&directory=assignments/${assignmentId}`,
+          formData
+        );
+
+        const newPage = await api.post(`/api/assignments/${assignmentId}/pages`, {
+          imageUrl: uploadResult.url,
+          position: basePosition + i,
+        });
+
+        if (newPage) lastPage = newPage;
+      } catch (err) {
+        console.error(`업로드 실패 (${file.name}):`, err.message);
       }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('chapter-pages')
-        .getPublicUrl(path);
-
-      const { data: newPage } = await supabase
-        .from('assignment_pages')
-        .insert({ assignment_id: assignmentId, image_url: publicUrl, position: basePosition + i })
-        .select().single();
-
-      if (newPage) lastPage = newPage;
       setUploadProgress((prev) => ({ ...prev, done: prev.done + 1 }));
     }
 
@@ -167,16 +174,26 @@ const AssignmentEditor = () => {
   const handleDeletePage = async (page) => {
     if (!confirm('이 페이지를 삭제하시겠습니까?')) return;
     setDeleting(true);
+
+    // Storage 파일 삭제
     try {
-      const url = new URL(page.image_url);
-      const marker = '/object/public/chapter-pages/';
-      const idx = url.pathname.indexOf(marker);
-      if (idx !== -1) {
-        const storagePath = url.pathname.slice(idx + marker.length);
-        await supabase.storage.from('chapter-pages').remove([storagePath]);
+      const imageUrl = page.imageUrl;
+      if (imageUrl) {
+        const apiMarker = '/api/files/';
+        const apiIdx = imageUrl.indexOf(apiMarker);
+        if (apiIdx !== -1) {
+          const filePath = imageUrl.slice(apiIdx);
+          await api.delete(filePath);
+        }
       }
-    } catch { /* URL 파싱 실패 시 DB만 삭제 */ }
-    await supabase.from('assignment_pages').delete().eq('id', page.id);
+    } catch { /* Storage 삭제 실패 시 DB만 삭제 */ }
+
+    try {
+      await api.delete(`/api/assignment-pages/${page.id}`);
+    } catch (err) {
+      console.error('페이지 삭제 실패:', err.message);
+    }
+
     setDeleting(false);
     await fetchData();
   };
@@ -286,7 +303,7 @@ const AssignmentEditor = () => {
         {/* 미리보기 */}
         <div className="flex-1 bg-gray-50 rounded-lg shadow overflow-y-auto p-4 relative">
           {selectedPage ? (
-            <img src={selectedPage.image_url} alt="선택된 페이지" className="w-full h-auto block shadow-sm bg-white" />
+            <img src={selectedPage.imageUrl} alt="선택된 페이지" className="w-full h-auto block shadow-sm bg-white" />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-gray-400">
               <p className="text-lg">페이지를 추가하세요</p>

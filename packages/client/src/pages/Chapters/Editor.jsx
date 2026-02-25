@@ -15,9 +15,11 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { invalidatePagesCache } from '../../lib/dataCache';
 import SortablePageItem from '../../components/common/SortablePageItem';
+
 
 const ChapterEditor = () => {
   const { id } = useParams(); // chapterId
@@ -58,47 +60,49 @@ const ChapterEditor = () => {
   const handleDragEnd = async (event) => {
     const { active, over } = event;
     if (!over) return;
-    
+
     if (active.id !== over.id) {
       const oldIndex = pages.findIndex((p) => p.id === active.id);
       const newIndex = pages.findIndex((p) => p.id === over.id);
 
       const newPages = arrayMove(pages, oldIndex, newIndex);
-      
+
       const updatedPages = newPages.map((p, idx) => ({ ...p, position: idx }));
       setPages(updatedPages);
 
-      const updates = updatedPages.map((pg) => ({
+      const items = updatedPages.map((pg) => ({
         id: pg.id,
-        chapter_id: id,
-        image_url: pg.image_url,
         position: pg.position,
       }));
 
-      await supabase.from('pages').upsert(updates);
+      try {
+        await api.put('/api/pages/reorder', { items });
+        invalidatePagesCache(id);
+      } catch (err) {
+        console.error('순서 변경 실패:', err.message);
+      }
     }
   };
 
   const fetchData = async () => {
     setLoading(true);
 
-    const { data: chap } = await supabase
-      .from('chapters')
-      .select('id, title, classroom_id')
-      .eq('id', id)
-      .single();
-    setChapter(chap);
+    try {
+      const [chap, pgs] = await Promise.all([
+        api.get(`/api/chapters/${id}`),
+        api.get(`/api/chapters/${id}/pages`),
+      ]);
+      setChapter(chap);
 
-    const { data: pgs } = await supabase
-      .from('pages')
-      .select('id, image_url, position')
-      .eq('chapter_id', id)
-      .order('position');
-    setPages(pgs || []);
-    if (pgs && pgs.length > 0) {
-      setSelectedPage((prev) => pgs.find((p) => p.id === prev?.id) || pgs[0]);
-    } else {
-      setSelectedPage(null);
+      const pageList = pgs || [];
+      setPages(pageList);
+      if (pageList.length > 0) {
+        setSelectedPage((prev) => pageList.find((p) => p.id === prev?.id) || pageList[0]);
+      } else {
+        setSelectedPage(null);
+      }
+    } catch (err) {
+      console.error('데이터 로드 실패:', err.message);
     }
 
     setLoading(false);
@@ -126,30 +130,26 @@ const ChapterEditor = () => {
     // 순서를 보장하기 위해 순차 업로드
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const ext  = file.name.split('.').pop();
-      const path = `chapters/${id}/${Date.now()}_${i}.${ext}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('chapter-pages')
-        .upload(path, file);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
 
-      if (uploadError) {
-        console.error(`업로드 실패 (${file.name}):`, uploadError.message);
-        setUploadProgress((prev) => ({ ...prev, done: prev.done + 1 }));
-        continue;
+        const uploadResult = await api.upload(
+          `/api/files/upload?bucket=chapter-pages&directory=chapters/${id}`,
+          formData
+        );
+
+        const newPage = await api.post(`/api/chapters/${id}/pages`, {
+          imageUrl: uploadResult.url,
+          position: basePosition + i,
+        });
+
+        if (newPage) lastPage = newPage;
+      } catch (err) {
+        console.error(`업로드 실패 (${file.name}):`, err.message);
       }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('chapter-pages')
-        .getPublicUrl(path);
-
-      const { data: newPage } = await supabase
-        .from('pages')
-        .insert({ chapter_id: id, image_url: publicUrl, position: basePosition + i })
-        .select()
-        .single();
-
-      if (newPage) lastPage = newPage;
       setUploadProgress((prev) => ({ ...prev, done: prev.done + 1 }));
     }
 
@@ -157,6 +157,7 @@ const ChapterEditor = () => {
     setUploading(false);
     setUploadProgress({ done: 0, total: 0 });
 
+    invalidatePagesCache(id);
     await fetchData();
     if (lastPage) setSelectedPage(lastPage);
   };
@@ -168,15 +169,11 @@ const ChapterEditor = () => {
       setExportTargetIds(new Set());
       setExportDone(false);
     }, 0);
-    
-    supabase
-      .from('classrooms')
-      .select('id, name')
-      .eq('teacher_id', user.id)
-      .neq('id', chapter.classroom_id)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setExportClassrooms(data || []));
-      
+
+    api.get(`/api/classrooms/other/${chapter.classroomId}`)
+      .then((data) => setExportClassrooms(data || []))
+      .catch(() => setExportClassrooms([]));
+
     return () => clearTimeout(timer);
   }, [showExportModal, user, chapter]);
 
@@ -185,36 +182,15 @@ const ChapterEditor = () => {
     if (exportTargetIds.size === 0) return;
     setExporting(true);
 
-    const { data: pagesData } = await supabase
-      .from('pages').select('image_url, position').eq('chapter_id', id).order('position');
-
-    // 선택된 각 클래스에 순차 내보내기
-    for (const targetId of exportTargetIds) {
-      const { data: targetChaps } = await supabase
-        .from('chapters').select('position')
-        .eq('classroom_id', targetId)
-        .order('position', { ascending: false }).limit(1);
-
-      const maxPos = targetChaps?.[0]?.position ?? -1;
-      const { data: newChap } = await supabase
-        .from('chapters')
-        .insert({
-          classroom_id: targetId,
-          title:        chapter.title,
-          description:  chapter.description ?? null,
-          position:     maxPos + 1,
-        })
-        .select().single();
-
-      if (newChap && pagesData?.length > 0) {
-        await supabase.from('pages').insert(
-          pagesData.map((pg) => ({
-            chapter_id: newChap.id,
-            image_url:  pg.image_url,
-            position:   pg.position,
-          }))
-        );
+    try {
+      // 선택된 각 클래스에 순차 내보내기
+      for (const targetId of exportTargetIds) {
+        await api.post(`/api/chapters/${id}/import`, {
+          targetClassroomId: targetId,
+        });
       }
+    } catch (err) {
+      console.error('내보내기 실패:', err.message);
     }
 
     setExporting(false);
@@ -225,9 +201,14 @@ const ChapterEditor = () => {
     const trimmed = titleInput.trim();
     if (!trimmed || trimmed === chapter.title) { setEditingTitle(false); return; }
     setSavingTitle(true);
-    const { error } = await supabase.from('chapters').update({ title: trimmed }).eq('id', id);
+    try {
+      await api.patch(`/api/chapters/${id}`, { title: trimmed });
+      setChapter((prev) => ({ ...prev, title: trimmed }));
+      invalidatePagesCache(id);
+    } catch (err) {
+      console.error('제목 저장 실패:', err.message);
+    }
     setSavingTitle(false);
-    if (!error) setChapter((prev) => ({ ...prev, title: trimmed }));
     setEditingTitle(false);
   };
 
@@ -240,20 +221,29 @@ const ChapterEditor = () => {
     if (!confirm('이 페이지를 삭제하시겠습니까?')) return;
     setDeleting(true);
 
-    // Storage 파일 경로 추출 후 삭제
+    // Storage 파일 삭제
     try {
-      const url = new URL(page.image_url);
-      const marker = '/object/public/chapter-pages/';
-      const idx = url.pathname.indexOf(marker);
-      if (idx !== -1) {
-        const storagePath = url.pathname.slice(idx + marker.length);
-        await supabase.storage.from('chapter-pages').remove([storagePath]);
+      const imageUrl = page.imageUrl;
+      if (imageUrl) {
+        // URL에서 /api/files/ 이후 경로 추출
+        const apiMarker = '/api/files/';
+        const apiIdx = imageUrl.indexOf(apiMarker);
+        if (apiIdx !== -1) {
+          const filePath = imageUrl.slice(apiIdx);
+          await api.delete(filePath);
+        }
       }
     } catch {
-      // URL 파싱 실패 시 DB 레코드만 삭제
+      // Storage 삭제 실패 시 DB 레코드만 삭제
     }
 
-    await supabase.from('pages').delete().eq('id', page.id);
+    try {
+      await api.delete(`/api/pages/${page.id}`);
+      invalidatePagesCache(id);
+    } catch (err) {
+      console.error('페이지 삭제 실패:', err.message);
+    }
+
     setDeleting(false);
     await fetchData();
   };
@@ -367,7 +357,7 @@ const ChapterEditor = () => {
         <div className="flex-1 bg-gray-50 rounded-lg shadow overflow-y-auto p-4 relative">
           {selectedPage ? (
             <img
-              src={selectedPage.image_url}
+              src={selectedPage.imageUrl}
               alt="선택된 페이지"
               className="w-full h-auto block shadow-sm bg-white"
             />

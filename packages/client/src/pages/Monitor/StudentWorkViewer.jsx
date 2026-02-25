@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Pencil, ChevronUp, ChevronDown, Menu } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
+import { subscribeToRoom } from '../../lib/socket';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
@@ -72,15 +73,15 @@ const StudentWorkViewer = () => {
   /* 코멘트 모드 전환 시 저장된 도구/색상/굵기 복원 */
   useEffect(() => {
     if (commentMode && excalidrawAPIRef.current) {
-      const api = excalidrawAPIRef.current;
+      const excApi = excalidrawAPIRef.current;
       const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
       const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
       const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.2');
       const validExcalidrawTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
       const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
         (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');
-      api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
-      api.setActiveTool({ type: excalidrawTool });
+      excApi.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
+      excApi.setActiveTool({ type: excalidrawTool });
     }
   }, [commentMode]);
 
@@ -90,63 +91,70 @@ const StudentWorkViewer = () => {
       if (!mountedRef.current) return;
       setLoading(true);
 
-      const [chapRes, pgsRes, profileRes] = await Promise.all([
-        supabase.from('chapters').select('id, title').eq('id', chapterId).single(),
-        supabase.from('pages').select('id, image_url, position').eq('chapter_id', chapterId).order('position'),
-        supabase.from('profiles').select('id, name, avatar_url').eq('id', studentId).single(),
-      ]);
+      try {
+        const [chap, pgs, profile] = await Promise.all([
+          api.get(`/api/chapters/${chapterId}`),
+          api.get(`/api/chapters/${chapterId}/pages`),
+          api.get(`/api/profiles/${studentId}`),
+        ]);
 
-      if (!mountedRef.current) return;
-      setChapter(chapRes.data);
-      setPages(pgsRes.data || []);
-      setStudentProfile(profileRes.data);
+        if (!mountedRef.current) return;
+        setChapter(chap);
+        setPages(pgs || []);
+        setStudentProfile(profile);
+      } catch (err) {
+        console.error('StudentWorkViewer fetchData error:', err);
+      }
+
       setLoading(false);
     };
     fetchData();
   }, [chapterId, studentId]);
 
-  /* ── 학생 필기 Realtime 구독 ── */
+  /* ── 학생 필기 Socket.IO 구독 ── */
   useEffect(() => {
     if (!currentPage) return;
 
-    const channel = supabase
-      .channel(`sn_${currentPage.id}_${studentId}`)
-      .on(
-        'postgres_changes',
-        {
-          event:  '*',
-          schema: 'public',
-          table:  'student_notes',
-          filter: `page_id=eq.${currentPage.id}`,
-        },
-        (payload) => {
-          const row = payload.new;
-          if (!row || row.student_id !== studentId) return;
+    return subscribeToRoom(
+      `work:${currentPage.id}:${studentId}`,
+      'student-note:updated',
+      async (data) => {
+        // 학생 필기가 업데이트됨 → 최신 데이터를 API에서 다시 가져옴
+        const excApi = excalidrawAPIRef.current;
+        if (!excApi) return;
 
-          const api = excalidrawAPIRef.current;
-          if (!api) return;
+        try {
+          const note = await api.get(`/api/notes/student-notes-for/${studentId}?pageIds=${currentPage.id}`);
+          const noteData = Array.isArray(note) ? note[0] : note;
 
           /* bgPosition 업데이트 */
-          if (row.excalidraw_data?.bgPosition) {
-            bgPositionRef.current = row.excalidraw_data.bgPosition;
+          if (noteData?.excalidrawData?.bgPosition) {
+            bgPositionRef.current = noteData.excalidrawData.bgPosition;
           }
 
           /* 새 학생 필기 elements 적용 */
-          const newStudentEls = (row.excalidraw_data?.elements || []).map((el) => ({
+          const newStudentEls = (noteData?.excalidrawData?.elements || []).map((el) => ({
             ...el, id: STUDENT_NOTE_PREFIX + el.id, locked: true, opacity: 60,
           }));
           studentEls.current = newStudentEls;
 
+          /* 학생 이미지 파일 업데이트 */
+          const newStudentFiles = noteData?.excalidrawData?.files ?? {};
+          if (Object.keys(newStudentFiles).length > 0) {
+            excApi.addFiles(Object.values(newStudentFiles));
+            savedStudentFilesRef.current = { ...savedStudentFilesRef.current, ...newStudentFiles };
+          }
+
           /* BG + 교사 코멘트는 유지, 학생 필기만 교체 */
-          const preserved = api.getSceneElements().filter(
+          const preserved = excApi.getSceneElements().filter(
             (el) => !el.id.startsWith(STUDENT_NOTE_PREFIX)
           );
-          api.updateScene({ elements: [...preserved, ...newStudentEls], commitToHistory: false });
+          excApi.updateScene({ elements: [...preserved, ...newStudentEls], commitToHistory: false });
+        } catch (err) {
+          console.error('학생 필기 실시간 갱신 실패:', err);
         }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+      }
+    );
   }, [currentPage, studentId]);
 
   const activeToolRef         = useRef('freedraw');
@@ -227,10 +235,10 @@ const StudentWorkViewer = () => {
         const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         if (lastTouchCenterYRef.current !== null) {
           const deltaY = centerY - lastTouchCenterYRef.current;
-          const api = excalidrawAPIRef.current;
-          if (api) {
-            const appState = api.getAppState();
-            api.updateScene({
+          const excApi = excalidrawAPIRef.current;
+          if (excApi) {
+            const appState = excApi.getAppState();
+            excApi.updateScene({
               appState: { scrollY: appState.scrollY + (deltaY / appState.zoom.value) }
             });
           }
@@ -280,30 +288,25 @@ const StudentWorkViewer = () => {
       teacherEls.current  = [];
       lastSavedRef.current  = null; // 페이지 변경 시 저장 기준점 초기화
 
-      /* 학생 필기 + 이 학생에 대한 교사 코멘트 */
-      const [snRes, tscRes] = await Promise.all([
-        supabase
-          .from('student_notes')
-          .select('excalidraw_data')
-          .eq('student_id', studentId)
-          .eq('page_id', currentPage.id)
-          .maybeSingle(),
-        supabase
-          .from('teacher_student_comments')
-          .select('excalidraw_data')
-          .eq('teacher_id', user?.id)
-          .eq('student_id', studentId)
-          .eq('page_id', currentPage.id)
-          .maybeSingle(),
-      ]);
+      try {
+        /* 학생 필기 + 이 학생에 대한 교사 코멘트 */
+        const [snNotes, tscComment] = await Promise.all([
+          api.get(`/api/notes/student-notes-for/${studentId}?pageIds=${currentPage.id}`),
+          api.get(`/api/comments/${currentPage.id}/${studentId}`),
+        ]);
 
-      studentEls.current = (snRes.data?.excalidraw_data?.elements || []).map((el) => ({
-        ...el, id: STUDENT_NOTE_PREFIX + el.id, locked: true, opacity: 60,
-      }));
-      bgPositionRef.current      = snRes.data?.excalidraw_data?.bgPosition ?? null;
-      savedStudentFilesRef.current = snRes.data?.excalidraw_data?.files ?? {};
-      teacherEls.current           = tscRes.data?.excalidraw_data?.elements || [];
-      savedTeacherFilesRef.current = tscRes.data?.excalidraw_data?.files ?? {};
+        const snData = Array.isArray(snNotes) ? snNotes[0] : snNotes;
+
+        studentEls.current = (snData?.excalidrawData?.elements || []).map((el) => ({
+          ...el, id: STUDENT_NOTE_PREFIX + el.id, locked: true, opacity: 60,
+        }));
+        bgPositionRef.current        = snData?.excalidrawData?.bgPosition ?? null;
+        savedStudentFilesRef.current = snData?.excalidrawData?.files ?? {};
+        teacherEls.current           = tscComment?.excalidrawData?.elements || [];
+        savedTeacherFilesRef.current = tscComment?.excalidrawData?.files ?? {};
+      } catch (err) {
+        console.error('페이지 데이터 로드 실패:', err);
+      }
 
       rebuildScene();
     };
@@ -314,11 +317,11 @@ const StudentWorkViewer = () => {
 
   /* BG + student + teacher elements → scene */
   const rebuildScene = useCallback(async () => {
-    const api = excalidrawAPIRef.current;
-    if (!api || !currentPageRef.current?.image_url || !containerRef.current) return;
+    const excApi = excalidrawAPIRef.current;
+    if (!excApi || !currentPageRef.current?.imageUrl || !containerRef.current) return;
 
     try {
-      const { dataUrl, mimeType } = await fetchAsDataUrl(currentPageRef.current.image_url);
+      const { dataUrl, mimeType } = await fetchAsDataUrl(currentPageRef.current.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
 
       let bgX, bgY, bgW, bgH;
@@ -334,25 +337,25 @@ const StudentWorkViewer = () => {
         bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
       }
 
-      api.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);
+      excApi.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);
       const studentFilesList = Object.values(savedStudentFilesRef.current);
       const teacherFilesList = Object.values(savedTeacherFilesRef.current);
       if (studentFilesList.length > 0 || teacherFilesList.length > 0) {
-        api.addFiles([...studentFilesList, ...teacherFilesList]);
+        excApi.addFiles([...studentFilesList, ...teacherFilesList]);
       }
       /* addFiles의 React 상태 커밋 후 updateScene — 별도 렌더 사이클에서 실행해야 이미지가 표시됨 */
       await new Promise((r) => requestAnimationFrame(r));
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
-      api.updateScene({ elements: [bgEl, ...studentEls.current, ...teacherEls.current], commitToHistory: false });
+      excApi.updateScene({ elements: [bgEl, ...studentEls.current, ...teacherEls.current], commitToHistory: false });
     } catch (err) {
       console.error('scene 재구성 실패:', err);
-      api.updateScene({ elements: [...studentEls.current, ...teacherEls.current], commitToHistory: false });
+      excApi.updateScene({ elements: [...studentEls.current, ...teacherEls.current], commitToHistory: false });
     }
   }, []);
 
   /* ── Excalidraw 마운트 ── */
-  const handleExcalidrawMount = useCallback(async (api) => {
-    excalidrawAPIRef.current = api;
+  const handleExcalidrawMount = useCallback(async (excApi) => {
+    excalidrawAPIRef.current = excApi;
 
     /* 저장된 도구 설정 복원 */
     const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
@@ -361,8 +364,8 @@ const StudentWorkViewer = () => {
     const validExcalidrawTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
     const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
       (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');
-    api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
-    api.setActiveTool({ type: excalidrawTool });
+    excApi.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
+    excApi.setActiveTool({ type: excalidrawTool });
 
     /* 캐시된 DataURL은 즉시 반환되어 Excalidraw 초기 렌더 전에 addFiles가 호출될 수 있음.
        한 이벤트 루프 후에 실행하여 Excalidraw가 렌더링 준비를 완료하도록 보장 */
@@ -375,14 +378,14 @@ const StudentWorkViewer = () => {
     if (appState) {
       activeToolRef.current = appState.activeTool.type;
       const isFreedraw = appState.activeTool.type === 'freedraw';
-      
+
       if (isFreedraw) {
         if (!isTouchingRef.current) {
           if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
             excalidrawAPIRef.current?.updateScene({
-              appState: { 
-                zoom: { value: lastZoomRef.current }, 
-                scrollX: lastScrollXRef.current 
+              appState: {
+                zoom: { value: lastZoomRef.current },
+                scrollX: lastScrollXRef.current
               }
             });
           }
@@ -420,19 +423,16 @@ const StudentWorkViewer = () => {
         )
       );
       savedTeacherFilesRef.current = teacherFiles;
-      await supabase.from('teacher_student_comments').upsert(
-        {
-          teacher_id:      user.id,
-          student_id:      studentId,
-          page_id:         page.id,
-          excalidraw_data: {
+      try {
+        await api.put(`/api/comments/${page.id}/${studentId}`, {
+          excalidrawData: {
             elements: filtered,
             ...(Object.keys(teacherFiles).length > 0 && { files: teacherFiles }),
           },
-          updated_at:      new Date().toISOString(),
-        },
-        { onConflict: 'teacher_id,student_id,page_id' }
-      );
+        });
+      } catch (err) {
+        console.error('교사 코멘트 저장 실패:', err);
+      }
       if (mountedRef.current) {
         lastSavedRef.current = serialized; // 저장 성공 시 기준점 갱신
         setSaveStatus('saved');
@@ -449,7 +449,7 @@ const StudentWorkViewer = () => {
   useEffect(() => {
     if (pages.length === 0) return;
     prefetchImages(
-      [pages[currentPageIndex - 1]?.image_url, pages[currentPageIndex + 1]?.image_url].filter(Boolean)
+      [pages[currentPageIndex - 1]?.imageUrl, pages[currentPageIndex + 1]?.imageUrl].filter(Boolean)
     );
   }, [currentPageIndex, pages]);
 
@@ -505,35 +505,32 @@ const StudentWorkViewer = () => {
                 const title = `${studentProfile?.name || '학생'}_${chapter?.title || '챕터'}_${currentPage.position + 1}p`;
                 const elsToDownload = [...studentEls.current, ...teacherEls.current];
                 const filesToDownload = { ...savedStudentFilesRef.current, ...savedTeacherFilesRef.current };
-                downloadPage(title, elsToDownload, filesToDownload, currentPage.image_url, bgPositionRef.current);
+                downloadPage(title, elsToDownload, filesToDownload, currentPage.imageUrl, bgPositionRef.current);
               }}
               onDownloadAll={async () => {
                 const title = `${studentProfile?.name || '학생'}_${chapter?.title || '챕터'}_전체`;
-                // Fetch all notes for this student in this chapter
-                const { data: studentNotes } = await supabase
-                  .from('student_notes')
-                  .select('page_id, excalidraw_data')
-                  .eq('student_id', studentProfile.id)
-                  .in('page_id', pages.map(p => p.id));
-                const studentNotesMap = Object.fromEntries((studentNotes || []).map(n => [n.page_id, n.excalidraw_data]));
-
-                // Fetch all teacher comments for this student in this chapter
-                const { data: teacherNotes } = await supabase
-                  .from('teacher_comments')
-                  .select('page_id, excalidraw_data')
-                  .eq('student_id', studentProfile.id)
-                  .in('page_id', pages.map(p => p.id));
-                const teacherNotesMap = Object.fromEntries((teacherNotes || []).map(n => [n.page_id, n.excalidraw_data]));
+                const pageIds = pages.map(p => p.id).join(',');
+                // Fetch all student notes and teacher comments for this student
+                const [studentNotesData, teacherCommentsData] = await Promise.all([
+                  api.get(`/api/notes/student-notes-for/${studentId}?pageIds=${pageIds}`),
+                  api.get(`/api/notes/teacher-comments-for/${studentId}?pageIds=${pageIds}`),
+                ]);
+                const studentNotesMap = Object.fromEntries(
+                  (studentNotesData || []).map(n => [n.pageId, n.excalidrawData])
+                );
+                const teacherCommentsMap = Object.fromEntries(
+                  (teacherCommentsData || []).map(n => [n.pageId, n.excalidrawData])
+                );
 
                 const pageDataList = pages.map(pg => {
                   const sNote = studentNotesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
-                  const tNote = teacherNotesMap[pg.id] || { elements: [], files: {} };
-                  
+                  const tNote = teacherCommentsMap[pg.id] || { elements: [], files: {} };
+
                   const sEls = sNote.elements || [];
                   const tEls = (tNote.elements || []).map(el => ({ ...el, id: '__tc_' + el.id, locked: true, opacity: 60 }));
-                  
+
                   return {
-                    bgUrl: pg.image_url,
+                    bgUrl: pg.imageUrl,
                     elements: [...sEls, ...tEls],
                     files: { ...(sNote.files || {}), ...(tNote.files || {}) },
                     bgPosition: sNote.bgPosition,
@@ -639,7 +636,7 @@ const StudentWorkViewer = () => {
                     idx === currentPageIndex ? 'border-4 border-indigo-500' : 'border-4 border-transparent hover:border-gray-300'
                   }`}
                 >
-                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                  <img src={pg.imageUrl} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
                   <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
                     {idx + 1}
                   </div>

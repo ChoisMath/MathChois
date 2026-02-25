@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Users, Clock, Download } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
+import { connectSocket, subscribeToRoom } from '../../lib/socket';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 
@@ -34,7 +35,7 @@ const AssignmentMonitor = () => {
   const [members, setMembers]           = useState([]);
   const [submissions, setSubmissions]   = useState({}); // studentId → submission
   const [loading, setLoading]           = useState(true);
-  
+
   const { downloadMultiplePages } = usePdfDownloader();
   const [downloadingStudentId, setDownloadingStudentId] = useState(null);
   const [pages, setPages] = useState([]);
@@ -45,50 +46,39 @@ const AssignmentMonitor = () => {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const [asnRes, pgsRes, membersRes, subsRes] = await Promise.all([
-        supabase.from('assignments').select('id, title, deadline, max_score').eq('id', assignmentId).single(),
-        supabase.from('assignment_pages').select('id, image_url, position').eq('assignment_id', assignmentId).order('position'),
-        supabase.from('classroom_members')
-          .select('student_id, profiles(id, name, avatar_url)')
-          .eq('classroom_id', classroomId),
-        supabase.from('assignment_submissions')
-          .select('student_id, status, score, max_score, submitted_at, is_late')
-          .eq('assignment_id', assignmentId),
-      ]);
+      try {
+        const [asnData, pgsData, membersData, subsData] = await Promise.all([
+          api.get(`/api/assignments/${assignmentId}`),
+          api.get(`/api/assignments/${assignmentId}/pages`),
+          api.get(`/api/classrooms/${classroomId}/members`),
+          api.get(`/api/assignments/${assignmentId}/submissions`),
+        ]);
 
-      setAssignment(asnRes.data);
-      setPages(pgsRes.data || []);
-      setMembers(membersRes.data || []);
+        setAssignment(asnData);
+        setPages(pgsData || []);
+        setMembers(membersData || []);
 
-      const map = {};
-      for (const s of (subsRes.data || [])) map[s.student_id] = s;
-      setSubmissions(map);
-
+        const map = {};
+        for (const s of (subsData || [])) map[s.studentId] = s;
+        setSubmissions(map);
+      } catch (err) {
+        console.error('데이터 로드 실패:', err);
+      }
       setLoading(false);
     };
     fetchData();
   }, [classroomId, assignmentId]);
 
-  /* Realtime: assignment_submissions 변경 감지 */
+  /* Socket.IO: assignment_submissions 변경 감지 */
   useEffect(() => {
-    const channel = supabase
-      .channel(`asn_monitor_${assignmentId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'assignment_submissions',
-          filter: `assignment_id=eq.${assignmentId}`,
-        },
-        (payload) => {
-          const row = payload.new;
-          if (!row) return;
-          setSubmissions((prev) => ({ ...prev, [row.student_id]: row }));
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    try { connectSocket(); } catch { /* 토큰 없음 */ }
+    return subscribeToRoom(`assignment:${assignmentId}`, 'submission:updated', (data) => {
+      if (!data?.studentId) return;
+      setSubmissions((prev) => ({
+        ...prev,
+        [data.studentId]: { ...prev[data.studentId], ...data },
+      }));
+    });
   }, [assignmentId]);
 
   if (loading) return (
@@ -98,28 +88,26 @@ const AssignmentMonitor = () => {
   );
 
   /* ── 학생 PDF 다운로드 ── */
-  const handleDownloadStudentPdf = async (e, student) => {
+  const handleDownloadStudentPdf = async (e, member) => {
     e.stopPropagation();
     if (pages.length === 0) return;
-    setDownloadingStudentId(student.student_id);
+    setDownloadingStudentId(member.studentId);
 
     try {
-      const { data: notes } = await supabase
-        .from('assignment_notes')
-        .select('page_id, excalidraw_data')
-        .eq('student_id', student.student_id)
-        .in('page_id', pages.map(p => p.id));
+      const notes = await api.get(
+        `/api/assignment-notes/${assignmentId}/bulk?pageIds=${pages.map(p => p.id).join(',')}&studentId=${member.studentId}`
+      );
 
       const notesMap = {};
-      (notes || []).forEach(n => { notesMap[n.page_id] = n.excalidraw_data; });
+      (notes || []).forEach(n => { notesMap[n.pageId] = n.excalidrawData; });
 
       const pageDataList = pages.map((p) => ({
         elements: notesMap[p.id]?.elements || [],
         files: notesMap[p.id]?.files || {},
-        bgUrl: p.image_url
+        bgUrl: p.imageUrl
       }));
 
-      await downloadMultiplePages(`${student.profiles?.name || '학생'}_${assignment?.title || '과제'}_필기`, pageDataList);
+      await downloadMultiplePages(`${member.student?.name || '학생'}_${assignment?.title || '과제'}_필기`, pageDataList);
     } catch (err) {
       console.error(err);
       alert('PDF 다운로드 중 오류가 발생했습니다.');
@@ -166,22 +154,22 @@ const AssignmentMonitor = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {members.map((m) => {
-            const profile = m.profiles;
-            const sub = submissions[m.student_id] || null;
+            const profile = m.student;
+            const sub = submissions[m.studentId] || null;
             const { bg, text, border, label } = statusStyle(sub?.status);
 
             return (
               <div
-                key={m.student_id}
+                key={m.studentId}
                 onClick={() => navigate(
-                  `/teacher/classrooms/${classroomId}/assignments/${assignmentId}/monitor/${m.student_id}`
+                  `/teacher/classrooms/${classroomId}/assignments/${assignmentId}/monitor/${m.studentId}`
                 )}
                 className={`flex flex-col h-full rounded-xl shadow-sm border p-4 cursor-pointer hover:shadow-md transition-all ${bg} ${border}`}
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {profile?.avatar_url ? (
-                      <img src={profile.avatar_url} alt={profile.name}
+                    {profile?.avatarUrl ? (
+                      <img src={profile.avatarUrl} alt={profile.name}
                         className="w-9 h-9 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
                     ) : (
                       <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm font-bold shrink-0">
@@ -194,7 +182,7 @@ const AssignmentMonitor = () => {
                   </div>
                   <PdfDownloadButton
                     onClick={(e) => handleDownloadStudentPdf(e, m)}
-                    isDownloading={downloadingStudentId === m.student_id}
+                    isDownloading={downloadingStudentId === m.studentId}
                     className="p-1 shrink-0 text-gray-400 hover:text-blue-600 bg-transparent hover:bg-blue-50"
                   />
                 </div>
@@ -204,11 +192,11 @@ const AssignmentMonitor = () => {
                   <div className="text-right">
                     {sub?.status === 'graded' && sub.score != null && (
                       <span className="text-xs font-semibold text-blue-700 block mb-0.5">
-                        {sub.score}/{sub.max_score ?? assignment?.max_score}점
+                        {sub.score}/{sub.maxScore ?? assignment?.maxScore}점
                       </span>
                     )}
-                    {sub?.submitted_at && (
-                      <p className="text-xs text-gray-400">{formatTime(sub.submitted_at)}</p>
+                    {sub?.submittedAt && (
+                      <p className="text-xs text-gray-400">{formatTime(sub.submittedAt)}</p>
                     )}
                   </div>
                 </div>

@@ -6,9 +6,13 @@ import {
   getStudentNote,
   upsertStudentNote,
   getStudentNotesBulk,
+  getStudentNotesBulkByTeacher,
   getChapterStudentSummary,
   getTeacherNote,
   upsertTeacherNote,
+  getTeacherNotesBulk,
+  getTeacherNotesForPage,
+  getTeacherCommentsBulk,
   getAssignmentNote,
   getAssignmentNotesBulk,
   upsertAssignmentNote,
@@ -90,6 +94,47 @@ export async function noteRoutes(app: FastifyInstance) {
     return getTeacherNote(request.user.sub, request.params.pageId);
   });
 
+  /** GET /api/notes/teacher-for-page/:pageId — 페이지의 모든 교사 필기 조회 (학생 모달용) */
+  app.get<{
+    Params: { pageId: string };
+  }>('/api/notes/teacher-for-page/:pageId', {
+    preHandler: [authenticate],
+  }, async (request) => {
+    return getTeacherNotesForPage(request.params.pageId);
+  });
+
+  /** GET /api/notes/teacher-bulk — 교사 필기 일괄 조회 (PDF 다운로드용) */
+  app.get<{
+    Querystring: { pageIds: string };
+  }>('/api/notes/teacher-bulk', {
+    preHandler: [authenticate],
+  }, async (request) => {
+    const ids = request.query.pageIds?.split(',').filter(Boolean) ?? [];
+    return getTeacherNotesBulk(request.user.sub, ids);
+  });
+
+  /** GET /api/notes/student-notes-for/:studentId — 교사가 특정 학생 필기 일괄 조회 */
+  app.get<{
+    Params: { studentId: string };
+    Querystring: { pageIds: string };
+  }>('/api/notes/student-notes-for/:studentId', {
+    preHandler: [authenticate],
+  }, async (request) => {
+    const ids = request.query.pageIds?.split(',').filter(Boolean) ?? [];
+    return getStudentNotesBulkByTeacher(request.params.studentId, ids);
+  });
+
+  /** GET /api/notes/teacher-comments-for/:studentId — 교사 코멘트 일괄 조회 (특정 학생, 복수 페이지) */
+  app.get<{
+    Params: { studentId: string };
+    Querystring: { pageIds: string };
+  }>('/api/notes/teacher-comments-for/:studentId', {
+    preHandler: [authenticate],
+  }, async (request) => {
+    const ids = request.query.pageIds?.split(',').filter(Boolean) ?? [];
+    return getTeacherCommentsBulk(request.params.studentId, ids);
+  });
+
   /** PUT /api/notes/teacher/:pageId — 교사 필기 upsert */
   app.put<{
     Params: { pageId: string };
@@ -106,31 +151,36 @@ export async function noteRoutes(app: FastifyInstance) {
 
   // ─── Assignment Notes ─────────────────────────
 
-  /** GET /api/assignment-notes/:assignmentId/bulk?pageIds=... — 과제 필기 일괄 조회 */
+  /** GET /api/assignment-notes/:assignmentId/bulk?pageIds=...&studentId=... — 과제 필기 일괄 조회 */
   app.get<{
     Params: { assignmentId: string };
-    Querystring: { pageIds: string };
+    Querystring: { pageIds: string; studentId?: string };
   }>('/api/assignment-notes/:assignmentId/bulk', {
     preHandler: [authenticate],
   }, async (request) => {
     const ids = request.query.pageIds?.split(',').filter(Boolean) ?? [];
+    // 교사가 특정 학생 필기 조회 시 studentId 쿼리 파라미터 사용
+    const targetStudentId = request.query.studentId ?? request.user.sub;
     return getAssignmentNotesBulk(
       request.params.assignmentId,
-      request.user.sub,
+      targetStudentId,
       ids,
     );
   });
 
-  /** GET /api/assignment-notes/:assignmentId/:pageId — 과제 학생 필기 */
+  /** GET /api/assignment-notes/:assignmentId/:pageId?studentId=... — 과제 학생 필기 */
   app.get<{
     Params: { assignmentId: string; pageId: string };
+    Querystring: { studentId?: string };
   }>('/api/assignment-notes/:assignmentId/:pageId', {
     preHandler: [authenticate],
   }, async (request) => {
+    // 교사가 특정 학생 필기 조회 시 studentId 쿼리 파라미터 사용
+    const targetStudentId = request.query.studentId ?? request.user.sub;
     return getAssignmentNote(
       request.params.assignmentId,
       request.params.pageId,
-      request.user.sub,
+      targetStudentId,
     );
   });
 

@@ -17,7 +17,7 @@ import {
   useSortable, arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
@@ -170,49 +170,38 @@ const ClassroomDetail = () => {
   /* ── 데이터 로드 ── */
   const fetchData = async () => {
     setLoading(true);
+    try {
+      const [cls, mems, chaps] = await Promise.all([
+        api.get(`/api/classrooms/${id}`),
+        api.get(`/api/classrooms/${id}/members`),
+        api.get(`/api/classrooms/${id}/chapters`),
+      ]);
 
-    const { data: cls } = await supabase
-      .from('classrooms').select('*').eq('id', id).single();
-    setClassroom(cls);
+      setClassroom(cls);
+      setMembers(mems || []);
+      setChapters(
+        (chaps || []).map((ch) => ({
+          ...ch,
+          pageCount: ch.pages?.length || 0,
+          firstPage: ch.pages?.sort((a, b) => a.position - b.position)[0] || null,
+        }))
+      );
 
-    const { data: mems } = await supabase
-      .from('classroom_members')
-      .select('*, student:profiles(id, name, email, avatar_url)')
-      .eq('classroom_id', id)
-      .order('joined_at', { ascending: true });
-    setMembers(mems || []);
-
-    const { data: chaps } = await supabase
-      .from('chapters')
-      .select('id, title, description, position, pages(id, position)')
-      .eq('classroom_id', id)
-      .order('position');
-
-    setChapters(
-      (chaps || []).map((ch) => ({
-        ...ch,
-        pageCount: ch.pages?.length || 0,
-        firstPage: ch.pages?.sort((a, b) => a.position - b.position)[0] || null,
-      }))
-    );
-
-    /* 학생: 미제출 과제 수 (탭 배지용, 페이지 로드 시 즉시 계산) */
-    if (!isTeacher && user) {
-      const { data: asns } = await supabase
-        .from('assignments').select('id').eq('classroom_id', id);
-      if (asns?.length > 0) {
-        const { data: subs } = await supabase
-          .from('assignment_submissions')
-          .select('assignment_id, status')
-          .eq('student_id', user.id)
-          .in('assignment_id', asns.map((a) => a.id));
-        const submittedIds = new Set(
-          (subs || []).filter((s) => s.assignment_id && s.status !== 'rejected').map((s) => s.assignment_id)
-        );
-        setUnsubmittedCount(asns.filter((a) => !submittedIds.has(a.id)).length);
+      /* 학생: 미제출 과제 수 (탭 배지용, 페이지 로드 시 즉시 계산) */
+      if (!isTeacher && user) {
+        const asns = await api.get(`/api/classrooms/${id}/assignments`);
+        if (asns?.length > 0) {
+          const asnIds = asns.map((a) => a.id).join(',');
+          const subs = await api.get(`/api/submissions/student?assignmentIds=${asnIds}`);
+          const submittedIds = new Set(
+            (subs || []).filter((s) => s.assignmentId && s.status !== 'rejected').map((s) => s.assignmentId)
+          );
+          setUnsubmittedCount(asns.filter((a) => !submittedIds.has(a.id)).length);
+        }
       }
+    } catch (err) {
+      console.error('[ClassroomDetail] 데이터 로드 오류:', err);
     }
-
     setLoading(false);
   };
 
@@ -225,18 +214,14 @@ const ClassroomDetail = () => {
   /* 가져오기 탭 전환 시 다른 클래스 목록 로드 */
   useEffect(() => {
     if (createTab !== 'import' || !user) return;
-    supabase
-      .from('classrooms')
-      .select('id, name')
-      .eq('teacher_id', user.id)
-      .neq('id', id)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
+    api.get(`/api/classrooms/other/${id}`)
+      .then((data) => {
         setImportClassrooms(data || []);
         setImportSrcCid('');
         setImportChapters([]);
         setImportSelectedChid('');
-      });
+      })
+      .catch((err) => console.error('[ClassroomDetail] 가져오기 클래스 목록 오류:', err));
   }, [createTab, user, id]);
 
   /* ── 모달 닫기 (상태 초기화 포함) ── */
@@ -252,48 +237,27 @@ const ClassroomDetail = () => {
     setImportSrcCid(cid);
     setImportSelectedChid('');
     if (!cid) { setImportChapters([]); return; }
-    const { data } = await supabase
-      .from('chapters')
-      .select('id, title, description')
-      .eq('classroom_id', cid)
-      .order('position');
-    setImportChapters(data || []);
+    try {
+      const data = await api.get(`/api/classrooms/${cid}/chapters`);
+      setImportChapters(data || []);
+    } catch (err) {
+      console.error('[ClassroomDetail] 챕터 목록 로드 오류:', err);
+      setImportChapters([]);
+    }
   };
 
   /* ── 가져오기 실행 ── */
   const handleImportChapter = async () => {
     if (!importSelectedChid) return;
     setImporting(true);
-
-    const [chapRes, pagesRes] = await Promise.all([
-      supabase.from('chapters').select('title, description').eq('id', importSelectedChid).single(),
-      supabase.from('pages').select('image_url, position').eq('chapter_id', importSelectedChid).order('position'),
-    ]);
-
-    const maxPos = chapters.length > 0 ? Math.max(...chapters.map((c) => c.position)) + 1 : 0;
-    const { data: newChap } = await supabase
-      .from('chapters')
-      .insert({
-        classroom_id: id,
-        title:        chapRes.data.title,
-        description:  chapRes.data.description,
-        position:     maxPos,
-      })
-      .select().single();
-
-    if (newChap && pagesRes.data?.length > 0) {
-      await supabase.from('pages').insert(
-        pagesRes.data.map((pg) => ({
-          chapter_id: newChap.id,
-          image_url:  pg.image_url,
-          position:   pg.position,
-        }))
-      );
+    try {
+      await api.post(`/api/chapters/${importSelectedChid}/import`, { targetClassroomId: id });
+      closeCreateModal();
+      fetchData();
+    } catch (err) {
+      console.error('[ClassroomDetail] 챕터 가져오기 오류:', err);
     }
-
     setImporting(false);
-    closeCreateModal();
-    fetchData();
   };
 
   /* ── 클래스 이름 인라인 편집 ── */
@@ -307,10 +271,13 @@ const ClassroomDetail = () => {
     const trimmed = nameInput.trim();
     if (!trimmed || trimmed === classroom.name) { setEditingName(false); return; }
     setSavingName(true);
-    const { error } = await supabase
-      .from('classrooms').update({ name: trimmed }).eq('id', id);
+    try {
+      await api.patch(`/api/classrooms/${id}`, { name: trimmed });
+      setClassroom((prev) => ({ ...prev, name: trimmed }));
+    } catch (err) {
+      console.error('[ClassroomDetail] 이름 수정 오류:', err);
+    }
     setSavingName(false);
-    if (!error) setClassroom((prev) => ({ ...prev, name: trimmed }));
     setEditingName(false);
   };
 
@@ -321,77 +288,64 @@ const ClassroomDetail = () => {
 
   /* ── 핸들러 ── */
   const handleCopyCode = async () => {
-    if (!classroom?.class_code) return;
-    await navigator.clipboard.writeText(classroom.class_code);
+    if (!classroom?.classCode) return;
+    await navigator.clipboard.writeText(classroom.classCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const handleLeave = async () => {
     if (!confirm('이 클래스룸에서 나가시겠습니까?')) return;
-    await supabase.from('classroom_members')
-      .delete().eq('classroom_id', id).eq('student_id', user.id);
-    navigate('/student/classrooms', { replace: true });
+    try {
+      await api.delete(`/api/classrooms/${id}/members/${user.id}`);
+      navigate('/student/classrooms', { replace: true });
+    } catch (err) {
+      console.error('[ClassroomDetail] 나가기 오류:', err);
+    }
   };
 
   const handleDeleteClassroom = async () => {
     setDeleting(true);
-    const { error } = await supabase.from('classrooms').delete().eq('id', id);
-    setDeleting(false);
-    if (error) {
-      window.alert(`삭제 실패: ${error.message}`);
-      setShowDeleteClassroom(false);
-    } else {
+    try {
+      await api.delete(`/api/classrooms/${id}`);
       navigate('/teacher/classrooms', { replace: true });
+    } catch (err) {
+      window.alert(`삭제 실패: ${err.message}`);
+      setShowDeleteClassroom(false);
     }
+    setDeleting(false);
   };
 
   const handleCreateChapter = async (e) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
     setCreating(true);
-    const maxPos = chapters.length > 0 ? Math.max(...chapters.map((c) => c.position)) + 1 : 0;
-    const { error } = await supabase.from('chapters').insert({
-      classroom_id: id,
-      title:        newTitle.trim(),
-      description:  newDesc.trim() || null,
-      position:     maxPos,
-    });
+    try {
+      const maxPos = chapters.length > 0 ? Math.max(...chapters.map((c) => c.position)) + 1 : 0;
+      await api.post(`/api/classrooms/${id}/chapters`, {
+        title:       newTitle.trim(),
+        description: newDesc.trim() || null,
+        position:    maxPos,
+      });
+      setNewTitle(''); setNewDesc(''); setShowCreateModal(false); fetchData();
+    } catch (err) {
+      console.error('[ClassroomDetail] 챕터 생성 오류:', err);
+    }
     setCreating(false);
-    if (!error) { setNewTitle(''); setNewDesc(''); setShowCreateModal(false); fetchData(); }
   };
 
   const handleDeleteChapter = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
-
-    /* ── Storage 파일 정리 (다른 챕터에서 공유되지 않는 파일만 삭제) ── */
-    const { data: pgs } = await supabase
-      .from('pages').select('image_url').eq('chapter_id', deleteTarget.id);
-
-    const urls = pgs?.map((p) => p.image_url).filter(Boolean) || [];
-    if (urls.length > 0) {
-      /* 같은 URL을 참조하는 다른 챕터의 페이지가 있는지 확인 */
-      const { data: sharedPgs } = await supabase
-        .from('pages').select('image_url')
-        .in('image_url', urls).neq('chapter_id', deleteTarget.id);
-
-      const sharedUrls = new Set(sharedPgs?.map((p) => p.image_url) || []);
-      const pathsToDelete = urls
-        .filter((url) => !sharedUrls.has(url))
-        .map((url) => url.split('/storage/v1/object/public/chapter-pages/')[1])
-        .filter(Boolean);
-
-      if (pathsToDelete.length > 0) {
-        await supabase.storage.from('chapter-pages').remove(pathsToDelete);
-      }
+    try {
+      /* 서버가 Storage orphan 이미지 정리 + DB 삭제(CASCADE)를 모두 처리 */
+      await api.delete(`/api/chapters/${deleteTarget.id}`);
+      setDeleteTarget(null);
+      fetchData();
+    } catch (err) {
+      console.error('[ClassroomDetail] 챕터 삭제 오류:', err);
     }
-
-    /* ── DB 삭제 (pages CASCADE) ── */
-    await supabase.from('chapters').delete().eq('id', deleteTarget.id);
     setDeleting(false);
-    setDeleteTarget(null);
-    fetchData();
   };
 
   const handleCardClick = (ch) => {
@@ -412,11 +366,13 @@ const ClassroomDetail = () => {
     const newIdx = chapters.findIndex((c) => c.id === over.id);
     const newOrder = arrayMove(chapters, oldIdx, newIdx);
     setChapters(newOrder); // optimistic update
-    await Promise.all(
-      newOrder.map((ch, i) =>
-        supabase.from('chapters').update({ position: i }).eq('id', ch.id)
-      )
-    );
+    try {
+      await api.put('/api/chapters/reorder', {
+        items: newOrder.map((ch, i) => ({ id: ch.id, position: i })),
+      });
+    } catch (err) {
+      console.error('[ClassroomDetail] 순서 변경 오류:', err);
+    }
   };
 
   /* ── 학생 챕터 PDF 일괄 다운로드 ── */
@@ -425,26 +381,19 @@ const ClassroomDetail = () => {
     setDownloadingChapterId(ch.id);
     try {
       const title = `${profile.name || '학생'}_${ch.title}_전체`;
-      const { data: pgs } = await supabase
-        .from('pages')
-        .select('id, image_url')
-        .eq('chapter_id', ch.id)
-        .order('position');
-        
+      const pgs = await api.get(`/api/chapters/${ch.id}/pages`);
+
       if (!pgs || pgs.length === 0) return;
-      
-      const { data: notes } = await supabase
-        .from('student_notes')
-        .select('page_id, excalidraw_data')
-        .eq('student_id', user.id)
-        .in('page_id', pgs.map(p => p.id));
-        
-      const notesMap = Object.fromEntries((notes || []).map(n => [n.page_id, n.excalidraw_data]));
-      
+
+      const pageIds = pgs.map(p => p.id).join(',');
+      const notes = await api.get(`/api/notes/student-bulk?pageIds=${pageIds}`);
+
+      const notesMap = Object.fromEntries((notes || []).map(n => [n.pageId, n.excalidrawData]));
+
       const pageDataList = pgs.map(pg => {
         const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
         return {
-          bgUrl: pg.image_url,
+          bgUrl: pg.imageUrl,
           elements: note.elements || [],
           files: note.files || {},
           bgPosition: note.bgPosition,
@@ -462,26 +411,17 @@ const ClassroomDetail = () => {
   /* ── 과제 생성 핸들러 (── 탭 버튼용) ── */
   const handleCreateAssignment = async () => {
     setCreatingAssignment(true);
-    const { data: asns } = await supabase
-      .from('assignments')
-      .select('position')
-      .eq('classroom_id', id)
-      .order('position', { ascending: false })
-      .limit(1);
-    const maxPos = asns?.length > 0 ? asns[0].position + 1 : 0;
-    const { data: newAsn } = await supabase
-      .from('assignments')
-      .insert({
-        classroom_id: id,
-        teacher_id:   user.id,
-        title:        '새 과제',
-        position:     maxPos,
-      })
-      .select().single();
-    setCreatingAssignment(false);
-    if (newAsn) {
-      navigate(`/teacher/classrooms/${id}/assignments/${newAsn.id}/edit`);
+    try {
+      const newAsn = await api.post(`/api/classrooms/${id}/assignments`, {
+        title: '새 과제',
+      });
+      if (newAsn) {
+        navigate(`/teacher/classrooms/${id}/assignments/${newAsn.id}/edit`);
+      }
+    } catch (err) {
+      console.error('[ClassroomDetail] 과제 생성 오류:', err);
     }
+    setCreatingAssignment(false);
   };
 
   return (
@@ -530,7 +470,7 @@ const ClassroomDetail = () => {
             {isTeacher && showCode && (
               <div className="flex items-center gap-2 mt-2">
                 <span className="font-mono font-bold text-blue-600 text-xl tracking-widest">
-                  {classroom.class_code}
+                  {classroom.classCode}
                 </span>
                 <button
                   onClick={handleCopyCode} title="코드 복사"
@@ -708,8 +648,8 @@ const ClassroomDetail = () => {
               <div className="space-y-2">
                 {members.map((m) => (
                   <div key={m.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 flex items-center gap-3">
-                    {m.student?.avatar_url ? (
-                      <img src={m.student.avatar_url} alt={m.student.name}
+                    {m.student?.avatarUrl ? (
+                      <img src={m.student.avatarUrl} alt={m.student.name}
                         className="h-9 w-9 rounded-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
                       <div className="h-9 w-9 rounded-full bg-gray-200 flex items-center justify-center text-sm text-gray-500 font-medium">

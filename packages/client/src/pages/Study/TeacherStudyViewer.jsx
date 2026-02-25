@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
 import {
@@ -197,7 +197,7 @@ const TeacherStudyViewer = () => {
       lastSavedRef.current  = null;
 
       /* 챕터·페이지 목록: 캐시 우선 → 없으면 병렬 fetch */
-      const { chapter: chap, pages: pgs } = await getCachedChapterAndPages(chapterId, supabase);
+      const { chapter: chap, pages: pgs } = await getCachedChapterAndPages(chapterId);
       if (!mountedRef.current) return;
       setChapter(chap);
       setPages(pgs);
@@ -224,15 +224,18 @@ const TeacherStudyViewer = () => {
           if (_notesCache.has(nk)) {
             noteData = _notesCache.get(nk);
           } else {
-            const { data: note } = await supabase
-              .from('teacher_notes').select('excalidraw_data')
-              .eq('teacher_id', user.id).eq('page_id', target.id).maybeSingle();
-            if (!mountedRef.current) return;
-            noteData = {
-              elements:   note?.excalidraw_data?.elements   || [],
-              bgPosition: note?.excalidraw_data?.bgPosition ?? null,
-              files:      note?.excalidraw_data?.files      ?? {},
-            };
+            try {
+              const note = await api.get(`/api/notes/teacher/${target.id}`);
+              if (!mountedRef.current) return;
+              noteData = {
+                elements:   note?.excalidrawData?.elements   || [],
+                bgPosition: note?.excalidrawData?.bgPosition ?? null,
+                files:      note?.excalidrawData?.files      ?? {},
+              };
+            } catch {
+              if (!mountedRef.current) return;
+              noteData = { elements: [], bgPosition: null, files: {} };
+            }
             _notesCache.set(nk, noteData);
           }
           setNoteElements(noteData.elements);
@@ -290,19 +293,17 @@ const TeacherStudyViewer = () => {
       setSaveStatus('saving');
       const allFiles  = excalidrawAPIRef.current?.getFiles() ?? {};
       const { [BG_FILE_ID]: _bgf, ...userFiles } = allFiles;
-      await supabase.from('teacher_notes').upsert(
-        {
-          teacher_id:      user.id,
-          page_id:         page.id,
-          excalidraw_data: {
+      try {
+        await api.put(`/api/notes/teacher/${page.id}`, {
+          excalidrawData: {
             elements:   teacherEls,
             bgPosition: bgPositionRef.current,
             ...(Object.keys(userFiles).length > 0 && { files: userFiles }),
           },
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'teacher_id,page_id' }
-      );
+        });
+      } catch (err) {
+        console.error('교사 필기 저장 실패:', err);
+      }
       if (mountedRef.current) {
         /* 노트 캐시 갱신 — 다음 방문 시 즉시 표시 */
         _notesCache.set(`${user.id}_${page.id}`, {
@@ -334,10 +335,10 @@ const TeacherStudyViewer = () => {
     }, 0);
 
     const page = currentPageRef.current;
-    if (!page?.image_url || !containerRef.current) return;
+    if (!page?.imageUrl || !containerRef.current) return;
 
     try {
-      const { dataUrl, mimeType } = await fetchAsDataUrl(page.image_url);
+      const { dataUrl, mimeType } = await fetchAsDataUrl(page.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
 
       let bgX, bgY, bgW, bgH;
@@ -379,7 +380,7 @@ const TeacherStudyViewer = () => {
 
   /* ── 인접 페이지 이미지 백그라운드 프리패치 ── */
   useEffect(() => {
-    prefetchImages([prevPage?.image_url, nextPage?.image_url].filter(Boolean));
+    prefetchImages([prevPage?.imageUrl, nextPage?.imageUrl].filter(Boolean));
   }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ── */
@@ -432,21 +433,18 @@ const TeacherStudyViewer = () => {
             <PdfDownloadButton
               onClick={() => {
                 const title = `${user?.name || '교사'}_${chapter?.title || '챕터'}_${currentPage.position + 1}p`;
-                downloadPage(title, noteElementsRef.current, savedFilesRef.current, currentPage.image_url, bgPositionRef.current);
+                downloadPage(title, noteElementsRef.current, savedFilesRef.current, currentPage.imageUrl, bgPositionRef.current);
               }}
               onDownloadAll={async () => {
                 const title = `${user?.name || '교사'}_${chapter?.title || '챕터'}_전체`;
-                const { data: notes } = await supabase
-                  .from('teacher_notes')
-                  .select('page_id, excalidraw_data')
-                  .eq('teacher_id', user.id)
-                  .in('page_id', pages.map(p => p.id));
-                const notesMap = Object.fromEntries((notes || []).map(n => [n.page_id, n.excalidraw_data]));
+                const pageIds = pages.map(p => p.id).join(',');
+                const notes = await api.get(`/api/notes/teacher-bulk?pageIds=${pageIds}`);
+                const notesMap = Object.fromEntries((notes || []).map(n => [n.pageId, n.excalidrawData]));
 
                 const pageDataList = pages.map(pg => {
                   const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
                   return {
-                    bgUrl: pg.image_url,
+                    bgUrl: pg.imageUrl,
                     elements: note.elements || [],
                     files: note.files || {},
                     bgPosition: note.bgPosition,
@@ -533,7 +531,7 @@ const TeacherStudyViewer = () => {
                     pg.id === currentPage?.id ? 'border-4 border-indigo-500' : 'border-4 border-transparent hover:border-gray-300'
                   }`}
                 >
-                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                  <img src={pg.imageUrl} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
                   <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
                     {idx + 1}
                   </div>

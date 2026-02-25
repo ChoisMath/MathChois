@@ -94,6 +94,34 @@ export async function getStudentPosts(studentId: string) {
   }));
 }
 
+/** 게시글 단일 조회 (편집용: files + classroomIds 포함) */
+export async function getPostById(id: string) {
+  const rows = await db
+    .select()
+    .from(posts)
+    .where(eq(posts.id, id))
+    .limit(1);
+
+  const post = rows[0] ?? null;
+  if (!post) return null;
+
+  const files = await db
+    .select()
+    .from(postFiles)
+    .where(eq(postFiles.postId, id));
+
+  const classroomLinks = await db
+    .select({ classroomId: postClassrooms.classroomId })
+    .from(postClassrooms)
+    .where(eq(postClassrooms.postId, id));
+
+  return {
+    ...post,
+    files,
+    classroomIds: classroomLinks.map((l) => l.classroomId),
+  };
+}
+
 /** 게시글 생성 */
 export async function createPost(data: {
   teacherId: string;

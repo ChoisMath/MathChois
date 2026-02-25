@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, PenLine, Users, FileText, Download } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
+import { subscribeToRoom } from '../../lib/socket';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
@@ -46,39 +47,35 @@ const ChapterMonitor = () => {
     const fetchData = async () => {
       setLoading(true);
 
-      /* 챕터+페이지는 공유 캐시 활용, 학생 목록은 항상 최신 데이터 */
-      const [{ chapter: chap, pages: pgs }, membersRes] = await Promise.all([
-        getCachedChapterAndPages(chapterId, supabase),
-        supabase
-          .from('classroom_members')
-          .select('student_id, profiles(id, name, avatar_url)')
-          .eq('classroom_id', classroomId),
-      ]);
+      try {
+        /* 챕터+페이지는 공유 캐시 활용, 학생 진도 요약은 서버에서 일괄 조회 */
+        const [{ chapter: chap, pages: pgs }, summaryData] = await Promise.all([
+          getCachedChapterAndPages(chapterId),
+          api.get(`/api/notes/student-summary/${chapterId}`),
+        ]);
 
-      const mems = membersRes.data || [];
+        setChapter(chap);
+        setPages(pgs);
+        setMembers((summaryData?.members || []).map((m) => ({
+          studentId: m.studentId,
+          profile: { id: m.studentId, name: m.name, avatarUrl: m.avatarUrl },
+        })));
 
-      setChapter(chap);
-      setPages(pgs);
-      setMembers(mems);
-
-      if (pgs.length > 0) {
-        const pageIds = pgs.map((p) => p.id);
-        const { data: notes } = await supabase
-          .from('student_notes')
-          .select('student_id, page_id, updated_at')
-          .in('page_id', pageIds);
-
-        const summary = {};
-        for (const n of (notes || [])) {
-          if (!summary[n.student_id]) {
-            summary[n.student_id] = { pagesWithNotes: new Set(), updatedAt: null };
+        if (pgs.length > 0) {
+          const summary = {};
+          for (const n of (summaryData?.notes || [])) {
+            if (!summary[n.studentId]) {
+              summary[n.studentId] = { pagesWithNotes: new Set(), updatedAt: null };
+            }
+            summary[n.studentId].pagesWithNotes.add(n.pageId);
+            if (!summary[n.studentId].updatedAt || n.updatedAt > summary[n.studentId].updatedAt) {
+              summary[n.studentId].updatedAt = n.updatedAt;
+            }
           }
-          summary[n.student_id].pagesWithNotes.add(n.page_id);
-          if (!summary[n.student_id].updatedAt || n.updated_at > summary[n.student_id].updatedAt) {
-            summary[n.student_id].updatedAt = n.updated_at;
-          }
+          setNotesSummary(summary);
         }
-        setNotesSummary(summary);
+      } catch (err) {
+        console.error('ChapterMonitor fetchData error:', err);
       }
 
       setLoading(false);
@@ -87,39 +84,24 @@ const ChapterMonitor = () => {
     fetchData();
   }, [classroomId, chapterId]);
 
-  /* ── Realtime 구독 ── */
+  /* ── Socket.IO 구독 ── */
   useEffect(() => {
     if (pages.length === 0) return;
 
-    const pageIds = pages.map((p) => p.id);
-    const channel = supabase
-      .channel(`monitor_${chapterId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'student_notes',
-          filter: `page_id=in.(${pageIds.join(',')})`,
-        },
-        (payload) => {
-          const { student_id, page_id, updated_at } = payload.new || {};
-          if (!student_id || !page_id) return;
-          setNotesSummary((prev) => {
-            const entry = prev[student_id]
-              ? { ...prev[student_id], pagesWithNotes: new Set(prev[student_id].pagesWithNotes) }
-              : { pagesWithNotes: new Set(), updatedAt: null };
-            entry.pagesWithNotes.add(page_id);
-            if (!entry.updatedAt || updated_at > entry.updatedAt) {
-              entry.updatedAt = updated_at;
-            }
-            return { ...prev, [student_id]: entry };
-          });
+    return subscribeToRoom(`chapter:${chapterId}`, 'student-note:updated', (data) => {
+      const { studentId, pageId, updatedAt } = data;
+      if (!studentId || !pageId) return;
+      setNotesSummary((prev) => {
+        const entry = prev[studentId]
+          ? { ...prev[studentId], pagesWithNotes: new Set(prev[studentId].pagesWithNotes) }
+          : { pagesWithNotes: new Set(), updatedAt: null };
+        entry.pagesWithNotes.add(pageId);
+        if (!entry.updatedAt || updatedAt > entry.updatedAt) {
+          entry.updatedAt = updatedAt;
         }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+        return { ...prev, [studentId]: entry };
+      });
+    });
   }, [chapterId, pages]);
 
   /* ── 교사 필기 버튼 → 마지막 방문 페이지 (없으면 첫 페이지) ── */
@@ -136,25 +118,22 @@ const ChapterMonitor = () => {
   const handleDownloadStudentPdf = async (e, student) => {
     e.stopPropagation();
     if (pages.length === 0) return;
-    setDownloadingStudentId(student.student_id);
+    setDownloadingStudentId(student.studentId);
 
     try {
-      const { data: notes } = await supabase
-        .from('student_notes')
-        .select('page_id, excalidraw_data')
-        .eq('student_id', student.student_id)
-        .in('page_id', pages.map(p => p.id));
+      const pageIds = pages.map(p => p.id).join(',');
+      const notes = await api.get(`/api/notes/student-notes-for/${student.studentId}?pageIds=${pageIds}`);
 
       const notesMap = {};
-      (notes || []).forEach(n => { notesMap[n.page_id] = n.excalidraw_data; });
+      (notes || []).forEach(n => { notesMap[n.pageId] = n.excalidrawData; });
 
       const pageDataList = pages.map((p) => ({
         elements: notesMap[p.id]?.elements || [],
         files: notesMap[p.id]?.files || {},
-        bgUrl: p.image_url
+        bgUrl: p.imageUrl
       }));
 
-      await downloadMultiplePages(`${student.profiles?.name || '학생'}_${chapter?.title || '챕터'}_필기`, pageDataList);
+      await downloadMultiplePages(`${student.profile?.name || '학생'}_${chapter?.title || '챕터'}_필기`, pageDataList);
     } catch (err) {
       console.error(err);
       alert('PDF 다운로드 중 오류가 발생했습니다.');
@@ -214,24 +193,24 @@ const ChapterMonitor = () => {
       {pages.length > 0 && members.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {members.map((m) => {
-            const profile = m.profiles;
-            const summary = notesSummary[m.student_id] || { pagesWithNotes: new Set(), updatedAt: null };
+            const profile = m.profile;
+            const summary = notesSummary[m.studentId] || { pagesWithNotes: new Set(), updatedAt: null };
             const done = summary.pagesWithNotes.size;
             const total = pages.length;
             const pct = total > 0 ? done / total : 0;
 
             return (
               <div
-                key={m.student_id}
+                key={m.studentId}
                 onClick={() => navigate(
-                  `/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor/${m.student_id}`
+                  `/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor/${m.studentId}`
                 )}
                 className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all flex flex-col h-full"
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {profile?.avatar_url ? (
-                      <img src={profile.avatar_url} alt={profile.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                    {profile?.avatarUrl ? (
+                      <img src={profile.avatarUrl} alt={profile.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
                     ) : (
                       <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm font-bold shrink-0">
                         {(profile?.name || '?')[0]}
@@ -243,7 +222,7 @@ const ChapterMonitor = () => {
                   </div>
                   <PdfDownloadButton
                     onClick={(e) => handleDownloadStudentPdf(e, m)}
-                    isDownloading={downloadingStudentId === m.student_id}
+                    isDownloading={downloadingStudentId === m.studentId}
                     className="p-1 shrink-0 text-gray-400 hover:text-blue-600 bg-transparent hover:bg-blue-50"
                   />
                 </div>

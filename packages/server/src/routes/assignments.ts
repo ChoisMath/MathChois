@@ -16,6 +16,7 @@ import {
   getSubmissionCounts,
   getStudentSubmissions,
   upsertSubmission,
+  reorderAssignmentPages,
 } from '../services/assignment.service.js';
 import { isClassroomOwner } from '../services/classroom.service.js';
 import { getIO } from '../socket/index.js';
@@ -159,6 +160,17 @@ export async function assignmentRoutes(app: FastifyInstance) {
     return page;
   });
 
+  // ─── PUT /api/assignment-pages/reorder — 과제 페이지 순서 변경
+
+  app.put<{
+    Body: { items: { id: string; position: number }[] };
+  }>('/api/assignment-pages/reorder', {
+    preHandler: [authenticate, requireRole('teacher')],
+  }, async (request) => {
+    await reorderAssignmentPages(request.body.items);
+    return { ok: true };
+  });
+
   // ─── GET /api/assignments/:id/submissions — 제출 목록 (교사만)
 
   app.get<{ Params: { id: string } }>('/api/assignments/:id/submissions', {
@@ -194,6 +206,7 @@ export async function assignmentRoutes(app: FastifyInstance) {
   app.put<{
     Params: { assignmentId: string };
     Body: {
+      studentId?: string;
       status?: string;
       isLate?: boolean;
       score?: number | null;
@@ -203,10 +216,14 @@ export async function assignmentRoutes(app: FastifyInstance) {
   }>('/api/submissions/:assignmentId', {
     preHandler: [authenticate],
   }, async (request) => {
+    // 교사가 채점/반려 시 body.studentId 사용, 학생 본인 제출 시 request.user.sub 사용
+    const targetStudentId = request.body.studentId ?? request.user.sub;
+    const { studentId: _ignore, ...bodyRest } = request.body;
+
     const result = await upsertSubmission({
       assignmentId: request.params.assignmentId,
-      studentId: request.user.sub,
-      ...request.body,
+      studentId: targetStudentId,
+      ...bodyRest,
     });
 
     // Socket.IO 브로드캐스트
@@ -215,7 +232,7 @@ export async function assignmentRoutes(app: FastifyInstance) {
       emitSubmissionUpdated(
         io,
         request.params.assignmentId,
-        request.user.sub,
+        targetStudentId,
         result.status ?? 'draft',
         result.score,
       );

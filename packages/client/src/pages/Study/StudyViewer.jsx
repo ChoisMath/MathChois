@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
+import { subscribeToRoom } from '../../lib/socket';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
 import { BG_ELEMENT_ID, BG_FILE_ID, ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE, fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages } from '../../lib/excalidrawUtils';
@@ -39,34 +40,36 @@ function TeacherNotesModal({ page, pages, onClose }) {
   useEffect(() => {
     const load = async () => {
       setStatus('loading');
-      const { data } = await supabase
-        .from('teacher_notes')
-        .select('excalidraw_data')
-        .eq('page_id', page.id);
-      const els = (data || []).flatMap((n) => n.excalidraw_data?.elements || []);
-      if (els.length === 0) {
+      try {
+        const data = await api.get(`/api/notes/teacher-for-page/${page.id}`);
+        const els = (data || []).flatMap((n) => n.excalidrawData?.elements || []);
+        if (els.length === 0) {
+          setStatus('empty');
+        } else {
+          const files = Object.assign({}, ...(data || []).map((n) => n.excalidrawData?.files ?? {}));
+          const bgPos = (data || []).find((n) => n.excalidrawData?.bgPosition)?.excalidrawData.bgPosition;
+          setNoteElements(els);
+          setNoteFiles(files);
+          setDbBgPosition(bgPos || null);
+          setStatus('ok');
+        }
+      } catch (err) {
+        console.error('교사 필기 로드 실패:', err);
         setStatus('empty');
-      } else {
-        const files = Object.assign({}, ...(data || []).map((n) => n.excalidraw_data?.files ?? {}));
-        const bgPos = (data || []).find((n) => n.excalidraw_data?.bgPosition)?.excalidraw_data.bgPosition;
-        setNoteElements(els);
-        setNoteFiles(files);
-        setDbBgPosition(bgPos || null);
-        setStatus('ok');
       }
     };
     load();
   }, [page.id]);
 
-  const handleMount = useCallback(async (api) => {
-    if (!page.image_url || !containerRef.current) return;
+  const handleMount = useCallback(async (excApi) => {
+    if (!page.imageUrl || !containerRef.current) return;
     try {
-      const { dataUrl, mimeType } = await fetchAsDataUrl(page.image_url);
+      const { dataUrl, mimeType } = await fetchAsDataUrl(page.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
       const W = containerRef.current.clientWidth  || 800;
       const H = containerRef.current.clientHeight || 900;
       const scale = Math.min(W / iW, H / iH);
-      
+
       let bgW, bgH, bgX, bgY;
       if (dbBgPosition) {
         ({ width: bgW, height: bgH, x: bgX, y: bgY } = dbBgPosition);
@@ -76,21 +79,21 @@ function TeacherNotesModal({ page, pages, onClose }) {
         bgX = (W - bgW) / 2;
         bgY = (H - bgH) / 2;
       }
-      
+
       bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
-      api.addFiles([{ id: '__bg_file__', dataURL: dataUrl, mimeType, created: Date.now() }]);
+      excApi.addFiles([{ id: '__bg_file__', dataURL: dataUrl, mimeType, created: Date.now() }]);
       /* 교사 필기에 삽입된 이미지 파일 복원 */
       const noteFilesList = Object.values(noteFiles);
-      if (noteFilesList.length > 0) api.addFiles(noteFilesList);
+      if (noteFilesList.length > 0) excApi.addFiles(noteFilesList);
       /* addFiles의 React 상태 커밋 후 updateScene — 별도 렌더 사이클에서 실행해야 이미지가 표시됨 */
       await new Promise((r) => requestAnimationFrame(r));
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
-      api.updateScene({ elements: [bgEl, ...noteElements] });
+      excApi.updateScene({ elements: [bgEl, ...noteElements] });
     } catch (err) {
       console.error('교사 필기 모달 bg 로드 실패:', err);
-      api.updateScene({ elements: noteElements });
+      excApi.updateScene({ elements: noteElements });
     }
-  }, [page.image_url, noteElements, noteFiles, dbBgPosition]);
+  }, [page.imageUrl, noteElements, noteFiles, dbBgPosition]);
 
   return (
     <div
@@ -106,20 +109,33 @@ function TeacherNotesModal({ page, pages, onClose }) {
           <div className="flex items-center gap-2">
             {status === 'ok' && (
               <PdfDownloadButton
-                onClick={() => downloadPage('교사_필기', noteElements, noteFiles, page.image_url, bgPositionRef.current)}
+                onClick={() => downloadPage('교사_필기', noteElements, noteFiles, page.imageUrl, bgPositionRef.current)}
                 onDownloadAll={async () => {
                    const title = `교사_필기_전체`;
-                   // Fetch all teacher notes for this chapter
-                   const { data: teacherNotes } = await supabase
-                     .from('teacher_notes')
-                     .select('page_id, excalidraw_data')
-                     .in('page_id', pages.map(p => p.id));
-                   const teacherNotesMap = Object.fromEntries((teacherNotes || []).map(n => [n.page_id, n.excalidraw_data]));
+                   const pageIds = pages.map(p => p.id).join(',');
+                   /* 챕터 전체 페이지의 교사 필기를 각각 조회 */
+                   const allNotesPerPage = await Promise.all(
+                     pages.map(async (pg) => {
+                       try {
+                         const notes = await api.get(`/api/notes/teacher-for-page/${pg.id}`);
+                         return { pageId: pg.id, notes: notes || [] };
+                       } catch {
+                         return { pageId: pg.id, notes: [] };
+                       }
+                     })
+                   );
+                   const teacherNotesMap = {};
+                   for (const { pageId: pid, notes } of allNotesPerPage) {
+                     const els = notes.flatMap(n => n.excalidrawData?.elements || []);
+                     const files = Object.assign({}, ...notes.map(n => n.excalidrawData?.files ?? {}));
+                     const bgPos = notes.find(n => n.excalidrawData?.bgPosition)?.excalidrawData.bgPosition;
+                     teacherNotesMap[pid] = { elements: els, files, bgPosition: bgPos || null };
+                   }
 
                    const pageDataList = pages.map(pg => {
                      const tNote = teacherNotesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
                      return {
-                       bgUrl: pg.image_url,
+                       bgUrl: pg.imageUrl,
                        elements: tNote.elements || [],
                        files: tNote.files || {},
                        bgPosition: tNote.bgPosition,
@@ -291,10 +307,10 @@ const StudyViewer = () => {
         const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         if (lastTouchCenterYRef.current !== null) {
           const deltaY = centerY - lastTouchCenterYRef.current;
-          const api = excalidrawAPIRef.current;
-          if (api) {
-            const appState = api.getAppState();
-            api.updateScene({
+          const excApi = excalidrawAPIRef.current;
+          if (excApi) {
+            const appState = excApi.getAppState();
+            excApi.updateScene({
               appState: { scrollY: appState.scrollY + (deltaY / appState.zoom.value) }
             });
           }
@@ -335,15 +351,15 @@ const StudyViewer = () => {
   /* 필기 모드 전환 시 저장된 도구/색상/굵기 복원 */
   useEffect(() => {
     if (drawMode && excalidrawAPIRef.current) {
-      const api = excalidrawAPIRef.current;
+      const excApi = excalidrawAPIRef.current;
       const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
       const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
       const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.2');
       const validExcalidrawTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
       const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
         (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');
-      api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
-      api.setActiveTool({ type: excalidrawTool });
+      excApi.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
+      excApi.setActiveTool({ type: excalidrawTool });
     }
   }, [drawMode]);
 
@@ -356,7 +372,7 @@ const StudyViewer = () => {
       setShowTeacherNotesModal(false);
 
       /* 챕터·페이지 목록: 캐시 우선 → 없으면 병렬 fetch */
-      const { chapter: chap, pages: pgs } = await getCachedChapterAndPages(chapterId, supabase);
+      const { chapter: chap, pages: pgs } = await getCachedChapterAndPages(chapterId);
       setChapter(chap);
       setPages(pgs);
 
@@ -373,30 +389,38 @@ const StudyViewer = () => {
             /* 학생 노트 + 교사 코멘트 — 캐시 히트면 0 round-trips, 미스면 병렬 fetch */
             const notePromise = _notesCache.has(nk)
               ? Promise.resolve(_notesCache.get(nk))
-              : supabase.from('student_notes').select('excalidraw_data')
-                  .eq('student_id', user.id).eq('page_id', pageId).maybeSingle()
-                  .then(({ data: note }) => {
+              : api.get(`/api/notes/student/${pageId}`)
+                  .then((note) => {
                     const nd = {
-                      elements:   note?.excalidraw_data?.elements   || [],
-                      bgPosition: note?.excalidraw_data?.bgPosition ?? null,
-                      files:      note?.excalidraw_data?.files      ?? {},
+                      elements:   note?.excalidrawData?.elements   || [],
+                      bgPosition: note?.excalidrawData?.bgPosition ?? null,
+                      files:      note?.excalidrawData?.files      ?? {},
                     };
+                    _notesCache.set(nk, nd);
+                    return nd;
+                  })
+                  .catch(() => {
+                    const nd = { elements: [], bgPosition: null, files: {} };
                     _notesCache.set(nk, nd);
                     return nd;
                   });
 
             const commentPromise = _commentsCache.has(ck)
               ? Promise.resolve(_commentsCache.get(ck))
-              : supabase.from('teacher_student_comments').select('excalidraw_data')
-                  .eq('page_id', pageId).eq('student_id', user.id)
-                  .then(({ data: comments }) => {
+              : api.get(`/api/comments/${pageId}/for-student`)
+                  .then((comments) => {
                     const els = (comments || []).flatMap((n) =>
-                      (n.excalidraw_data?.elements || []).map((el) => ({
+                      (n.excalidrawData?.elements || []).map((el) => ({
                         ...el, id: TEACHER_NOTE_PREFIX + el.id, locked: true, opacity: 60,
                       }))
                     );
-                    const files = Object.assign({}, ...(comments || []).map((n) => n.excalidraw_data?.files ?? {}));
+                    const files = Object.assign({}, ...(comments || []).map((n) => n.excalidrawData?.files ?? {}));
                     const cd = { elements: els, files };
+                    _commentsCache.set(ck, cd);
+                    return cd;
+                  })
+                  .catch(() => {
+                    const cd = { elements: [], files: {} };
                     _commentsCache.set(ck, cd);
                     return cd;
                   });
@@ -419,34 +443,31 @@ const StudyViewer = () => {
     fetchData();
   }, [chapterId, pageId, navigate, user]);
 
-  /* ── 교사 코멘트 Realtime 구독 ── */
+  /* ── 교사 코멘트 Socket.IO 구독 ── */
   useEffect(() => {
     if (!currentPage || !user) return;
 
-    const channel = supabase
-      .channel(`tsc_${currentPage.id}_${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event:  '*',
-          schema: 'public',
-          table:  'teacher_student_comments',
-          filter: `page_id=eq.${currentPage.id}`,
-        },
-        (payload) => {
-          const row = payload.new;
-          if (!row || row.student_id !== user.id) return;
+    return subscribeToRoom(
+      `comments:${currentPage.id}:${user.id}`,
+      'teacher-comment:updated',
+      async (data) => {
+        // 교사 코멘트가 업데이트됨 → 최신 데이터를 API에서 다시 가져옴
+        const excApi = excalidrawAPIRef.current;
+        if (!excApi) return;
 
-          const api = excalidrawAPIRef.current;
-          if (!api) return;
+        try {
+          const comments = await api.get(`/api/comments/${currentPage.id}/for-student`);
 
-          const newCommentEls = (row.excalidraw_data?.elements || []).map((el) => ({
-            ...el, id: TEACHER_NOTE_PREFIX + el.id, locked: true, opacity: 60,
-          }));
-          const newCommentFiles = row.excalidraw_data?.files ?? {};
+          const newCommentEls = (comments || []).flatMap((n) =>
+            (n.excalidrawData?.elements || []).map((el) => ({
+              ...el, id: TEACHER_NOTE_PREFIX + el.id, locked: true, opacity: 60,
+            }))
+          );
+          const newCommentFiles = Object.assign({}, ...(comments || []).map((n) => n.excalidrawData?.files ?? {}));
+
           /* 교사 코멘트 이미지 파일 — Excalidraw에 즉시 등록 */
           if (Object.keys(newCommentFiles).length > 0) {
-            api.addFiles(Object.values(newCommentFiles));
+            excApi.addFiles(Object.values(newCommentFiles));
             teacherCommentFilesRef.current = { ...teacherCommentFilesRef.current, ...newCommentFiles };
           }
           /* 코멘트 캐시 갱신 — 다음 방문 시 최신 데이터 즉시 표시 */
@@ -454,15 +475,15 @@ const StudyViewer = () => {
             elements: newCommentEls, files: teacherCommentFilesRef.current,
           });
           teacherCommentsRef.current = newCommentEls;
-          const preserved = api.getSceneElements().filter(
+          const preserved = excApi.getSceneElements().filter(
             (el) => !el.id.startsWith(TEACHER_NOTE_PREFIX)
           );
-          api.updateScene({ elements: [...preserved, ...newCommentEls], commitToHistory: false });
+          excApi.updateScene({ elements: [...preserved, ...newCommentEls], commitToHistory: false });
+        } catch (err) {
+          console.error('교사 코멘트 실시간 갱신 실패:', err);
         }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+      }
+    );
   }, [currentPage, user]);
 
   /* ── Excalidraw onChange & 스마트 좌우 패닝 잠금 ── */
@@ -470,14 +491,14 @@ const StudyViewer = () => {
     if (appState) {
       activeToolRef.current = appState.activeTool.type;
       const isFreedraw = appState.activeTool.type === 'freedraw';
-      
+
       if (isFreedraw) {
         if (!isTouchingRef.current) {
           if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
             excalidrawAPIRef.current?.updateScene({
-              appState: { 
-                zoom: { value: lastZoomRef.current }, 
-                scrollX: lastScrollXRef.current 
+              appState: {
+                zoom: { value: lastZoomRef.current },
+                scrollX: lastScrollXRef.current
               }
             });
           }
@@ -518,19 +539,18 @@ const StudyViewer = () => {
       const userFiles = Object.fromEntries(
         Object.entries(allFiles).filter(([id]) => id !== BG_FILE_ID && !teacherFileIds.has(id))
       );
-      await supabase.from('student_notes').upsert(
-        {
-          student_id:      cu.id,
-          page_id:         page.id,
-          excalidraw_data: {
+      try {
+        await api.put(`/api/notes/student/${page.id}`, {
+          excalidrawData: {
             elements:   userEls,
             bgPosition: bgPositionRef.current,
             ...(Object.keys(userFiles).length > 0 && { files: userFiles }),
           },
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'student_id,page_id' }
-      );
+          chapterId,
+        });
+      } catch (err) {
+        console.error('학생 필기 저장 실패:', err);
+      }
       /* 노트 캐시 갱신 — 다음 방문 시 즉시 표시 */
       _notesCache.set(`${cu.id}_${page.id}`, {
         elements:   userEls,
@@ -540,11 +560,11 @@ const StudyViewer = () => {
       lastSavedRef.current = serialized;
       setSaveStatus('saved');
     }, 1500);
-  }, []);
+  }, [chapterId]);
 
   /* ── Excalidraw 마운트: bg + 학생 필기 + 교사 코멘트 ── */
-  const handleExcalidrawMount = useCallback(async (api) => {
-    excalidrawAPIRef.current = api;
+  const handleExcalidrawMount = useCallback(async (excApi) => {
+    excalidrawAPIRef.current = excApi;
 
     /* 저장된 도구 설정 복원 (React 렌더 사이클 충돌 방지) */
     setTimeout(() => {
@@ -554,15 +574,15 @@ const StudyViewer = () => {
       const validExcalidrawTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
       const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
         (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');
-      api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
-      api.setActiveTool({ type: excalidrawTool });
+      excApi.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
+      excApi.setActiveTool({ type: excalidrawTool });
     }, 0);
 
     const page = currentPageRef.current;
-    if (!page?.image_url || !containerRef.current) return;
+    if (!page?.imageUrl || !containerRef.current) return;
 
     try {
-      const { dataUrl, mimeType } = await fetchAsDataUrl(page.image_url);
+      const { dataUrl, mimeType } = await fetchAsDataUrl(page.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
 
       let bgX, bgY, bgW, bgH;
@@ -583,26 +603,26 @@ const StudyViewer = () => {
       /* 캐시된 DataURL은 즉시 반환되어 Excalidraw 초기 렌더 전에 addFiles가 호출될 수 있음.
          한 이벤트 루프 후에 실행하여 Excalidraw가 렌더링 준비를 완료하도록 보장 */
       await new Promise((r) => setTimeout(r, 0));
-      api.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);
+      excApi.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);
       /* 저장된 사용자 삽입 이미지 복원 */
       const userFilesList = Object.values(savedFilesRef.current);
-      if (userFilesList.length > 0) api.addFiles(userFilesList);
+      if (userFilesList.length > 0) excApi.addFiles(userFilesList);
       /* 교사 코멘트 이미지 파일 복원 */
       const teacherFilesList = Object.values(teacherCommentFilesRef.current);
-      if (teacherFilesList.length > 0) api.addFiles(teacherFilesList);
+      if (teacherFilesList.length > 0) excApi.addFiles(teacherFilesList);
       /* addFiles의 React 상태 커밋 후 updateScene — 별도 렌더 사이클에서 실행해야 이미지가 표시됨 */
       await new Promise((r) => requestAnimationFrame(r));
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
 
-      /* 교사 코멘트: fetchData에서 미리 로드되어 ref에 저장됨 — 추가 Supabase 요청 없음 */
-      api.updateScene({
+      /* 교사 코멘트: fetchData에서 미리 로드되어 ref에 저장됨 — 추가 API 요청 없음 */
+      excApi.updateScene({
         elements: [bgEl, ...noteElementsRef.current, ...teacherCommentsRef.current],
         commitToHistory: false,
       });
 
     } catch (err) {
       console.error('배경 이미지 로드 실패:', err);
-      api.updateScene({ elements: noteElementsRef.current, commitToHistory: false });
+      excApi.updateScene({ elements: noteElementsRef.current, commitToHistory: false });
     }
   }, []);
 
@@ -613,7 +633,7 @@ const StudyViewer = () => {
 
   /* ── 인접 페이지 이미지 백그라운드 프리패치 ── */
   useEffect(() => {
-    prefetchImages([prevPage?.image_url, nextPage?.image_url].filter(Boolean));
+    prefetchImages([prevPage?.imageUrl, nextPage?.imageUrl].filter(Boolean));
   }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── 전역 터치/스크롤 제어: 모바일 URL바 숨김 허용 및 좌우 이동/줌 방지 ── */
@@ -658,7 +678,7 @@ const StudyViewer = () => {
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate(`/student/classrooms/${chapter?.classroom_id}`)}
+            onClick={() => navigate(`/student/classrooms/${chapter?.classroomId}`)}
             className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer">
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -679,22 +699,18 @@ const StudyViewer = () => {
             <PdfDownloadButton
               onClick={() => {
                 const title = `${user?.name || '학생'}_${chapter?.title || '챕터'}_${currentPage.position + 1}p`;
-                downloadPage(title, noteElements, savedFilesRef.current, currentPage.image_url, bgPositionRef.current);
+                downloadPage(title, noteElements, savedFilesRef.current, currentPage.imageUrl, bgPositionRef.current);
               }}
               onDownloadAll={async () => {
                 const title = `${user?.name || '학생'}_${chapter?.title || '챕터'}_전체`;
-                // Fetch all notes for this student in this chapter
-                const { data: notes } = await supabase
-                  .from('student_notes')
-                  .select('page_id, excalidraw_data')
-                  .eq('student_id', user.id)
-                  .in('page_id', pages.map(p => p.id));
-                const notesMap = Object.fromEntries((notes || []).map(n => [n.page_id, n.excalidraw_data]));
+                const pageIds = pages.map(p => p.id).join(',');
+                const notes = await api.get(`/api/notes/student-bulk?pageIds=${pageIds}`);
+                const notesMap = Object.fromEntries((notes || []).map(n => [n.pageId, n.excalidrawData]));
 
                 const pageDataList = pages.map(pg => {
                   const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
                   return {
-                    bgUrl: pg.image_url,
+                    bgUrl: pg.imageUrl,
                     elements: note.elements || [],
                     files: note.files || {},
                     bgPosition: note.bgPosition,
@@ -808,7 +824,7 @@ const StudyViewer = () => {
                     pg.id === currentPage?.id ? 'border-4 border-blue-500' : 'border-4 border-transparent hover:border-gray-300'
                   }`}
                 >
-                  <img src={pg.image_url} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                  <img src={pg.imageUrl} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
                   <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
                     {idx + 1}
                   </div>

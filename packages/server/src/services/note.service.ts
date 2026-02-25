@@ -96,6 +96,44 @@ export async function upsertTeacherNote(teacherId: string, pageId: string, excal
   return result;
 }
 
+/** 페이지의 모든 교사 필기 조회 (학생용 — teacherId 필터 없이) */
+export async function getTeacherNotesForPage(pageId: string) {
+  return db
+    .select()
+    .from(teacherNotes)
+    .where(eq(teacherNotes.pageId, pageId));
+}
+
+/** 교사 필기 일괄 조회 (복수 페이지) */
+export async function getTeacherNotesBulk(teacherId: string, pageIds: string[]) {
+  if (pageIds.length === 0) return [];
+  return db
+    .select()
+    .from(teacherNotes)
+    .where(and(eq(teacherNotes.teacherId, teacherId), inArray(teacherNotes.pageId, pageIds)));
+}
+
+/** 특정 학생 필기 일괄 조회 (교사용 — studentId를 파라미터로 받음) */
+export async function getStudentNotesBulkByTeacher(studentId: string, pageIds: string[]) {
+  if (pageIds.length === 0) return [];
+  return db
+    .select()
+    .from(studentNotes)
+    .where(and(eq(studentNotes.studentId, studentId), inArray(studentNotes.pageId, pageIds)));
+}
+
+/** 교사→학생 코멘트 일괄 조회 (특정 학생, 복수 페이지) */
+export async function getTeacherCommentsBulk(studentId: string, pageIds: string[]) {
+  if (pageIds.length === 0) return [];
+  return db
+    .select()
+    .from(teacherStudentComments)
+    .where(and(
+      eq(teacherStudentComments.studentId, studentId),
+      inArray(teacherStudentComments.pageId, pageIds),
+    ));
+}
+
 // ─── Teacher-Student Comments ───────────────────
 
 /** 교사→학생 코멘트 조회 */
@@ -110,6 +148,18 @@ export async function getTeacherStudentComment(teacherId: string, studentId: str
     ))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/** 학생이 자기 코멘트 조회 (teacherId 없이, pageId + studentId로 조회) */
+export async function getCommentsForStudent(studentId: string, pageId: string) {
+  const rows = await db
+    .select()
+    .from(teacherStudentComments)
+    .where(and(
+      eq(teacherStudentComments.pageId, pageId),
+      eq(teacherStudentComments.studentId, studentId),
+    ));
+  return rows;
 }
 
 /** 교사→학생 코멘트 upsert */

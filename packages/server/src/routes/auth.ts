@@ -129,6 +129,18 @@ export async function authRoutes(app: FastifyInstance) {
     };
   });
 
+  // ─── GET /api/profiles/:id — 특정 사용자 프로필 조회
+
+  app.get<{ Params: { id: string } }>('/api/profiles/:id', {
+    preHandler: [authenticate],
+  }, async (request, reply) => {
+    const profile = await getProfileById(request.params.id);
+    if (!profile) {
+      return reply.status(404).send({ error: 'Profile not found' });
+    }
+    return { id: profile.id, name: profile.name, avatarUrl: profile.avatarUrl };
+  });
+
   // ─── PATCH /api/profiles/role — 역할 설정 ───────
 
   app.patch<{

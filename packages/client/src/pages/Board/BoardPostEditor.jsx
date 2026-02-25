@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Paperclip, X, Loader, Plus, Save, Send } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 const MAX_FILES = 3;
@@ -27,12 +27,9 @@ const BoardPostEditor = () => {
   /* 교사의 클래스룸 목록 로드 */
   useEffect(() => {
     if (!user) return;
-    supabase
-      .from('classrooms')
-      .select('id, name')
-      .eq('teacher_id', user.id)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setClassrooms(data || []));
+    api.get('/api/classrooms')
+      .then((data) => setClassrooms(data || []))
+      .catch(() => setClassrooms([]));
   }, [user]);
 
   /* 수정 시: 기존 게시글 데이터 로드 */
@@ -40,17 +37,24 @@ const BoardPostEditor = () => {
     if (!postId || !user) return;
     const fetchPost = async () => {
       setLoading(true);
-      const [postRes, filesRes, pcsRes] = await Promise.all([
-        supabase.from('posts').select('title, content').eq('id', postId).single(),
-        supabase.from('post_files').select('*').eq('post_id', postId),
-        supabase.from('post_classrooms').select('classroom_id').eq('post_id', postId),
-      ]);
-      if (postRes.data) {
-        setTitle(postRes.data.title);
-        setContent(postRes.data.content || '');
+      try {
+        const postData = await api.get(`/api/posts/${postId}`);
+        if (postData) {
+          setTitle(postData.title);
+          setContent(postData.content || '');
+          // 서버에서 camelCase로 반환: files 배열, classroomIds 배열
+          setExistingFiles((postData.files || []).map((f) => ({
+            id: f.id,
+            fileName: f.fileName,
+            fileUrl: f.fileUrl,
+            fileSize: f.fileSize,
+            mimeType: f.mimeType,
+          })));
+          setSelectedIds(new Set(postData.classroomIds || []));
+        }
+      } catch (err) {
+        console.error('게시글 로드 실패:', err.message);
       }
-      setExistingFiles(filesRes.data || []);
-      setSelectedIds(new Set((pcsRes.data || []).map((pc) => pc.classroom_id)));
       setLoading(false);
     };
     fetchPost();
@@ -90,88 +94,110 @@ const BoardPostEditor = () => {
     setDeletedFileIds((prev) => new Set([...prev, fileId]));
   };
 
+  /** 새 파일들을 Storage에 업로드하고 메타데이터 배열을 반환 */
+  const uploadNewFiles = async (targetPostId) => {
+    const uploaded = [];
+    for (const file of newFiles) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const result = await api.upload(
+          `/api/files/upload?bucket=post-files&directory=posts/${targetPostId}`,
+          formData
+        );
+
+        uploaded.push({
+          fileName: file.name,
+          fileUrl: result.url,
+          fileSize: result.fileSize ?? file.size,
+          mimeType: result.mimeType ?? (file.type || null),
+        });
+      } catch (err) {
+        console.error(`파일 업로드 실패 (${file.name}):`, err.message);
+      }
+    }
+    return uploaded;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim() || !user) return;
     setSaving(true);
 
-    if (postId) {
-      /* ── 수정 ── */
-      await supabase.from('posts').update({
-        title: title.trim(),
-        content: content.trim(),
-        updated_at: new Date().toISOString(),
-      }).eq('id', postId);
+    try {
+      if (postId) {
+        /* ── 수정 ── */
 
-      /* 삭제 대상 파일 Storage + DB 삭제 */
-      if (deletedFileIds.size > 0) {
-        const toDelete = existingFiles.filter((f) => deletedFileIds.has(f.id));
-        const paths = toDelete.map((f) => {
-          try {
-            const url = new URL(f.file_url);
-            const marker = '/object/public/post-files/';
-            const idx = url.pathname.indexOf(marker);
-            return idx !== -1 ? url.pathname.slice(idx + marker.length) : null;
-          } catch { return null; }
-        }).filter(Boolean);
-        if (paths.length > 0) await supabase.storage.from('post-files').remove(paths);
-        await supabase.from('post_files').delete().in('id', [...deletedFileIds]);
-      }
+        // 삭제 대상 파일 Storage 삭제
+        if (deletedFileIds.size > 0) {
+          const toDelete = existingFiles.filter((f) => deletedFileIds.has(f.id));
+          for (const f of toDelete) {
+            try {
+              const fileUrl = f.fileUrl;
+              if (fileUrl) {
+                const apiMarker = '/api/files/';
+                const apiIdx = fileUrl.indexOf(apiMarker);
+                if (apiIdx !== -1) {
+                  await api.delete(fileUrl.slice(apiIdx));
+                }
+              }
+            } catch { /* Storage 삭제 실패 무시 */ }
+          }
+        }
 
-      /* post_classrooms 업데이트 */
-      await supabase.from('post_classrooms').delete().eq('post_id', postId);
-      if (selectedIds.size > 0) {
-        await supabase.from('post_classrooms').insert(
-          [...selectedIds].map((cid) => ({ post_id: postId, classroom_id: cid }))
-        );
-      }
-    } else {
-      /* ── 신규 ── */
-      const { data: newPost } = await supabase
-        .from('posts')
-        .insert({ teacher_id: user.id, title: title.trim(), content: content.trim() })
-        .select().single();
+        // 새 파일 업로드
+        const uploadedFiles = await uploadNewFiles(postId);
 
-      if (newPost && selectedIds.size > 0) {
-        await supabase.from('post_classrooms').insert(
-          [...selectedIds].map((cid) => ({ post_id: newPost.id, classroom_id: cid }))
-        );
-      }
+        // 남은 기존 파일 + 새 파일 합쳐서 files 배열 구성
+        const keptFiles = existingFiles
+          .filter((f) => !deletedFileIds.has(f.id))
+          .map((f) => ({
+            fileName: f.fileName,
+            fileUrl: f.fileUrl,
+            fileSize: f.fileSize,
+            mimeType: f.mimeType,
+          }));
 
-      if (newPost) {
-        for (const file of newFiles) {
-          const ext  = file.name.split('.').pop();
-          const path = `posts/${newPost.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}.${ext}`;
-          const { error: upErr } = await supabase.storage.from('post-files').upload(path, file);
-          if (upErr) continue;
-          const { data: { publicUrl } } = supabase.storage.from('post-files').getPublicUrl(path);
-          await supabase.from('post_files').insert({
-            post_id:   newPost.id,
-            file_name: file.name,
-            file_url:  publicUrl,
-            file_size: file.size,
-            mime_type: file.type || null,
+        const allFiles = [...keptFiles, ...uploadedFiles];
+
+        await api.patch(`/api/posts/${postId}`, {
+          title: title.trim(),
+          content: content.trim(),
+          classroomIds: [...selectedIds],
+          files: allFiles,
+        });
+
+      } else {
+        /* ── 신규: 먼저 게시글 생성 (파일 없이), 그 후 파일 업로드 후 업데이트 ── */
+
+        if (newFiles.length > 0) {
+          // 파일이 있으면: 먼저 게시글 생성 → postId 획득 → 파일 업로드 → 파일 메타 업데이트
+          const newPost = await api.post('/api/posts', {
+            title: title.trim(),
+            content: content.trim(),
+            classroomIds: [...selectedIds],
+          });
+
+          if (newPost) {
+            const uploadedFiles = await uploadNewFiles(newPost.id);
+            if (uploadedFiles.length > 0) {
+              await api.patch(`/api/posts/${newPost.id}`, {
+                files: uploadedFiles,
+              });
+            }
+          }
+        } else {
+          // 파일 없으면 한번에 생성
+          await api.post('/api/posts', {
+            title: title.trim(),
+            content: content.trim(),
+            classroomIds: [...selectedIds],
           });
         }
       }
-    }
-
-    /* 수정 시 새 파일 추가 */
-    if (postId && newFiles.length > 0) {
-      for (const file of newFiles) {
-        const ext  = file.name.split('.').pop();
-        const path = `posts/${postId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}.${ext}`;
-        const { error: upErr } = await supabase.storage.from('post-files').upload(path, file);
-        if (upErr) continue;
-        const { data: { publicUrl } } = supabase.storage.from('post-files').getPublicUrl(path);
-        await supabase.from('post_files').insert({
-          post_id:   postId,
-          file_name: file.name,
-          file_url:  publicUrl,
-          file_size: file.size,
-          mime_type: file.type || null,
-        });
-      }
+    } catch (err) {
+      console.error('저장 실패:', err.message);
     }
 
     setSaving(false);
@@ -232,11 +258,11 @@ const BoardPostEditor = () => {
           {existingFiles.filter((f) => !deletedFileIds.has(f.id)).map((f) => (
             <div key={f.id} className="flex items-center gap-2 mb-1 p-2 bg-gray-50 rounded-md">
               <Paperclip className="h-4 w-4 text-gray-400 flex-shrink-0" />
-              <a href={f.file_url} target="_blank" rel="noreferrer"
+              <a href={f.fileUrl} target="_blank" rel="noreferrer"
                 className="text-sm text-blue-600 hover:underline truncate flex-1">
-                {f.file_name}
+                {f.fileName}
               </a>
-              <span className="text-xs text-gray-400">{(f.file_size / 1024).toFixed(0)}KB</span>
+              <span className="text-xs text-gray-400">{(f.fileSize / 1024).toFixed(0)}KB</span>
               <button type="button" onClick={() => handleRemoveExistingFile(f.id)}
                 className="p-0.5 text-gray-400 hover:text-red-500 cursor-pointer">
                 <X className="h-4 w-4" />

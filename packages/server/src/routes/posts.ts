@@ -5,6 +5,7 @@ import {
   getTeacherPosts,
   getStudentPosts,
   getPostsByClassroom,
+  getPostById,
   createPost,
   updatePost,
   deletePost,
@@ -32,6 +33,18 @@ export async function postRoutes(app: FastifyInstance) {
     preHandler: [authenticate],
   }, async (request) => {
     return getPostsByClassroom(request.params.cid);
+  });
+
+  // ─── GET /api/posts/:id — 게시글 상세 (편집용) ──
+
+  app.get<{ Params: { id: string } }>('/api/posts/:id', {
+    preHandler: [authenticate, requireRole('teacher')],
+  }, async (request, reply) => {
+    const post = await getPostById(request.params.id);
+    if (!post) {
+      return reply.status(404).send({ error: 'Post not found' });
+    }
+    return post;
   });
 
   // ─── POST /api/posts — 게시글 생성 ────────────

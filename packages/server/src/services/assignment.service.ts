@@ -138,6 +138,17 @@ export async function createAssignmentPage(data: {
   return created;
 }
 
+/** 과제 페이지 순서 변경 */
+export async function reorderAssignmentPages(items: { id: string; position: number }[]) {
+  await Promise.all(
+    items.map((item) =>
+      db.update(assignmentPages)
+        .set({ position: item.position })
+        .where(eq(assignmentPages.id, item.id)),
+    ),
+  );
+}
+
 /** 과제 페이지 삭제 */
 export async function deleteAssignmentPage(id: string) {
   const rows = await db
@@ -177,10 +188,7 @@ export async function getSubmissionCounts(assignmentIds: string[]) {
 export async function getStudentSubmissions(studentId: string, assignmentIds: string[]) {
   if (assignmentIds.length === 0) return [];
   return db
-    .select({
-      assignmentId: assignmentSubmissions.assignmentId,
-      status: assignmentSubmissions.status,
-    })
+    .select()
     .from(assignmentSubmissions)
     .where(
       and(
