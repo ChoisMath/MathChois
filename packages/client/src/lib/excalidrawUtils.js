@@ -53,15 +53,20 @@ const _sizeCache = new Map(); // dataUrl → { w, h }
 /* ─────────── 유틸: 이미지 URL → DataURL (캐시 적용) ─────────── */
 export async function fetchAsDataUrl(url) {
   if (_imgCache.has(url)) return _imgCache.get(url);
-  const res  = await fetch(url, { mode: 'cors' });
+  const res = await fetch(url, { mode: 'cors' });
+  if (!res.ok) throw new Error(`Image fetch failed: ${res.status} ${url}`);
   const blob = await res.blob();
-  return new Promise((resolve) => {
+  if (!blob.type.startsWith('image/') && blob.size < 100) {
+    throw new Error(`Invalid image response for ${url}`);
+  }
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
       const result = { dataUrl: reader.result, mimeType: blob.type || 'image/jpeg' };
       _imgCache.set(url, result);
       resolve(result);
     };
+    reader.onerror = () => reject(new Error(`FileReader failed for ${url}`));
     reader.readAsDataURL(blob);
   });
 }
@@ -69,13 +74,14 @@ export async function fetchAsDataUrl(url) {
 /* ─────────── 유틸: DataURL → 이미지 자연 크기 (캐시 적용) ─────────── */
 export function getImageNaturalSize(dataUrl) {
   if (_sizeCache.has(dataUrl)) return Promise.resolve(_sizeCache.get(dataUrl));
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const result = { w: img.naturalWidth, h: img.naturalHeight };
       _sizeCache.set(dataUrl, result);
       resolve(result);
     };
+    img.onerror = () => reject(new Error('Image decode failed'));
     img.src = dataUrl;
   });
 }
