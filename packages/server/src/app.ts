@@ -5,6 +5,9 @@ import fastifyStatic from '@fastify/static';
 import path from 'node:path';
 import { env } from './config/env.js';
 import { authRoutes } from './routes/auth.js';
+import { classroomRoutes } from './routes/classrooms.js';
+import { chapterRoutes } from './routes/chapters.js';
+import { pageRoutes } from './routes/pages.js';
 
 export function buildApp() {
   const app = Fastify({
@@ -27,6 +30,9 @@ export function buildApp() {
   // ─── Routes ───────────────────────────────────────
 
   app.register(authRoutes);
+  app.register(classroomRoutes);
+  app.register(chapterRoutes);
+  app.register(pageRoutes);
 
   // ─── Health check ───────────────────────────────────
 

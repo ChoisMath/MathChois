@@ -5,9 +5,9 @@
 
 ## 현재 상태
 
-- **현재 Phase**: Phase 1 (코드 완료) → Phase 2 시작 예정
+- **현재 Phase**: Phase 2 (서버측 완료) → Phase 3 시작 예정
 - **마지막 작업 세션**: 2026-02-25
-- **다음 할 일**: Phase 2 핵심 CRUD API 구현
+- **다음 할 일**: Phase 3 파일 저장소 + 게시판/과제 라우트
 - **블로커**: 없음
 - **참고**: Supabase는 현재 서비스 중이나, 이전할 데이터 없음. 새 백엔드를 처음부터 구축.
 
@@ -112,25 +112,29 @@
 ## Phase 2: 핵심 CRUD API
 
 ### 2-1. 서버 CRUD 라우트
-- [ ] `services/classroom.service.ts` + `routes/classrooms.ts`
-  - [ ] GET /api/classrooms (역할별 필터링)
-  - [ ] GET /api/classrooms/:id (상세 + 멤버 수)
-  - [ ] POST /api/classrooms (교사 전용, class_code 자동 생성)
-  - [ ] PATCH /api/classrooms/:id (교사 전용)
-  - [ ] DELETE /api/classrooms/:id (교사 전용, CASCADE)
-  - [ ] POST /api/classrooms/join (학생: 코드로 참가)
-  - [ ] GET /api/classrooms/:id/members (멤버 목록 + 프로필)
-  - [ ] DELETE /api/classrooms/:id/members/:studentId (멤버 제거)
-- [ ] `services/chapter.service.ts` + `routes/chapters.ts`
-  - [ ] GET /api/classrooms/:cid/chapters (목록, page count 포함)
-  - [ ] POST /api/classrooms/:cid/chapters
-  - [ ] PATCH /api/chapters/:id (title, description)
-  - [ ] DELETE /api/chapters/:id (CASCADE + Storage 정리는 Phase 3)
-  - [ ] PUT /api/chapters/reorder (bulk position update)
-- [ ] `services/page.service.ts` + `routes/pages.ts`
-  - [ ] GET /api/chapters/:id/pages (목록)
-  - [ ] DELETE /api/pages/:id
-  - [ ] PUT /api/pages/reorder (bulk position update)
+- [x] `services/classroom.service.ts` + `routes/classrooms.ts`
+  - [x] GET /api/classrooms (역할별 필터링)
+  - [x] GET /api/classrooms/:id (상세)
+  - [x] POST /api/classrooms (교사 전용, class_code 자동 생성)
+  - [x] PATCH /api/classrooms/:id (교사 전용)
+  - [x] DELETE /api/classrooms/:id (교사 전용, CASCADE)
+  - [x] POST /api/classrooms/join (학생: 코드로 참가)
+  - [x] GET /api/classrooms/:id/members (멤버 목록 + 프로필)
+  - [x] DELETE /api/classrooms/:id/members/:studentId (멤버 제거)
+  - [x] GET /api/classrooms/other/:excludeId (다른 교실 목록, import/export용)
+- [x] `services/chapter.service.ts` + `routes/chapters.ts`
+  - [x] GET /api/classrooms/:cid/chapters (목록, pages 포함)
+  - [x] GET /api/chapters/:id (상세)
+  - [x] POST /api/classrooms/:cid/chapters
+  - [x] PATCH /api/chapters/:id (title, description)
+  - [x] DELETE /api/chapters/:id (CASCADE, Storage 정리는 Phase 3)
+  - [x] PUT /api/chapters/reorder (bulk position update)
+  - [x] POST /api/chapters/:id/import (챕터 복제)
+- [x] `services/page.service.ts` + `routes/pages.ts`
+  - [x] GET /api/chapters/:chapterId/pages (목록)
+  - [x] POST /api/chapters/:chapterId/pages (단일/배치)
+  - [x] DELETE /api/pages/:id
+  - [x] PUT /api/pages/reorder (bulk position update)
 
 ### 2-2. 클라이언트 CRUD 전환
 - [ ] `ClassroomList` — supabase.from → api 호출
