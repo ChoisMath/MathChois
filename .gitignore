@@ -44,3 +44,9 @@ image.png
 
 # Unused legacy code
 legacy_rails/
+
+# Local storage (dev file uploads)
+local-storage/
+
+# Drizzle
+drizzle/meta/

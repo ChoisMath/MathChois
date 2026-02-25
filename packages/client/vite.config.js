@@ -10,6 +10,13 @@ export default defineConfig({
   ],
   server: {
     port: 3000,
+    proxy: {
+      '/api': 'http://localhost:3001',
+      '/socket.io': {
+        target: 'http://localhost:3001',
+        ws: true,
+      },
+    },
   },
   optimizeDeps: {
     include: ['@excalidraw/excalidraw'],
@@ -28,7 +35,7 @@ export default defineConfig({
           ) {
             return 'vendor-react';
           }
-          /* Supabase: 별도 캐시 */
+          /* Supabase: 별도 캐시 (마이그레이션 완료 후 제거) */
           if (id.includes('node_modules/@supabase')) {
             return 'vendor-supabase';
           }
