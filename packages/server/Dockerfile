@@ -14,7 +14,7 @@ FROM deps AS build-server
 COPY tsconfig.base.json ./
 COPY packages/shared/ packages/shared/
 COPY packages/server/ packages/server/
-RUN npm run build -w @mathchois/shared && npm run build -w @mathchois/server
+RUN npx tsc -b packages/server/tsconfig.json
 
 # ─── Build client ──────────────────────────────────
 FROM deps AS build-client
@@ -39,6 +39,9 @@ COPY --from=build-server /app/packages/server/dist packages/server/dist
 COPY --from=build-server /app/packages/server/package.json packages/server/
 COPY --from=build-client /app/packages/client/dist packages/client/dist
 COPY --from=build-client /app/packages/client/package.json packages/client/
+
+# Fix shared package.json for production (source .ts → compiled .js)
+RUN sed -i 's|"./src/index.ts"|"./dist/index.js"|g; s|"./src/\*"|"./dist/\*"|g' packages/shared/package.json
 
 EXPOSE ${PORT:-3001}
 CMD ["node", "packages/server/dist/index.js"]
