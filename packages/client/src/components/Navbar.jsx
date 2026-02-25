@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, LogOut, Menu } from 'lucide-react';
+import { BookOpen, LogOut, Menu, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const Navbar = ({ onToggleSidebar }) => {
@@ -33,6 +33,15 @@ const Navbar = ({ onToggleSidebar }) => {
           <div className="flex items-center">
             {isAuthenticated && (
               <div className="flex items-center gap-3">
+                {profile?.isAdmin && (
+                  <Link
+                    to="/admin"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition-colors"
+                  >
+                    <Shield className="h-4 w-4" />
+                    <span className="hidden sm:inline">관리자 패널</span>
+                  </Link>
+                )}
                 {profile?.avatarUrl && (
                   <img
                     src={profile.avatarUrl}

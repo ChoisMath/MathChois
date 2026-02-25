@@ -21,6 +21,19 @@ const REFRESH_COOKIE_OPTIONS = {
   maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
 };
 
+/** DB profile → API 응답용 profile 변환 */
+function toProfileResponse(p: NonNullable<Awaited<ReturnType<typeof getProfileById>>>) {
+  return {
+    id: p.id,
+    googleId: p.googleId,
+    name: p.name,
+    email: p.email,
+    avatarUrl: p.avatarUrl,
+    role: p.role,
+    isAdmin: p.isAdmin,
+  };
+}
+
 export async function authRoutes(app: FastifyInstance) {
 
   // ─── GET /api/auth/google — Google OAuth 시작 ────
@@ -90,14 +103,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     return {
       token: newAccessToken,
-      profile: {
-        id: profile.id,
-        googleId: profile.googleId,
-        name: profile.name,
-        email: profile.email,
-        avatarUrl: profile.avatarUrl,
-        role: profile.role,
-      },
+      profile: toProfileResponse(profile),
     };
   });
 
@@ -117,16 +123,7 @@ export async function authRoutes(app: FastifyInstance) {
     if (!profile) {
       return reply.status(404).send({ error: 'Profile not found' });
     }
-    return {
-      profile: {
-        id: profile.id,
-        googleId: profile.googleId,
-        name: profile.name,
-        email: profile.email,
-        avatarUrl: profile.avatarUrl,
-        role: profile.role,
-      },
-    };
+    return { profile: toProfileResponse(profile) };
   });
 
   // ─── GET /api/profiles/:id — 특정 사용자 프로필 조회
@@ -165,14 +162,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     return {
       token: newAccessToken,
-      profile: {
-        id: updated.id,
-        googleId: updated.googleId,
-        name: updated.name,
-        email: updated.email,
-        avatarUrl: updated.avatarUrl,
-        role: updated.role,
-      },
+      profile: toProfileResponse(updated),
     };
   });
 }

@@ -28,6 +28,9 @@ const AssignmentMonitor      = lazy(() => import('./pages/Assignment/AssignmentM
 const AssignmentWorkViewer   = lazy(() => import('./pages/Assignment/AssignmentWorkViewer'));
 const AssignmentStudyViewer  = lazy(() => import('./pages/Assignment/AssignmentStudyViewer'));
 
+/* 관리자 */
+const AdminPanel = lazy(() => import('./pages/Admin/AdminPanel'));
+
 const PageLoader = () => (
   <div className="flex items-center justify-center min-h-screen bg-gray-50">
     <p className="text-gray-500">로딩 중...</p>
@@ -121,6 +124,13 @@ function App() {
               path="/teacher/classrooms/:classroomId/assignments/:assignmentId/monitor/:studentId"
               element={<AssignmentWorkViewer />}
             />
+          </Route>
+
+          {/* Admin Routes */}
+          <Route element={<ProtectedRoute requireAdmin />}>
+            <Route element={<DashboardLayout />}>
+              <Route path="/admin" element={<AdminPanel />} />
+            </Route>
           </Route>
 
           {/* Student Routes */}

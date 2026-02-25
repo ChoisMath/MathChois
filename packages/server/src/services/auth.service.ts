@@ -11,6 +11,9 @@ const google = new OAuth2Client(
   env.GOOGLE_CLIENT_SECRET,
 );
 
+/** 최초 관리자 이메일 — 첫 로그인 시 자동으로 isAdmin = true */
+const INITIAL_ADMIN_EMAIL = 'complete860127@gmail.com';
+
 // ─── Google OAuth ──────────────────────────────────
 
 /** Google 인가 URL 생성 */
@@ -48,6 +51,8 @@ export async function findOrCreateProfile(googleUser: {
   name: string | null;
   avatarUrl: string | null;
 }) {
+  const shouldBeAdmin = googleUser.email === INITIAL_ADMIN_EMAIL;
+
   // 기존 사용자 조회
   const existing = await db
     .select()
@@ -63,6 +68,8 @@ export async function findOrCreateProfile(googleUser: {
         name: googleUser.name,
         email: googleUser.email,
         avatarUrl: googleUser.avatarUrl,
+        // 최초 관리자 이메일이면 isAdmin 보장
+        ...(shouldBeAdmin && !existing[0].isAdmin ? { isAdmin: true } : {}),
       })
       .where(eq(profiles.id, existing[0].id))
       .returning();
@@ -77,6 +84,7 @@ export async function findOrCreateProfile(googleUser: {
       email: googleUser.email,
       name: googleUser.name,
       avatarUrl: googleUser.avatarUrl,
+      isAdmin: shouldBeAdmin,
     })
     .returning();
   return created;
@@ -105,10 +113,11 @@ export async function updateProfileRole(id: string, role: 'teacher' | 'student')
 // ─── JWT ──────────────────────────────────────────
 
 /** Access Token 발급 (15분) */
-export function signAccessToken(profile: { id: string; role: string | null }): string {
+export function signAccessToken(profile: { id: string; role: string | null; isAdmin: boolean }): string {
   const payload: TokenPayload = {
     sub: profile.id,
     role: profile.role as TokenPayload['role'],
+    isAdmin: profile.isAdmin,
   };
   return jwt.sign(payload, env.JWT_SECRET, { expiresIn: '15m' });
 }

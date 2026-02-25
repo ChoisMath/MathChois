@@ -1,7 +1,7 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-const ProtectedRoute = ({ allowedRole }) => {
+const ProtectedRoute = ({ allowedRole, requireAdmin }) => {
   const { isAuthenticated, isLoading, profile } = useAuth();
 
   if (isLoading) {
@@ -18,6 +18,11 @@ const ProtectedRoute = ({ allowedRole }) => {
 
   if (!profile?.role) {
     return <Navigate to="/choose-role" replace />;
+  }
+
+  // 관리자 전용 라우트 체크
+  if (requireAdmin && !profile?.isAdmin) {
+    return <Navigate to={`/${profile.role}/classrooms`} replace />;
   }
 
   if (allowedRole && profile.role !== allowedRole) {

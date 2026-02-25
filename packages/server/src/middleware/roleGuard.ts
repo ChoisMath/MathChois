@@ -10,3 +10,12 @@ export function requireRole(role: 'teacher' | 'student') {
     }
   };
 }
+
+/**
+ * 관리자 체크 미들웨어 — authenticate 이후 사용
+ */
+export async function requireAdmin(request: FastifyRequest, reply: FastifyReply) {
+  if (!request.user.isAdmin) {
+    return reply.status(403).send({ error: 'Admin access required' });
+  }
+}

@@ -12,6 +12,7 @@ export const profiles = pgTable('profiles', {
   email: text('email'),
   avatarUrl: text('avatar_url'),
   role: text('role'),  // 'teacher' | 'student' | null
+  isAdmin: boolean('is_admin').default(false).notNull(),
 });
 
 // ─── classrooms ─────────────────────────────────────

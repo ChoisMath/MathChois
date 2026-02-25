@@ -2,6 +2,7 @@
 export interface TokenPayload {
   sub: string;  // profile.id
   role: 'teacher' | 'student' | null;
+  isAdmin: boolean;
   iat?: number;
   exp?: number;
 }
@@ -14,6 +15,7 @@ export interface Profile {
   email: string | null;
   avatarUrl: string | null;
   role: 'teacher' | 'student' | null;
+  isAdmin: boolean;
 }
 
 /** 로그인 응답 */

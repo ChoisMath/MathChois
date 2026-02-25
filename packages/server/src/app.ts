@@ -13,6 +13,7 @@ import { postRoutes } from './routes/posts.js';
 import { assignmentRoutes } from './routes/assignments.js';
 import { noteRoutes } from './routes/notes.js';
 import { commentRoutes } from './routes/comments.js';
+import { adminRoutes } from './routes/admin.js';
 
 export function buildApp() {
   const app = Fastify({
@@ -44,6 +45,7 @@ export function buildApp() {
   app.register(assignmentRoutes);
   app.register(noteRoutes);
   app.register(commentRoutes);
+  app.register(adminRoutes);
 
   // ─── Health check ───────────────────────────────────
 
