@@ -33,9 +33,9 @@ const Navbar = ({ onToggleSidebar }) => {
           <div className="flex items-center">
             {isAuthenticated && (
               <div className="flex items-center gap-3">
-                {profile?.avatar_url && (
+                {(profile?.avatarUrl || profile?.avatar_url) && (
                   <img
-                    src={profile.avatar_url}
+                    src={profile.avatarUrl || profile.avatar_url}
                     alt={profile.name}
                     className="h-8 w-8 rounded-full"
                     referrerPolicy="no-referrer"

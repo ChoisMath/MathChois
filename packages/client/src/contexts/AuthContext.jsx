@@ -1,126 +1,74 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { refreshToken, logout as apiLogout, updateRole as apiUpdateRole, setAccessToken } from '../lib/api';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchProfile = async (userId) => {
-    // Retry logic: trigger 가 아직 profile을 생성하지 않았을 수 있음
-    for (let i = 0; i < 3; i++) {
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .single();
-
-        if (error && error.code !== 'PGRST116') {
-          console.error('[fetchProfile] error:', error);
-        }
-
-        if (data) {
-          setProfile(data);
-          return data;
-        }
-      } catch (err) {
-        console.error('[fetchProfile] Exception:', err);
-      }
-
-      if (i < 2) {
-        await new Promise((r) => setTimeout(r, 500));
-      }
-    }
-    return null;
-  };
+  // ─── 앱 시작 시 refresh token으로 세션 복원 ────
 
   useEffect(() => {
-    // 1단계: 앱 시작 시 세션 로드
-    const initializeAuth = async () => {
+    const initAuth = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) throw error;
+        // hash에서 token 추출 (OAuth callback에서 전달된 경우)
+        const hash = window.location.hash;
+        if (hash.includes('token=')) {
+          const token = hash.split('token=')[1]?.split('&')[0];
+          if (token) {
+            setAccessToken(token);
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+        }
 
-        if (session?.user) {
-          setUser(session.user);
-          await fetchProfile(session.user.id);
+        // refresh token으로 세션 복원 시도
+        const result = await refreshToken();
+        if (result) {
+          setProfile(result.profile);
         }
       } catch (err) {
-        console.error('[Auth] 초기화 오류 (로그아웃 처리):', err.message);
-        try { await supabase.auth.signOut(); } catch { /* ignore */ }
-        setUser(null);
-        setProfile(null);
+        console.error('[Auth] 초기화 오류:', err);
       } finally {
-        // 어떤 경우에도 반드시 로딩 해제
         setIsLoading(false);
       }
     };
 
-    initializeAuth();
-
-    // 2단계: 이후 로그인/로그아웃 이벤트만 처리
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('[Auth] event:', event, '| user:', session?.user?.email ?? 'none');
-
-        if (event === 'SIGNED_IN') {
-          setUser(session.user);
-          fetchProfile(session.user.id);
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null);
-          setProfile(null);
-        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-          setUser(session.user);
-        }
-      }
-    );
-
-    return () => subscription.unsubscribe();
+    initAuth();
   }, []);
 
-  const signInWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-    if (error) console.error('Google 로그인 실패:', error.message);
-  };
+  // ─── Google OAuth 시작 ─────────────────────────
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
+  const signInWithGoogle = useCallback(() => {
+    window.location.href = '/api/auth/google';
+  }, []);
+
+  // ─── 로그아웃 ──────────────────────────────────
+
+  const signOut = useCallback(async () => {
+    await apiLogout();
     setProfile(null);
-  };
+  }, []);
 
-  const updateRole = async (role) => {
-    if (!user) return;
-    const { data, error } = await supabase
-      .from('profiles')
-      .update({ role })
-      .eq('id', user.id)
-      .select()
-      .single();
+  // ─── 역할 업데이트 ────────────────────────────
 
-    if (error) {
-      console.error('역할 업데이트 실패:', error.message);
+  const updateRole = useCallback(async (role) => {
+    try {
+      const result = await apiUpdateRole(role);
+      setProfile(result.profile);
+      return result.profile;
+    } catch (err) {
+      console.error('역할 업데이트 실패:', err);
       return null;
     }
-    setProfile(data);
-    return data;
-  };
+  }, []);
 
   return (
     <AuthContext.Provider
       value={{
-        user,
+        user: profile,   // 기존 호환: user는 profile과 동일
         profile,
-        isAuthenticated: !!user,
+        isAuthenticated: !!profile,
         isLoading,
         signInWithGoogle,
         signOut,

@@ -1,6 +1,6 @@
 /** JWT Access Token에 포함되는 페이로드 */
 export interface TokenPayload {
-  userId: string;
+  sub: string;  // profile.id
   role: 'teacher' | 'student' | null;
   iat?: number;
   exp?: number;

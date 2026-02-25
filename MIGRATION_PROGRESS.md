@@ -5,9 +5,9 @@
 
 ## 현재 상태
 
-- **현재 Phase**: Phase 0 (완료) → Phase 1 시작 예정
+- **현재 Phase**: Phase 1 (코드 완료) → Phase 2 시작 예정
 - **마지막 작업 세션**: 2026-02-25
-- **다음 할 일**: Phase 1 인증 시스템 구현
+- **다음 할 일**: Phase 2 핵심 CRUD API 구현
 - **블로커**: 없음
 - **참고**: Supabase는 현재 서비스 중이나, 이전할 데이터 없음. 새 백엔드를 처음부터 구축.
 
@@ -78,34 +78,34 @@
 ## Phase 1: 인증
 
 ### 1-1. 서버 인증 엔드포인트
-- [ ] `middleware/auth.ts` — JWT 검증 미들웨어
-- [ ] `middleware/roleGuard.ts` — teacher/student 역할 체크
-- [ ] `services/auth.service.ts` — Google OAuth 토큰 교환, JWT 발급/검증, 프로필 CRUD
-- [ ] `routes/auth.ts` — GET /api/auth/google (인가 URL 리다이렉트)
-- [ ] `routes/auth.ts` — GET /api/auth/google/callback (code 교환 → JWT → 프론트 리다이렉트)
-- [ ] `routes/auth.ts` — POST /api/auth/refresh (쿠키에서 refresh token → 새 access token)
-- [ ] `routes/auth.ts` — POST /api/auth/logout (쿠키 제거)
-- [ ] `routes/auth.ts` — GET /api/auth/me (현재 사용자 프로필)
-- [ ] `routes/auth.ts` — PATCH /api/profiles/role (역할 설정)
-- [ ] 서버 인증 단독 테스트 (curl 또는 Postman)
+- [x] `middleware/auth.ts` — JWT 검증 미들웨어
+- [x] `middleware/roleGuard.ts` — teacher/student 역할 체크
+- [x] `services/auth.service.ts` — Google OAuth 토큰 교환, JWT 발급/검증, 프로필 CRUD
+- [x] `routes/auth.ts` — GET /api/auth/google (인가 URL 리다이렉트)
+- [x] `routes/auth.ts` — GET /api/auth/google/callback (code 교환 → JWT → 프론트 리다이렉트)
+- [x] `routes/auth.ts` — POST /api/auth/refresh (쿠키에서 refresh token → 새 access token)
+- [x] `routes/auth.ts` — POST /api/auth/logout (쿠키 제거)
+- [x] `routes/auth.ts` — GET /api/auth/me (현재 사용자 프로필)
+- [x] `routes/auth.ts` — PATCH /api/profiles/role (역할 설정)
+- [x] 서버 인증 단독 테스트 (curl) ✅ 401/200 응답 확인
 
 ### 1-2. 클라이언트 인증 전환
-- [ ] `src/lib/api.ts` 생성 — API 클라이언트 (Bearer 토큰, 401 자동 갱신)
-- [ ] `AuthContext.jsx` → `AuthContext.tsx` 재작성 (JWT 기반)
-- [ ] `ProtectedRoute.jsx` → `.tsx` 수정
-- [ ] `OAuthCallback.jsx` → `.tsx` 수정 (hash에서 token 추출)
-- [ ] `Login.jsx` → `.tsx` 수정 (href → /api/auth/google)
-- [ ] `ChooseRole.jsx` → `.tsx` 수정 (API 호출)
-- [ ] `Navbar.jsx` → `.tsx` 수정 (signOut → API)
-- [ ] `Home.jsx` → `.tsx` 수정 (로그인 버튼)
+- [x] `src/lib/api.ts` 생성 — API 클라이언트 (Bearer 토큰, 401 자동 갱신)
+- [x] `AuthContext.jsx` 재작성 (JWT 기반, Supabase 제거)
+- [ ] `ProtectedRoute.jsx` → `.tsx` 수정 — 변경 불필요 (useAuth 인터페이스 동일)
+- [ ] `OAuthCallback.jsx` → `.tsx` 수정 — 변경 불필요 (토큰 추출은 AuthContext에서 처리)
+- [ ] `Login.jsx` → `.tsx` 수정 — 변경 불필요 (signInWithGoogle 인터페이스 동일)
+- [ ] `ChooseRole.jsx` → `.tsx` 수정 — 변경 불필요 (updateRole 인터페이스 동일)
+- [x] `Navbar.jsx` 수정 (avatarUrl camelCase 호환)
+- [ ] `Home.jsx` → `.tsx` 수정 — 변경 불필요 (signInWithGoogle 인터페이스 동일)
 
-### 1-3. 검증
+### 1-3. 검증 (실제 DB 연결 후)
 - [ ] Google 로그인 → 첫 로그인 시 프로필 자동 생성
 - [ ] 역할 선택 → 대시보드 리다이렉트
 - [ ] 로그아웃 → 재로그인
 - [ ] 페이지 새로고침 시 세션 유지 (refresh token으로 자동 복원)
 - [ ] 15분+ 방치 후 API 호출 시 자동 토큰 갱신
-- [ ] **Phase 1 완료 커밋**
+- [x] **Phase 1 코드 완료 커밋**
 
 ---
 

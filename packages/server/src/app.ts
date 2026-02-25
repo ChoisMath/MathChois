@@ -4,6 +4,7 @@ import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import path from 'node:path';
 import { env } from './config/env.js';
+import { authRoutes } from './routes/auth.js';
 
 export function buildApp() {
   const app = Fastify({
@@ -22,6 +23,10 @@ export function buildApp() {
       fileSize: 10 * 1024 * 1024, // 10MB per file
     },
   });
+
+  // ─── Routes ───────────────────────────────────────
+
+  app.register(authRoutes);
 
   // ─── Health check ───────────────────────────────────
 
