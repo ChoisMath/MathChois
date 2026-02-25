@@ -11,7 +11,7 @@ import {
   deletePost,
   isPostOwner,
 } from '../services/post.service.js';
-import { urlToStoragePath, removeFile } from '../services/storage.service.js';
+import { urlToStoragePath, removeFile, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
 
 export async function postRoutes(app: FastifyInstance) {
 
@@ -114,6 +114,14 @@ export async function postRoutes(app: FastifyInstance) {
       const parsed = urlToStoragePath(url);
       if (parsed) {
         await removeFile(parsed.bucket, parsed.path);
+      }
+    }
+
+    // 빈 디렉토리 정리
+    if (fileUrls.length > 0) {
+      const parentDir = urlToParentDir(fileUrls[0]);
+      if (parentDir) {
+        await removeDirectoryIfEmpty(parentDir.bucket, parentDir.dir);
       }
     }
 

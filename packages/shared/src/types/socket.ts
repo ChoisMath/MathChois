@@ -14,6 +14,8 @@ export interface ClientToServerEvents {
   'leave:assignment-monitor': (data: { assignmentId: string }) => void;
   'join:asn-comments': (data: { pageId: string; studentId: string }) => void;
   'leave:asn-comments': (data: { pageId: string; studentId: string }) => void;
+  'join:teacher-notes': (data: { pageId: string }) => void;
+  'leave:teacher-notes': (data: { pageId: string }) => void;
 }
 
 /** 서버 → 클라이언트 이벤트 */
@@ -22,6 +24,7 @@ export interface ServerToClientEvents {
   'teacher-comment:updated': (data: TeacherCommentUpdatedPayload) => void;
   'submission:updated': (data: SubmissionUpdatedPayload) => void;
   'asn-comment:updated': (data: AsnCommentUpdatedPayload) => void;
+  'teacher-note:updated': (data: TeacherNoteUpdatedPayload) => void;
 }
 
 // ─── 이벤트 페이로드 ──────────────────────────────
@@ -55,4 +58,9 @@ export interface AsnCommentUpdatedPayload {
   studentId: string;
   pageId: string;
   excalidrawData: ExcalidrawData;
+}
+
+export interface TeacherNoteUpdatedPayload {
+  pageId: string;
+  updatedAt: string;
 }

@@ -13,7 +13,10 @@ import {
   joinClassroomByCode,
   removeClassroomMember,
   isClassroomOwner,
+  getClassroomImageUrls,
+  findSharedClassroomImageUrls,
 } from '../services/classroom.service.js';
+import { removeFile, urlToStoragePath, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
 
 export async function classroomRoutes(app: FastifyInstance) {
 
@@ -112,7 +115,48 @@ export async function classroomRoutes(app: FastifyInstance) {
     if (!isOwner) {
       return reply.status(403).send({ error: 'Not the classroom owner' });
     }
+
+    // Storage 파일 정리: orphan 이미지만 삭제 (다른 교실에서 공유되지 않는 것)
+    const imageUrls = await getClassroomImageUrls(request.params.id);
+    const sharedUrls = await findSharedClassroomImageUrls(imageUrls, request.params.id);
+    const sharedSet = new Set(sharedUrls);
+    const orphanUrls = imageUrls.filter((url) => !sharedSet.has(url));
+
+    app.log.info({ classroomId: request.params.id, total: imageUrls.length, shared: sharedUrls.length, orphans: orphanUrls.length }, 'Classroom storage cleanup');
+
     await deleteClassroom(request.params.id);
+
+    // DB 삭제 후 orphan 파일 정리
+    if (orphanUrls.length > 0) {
+      const deleteResults = await Promise.all(
+        orphanUrls.map(async (url) => {
+          const parsed = urlToStoragePath(url);
+          if (!parsed) {
+            app.log.warn({ url }, 'Failed to parse storage URL');
+            return false;
+          }
+          const ok = await removeFile(parsed.bucket, parsed.path);
+          if (!ok) app.log.warn({ bucket: parsed.bucket, path: parsed.path }, 'Failed to delete orphan file');
+          return ok;
+        }),
+      );
+
+      app.log.info({ deleted: deleteResults.filter(Boolean).length, failed: deleteResults.filter((r) => !r).length }, 'Classroom file cleanup result');
+
+      // 빈 디렉토리 정리 (챕터/과제 디렉토리별)
+      const parentDirs = new Set<string>();
+      for (const url of orphanUrls) {
+        const parentDir = urlToParentDir(url);
+        if (parentDir) {
+          parentDirs.add(`${parentDir.bucket}|${parentDir.dir}`);
+        }
+      }
+      for (const key of parentDirs) {
+        const [bucket, dir] = key.split('|');
+        await removeDirectoryIfEmpty(bucket, dir);
+      }
+    }
+
     return reply.status(204).send();
   });
 

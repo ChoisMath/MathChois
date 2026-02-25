@@ -11,14 +11,18 @@ import {
   getAssignmentPages,
   getAssignmentPageById,
   createAssignmentPage,
+  createAssignmentPages,
   deleteAssignmentPage,
   getSubmissionsByAssignment,
   getSubmissionCounts,
   getStudentSubmissions,
   upsertSubmission,
   reorderAssignmentPages,
+  getAssignmentPageImageUrls,
+  findSharedAssignmentImageUrls,
 } from '../services/assignment.service.js';
 import { isClassroomOwner } from '../services/classroom.service.js';
+import { removeFile, urlToStoragePath, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
 import { getIO } from '../socket/index.js';
 import { emitSubmissionUpdated } from '../socket/handlers/assignments.js';
 
@@ -110,7 +114,41 @@ export async function assignmentRoutes(app: FastifyInstance) {
     if (!isOwner) {
       return reply.status(403).send({ error: 'Not the assignment owner' });
     }
+
+    // Storage 파일 정리: orphan 이미지만 삭제 (다른 과제에서 공유되지 않는 것)
+    const imageUrls = await getAssignmentPageImageUrls(request.params.id);
+    const sharedUrls = await findSharedAssignmentImageUrls(imageUrls, request.params.id);
+    const sharedSet = new Set(sharedUrls);
+    const orphanUrls = imageUrls.filter((url) => !sharedSet.has(url));
+
+    app.log.info({ assignmentId: request.params.id, total: imageUrls.length, shared: sharedUrls.length, orphans: orphanUrls.length }, 'Assignment storage cleanup');
+
     await deleteAssignment(request.params.id);
+
+    // DB 삭제 후 orphan 파일 정리
+    const deleteResults = await Promise.all(
+      orphanUrls.map(async (url) => {
+        const parsed = urlToStoragePath(url);
+        if (!parsed) {
+          app.log.warn({ url }, 'Failed to parse storage URL');
+          return false;
+        }
+        const ok = await removeFile(parsed.bucket, parsed.path);
+        if (!ok) app.log.warn({ bucket: parsed.bucket, path: parsed.path }, 'Failed to delete orphan file');
+        return ok;
+      }),
+    );
+
+    app.log.info({ deleted: deleteResults.filter(Boolean).length, failed: deleteResults.filter((r) => !r).length }, 'Assignment file cleanup result');
+
+    // orphan 파일 삭제 후, 빈 디렉토리 정리
+    if (orphanUrls.length > 0) {
+      const parentDir = urlToParentDir(orphanUrls[0]);
+      if (parentDir) {
+        await removeDirectoryIfEmpty(parentDir.bucket, parentDir.dir);
+      }
+    }
+
     return reply.status(204).send();
   });
 
@@ -169,6 +207,57 @@ export async function assignmentRoutes(app: FastifyInstance) {
   }, async (request) => {
     await reorderAssignmentPages(request.body.items);
     return { ok: true };
+  });
+
+  // ─── POST /api/assignments/:id/import — 과제 복제 (import/export) ──
+
+  app.post<{
+    Params: { id: string };
+    Body: { targetClassroomId: string };
+  }>('/api/assignments/:id/import', {
+    preHandler: [authenticate, requireRole('teacher')],
+  }, async (request, reply) => {
+    const sourceAssignment = await getAssignmentById(request.params.id);
+    if (!sourceAssignment) {
+      return reply.status(404).send({ error: 'Source assignment not found' });
+    }
+
+    // 소스 과제 소유권 확인
+    if (sourceAssignment.teacherId !== request.user.sub) {
+      return reply.status(403).send({ error: 'Not the source assignment owner' });
+    }
+
+    // 타겟 클래스룸 소유권 확인
+    const isOwner = await isClassroomOwner(request.body.targetClassroomId, request.user.sub);
+    if (!isOwner) {
+      return reply.status(403).send({ error: 'Not the target classroom owner' });
+    }
+
+    // 소스 과제의 페이지 가져오기
+    const sourcePages = await getAssignmentPages(sourceAssignment.id);
+
+    // 새 과제 생성 (deadline은 null로 초기화)
+    const newAssignment = await createAssignment({
+      classroomId: request.body.targetClassroomId,
+      teacherId: request.user.sub,
+      title: sourceAssignment.title,
+      description: sourceAssignment.description ?? undefined,
+      deadline: null,
+      maxScore: sourceAssignment.maxScore ?? undefined,
+    });
+
+    // 페이지 복제 (같은 imageUrl 공유)
+    if (sourcePages.length > 0) {
+      await createAssignmentPages(
+        sourcePages.map((pg, idx) => ({
+          assignmentId: newAssignment.id,
+          imageUrl: pg.imageUrl,
+          position: pg.position ?? idx,
+        })),
+      );
+    }
+
+    return reply.status(201).send(newAssignment);
   });
 
   // ─── GET /api/assignments/:id/submissions — 제출 목록 (교사만)

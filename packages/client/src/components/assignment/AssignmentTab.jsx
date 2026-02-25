@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, ClipboardList, Clock, Trophy, Users, Loader, X } from 'lucide-react';
+import { Plus, Trash2, ClipboardList, Clock, Trophy, Users, Loader, X, Download } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
@@ -24,7 +24,7 @@ function statusStyle(status) {
   }
 }
 
-const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmittedCount }) => {
+const AssignmentTab = ({ classroomId, isTeacher, onUnsubmittedCount }) => {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
 
@@ -33,9 +33,22 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
   const [submissionCounts, setSubmissionCounts] = useState({}); // assignmentId → count (teacher)
   const [totalStudents, setTotalStudents] = useState(0); // teacher: total students in classroom
   const [loading, setLoading]         = useState(true);
-  const [creating, setCreating]       = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting]         = useState(false);
+
+  /* 생성/가져오기 모달 */
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createTab, setCreateTab]   = useState('new'); // 'new' | 'import'
+  const [newTitle, setNewTitle]     = useState('');
+  const [newDesc, setNewDesc]       = useState('');
+  const [creating, setCreating]     = useState(false);
+
+  /* 가져오기 */
+  const [importClassrooms, setImportClassrooms]       = useState([]);
+  const [importSrcCid, setImportSrcCid]               = useState('');
+  const [importAssignments, setImportAssignments]     = useState([]);
+  const [importSelectedAsnId, setImportSelectedAsnId] = useState('');
+  const [importing, setImporting]                     = useState(false);
 
   /* PDF 다운로드 */
   const { downloadMultiplePages } = usePdfDownloader();
@@ -84,21 +97,75 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchData(); }, [classroomId]);
 
-  const handleCreate = async () => {
+  /* 가져오기 탭 전환 시 다른 클래스 목록 로드 */
+  useEffect(() => {
+    if (createTab !== 'import' || !user) return;
+    api.get(`/api/classrooms/other/${classroomId}`)
+      .then((data) => {
+        setImportClassrooms(data || []);
+        setImportSrcCid('');
+        setImportAssignments([]);
+        setImportSelectedAsnId('');
+      })
+      .catch((err) => console.error('[AssignmentTab] import classrooms error:', err));
+  }, [createTab, user, classroomId]);
+
+  /* 모달 닫기 (상태 초기화) */
+  const closeCreateModal = () => {
+    setShowCreateModal(false);
+    setCreateTab('new');
+    setNewTitle(''); setNewDesc('');
+    setImportSrcCid(''); setImportAssignments([]); setImportSelectedAsnId('');
+  };
+
+  /* 직접 만들기 */
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    if (!newTitle.trim()) return;
     setCreating(true);
     try {
       const maxPos = assignments.length > 0 ? Math.max(...assignments.map((a) => a.position)) + 1 : 0;
       const newAsn = await api.post(`/api/classrooms/${classroomId}/assignments`, {
-        title:    '새 과제',
-        position: maxPos,
+        title:       newTitle.trim(),
+        description: newDesc.trim() || undefined,
+        position:    maxPos,
       });
       if (newAsn) {
+        closeCreateModal();
         navigate(`/teacher/classrooms/${classroomId}/assignments/${newAsn.id}/edit`);
       }
     } catch (err) {
       console.error('[AssignmentTab] create error:', err);
     }
     setCreating(false);
+  };
+
+  /* 가져오기: 클래스 선택 → 과제 목록 로드 */
+  const handleImportClassroomChange = async (cid) => {
+    setImportSrcCid(cid);
+    setImportSelectedAsnId('');
+    if (!cid) { setImportAssignments([]); return; }
+    try {
+      const data = await api.get(`/api/classrooms/${cid}/assignments`);
+      setImportAssignments(data || []);
+    } catch (err) {
+      console.error('[AssignmentTab] import assignments error:', err);
+      setImportAssignments([]);
+    }
+  };
+
+  /* 가져오기 실행 */
+  const handleImportAssignment = async () => {
+    if (!importSelectedAsnId) return;
+    setImporting(true);
+    try {
+      await api.post(`/api/assignments/${importSelectedAsnId}/import`, { targetClassroomId: classroomId });
+      closeCreateModal();
+      fetchData();
+    } catch (err) {
+      console.error('[AssignmentTab] import error:', err);
+    }
+    setImporting(false);
   };
 
   const handleDelete = async () => {
@@ -164,23 +231,28 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
 
   return (
     <div>
-      {isTeacher && !hideCreateButton && (
+      {isTeacher && (
         <div className="flex justify-end mb-4">
           <button
-            onClick={handleCreate}
-            disabled={creating}
+            onClick={() => setShowCreateModal(true)}
             title="새 과제"
-            className="inline-flex items-center justify-center p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+            className="inline-flex items-center justify-center p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
           >
-            {creating ? <Loader className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}
+            <Plus className="h-5 w-5" />
           </button>
         </div>
       )}
 
       {assignments.length === 0 ? (
-        <div className="border-2 border-dashed border-gray-200 rounded-xl h-40 flex flex-col items-center justify-center text-gray-400 text-sm gap-2">
-          <ClipboardList className="h-8 w-8" />
-          <span>등록된 과제가 없습니다.</span>
+        <div
+          onClick={isTeacher ? () => setShowCreateModal(true) : undefined}
+          className={`border-2 border-dashed border-gray-200 rounded-xl h-40 flex flex-col items-center justify-center text-gray-400 text-sm gap-2 ${
+            isTeacher ? 'cursor-pointer hover:border-blue-300 hover:text-blue-400 transition-colors' : ''
+          }`}
+        >
+          {isTeacher
+            ? <><Plus className="h-8 w-8" /><span>새 과제 추가</span></>
+            : <><ClipboardList className="h-8 w-8" /><span>등록된 과제가 없습니다.</span></>}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -260,6 +332,105 @@ const AssignmentTab = ({ classroomId, isTeacher, hideCreateButton, onUnsubmitted
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* 생성/가져오기 모달 */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">새 과제</h2>
+
+            {/* 탭 */}
+            <div className="flex border-b mb-4">
+              {[['new', '직접 만들기'], ['import', '가져오기']].map(([tab, label]) => (
+                <button key={tab} type="button" onClick={() => setCreateTab(tab)}
+                  className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors cursor-pointer ${
+                    createTab === tab
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* 직접 만들기 */}
+            {createTab === 'new' && (
+              <form onSubmit={handleCreate} className="flex flex-col">
+                <input autoFocus type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="과제 제목"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md mb-3 focus:ring-blue-500 focus:border-blue-500" />
+                <textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)}
+                  placeholder="설명 (선택)" rows={2}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md mb-4 focus:ring-blue-500 focus:border-blue-500 resize-none whitespace-normal break-keep" />
+                <div className="flex justify-end gap-3 mt-auto">
+                  <button type="button" onClick={closeCreateModal} title="취소"
+                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer flex items-center justify-center"><X className="h-5 w-5" /></button>
+                  <button type="submit" disabled={creating || !newTitle.trim()} title={creating ? '생성 중...' : '만들기'}
+                    className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer flex items-center justify-center">
+                    {creating ? <Loader className="animate-spin h-5 w-5" /> : <Plus className="h-5 w-5" />}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* 가져오기 */}
+            {createTab === 'import' && (
+              <div>
+                {importClassrooms.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-6 text-center">가져올 수 있는 다른 클래스가 없습니다.</p>
+                ) : (
+                  <>
+                    <div className="mb-3">
+                      <label className="block text-xs font-medium text-gray-500 mb-1">클래스 선택</label>
+                      <select value={importSrcCid}
+                        onChange={(e) => handleImportClassroomChange(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">-- 클래스를 선택하세요 --</option>
+                        {importClassrooms.map((cls) => (
+                          <option key={cls.id} value={cls.id}>{cls.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {importSrcCid && (
+                      <div className="mb-4">
+                        <label className="block text-xs font-medium text-gray-500 mb-1">과제 선택</label>
+                        {importAssignments.length === 0 ? (
+                          <p className="text-sm text-gray-400 py-2">이 클래스에 과제가 없습니다.</p>
+                        ) : (
+                          <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md divide-y">
+                            {importAssignments.map((asn) => (
+                              <button key={asn.id} type="button"
+                                onClick={() => setImportSelectedAsnId(asn.id)}
+                                className={`w-full text-left px-3 py-2.5 text-sm transition-colors cursor-pointer ${
+                                  importSelectedAsnId === asn.id
+                                    ? 'bg-blue-50 text-blue-700 font-medium'
+                                    : 'hover:bg-gray-50 text-gray-700'
+                                }`}>
+                                {asn.title}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="flex justify-end gap-3 mt-2">
+                  <button type="button" onClick={closeCreateModal} title="취소"
+                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer flex items-center justify-center"><X className="h-5 w-5" /></button>
+                  <button type="button" onClick={handleImportAssignment}
+                    disabled={!importSelectedAsnId || importing} title={importing ? '가져오는 중...' : '가져오기'}
+                    className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer flex items-center justify-center">
+                    {importing ? <Loader className="animate-spin h-5 w-5" /> : <Download className="h-5 w-5" />}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

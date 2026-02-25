@@ -1,4 +1,4 @@
-import { eq, and, inArray, desc, sql } from 'drizzle-orm';
+import { eq, and, inArray, desc, sql, ne } from 'drizzle-orm';
 import { db } from '../config/database.js';
 import {
   assignments, assignmentPages, assignmentSubmissions,
@@ -81,6 +81,15 @@ export async function deleteAssignment(id: string) {
   await db.delete(assignments).where(eq(assignments.id, id));
 }
 
+/** 과제 페이지의 이미지 URL 목록 */
+export async function getAssignmentPageImageUrls(assignmentId: string): Promise<string[]> {
+  const rows = await db
+    .select({ imageUrl: assignmentPages.imageUrl })
+    .from(assignmentPages)
+    .where(eq(assignmentPages.assignmentId, assignmentId));
+  return rows.map((r) => r.imageUrl);
+}
+
 /** 과제 소유자 확인 */
 export async function isAssignmentOwner(assignmentId: string, teacherId: string): Promise<boolean> {
   const rows = await db
@@ -161,6 +170,37 @@ export async function deleteAssignmentPage(id: string) {
     await db.delete(assignmentPages).where(eq(assignmentPages.id, id));
   }
   return page;
+}
+
+/** 과제 페이지 일괄 생성 (import용) */
+export async function createAssignmentPages(items: {
+  assignmentId: string;
+  imageUrl: string;
+  position: number;
+}[]) {
+  if (items.length === 0) return [];
+  return db
+    .insert(assignmentPages)
+    .values(items)
+    .returning();
+}
+
+/** 특정 URL이 다른 과제에서도 사용되는지 확인 (orphan 체크) */
+export async function findSharedAssignmentImageUrls(
+  urls: string[],
+  excludeAssignmentId: string,
+): Promise<string[]> {
+  if (urls.length === 0) return [];
+  const rows = await db
+    .select({ imageUrl: assignmentPages.imageUrl })
+    .from(assignmentPages)
+    .where(
+      and(
+        inArray(assignmentPages.imageUrl, urls),
+        ne(assignmentPages.assignmentId, excludeAssignmentId),
+      ),
+    );
+  return rows.map((r) => r.imageUrl);
 }
 
 // ─── Submissions ────────────────────────────────

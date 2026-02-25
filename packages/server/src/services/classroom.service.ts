@@ -1,6 +1,6 @@
 import { eq, and, count, desc, ne, inArray } from 'drizzle-orm';
 import { db } from '../config/database.js';
-import { classrooms, classroomMembers, profiles } from '../db/schema.js';
+import { classrooms, classroomMembers, profiles, chapters, pages, assignments, assignmentPages } from '../db/schema.js';
 
 /** 6자리 랜덤 클래스 코드 생성 */
 function generateClassCode(): string {
@@ -202,6 +202,61 @@ export async function isClassroomOwner(classroomId: string, teacherId: string): 
     .where(and(eq(classrooms.id, classroomId), eq(classrooms.teacherId, teacherId)))
     .limit(1);
   return rows.length > 0;
+}
+
+/** 교실의 모든 이미지 URL 수집 (챕터 페이지 + 과제 페이지) */
+export async function getClassroomImageUrls(classroomId: string): Promise<string[]> {
+  // 챕터 페이지 이미지
+  const chapterRows = await db
+    .select({ imageUrl: pages.imageUrl })
+    .from(pages)
+    .innerJoin(chapters, eq(pages.chapterId, chapters.id))
+    .where(eq(chapters.classroomId, classroomId));
+
+  // 과제 페이지 이미지
+  const assignmentRows = await db
+    .select({ imageUrl: assignmentPages.imageUrl })
+    .from(assignmentPages)
+    .innerJoin(assignments, eq(assignmentPages.assignmentId, assignments.id))
+    .where(eq(assignments.classroomId, classroomId));
+
+  return [
+    ...chapterRows.map((r) => r.imageUrl),
+    ...assignmentRows.map((r) => r.imageUrl),
+  ];
+}
+
+/** 다른 교실에서도 사용 중인 이미지 URL 찾기 (orphan 체크) */
+export async function findSharedClassroomImageUrls(
+  urls: string[],
+  excludeClassroomId: string,
+): Promise<string[]> {
+  if (urls.length === 0) return [];
+
+  // 다른 교실의 챕터 페이지에서 사용 중인 URL
+  const sharedChapterRows = await db
+    .select({ imageUrl: pages.imageUrl })
+    .from(pages)
+    .innerJoin(chapters, eq(pages.chapterId, chapters.id))
+    .where(and(
+      inArray(pages.imageUrl, urls),
+      ne(chapters.classroomId, excludeClassroomId),
+    ));
+
+  // 다른 교실의 과제 페이지에서 사용 중인 URL
+  const sharedAssignmentRows = await db
+    .select({ imageUrl: assignmentPages.imageUrl })
+    .from(assignmentPages)
+    .innerJoin(assignments, eq(assignmentPages.assignmentId, assignments.id))
+    .where(and(
+      inArray(assignmentPages.imageUrl, urls),
+      ne(assignments.classroomId, excludeClassroomId),
+    ));
+
+  return [
+    ...sharedChapterRows.map((r) => r.imageUrl),
+    ...sharedAssignmentRows.map((r) => r.imageUrl),
+  ];
 }
 
 /** 교실 멤버 확인 */

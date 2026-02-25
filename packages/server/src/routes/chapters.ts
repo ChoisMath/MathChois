@@ -12,7 +12,7 @@ import {
 } from '../services/chapter.service.js';
 import { getPagesByChapter, createPages, getPageImageUrls, findSharedImageUrls } from '../services/page.service.js';
 import { isClassroomOwner } from '../services/classroom.service.js';
-import { removeFile, urlToStoragePath } from '../services/storage.service.js';
+import { removeFile, urlToStoragePath, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
 
 export async function chapterRoutes(app: FastifyInstance) {
 
@@ -105,15 +105,33 @@ export async function chapterRoutes(app: FastifyInstance) {
     const sharedSet = new Set(sharedUrls);
     const orphanUrls = imageUrls.filter((url) => !sharedSet.has(url));
 
+    app.log.info({ chapterId: request.params.id, total: imageUrls.length, shared: sharedUrls.length, orphans: orphanUrls.length }, 'Chapter storage cleanup');
+
     await deleteChapter(request.params.id);
 
-    // DB 삭제 후 파일 정리 (실패해도 무시 — 고아 파일은 치명적이지 않음)
-    await Promise.all(
-      orphanUrls.map((url) => {
+    // DB 삭제 후 orphan 파일 정리
+    const deleteResults = await Promise.all(
+      orphanUrls.map(async (url) => {
         const parsed = urlToStoragePath(url);
-        if (parsed) return removeFile(parsed.bucket, parsed.path);
+        if (!parsed) {
+          app.log.warn({ url }, 'Failed to parse storage URL');
+          return false;
+        }
+        const ok = await removeFile(parsed.bucket, parsed.path);
+        if (!ok) app.log.warn({ bucket: parsed.bucket, path: parsed.path }, 'Failed to delete orphan file');
+        return ok;
       }),
     );
+
+    app.log.info({ deleted: deleteResults.filter(Boolean).length, failed: deleteResults.filter((r) => !r).length }, 'Chapter file cleanup result');
+
+    // orphan 파일 삭제 후, 빈 디렉토리 정리
+    if (orphanUrls.length > 0) {
+      const parentDir = urlToParentDir(orphanUrls[0]);
+      if (parentDir) {
+        await removeDirectoryIfEmpty(parentDir.bucket, parentDir.dir);
+      }
+    }
 
     return reply.status(204).send();
   });

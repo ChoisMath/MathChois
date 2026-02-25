@@ -154,7 +154,6 @@ const ClassroomDetail = () => {
   const [deleteTarget, setDeleteTarget]         = useState(null);
   const [showDeleteClassroom, setShowDeleteClassroom] = useState(false);
   const [deleting, setDeleting]     = useState(false);
-  const [creatingAssignment, setCreatingAssignment] = useState(false);
   const [unsubmittedCount, setUnsubmittedCount] = useState(0);
 
   /* PDF 다운로드 */
@@ -408,22 +407,6 @@ const ClassroomDetail = () => {
   if (loading) return <p className="text-gray-500">로딩 중...</p>;
   if (!classroom) return <p className="text-gray-500">클래스룸을 찾을 수 없습니다.</p>;
 
-  /* ── 과제 생성 핸들러 (── 탭 버튼용) ── */
-  const handleCreateAssignment = async () => {
-    setCreatingAssignment(true);
-    try {
-      const newAsn = await api.post(`/api/classrooms/${id}/assignments`, {
-        title: '새 과제',
-      });
-      if (newAsn) {
-        navigate(`/teacher/classrooms/${id}/assignments/${newAsn.id}/edit`);
-      }
-    } catch (err) {
-      console.error('[ClassroomDetail] 과제 생성 오류:', err);
-    }
-    setCreatingAssignment(false);
-  };
-
   return (
     <>
       <div className="max-w-5xl mx-auto space-y-6">
@@ -501,15 +484,6 @@ const ClassroomDetail = () => {
                     className="inline-flex items-center justify-center p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
                   >
                     <Plus className="h-5 w-5" />
-                  </button>
-                )}
-                {activeTab === 'assignments' && (
-                  <button
-                    onClick={handleCreateAssignment}
-                    disabled={creatingAssignment} title={creatingAssignment ? '생성 중...' : '새 과제'}
-                    className="inline-flex items-center justify-center p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
-                  >
-                    {creatingAssignment ? <Loader className="animate-spin h-5 w-5" /> : <Plus className="h-5 w-5" /> }
                   </button>
                 )}
                 <button
@@ -630,7 +604,6 @@ const ClassroomDetail = () => {
             <AssignmentTab
               classroomId={id}
               isTeacher={isTeacher}
-              hideCreateButton
               onUnsubmittedCount={!isTeacher ? setUnsubmittedCount : undefined}
             />
           </Suspense>

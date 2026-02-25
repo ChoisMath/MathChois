@@ -37,3 +37,18 @@ export function emitStudentNoteUpdated(
     updatedAt: updatedAt.toISOString(),
   });
 }
+
+/**
+ * 서버 라우트에서 호출: 교사 필기 변경 브로드캐스트
+ * Room: `teacher-notes:{pageId}` — 해당 페이지를 보는 모든 학생에게 전송
+ */
+export function emitTeacherNoteUpdated(
+  io: Server,
+  pageId: string,
+  updatedAt: Date,
+) {
+  io.to(`teacher-notes:${pageId}`).emit('teacher-note:updated', {
+    pageId,
+    updatedAt: updatedAt.toISOString(),
+  });
+}

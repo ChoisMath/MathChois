@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
 import { getIO } from '../socket/index.js';
-import { emitStudentNoteUpdated } from '../socket/handlers/notes.js';
+import { emitStudentNoteUpdated, emitTeacherNoteUpdated } from '../socket/handlers/notes.js';
 import {
   getStudentNote,
   upsertStudentNote,
@@ -142,11 +142,19 @@ export async function noteRoutes(app: FastifyInstance) {
   }>('/api/notes/teacher/:pageId', {
     preHandler: [authenticate],
   }, async (request) => {
-    return upsertTeacherNote(
+    const result = await upsertTeacherNote(
       request.user.sub,
       request.params.pageId,
       request.body.excalidrawData,
     );
+
+    // Socket.IO 브로드캐스트: 해당 페이지를 보는 학생에게 알림
+    try {
+      const io = getIO();
+      emitTeacherNoteUpdated(io, request.params.pageId, result.updatedAt!);
+    } catch { /* Socket.IO 미초기화 시 무시 */ }
+
+    return result;
   });
 
   // ─── Assignment Notes ─────────────────────────

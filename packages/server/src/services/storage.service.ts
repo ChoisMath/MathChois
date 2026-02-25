@@ -63,6 +63,33 @@ export async function removeFiles(bucket: string, filePaths: string[]): Promise<
   await Promise.all(filePaths.map((p) => removeFile(bucket, p)));
 }
 
+/** 디렉토리 삭제 (비어 있을 때만) */
+export async function removeDirectoryIfEmpty(bucket: string, dirPath: string): Promise<boolean> {
+  try {
+    const absPath = safePath(bucket, dirPath);
+    const entries = await fs.readdir(absPath);
+    if (entries.length === 0) {
+      await fs.rmdir(absPath);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** URL에서 부모 디렉토리 경로 추출 */
+export function urlToParentDir(url: string): { bucket: string; dir: string } | null {
+  const parsed = urlToStoragePath(url);
+  if (!parsed) return null;
+  const lastSlash = parsed.path.lastIndexOf('/');
+  if (lastSlash === -1) return null;
+  return {
+    bucket: parsed.bucket,
+    dir: parsed.path.slice(0, lastSlash),
+  };
+}
+
 /** URL에서 storage path 추출: /api/files/chapter-pages/chapters/xxx → chapters/xxx */
 export function urlToStoragePath(url: string): { bucket: string; path: string } | null {
   const prefix = '/api/files/';

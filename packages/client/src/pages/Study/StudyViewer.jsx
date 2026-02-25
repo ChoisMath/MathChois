@@ -21,58 +21,146 @@ const _commentsCache = new Map(); // `${userId}_${pageId}` → commentEls[]
 
 const TEACHER_NOTE_PREFIX = '__tn_';
 
-/* ─────────── 교사 필기 모달 ─────────── */
-function TeacherNotesModal({ page, pages, onClose }) {
+/* ── 교사 필기 모달 세션 캐시 (모달 닫아도 유지) ── */
+const _teacherNotesModalCache = new Map(); // pageId → { elements, files, bgPosition }
+
+/* ─────────── 교사 필기 모달 (실시간 + 페이지 이동) ─────────── */
+function TeacherNotesModal({ initialPageId, pages, onClose }) {
+  const [currentPageIndex, setCurrentPageIndex] = useState(() =>
+    Math.max(0, pages.findIndex((p) => p.id === initialPageId))
+  );
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const containerRef = useRef(null);
+  const excApiRef = useRef(null);
   const [status, setStatus] = useState('loading'); // 'loading' | 'empty' | 'ok'
   const [noteElements, setNoteElements] = useState([]);
   const [noteFiles, setNoteFiles] = useState({});
   const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
   const bgPositionRef = useRef(null);
   const [dbBgPosition, setDbBgPosition] = useState(null);
+  const noteElementsRef = useRef([]);
+  const noteFilesRef = useRef({});
 
+  const currentPage = pages[currentPageIndex];
+  const hasPrev = currentPageIndex > 0;
+  const hasNext = currentPageIndex < pages.length - 1;
+
+  /* refs 동기화 */
+  useEffect(() => { noteElementsRef.current = noteElements; }, [noteElements]);
+  useEffect(() => { noteFilesRef.current = noteFiles; }, [noteFiles]);
+
+  /* ESC 닫기 */
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  /* 교사 필기 로드 (캐시 우선) */
   useEffect(() => {
-    const load = async () => {
-      setStatus('loading');
-      try {
-        const data = await api.get(`/api/notes/teacher-for-page/${page.id}`);
-        const els = (data || []).flatMap((n) => n.excalidrawData?.elements || []);
-        if (els.length === 0) {
-          setStatus('empty');
-        } else {
-          const files = Object.assign({}, ...(data || []).map((n) => n.excalidrawData?.files ?? {}));
-          const bgPos = (data || []).find((n) => n.excalidrawData?.bgPosition)?.excalidrawData.bgPosition;
-          setNoteElements(els);
-          setNoteFiles(files);
-          setDbBgPosition(bgPos || null);
-          setStatus('ok');
-        }
-      } catch (err) {
-        console.error('교사 필기 로드 실패:', err);
+    if (!currentPage) return;
+    const pid = currentPage.id;
+
+    const applyData = (d) => {
+      if (d.elements.length === 0) {
+        setNoteElements([]);
+        setNoteFiles({});
+        setDbBgPosition(null);
         setStatus('empty');
+      } else {
+        setNoteElements(d.elements);
+        setNoteFiles(d.files);
+        setDbBgPosition(d.bgPosition);
+        setStatus('ok');
       }
     };
-    load();
-  }, [page.id]);
 
+    if (_teacherNotesModalCache.has(pid)) {
+      applyData(_teacherNotesModalCache.get(pid));
+      return;
+    }
+
+    setStatus('loading');
+    excApiRef.current = null;
+
+    api.get(`/api/notes/teacher-for-page/${pid}`)
+      .then((data) => {
+        const els = (data || []).flatMap((n) => n.excalidrawData?.elements || []);
+        const files = Object.assign({}, ...(data || []).map((n) => n.excalidrawData?.files ?? {}));
+        const bgPos = (data || []).find((n) => n.excalidrawData?.bgPosition)?.excalidrawData.bgPosition || null;
+        const d = { elements: els, files, bgPosition: bgPos };
+        _teacherNotesModalCache.set(pid, d);
+        applyData(d);
+      })
+      .catch((err) => {
+        console.error('교사 필기 로드 실패:', err);
+        setStatus('empty');
+      });
+  }, [currentPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Socket.IO 실시간 구독: teacher-notes:{pageId} */
+  useEffect(() => {
+    if (!currentPage) return;
+
+    return subscribeToRoom(
+      `teacher-notes:${currentPage.id}`,
+      'teacher-note:updated',
+      async () => {
+        try {
+          const data = await api.get(`/api/notes/teacher-for-page/${currentPage.id}`);
+          const els = (data || []).flatMap((n) => n.excalidrawData?.elements || []);
+          const files = Object.assign({}, ...(data || []).map((n) => n.excalidrawData?.files ?? {}));
+          const bgPos = (data || []).find((n) => n.excalidrawData?.bgPosition)?.excalidrawData.bgPosition || null;
+
+          /* 캐시 갱신 */
+          _teacherNotesModalCache.set(currentPage.id, { elements: els, files, bgPosition: bgPos });
+
+          if (els.length === 0) {
+            setNoteElements([]);
+            setNoteFiles({});
+            setStatus('empty');
+            return;
+          }
+
+          setNoteElements(els);
+          setNoteFiles(files);
+          setDbBgPosition(bgPos);
+
+          /* Excalidraw가 마운트된 상태면 scene 실시간 업데이트 */
+          const excApi = excApiRef.current;
+          if (excApi) {
+            const noteFilesList = Object.values(files);
+            if (noteFilesList.length > 0) excApi.addFiles(noteFilesList);
+            await new Promise((r) => requestAnimationFrame(r));
+            const bgEl = excApi.getSceneElements().find((el) => el.id === BG_ELEMENT_ID);
+            const preserved = bgEl ? [bgEl] : [];
+            excApi.updateScene({ elements: [...preserved, ...els], commitToHistory: false });
+          } else {
+            /* Excalidraw 아직 미마운트 → status 변경으로 리렌더 트리거 */
+            setStatus('ok');
+          }
+        } catch (err) {
+          console.error('교사 필기 실시간 갱신 실패:', err);
+        }
+      }
+    );
+  }, [currentPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Excalidraw 마운트: bg + 교사 필기 elements */
   const handleMount = useCallback(async (excApi) => {
-    if (!page.imageUrl || !containerRef.current) return;
+    excApiRef.current = excApi;
+    if (!currentPage?.imageUrl || !containerRef.current) return;
     try {
-      const { dataUrl, mimeType } = await fetchAsDataUrl(page.imageUrl);
+      const { dataUrl, mimeType } = await fetchAsDataUrl(currentPage.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
       const W = containerRef.current.clientWidth  || 800;
       const H = containerRef.current.clientHeight || 900;
       const scale = Math.min(W / iW, H / iH);
 
       let bgW, bgH, bgX, bgY;
-      if (dbBgPosition) {
-        ({ width: bgW, height: bgH, x: bgX, y: bgY } = dbBgPosition);
+      const savedBg = dbBgPosition;
+      if (savedBg) {
+        ({ width: bgW, height: bgH, x: bgX, y: bgY } = savedBg);
       } else {
         bgW = iW * scale;
         bgH = iH * scale;
@@ -82,18 +170,16 @@ function TeacherNotesModal({ page, pages, onClose }) {
 
       bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
       excApi.addFiles([{ id: '__bg_file__', dataURL: dataUrl, mimeType, created: Date.now() }]);
-      /* 교사 필기에 삽입된 이미지 파일 복원 */
-      const noteFilesList = Object.values(noteFiles);
+      const noteFilesList = Object.values(noteFilesRef.current);
       if (noteFilesList.length > 0) excApi.addFiles(noteFilesList);
-      /* addFiles의 React 상태 커밋 후 updateScene — 별도 렌더 사이클에서 실행해야 이미지가 표시됨 */
       await new Promise((r) => requestAnimationFrame(r));
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
-      excApi.updateScene({ elements: [bgEl, ...noteElements] });
+      excApi.updateScene({ elements: [bgEl, ...noteElementsRef.current] });
     } catch (err) {
       console.error('교사 필기 모달 bg 로드 실패:', err);
-      excApi.updateScene({ elements: noteElements });
+      excApi.updateScene({ elements: noteElementsRef.current });
     }
-  }, [page.imageUrl, noteElements, noteFiles, dbBgPosition]);
+  }, [currentPage?.imageUrl, dbBgPosition]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div
@@ -101,19 +187,18 @@ function TeacherNotesModal({ page, pages, onClose }) {
       onClick={onClose}
     >
       <div
-        className="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden"
+        className="relative bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* ── 헤더 ── */}
         <div className="h-12 flex items-center justify-between px-4 border-b flex-shrink-0">
           <span className="font-semibold text-gray-800">교사 필기</span>
           <div className="flex items-center gap-2">
             {status === 'ok' && (
               <PdfDownloadButton
-                onClick={() => downloadPage('교사_필기', noteElements, noteFiles, page.imageUrl, bgPositionRef.current)}
+                onClick={() => downloadPage('교사_필기', noteElements, noteFiles, currentPage.imageUrl, bgPositionRef.current)}
                 onDownloadAll={async () => {
                    const title = `교사_필기_전체`;
-                   const pageIds = pages.map(p => p.id).join(',');
-                   /* 챕터 전체 페이지의 교사 필기를 각각 조회 */
                    const allNotesPerPage = await Promise.all(
                      pages.map(async (pg) => {
                        try {
@@ -131,7 +216,6 @@ function TeacherNotesModal({ page, pages, onClose }) {
                      const bgPos = notes.find(n => n.excalidrawData?.bgPosition)?.excalidrawData.bgPosition;
                      teacherNotesMap[pid] = { elements: els, files, bgPosition: bgPos || null };
                    }
-
                    const pageDataList = pages.map(pg => {
                      const tNote = teacherNotesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
                      return {
@@ -147,46 +231,101 @@ function TeacherNotesModal({ page, pages, onClose }) {
                 className="py-1 px-2 text-xs"
               />
             )}
+            {/* 이전/다음 페이지 */}
+            <button
+              onClick={() => hasPrev && setCurrentPageIndex((i) => i - 1)}
+              disabled={!hasPrev}
+              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="text-sm text-gray-500 min-w-[3rem] text-center">
+              {currentPageIndex + 1} / {pages.length}
+            </span>
+            <button
+              onClick={() => hasNext && setCurrentPageIndex((i) => i + 1)}
+              disabled={!hasNext}
+              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            {/* 사이드바 토글 */}
+            <button
+              onClick={() => setSidebarOpen((v) => !v)}
+              title="페이지 목록"
+              className="p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
             <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer">
               <X className="h-5 w-5" />
             </button>
           </div>
         </div>
-        <div ref={containerRef} className="flex-1 relative overflow-hidden bg-gray-50">
-          {status === 'loading' && (
-            <div className="flex items-center justify-center h-full text-gray-400">불러오는 중...</div>
-          )}
-          {status === 'empty' && (
-            <div className="flex items-center justify-center h-full text-gray-400">
-              이 페이지에 교사 필기가 없습니다.
+
+        {/* ── 본문: 사이드바 + Excalidraw ── */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* 페이지 썸네일 사이드바 */}
+          {sidebarOpen && (
+            <div className="w-28 bg-gray-50 border-r overflow-y-auto flex-shrink-0">
+              <div className="space-y-1.5 p-1.5">
+                {pages.map((pg, idx) => (
+                  <button
+                    key={pg.id}
+                    onClick={() => setCurrentPageIndex(idx)}
+                    className={`relative block w-full rounded overflow-hidden cursor-pointer ${
+                      idx === currentPageIndex
+                        ? 'ring-2 ring-blue-500'
+                        : 'ring-1 ring-gray-200 hover:ring-gray-400'
+                    }`}
+                  >
+                    <img src={pg.imageUrl} alt={`p.${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                    <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] text-center py-0.5">
+                      {idx + 1}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
-          {status === 'ok' && (
-            <>
-              <style>{ALWAYS_HIDE_CSS}{PANEL_HIDE_CSS}</style>
-              <Excalidraw
-                key={page.id + '_modal'}
-                excalidrawAPI={handleMount}
-                initialData={{
-                  elements: noteElements,
-                  appState: { viewBackgroundColor: 'transparent', scrollX: 0, scrollY: 0 },
-                }}
-                viewModeEnabled={true}
-                UIOptions={{
-                  canvasActions: {
-                    changeViewBackgroundColor: false,
-                    clearCanvas:               false,
-                    export:                    false,
-                    loadScene:                 false,
-                    saveToActiveFile:          false,
-                    toggleTheme:               false,
-                    saveAsImage:               false,
-                  },
-                  tools: { image: false },
-                }}
-              />
-            </>
-          )}
+
+          {/* Excalidraw 영역 */}
+          <div ref={containerRef} className="flex-1 relative overflow-hidden bg-gray-50">
+            {status === 'loading' && (
+              <div className="flex items-center justify-center h-full text-gray-400">불러오는 중...</div>
+            )}
+            {status === 'empty' && (
+              <div className="flex items-center justify-center h-full text-gray-400">
+                이 페이지에 교사 필기가 없습니다.
+              </div>
+            )}
+            {status === 'ok' && (
+              <>
+                <style>{ALWAYS_HIDE_CSS}{PANEL_HIDE_CSS}</style>
+                <Excalidraw
+                  key={currentPage.id + '_tmodal'}
+                  excalidrawAPI={handleMount}
+                  initialData={{
+                    elements: noteElements,
+                    appState: { viewBackgroundColor: 'transparent', scrollX: 0, scrollY: 0 },
+                  }}
+                  viewModeEnabled={true}
+                  UIOptions={{
+                    canvasActions: {
+                      changeViewBackgroundColor: false,
+                      clearCanvas:               false,
+                      export:                    false,
+                      loadScene:                 false,
+                      saveToActiveFile:          false,
+                      toggleTheme:               false,
+                      saveAsImage:               false,
+                    },
+                    tools: { image: false },
+                  }}
+                />
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -882,7 +1021,7 @@ const StudyViewer = () => {
       {/* ── 교사 필기 모달 ── */}
       {showTeacherNotesModal && currentPage && (
         <TeacherNotesModal
-          page={currentPage}
+          initialPageId={currentPage.id}
           pages={pages}
           onClose={() => setShowTeacherNotesModal(false)}
         />
