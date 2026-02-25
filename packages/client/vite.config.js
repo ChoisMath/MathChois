@@ -35,10 +35,6 @@ export default defineConfig({
           ) {
             return 'vendor-react';
           }
-          /* Supabase: 별도 캐시 (마이그레이션 완료 후 제거) */
-          if (id.includes('node_modules/@supabase')) {
-            return 'vendor-supabase';
-          }
           /* Lucide 아이콘: 별도 캐시 */
           if (id.includes('node_modules/lucide-react')) {
             return 'vendor-lucide';

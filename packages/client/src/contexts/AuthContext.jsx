@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { refreshToken, logout as apiLogout, updateRole as apiUpdateRole, setAccessToken } from '../lib/api';
+import { connectSocket, disconnectSocket, reconnectWithToken } from '../lib/socket';
 
 const AuthContext = createContext(null);
 
@@ -26,6 +27,8 @@ export function AuthProvider({ children }) {
         const result = await refreshToken();
         if (result) {
           setProfile(result.profile);
+          // 세션 복원 성공 → Socket.IO 연결
+          try { connectSocket(); } catch { /* 토큰 없으면 무시 */ }
         }
       } catch (err) {
         console.error('[Auth] 초기화 오류:', err);
@@ -46,6 +49,7 @@ export function AuthProvider({ children }) {
   // ─── 로그아웃 ──────────────────────────────────
 
   const signOut = useCallback(async () => {
+    disconnectSocket();
     await apiLogout();
     setProfile(null);
   }, []);
@@ -56,6 +60,7 @@ export function AuthProvider({ children }) {
     try {
       const result = await apiUpdateRole(role);
       setProfile(result.profile);
+      reconnectWithToken(); // 새 토큰으로 소켓 재연결
       return result.profile;
     } catch (err) {
       console.error('역할 업데이트 실패:', err);

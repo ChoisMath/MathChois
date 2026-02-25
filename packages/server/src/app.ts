@@ -20,6 +20,7 @@ export function buildApp() {
       level: env.NODE_ENV === 'production' ? 'info' : 'debug',
     },
     bodyLimit: 5 * 1024 * 1024, // 5MB for Excalidraw JSON payloads
+    trustProxy: true, // Railway 리버스 프록시 뒤에서 X-Forwarded-* 헤더 신뢰
   });
 
   // ─── Plugins ────────────────────────────────────────

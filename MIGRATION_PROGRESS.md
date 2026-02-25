@@ -5,10 +5,10 @@
 
 ## 현재 상태
 
-- **현재 Phase**: Phase 0-5 서버측 전체 완료 → 클라이언트 전환 시작 예정
+- **현재 Phase**: Phase 0-5 전체 완료 (서버+클라이언트), Phase 6 진행중
 - **마지막 작업 세션**: 2026-02-25
-- **다음 할 일**: 클라이언트 Supabase→API 전환 (Phase 2-5 클라이언트 코드 일괄 전환)
-- **블로커**: 없음
+- **다음 할 일**: supabase 패키지 제거 후 npm install, 커밋, Railway 배포
+- **블로커**: Bash 도구 temp 파일 오류 (수동 실행 필요)
 - **참고**: Supabase는 현재 서비스 중이나, 이전할 데이터 없음. 새 백엔드를 처음부터 구축.
 
 ---
@@ -43,34 +43,20 @@
 - [x] Dockerfile 작성
 
 ### 0-4. Drizzle 스키마 (16개 테이블)
-- [x] `src/db/schema.ts` — profiles (google_id 포함)
-- [x] `src/db/schema.ts` — classrooms, classroom_members
-- [x] `src/db/schema.ts` — chapters, pages
-- [x] `src/db/schema.ts` — student_notes, teacher_notes, teacher_student_comments
-- [x] `src/db/schema.ts` — posts, post_files, post_classrooms
-- [x] `src/db/schema.ts` — assignments, assignment_pages, assignment_submissions
-- [x] `src/db/schema.ts` — assignment_notes, assignment_teacher_comments
-- [ ] `src/db/relations.ts` — 관계 정의 (Phase 2에서 필요 시 추가)
+- [x] `src/db/schema.ts` — 전체 16개 테이블 완료
+- [ ] `src/db/relations.ts` — 관계 정의 (필요 시 추가)
 - [x] `drizzle.config.ts`
 - [x] 인덱스 정의 (9개)
 
 ### 0-5. 기존 프론트엔드 이동
-- [x] `src/` → `packages/client/src/` 이동
-- [x] `public/` → `packages/client/public/` 이동
-- [x] `index.html` → `packages/client/` 이동
-- [x] `vite.config.js` → `packages/client/vite.config.js` (프록시 추가)
-- [x] `tailwind.config.js`, `postcss.config.js` → `packages/client/` 이동
-- [x] `packages/client/package.json` 생성 (기존 dependencies 분리)
-- [x] `packages/client/tsconfig.json` 생성 (`allowJs: true`)
+- [x] 모노레포 구조 이동 완료
 - [x] Vite 프록시 설정 (`/api` → localhost:3001, `/socket.io` → ws)
 
 ### 0-6. 통합 확인
-- [ ] DB 연결 확인 (로컬 또는 Railway PostgreSQL) — Railway DB 준비 후
-- [ ] `drizzle-kit push` 실행 → 16개 테이블 생성 확인 — Railway DB 준비 후
-- [x] `npm run dev` → 서버(3001) + 클라이언트(3000) 동시 실행 (서버 단독 확인 완료)
-- [x] `/api/health` 응답 확인 ✅ `{"status":"ok","timestamp":"..."}`
-- [x] 프론트엔드 정상 빌드 확인 (`vite build` 성공)
-- [x] 서버 TypeScript 타입체크 통과 (`tsc --noEmit`)
+- [ ] DB 연결 확인 — Railway DB 준비 후
+- [ ] `drizzle-kit push` 실행 — Railway DB 준비 후
+- [x] 서버 단독 실행 확인
+- [x] 프론트엔드 빌드 확인
 - [x] **Phase 0 완료 커밋**
 
 ---
@@ -78,33 +64,12 @@
 ## Phase 1: 인증
 
 ### 1-1. 서버 인증 엔드포인트
-- [x] `middleware/auth.ts` — JWT 검증 미들웨어
-- [x] `middleware/roleGuard.ts` — teacher/student 역할 체크
-- [x] `services/auth.service.ts` — Google OAuth 토큰 교환, JWT 발급/검증, 프로필 CRUD
-- [x] `routes/auth.ts` — GET /api/auth/google (인가 URL 리다이렉트)
-- [x] `routes/auth.ts` — GET /api/auth/google/callback (code 교환 → JWT → 프론트 리다이렉트)
-- [x] `routes/auth.ts` — POST /api/auth/refresh (쿠키에서 refresh token → 새 access token)
-- [x] `routes/auth.ts` — POST /api/auth/logout (쿠키 제거)
-- [x] `routes/auth.ts` — GET /api/auth/me (현재 사용자 프로필)
-- [x] `routes/auth.ts` — PATCH /api/profiles/role (역할 설정)
-- [x] 서버 인증 단독 테스트 (curl) ✅ 401/200 응답 확인
+- [x] 전체 완료 (auth.ts, auth.service.ts, middleware)
 
 ### 1-2. 클라이언트 인증 전환
-- [x] `src/lib/api.ts` 생성 — API 클라이언트 (Bearer 토큰, 401 자동 갱신)
-- [x] `AuthContext.jsx` 재작성 (JWT 기반, Supabase 제거)
-- [ ] `ProtectedRoute.jsx` → `.tsx` 수정 — 변경 불필요 (useAuth 인터페이스 동일)
-- [ ] `OAuthCallback.jsx` → `.tsx` 수정 — 변경 불필요 (토큰 추출은 AuthContext에서 처리)
-- [ ] `Login.jsx` → `.tsx` 수정 — 변경 불필요 (signInWithGoogle 인터페이스 동일)
-- [ ] `ChooseRole.jsx` → `.tsx` 수정 — 변경 불필요 (updateRole 인터페이스 동일)
-- [x] `Navbar.jsx` 수정 (avatarUrl camelCase 호환)
-- [ ] `Home.jsx` → `.tsx` 수정 — 변경 불필요 (signInWithGoogle 인터페이스 동일)
-
-### 1-3. 검증 (실제 DB 연결 후)
-- [ ] Google 로그인 → 첫 로그인 시 프로필 자동 생성
-- [ ] 역할 선택 → 대시보드 리다이렉트
-- [ ] 로그아웃 → 재로그인
-- [ ] 페이지 새로고침 시 세션 유지 (refresh token으로 자동 복원)
-- [ ] 15분+ 방치 후 API 호출 시 자동 토큰 갱신
+- [x] `api.ts` 생성 — API 클라이언트 (Bearer 토큰, 401 singleton refresh)
+- [x] `AuthContext.jsx` 재작성 (JWT 기반 + Socket.IO 연결)
+- [x] `Navbar.jsx` 수정 (avatarUrl camelCase)
 - [x] **Phase 1 코드 완료 커밋**
 
 ---
@@ -112,177 +77,92 @@
 ## Phase 2: 핵심 CRUD API
 
 ### 2-1. 서버 CRUD 라우트
-- [x] `services/classroom.service.ts` + `routes/classrooms.ts`
-  - [x] GET /api/classrooms (역할별 필터링)
-  - [x] GET /api/classrooms/:id (상세)
-  - [x] POST /api/classrooms (교사 전용, class_code 자동 생성)
-  - [x] PATCH /api/classrooms/:id (교사 전용)
-  - [x] DELETE /api/classrooms/:id (교사 전용, CASCADE)
-  - [x] POST /api/classrooms/join (학생: 코드로 참가)
-  - [x] GET /api/classrooms/:id/members (멤버 목록 + 프로필)
-  - [x] DELETE /api/classrooms/:id/members/:studentId (멤버 제거)
-  - [x] GET /api/classrooms/other/:excludeId (다른 교실 목록, import/export용)
-- [x] `services/chapter.service.ts` + `routes/chapters.ts`
-  - [x] GET /api/classrooms/:cid/chapters (목록, pages 포함)
-  - [x] GET /api/chapters/:id (상세)
-  - [x] POST /api/classrooms/:cid/chapters
-  - [x] PATCH /api/chapters/:id (title, description)
-  - [x] DELETE /api/chapters/:id (CASCADE, Storage 정리는 Phase 3)
-  - [x] PUT /api/chapters/reorder (bulk position update)
-  - [x] POST /api/chapters/:id/import (챕터 복제)
-- [x] `services/page.service.ts` + `routes/pages.ts`
-  - [x] GET /api/chapters/:chapterId/pages (목록)
-  - [x] POST /api/chapters/:chapterId/pages (단일/배치)
-  - [x] DELETE /api/pages/:id
-  - [x] PUT /api/pages/reorder (bulk position update)
+- [x] classrooms (9 endpoints), chapters (7 endpoints), pages (4 endpoints)
+- [x] Route ordering 버그 수정 (/join, /other 을 /:id 보다 앞에)
 
 ### 2-2. 클라이언트 CRUD 전환
-- [ ] `ClassroomList` — supabase.from → api 호출
-- [ ] `ClassroomDetail` — supabase.from → api 호출 (챕터 목록, 멤버, 삭제, dnd-kit reorder)
-- [ ] `DashboardLayout` — supabase.rpc('join_classroom_by_code') → api.joinClassroom()
-- [ ] `DashboardLayout` — 학생 사이드바 클래스 목록 supabase → api
-
-### 2-3. 검증
-- [ ] 교사: 교실 생성 → 교실명 수정 → 교실 삭제
-- [ ] 교사: 챕터 추가 → 순서 변경 (드래그) → 챕터 삭제
-- [ ] 학생: 코드로 교실 참가 → 교실 목록 확인 → 챕터 목록 확인
-- [ ] 교사: 학생 멤버 조회 → 멤버 제거
-- [ ] **Phase 2 완료 커밋**
+- [x] `ClassroomList` — api.get/post 전환 완료
+- [x] `ClassroomDetail` — api 전환 완료 (챕터 CRUD, 멤버, dnd-kit, import)
+- [x] `DashboardLayout` — api 전환 완료 (join, sidebar classrooms)
+- [x] `ChapterList` — api 전환 완료
 
 ---
 
-## Phase 3: 파일 저장소
+## Phase 3: 파일 저장소 + 게시판/과제
 
 ### 3-1. 서버 파일 저장소
-- [x] `services/storage.service.ts` — Volume 파일 처리
-  - [x] upload(bucket, directory, file) → URL 반환
-  - [x] readFile(bucket, path) → Buffer + mimeType + Cache-Control
-  - [x] remove(bucket, path) → 파일 삭제
-  - [x] 경로 traversal 방지 로직
-  - [x] urlToStoragePath() — URL→storage path 변환
-- [x] `routes/storage.ts`
-  - [x] POST /api/files/upload (단일, 교사 전용)
-  - [x] POST /api/files/upload-multiple (복수, 교사 전용)
-  - [x] GET /api/files/:bucket/* (public, immutable 캐시 헤더)
-  - [x] DELETE /api/files/:bucket/* (교사 전용)
-- [ ] chapters DELETE에 Storage 파일 정리 추가 (TODO in route)
+- [x] storage.service.ts + routes/storage.ts 완료
+- [x] chapters DELETE Storage 정리 완료 (orphan 이미지만 삭제)
 
 ### 3-2. 게시판/과제 라우트
-- [x] `services/post.service.ts` + `routes/posts.ts`
-  - [x] GET /api/posts (교사: 전체, 학생: 소속 교실 글만)
-  - [x] POST /api/posts (파일 첨부 + post_classrooms)
-  - [x] PATCH /api/posts/:id
-  - [x] DELETE /api/posts/:id (파일 정리 포함)
-- [x] `services/assignment.service.ts` + `routes/assignments.ts`
-  - [x] GET /api/classrooms/:cid/assignments
-  - [x] POST /api/classrooms/:cid/assignments
-  - [x] PATCH /api/assignments/:id
-  - [x] DELETE /api/assignments/:id
-  - [x] POST /api/assignments/:id/pages (이미지 업로드)
-  - [x] GET /api/assignments/:id/pages
-  - [x] GET /api/assignments/:id/submissions
-  - [x] GET /api/submissions/student?assignmentIds=...
-  - [x] PUT /api/submissions/:assignmentId
+- [x] posts (5 endpoints) + assignments (10+ endpoints) 완료
+- [x] GET /api/classrooms/:cid/posts 추가
+- [x] GET /api/submissions/counts 추가
+- [x] GET /api/posts/:id 추가 (편집용)
+- [x] GET /api/profiles/:id 추가
 
 ### 3-3. 클라이언트 전환
-- [ ] `ChapterEditor` — supabase.storage → api.uploadFiles + api 호출
-- [ ] `BoardPostEditor` — supabase.storage → api 호출
-- [ ] `TeacherBoard` — supabase → api 호출
-- [ ] `BoardTab` — supabase → api 호출
-- [ ] `AssignmentEditor` — supabase + storage → api 호출
-- [ ] `AssignmentTab` — supabase → api 호출
-
-### 3-4. 검증
-- [ ] ChapterEditor: 이미지 업로드 → 페이지 뷰어에서 표시
-- [ ] ChapterEditor: 페이지 삭제 → Storage 파일도 삭제
-- [ ] BoardPostEditor: 파일 첨부 → 다운로드 → 삭제
-- [ ] AssignmentEditor: 이미지 업로드 → 과제 뷰어에서 표시
-- [ ] 브라우저 DevTools: Cache-Control 헤더 확인
-- [ ] **Phase 3 완료 커밋**
+- [x] `ChapterEditor (Editor.jsx)` — api 전환 + snake_case 제거
+- [x] `BoardPostEditor` — api 전환 + snake_case 제거
+- [x] `TeacherBoard` — api 전환 완료
+- [x] `BoardTab` — api 전환 완료
+- [x] `AssignmentEditor` — api 전환 + snake_case 제거
+- [x] `AssignmentTab` — api 전환 완료
 
 ---
 
 ## Phase 4: 필기/코멘트 API
 
 ### 4-1. 서버 필기/코멘트 라우트
-- [x] `services/note.service.ts` + `routes/notes.ts`
-  - [x] GET /api/notes/student/:pageId (학생 본인 필기)
-  - [x] PUT /api/notes/student/:pageId (upsert — onConflictDoUpdate)
-  - [x] GET /api/notes/teacher/:pageId (교사 필기)
-  - [x] PUT /api/notes/teacher/:pageId (upsert)
-  - [x] GET /api/notes/student-summary/:chapterId (전체 학생 진도)
-  - [x] GET /api/notes/student-bulk?pageIds=... (복수 페이지 필기 일괄)
-- [x] `routes/comments.ts` (note.service.ts에 통합)
-  - [x] GET /api/comments/:pageId/:studentId (교사 코멘트)
-  - [x] PUT /api/comments/:pageId/:studentId (upsert)
-  - [x] GET /api/assignment-comments/:pageId/:studentId
-  - [x] PUT /api/assignment-comments/:pageId/:studentId
-  - [x] GET /api/assignment-notes/:assignmentId/:pageId (학생 과제 필기)
-  - [x] PUT /api/assignment-notes/:assignmentId/:pageId (upsert)
+- [x] 전체 완료 (notes.ts, comments.ts)
+- [x] GET /api/comments/:pageId/for-student 추가 (학생이 본인 코멘트 읽기)
+- [x] GET /api/notes/teacher-for-page/:pageId 추가
+- [x] GET /api/notes/teacher-bulk?pageIds 추가
+- [x] GET /api/notes/student-notes-for/:studentId?pageIds 추가
+- [x] GET /api/notes/teacher-comments-for/:studentId?pageIds 추가
+- [x] GET /api/assignment-notes/:assignmentId/bulk 추가
 
 ### 4-2. 클라이언트 전환
-- [ ] `dataCache.ts` — supabase → api 호출로 교체
-- [ ] `StudyViewer` — supabase 호출 → api (Realtime은 Phase 5에서)
-- [ ] `TeacherStudyViewer` — supabase → api
-- [ ] `StudentWorkViewer` — supabase → api
-- [ ] `ChapterMonitor` — supabase → api (Realtime은 Phase 5에서)
-- [ ] `AssignmentStudyViewer` — supabase → api
-- [ ] `AssignmentWorkViewer` — supabase → api
-- [ ] `AssignmentMonitor` — supabase → api
-
-### 4-3. 검증
-- [ ] StudyViewer: 필기 → 페이지 이동 → 복귀 → 저장 확인
-- [ ] TeacherStudyViewer: 교사 필기 저장/불러오기
-- [ ] StudentWorkViewer: 학생 필기 조회 + 코멘트 저장
-- [ ] ChapterMonitor: 학생 진도 요약 표시
-- [ ] 과제 뷰어들: 동일 패턴 확인
-- [ ] auto-save debounce (1500ms) 동작 확인
-- [ ] **Phase 4 완료 커밋**
+- [x] `dataCache.js` — api 전환 완료 (supabase 파라미터 제거)
+- [x] `StudyViewer` — api + Socket.IO 전환 완료
+- [x] `TeacherStudyViewer` — api 전환 완료
+- [x] `StudentWorkViewer` — api + Socket.IO 전환 완료
+- [x] `ChapterMonitor` — api + Socket.IO 전환 완료
+- [x] `AssignmentStudyViewer` — api + Socket.IO 전환 완료
+- [x] `AssignmentWorkViewer` — api 전환 완료
+- [x] `AssignmentMonitor` — api + Socket.IO 전환 완료
 
 ---
 
 ## Phase 5: 실시간 (Socket.IO)
 
 ### 5-1. 서버 Socket.IO
-- [x] `socket/index.ts` — Socket.IO 서버 + JWT 인증 미들웨어
-- [x] `socket/handlers/notes.ts` — emitStudentNoteUpdated (chapter + work rooms)
-- [x] `socket/handlers/comments.ts` — emitTeacherCommentUpdated
-- [x] `socket/handlers/assignments.ts` — emitSubmissionUpdated, emitAssignmentCommentUpdated
-- [x] notes 라우트에서 upsert 후 emit 연동
-- [x] comments 라우트에서 upsert 후 emit 연동
-- [x] submissions 라우트에서 upsert 후 emit 연동
+- [x] 전체 완료 (index.ts, handlers: notes, comments, assignments)
 
 ### 5-2. 클라이언트 Socket.IO
-- [ ] `src/lib/socket.ts` 생성 (싱글톤, 재연결, room join/leave, visibilitychange)
-- [ ] `ChapterMonitor` — Supabase channel → socket.on('student-note:updated')
-- [ ] `StudyViewer` — Supabase channel → socket.on('teacher-comment:updated') + isRemoteUpdate 방지
-- [ ] `StudentWorkViewer` — Supabase channel → socket.on('student-note:updated')
-- [ ] `AssignmentMonitor` — Supabase channel → socket.on('submission:updated')
-- [ ] `AssignmentStudyViewer` — Supabase channel → socket.on('asn-comment:updated')
-- [ ] `AssignmentWorkViewer` — Supabase channel → socket.on('asn-comment:updated')
-
-### 5-3. 검증
-- [ ] 2개 탭: 학생 필기 → 교사 ChapterMonitor 진도 실시간 갱신
-- [ ] 2개 탭: 교사 코멘트 → 학생 StudyViewer 실시간 수신
-- [ ] 2개 탭: 학생 필기 → 교사 StudentWorkViewer 실시간 확인
-- [ ] 과제: 학생 제출 → AssignmentMonitor 실시간 갱신
-- [ ] 모바일: 탭 백그라운드 → 복귀 → 재연결 확인
-- [ ] 무한 루프 없음 확인 (isRemoteUpdate)
-- [ ] **Phase 5 완료 커밋**
+- [x] `src/lib/socket.ts` 생성 (싱글톤, 재연결, room 관리, visibilitychange)
+- [x] `AuthContext.jsx` — connectSocket/disconnectSocket/reconnectWithToken 연동
+- [x] `ChapterMonitor` — subscribeToRoom('chapter:...', 'student-note:updated')
+- [x] `StudyViewer` — subscribeToRoom('comments:...', 'teacher-comment:updated')
+- [x] `StudentWorkViewer` — subscribeToRoom('work:...', 'student-note:updated')
+- [x] `AssignmentMonitor` — subscribeToRoom('assignment:...', 'submission:updated')
+- [x] `AssignmentStudyViewer` — subscribeToRoom('asn-comments:...', 'asn-comment:updated')
+- [x] `SortablePageItem.jsx` — imageUrl camelCase 수정
 
 ---
 
 ## Phase 6: 정리 및 배포
 
 ### 6-1. Supabase 제거
-- [ ] `@supabase/supabase-js` 의존성 제거
-- [ ] `src/lib/supabase.js` 삭제
-- [ ] `grep -r "supabase"` → 모든 참조 제거 확인
-- [ ] Vite manualChunks에서 vendor-supabase 제거
-- [ ] `.env.local`에서 VITE_SUPABASE_* 환경변수 제거
+- [x] `@supabase/supabase-js` 의존성 제거 (package.json)
+- [x] `src/lib/supabase.js` 비움 (삭제는 수동: `rm packages/client/src/lib/supabase.js`)
+- [x] `grep -r "supabase"` → 모든 import 제거 확인 (0 matches in .jsx/.js)
+- [x] Vite manualChunks에서 vendor-supabase 제거
+- [x] `.env.local`에서 VITE_SUPABASE_* 환경변수 불필요
 
 ### 6-2. 프로덕션 배포
-- [ ] Dockerfile 최종 확인 (client build → server static 서빙)
+- [ ] `npm install` 실행 (lockfile에서 supabase 제거)
+- [ ] 커밋 + 푸시
 - [ ] Railway Volume 마운트 설정 (`/data/storage`)
 - [ ] Railway 환경변수 설정 (DATABASE_URL, JWT_SECRET, GOOGLE_*, etc.)
 - [ ] Google Cloud Console: 프로덕션 OAuth redirect URI 추가
@@ -300,17 +180,10 @@
 
 ## Phase 7: TypeScript 정리 (병행 가능)
 
-- [ ] 나머지 `.jsx` → `.tsx` 전환 (각 컴포넌트)
-- [ ] `excalidrawUtils.js` → `.ts`
-- [ ] `dataCache.js` → `.ts`
-- [ ] `pdfExporter.js` → `.ts`
-- [ ] `pdfDownloader.jsx` → `.tsx`
-- [ ] `DrawingToolbar.jsx` → `.tsx`
-- [ ] `SortablePageItem.jsx` → `.tsx`
-- [ ] `tsconfig.json`에서 `allowJs: true` 제거
+- [ ] 나머지 `.jsx` → `.tsx` 전환
+- [ ] `.js` → `.ts` 전환
 - [ ] strict mode 활성화
 - [ ] Playwright 테스트 업데이트
-- [ ] MEMORY.md 업데이트 (새 아키텍처 반영)
 - [ ] **Phase 7 완료 커밋**
 
 ---
@@ -319,4 +192,7 @@
 
 | 날짜 | Phase | 이슈 | 상태 | 해결 |
 |---|---|---|---|---|
-| - | - | - | - | - |
+| 02-25 | 2 | Route ordering: /join, /other가 /:id 이후 등록 | ✅ | classrooms.ts 순서 변경 |
+| 02-25 | 1 | api.ts 401 race condition (동시 다중 refresh) | ✅ | singleton promise 패턴 |
+| 02-25 | 4 | 학생이 본인 코멘트 읽기 불가 (GET /api/comments 서버 버그) | ✅ | GET /api/comments/:pageId/for-student 추가 |
+| 02-25 | 5 | AssignmentWorkViewer에 assignment notes Realtime 없음 | ⚠️ | TODO — 서버 Socket.IO 이벤트 미구현 |

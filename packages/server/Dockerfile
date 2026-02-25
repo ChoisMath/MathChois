@@ -40,5 +40,5 @@ COPY --from=build-server /app/packages/server/package.json packages/server/
 COPY --from=build-client /app/packages/client/dist packages/client/dist
 COPY --from=build-client /app/packages/client/package.json packages/client/
 
-EXPOSE 3001
+EXPOSE ${PORT:-3001}
 CMD ["node", "packages/server/dist/index.js"]
