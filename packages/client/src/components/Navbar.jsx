@@ -27,7 +27,7 @@ const Navbar = ({ onToggleSidebar }) => {
             )}
             <Link to="/" className="flex-shrink-0 flex items-center gap-2">
               <BookOpen className="h-8 w-8 text-blue-600" />
-              <span className="text-xl font-bold text-gray-900">ClassChois</span>
+              <span className="text-xl font-bold text-gray-900">ChoisClass</span>
             </Link>
           </div>
           <div className="flex items-center">

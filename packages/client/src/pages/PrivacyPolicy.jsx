@@ -15,7 +15,7 @@ const PrivacyPolicy = () => {
       <div className="prose prose-gray max-w-none space-y-8 text-gray-700 leading-relaxed">
         <section>
           <h2 className="text-xl font-semibold text-gray-900 mb-3">1. 개인정보의 수집 항목 및 방법</h2>
-          <p>ClassChois(이하 "서비스")는 Google OAuth 2.0을 통한 로그인 시 다음 정보를 수집합니다.</p>
+          <p>ChoisClass(이하 "서비스")는 Google OAuth 2.0을 통한 로그인 시 다음 정보를 수집합니다.</p>
           <ul className="list-disc pl-6 mt-2 space-y-1">
             <li><strong>필수 항목:</strong> 이름, 이메일 주소, Google 프로필 사진 URL</li>
             <li><strong>자동 수집 항목:</strong> 서비스 이용 기록(로그인 시각, 학습 활동 기록)</li>
@@ -88,7 +88,7 @@ const PrivacyPolicy = () => {
         <section>
           <h2 className="text-xl font-semibold text-gray-900 mb-3">9. 개인정보 보호책임자</h2>
           <ul className="list-none space-y-1">
-            <li><strong>담당자:</strong> ClassChois 운영팀</li>
+            <li><strong>담당자:</strong> ChoisClass 운영팀</li>
             <li><strong>이메일:</strong> complete860127@gmail.com</li>
           </ul>
         </section>

@@ -15,7 +15,7 @@ const TermsOfService = () => {
       <div className="prose prose-gray max-w-none space-y-8 text-gray-700 leading-relaxed">
         <section>
           <h2 className="text-xl font-semibold text-gray-900 mb-3">제1조 (목적)</h2>
-          <p>본 약관은 ClassChois(이하 "서비스")의 이용과 관련하여 서비스 운영자와 이용자 간의 권리, 의무 및 책임 사항을 규정함을 목적으로 합니다.</p>
+          <p>본 약관은 ChoisClass(이하 "서비스")의 이용과 관련하여 서비스 운영자와 이용자 간의 권리, 의무 및 책임 사항을 규정함을 목적으로 합니다.</p>
         </section>
 
         <section>
@@ -93,7 +93,7 @@ const TermsOfService = () => {
           <h2 className="text-xl font-semibold text-gray-900 mb-3">제10조 (연락처)</h2>
           <p>서비스 이용에 관한 문의는 아래로 연락해 주시기 바랍니다.</p>
           <ul className="list-none mt-2 space-y-1">
-            <li><strong>서비스명:</strong> ClassChois</li>
+            <li><strong>서비스명:</strong> ChoisClass</li>
             <li><strong>이메일:</strong> complete860127@gmail.com</li>
           </ul>
         </section>
