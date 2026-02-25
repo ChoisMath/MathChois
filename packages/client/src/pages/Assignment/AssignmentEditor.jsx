@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Loader, Save } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader, Save, Upload, X } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -16,12 +16,14 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { api } from '../../lib/api';
+import { useAuth } from '../../contexts/AuthContext';
 import SortablePageItem from '../../components/common/SortablePageItem';
 
 
 const AssignmentEditor = () => {
   const { classroomId, assignmentId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const fileInputRef = useRef(null);
 
   const [pages, setPages]           = useState([]);
@@ -36,6 +38,13 @@ const AssignmentEditor = () => {
   const [deadline, setDeadline]     = useState('');
   const [maxScore, setMaxScore]     = useState(100);
   const [savingMeta, setSavingMeta] = useState(false);
+
+  /* 내보내기 */
+  const [showExportModal, setShowExportModal]   = useState(false);
+  const [exportClassrooms, setExportClassrooms] = useState([]);
+  const [exportTargetIds, setExportTargetIds]   = useState(new Set());
+  const [exporting, setExporting]               = useState(false);
+  const [exportDone, setExportDone]             = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -110,6 +119,40 @@ const AssignmentEditor = () => {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
+
+  /* ── 내보내기: 모달 열릴 때 다른 클래스 목록 로드 ── */
+  useEffect(() => {
+    if (!showExportModal || !user || !classroomId) return;
+    const timer = setTimeout(() => {
+      setExportTargetIds(new Set());
+      setExportDone(false);
+    }, 0);
+
+    api.get(`/api/classrooms/other/${classroomId}`)
+      .then((data) => setExportClassrooms(data || []))
+      .catch(() => setExportClassrooms([]));
+
+    return () => clearTimeout(timer);
+  }, [showExportModal, user, classroomId]);
+
+  /* ── 내보내기 실행 ── */
+  const handleExport = async () => {
+    if (exportTargetIds.size === 0) return;
+    setExporting(true);
+
+    try {
+      for (const targetId of exportTargetIds) {
+        await api.post(`/api/assignments/${assignmentId}/import`, {
+          targetClassroomId: targetId,
+        });
+      }
+    } catch (err) {
+      console.error('내보내기 실패:', err.message);
+    }
+
+    setExporting(false);
+    setExportDone(true);
+  };
 
   const handleSaveMeta = async (e) => {
     e.preventDefault();
@@ -254,7 +297,14 @@ const AssignmentEditor = () => {
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
           페이지 ({pages.length})
         </h2>
-        <div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowExportModal(true)}
+            title="내보내기"
+            className="inline-flex items-center justify-center p-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
+          >
+            <Upload className="h-5 w-5" />
+          </button>
           <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleUpload} className="hidden" />
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -312,6 +362,89 @@ const AssignmentEditor = () => {
           )}
         </div>
       </div>
+
+      {/* ── 내보내기 모달 ── */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">과제 내보내기</h2>
+            <p className="text-sm text-gray-500 mb-4 whitespace-normal break-keep">
+              <span className="font-medium text-gray-700">"{title}"</span>을(를) 복사할 클래스를 선택하세요.
+            </p>
+
+            {exportDone ? (
+              <div className="text-center py-4">
+                <p className="text-green-600 font-semibold mb-1">내보내기 완료!</p>
+                <p className="text-sm text-gray-500 mb-4">
+                  {exportTargetIds.size}개 클래스에 과제가 추가되었습니다.
+                </p>
+                <button onClick={() => setShowExportModal(false)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 cursor-pointer">
+                  닫기
+                </button>
+              </div>
+            ) : exportClassrooms.length === 0 ? (
+              <>
+                <p className="text-sm text-gray-400 py-4 text-center">내보낼 수 있는 다른 클래스가 없습니다.</p>
+                <div className="flex justify-end">
+                  <button onClick={() => setShowExportModal(false)}
+                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">닫기</button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* 전체 선택 */}
+                <label className="flex items-center gap-2 px-1 mb-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={exportTargetIds.size === exportClassrooms.length}
+                    onChange={(e) => setExportTargetIds(
+                      e.target.checked ? new Set(exportClassrooms.map((c) => c.id)) : new Set()
+                    )}
+                    className="w-4 h-4 accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-sm text-gray-500">전체 선택</span>
+                </label>
+
+                <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-md divide-y mb-4">
+                  {exportClassrooms.map((cls) => (
+                    <label key={cls.id}
+                      className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={exportTargetIds.has(cls.id)}
+                        onChange={(e) => {
+                          setExportTargetIds((prev) => {
+                            const next = new Set(prev);
+                            e.target.checked ? next.add(cls.id) : next.delete(cls.id);
+                            return next;
+                          });
+                        }}
+                        className="w-4 h-4 accent-blue-600 cursor-pointer flex-shrink-0"
+                      />
+                      <span className="text-sm text-gray-700">{cls.name}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">
+                    {exportTargetIds.size > 0 ? `${exportTargetIds.size}개 선택됨` : ''}
+                  </span>
+                  <div className="flex gap-3">
+                    <button onClick={() => setShowExportModal(false)} title="취소"
+                      className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer flex items-center justify-center"><X className="h-5 w-5" /></button>
+                    <button onClick={handleExport} disabled={exportTargetIds.size === 0 || exporting} title={exporting ? '내보내는 중...' : `내보내기${exportTargetIds.size > 1 ? ` (${exportTargetIds.size})` : ''}`}
+                      className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer flex items-center justify-center">
+                      {exporting ? <Loader className="animate-spin h-5 w-5" /> : <Upload className="h-5 w-5" />}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

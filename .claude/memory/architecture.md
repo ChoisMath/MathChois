@@ -1,59 +1,105 @@
 # MathChois 아키텍처 상세
 
-## 전체 파일 구조
+## 전체 파일 구조 (모노레포)
 
 ```
 E:\Projects\MathChois\
-├── src/
-│   ├── main.jsx                    # ReactDOM.createRoot → App
-│   ├── App.jsx                     # ErrorBoundary + AuthProvider + BrowserRouter + Routes
-│   ├── index.css                   # 글로벌 스타일 (Tailwind)
-│   ├── lib/
-│   │   ├── supabase.js             # createClient(VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)
-│   │   └── excalidrawUtils.js      # ★ Phase 4 신규: BG_ELEMENT_ID, GRID_STYLE, fetchAsDataUrl, getImageNaturalSize, createBgElement, DEFAULT_COLORS, TOOLS 등 공유 상수/함수
-│   ├── contexts/
-│   │   └── AuthContext.jsx         # AuthProvider, useAuth hook
-│   ├── components/
-│   │   ├── Navbar.jsx              # 상단 네비 (로고, 유저명, 아바타, 로그아웃)
-│   │   ├── ProtectedRoute.jsx      # 역할별 라우트 가드
-│   │   └── study/
-│   │       └── DrawingToolbar.jsx  # ★ Phase 4 신규: StudyViewer에서 분리, S Pen 배럴 버튼 지원
-│   ├── layouts/
-│   │   ├── MainLayout.jsx          # 공개 페이지 (Navbar + Outlet)
-│   │   └── DashboardLayout.jsx     # 인증된 페이지 (Navbar + 사이드바 + Outlet)
-│   └── pages/
-│       ├── Home.jsx                # 랜딩 페이지 (Google OAuth 버튼)
-│       ├── Login.jsx               # 로그인 페이지
-│       ├── OAuthCallback.jsx       # /auth/callback 처리
-│       ├── ChooseRole.jsx          # 역할 선택 (teacher/student)
-│       ├── TeacherDashboard.jsx    # 교사 대시보드
-│       ├── StudentDashboard.jsx    # 학생 대시보드 (참여 클래스룸 + 코드 입력)
-│       ├── Classrooms/
-│       │   ├── ClassroomList.jsx   # 클래스룸 목록 (교사: 생성, 학생: 코드 참여)
-│       │   └── ClassroomDetail.jsx # 클래스룸 상세 (dnd-kit 챕터 순서, 챕터 삭제 시 Storage 정리)
-│       ├── Chapters/
-│       │   ├── ChapterList.jsx     # 챕터 관리 (생성/삭제/편집 링크)
-│       │   └── Editor.jsx          # 챕터 편집 (이미지 업로드/삭제/미리보기)
-│       ├── Study/
-│       │   ├── StudyViewer.jsx     # 학생 필기, 교사 코멘트 오버레이, 100dvh, 툴바 접기
-│       │   └── TeacherStudyViewer.jsx  # ★ Phase 4 신규: 교사 class-wide 필기
-│       └── Monitor/
-│           ├── ChapterMonitor.jsx      # ★ Phase 4 신규: 학생 진도 실시간 모니터링 (DashboardLayout 안)
-│           └── StudentWorkViewer.jsx   # ★ Phase 4 신규: 학생 필기 상세 + 코멘트 (전체화면)
+├── packages/
+│   ├── server/src/
+│   │   ├── index.ts                # Fastify 서버 진입점
+│   │   ├── app.ts                  # 플러그인/라우트 등록
+│   │   ├── middleware/
+│   │   │   ├── auth.ts             # JWT authenticate 미들웨어
+│   │   │   └── roleGuard.ts        # requireTeacher, requireStudent, requireAdmin
+│   │   ├── services/
+│   │   │   ├── auth.service.ts     # findOrCreateProfile, signAccessToken (isAdmin 포함)
+│   │   │   ├── admin.service.ts    # ★ 신규: getAllUsers, updateUserRole, setUserAdmin,
+│   │   │   │                       #         deleteUser, getUserDetail, getClassroomOverview,
+│   │   │   │                       #         getSystemStats, resetAllData, resetUserData
+│   │   │   ├── classroom.service.ts
+│   │   │   ├── chapter.service.ts
+│   │   │   ├── page.service.ts
+│   │   │   ├── note.service.ts
+│   │   │   ├── post.service.ts
+│   │   │   ├── assignment.service.ts
+│   │   │   └── storage.service.ts
+│   │   ├── routes/
+│   │   │   ├── auth.ts
+│   │   │   ├── admin.ts            # ★ 신규: 9개 엔드포인트 /api/admin/*
+│   │   │   ├── classrooms.ts
+│   │   │   ├── chapters.ts
+│   │   │   ├── pages.ts
+│   │   │   ├── notes.ts
+│   │   │   ├── comments.ts
+│   │   │   ├── posts.ts
+│   │   │   ├── assignments.ts
+│   │   │   └── storage.ts
+│   │   ├── socket/
+│   │   │   ├── index.ts
+│   │   │   └── handlers/
+│   │   │       ├── notes.ts
+│   │   │       ├── comments.ts
+│   │   │       └── assignments.ts
+│   │   ├── db/schema.ts            # Drizzle 스키마 (profiles.isAdmin 컬럼 포함)
+│   │   ├── config/database.ts
+│   │   └── drizzle.config.ts
+│   │
+│   ├── client/src/
+│   │   ├── main.jsx
+│   │   ├── App.jsx                 # Routes (admin 라우트 포함)
+│   │   ├── lib/
+│   │   │   ├── api.ts              # Bearer 토큰, 401 singleton refresh
+│   │   │   ├── socket.ts           # Socket.IO 싱글톤
+│   │   │   ├── dataCache.js
+│   │   │   └── excalidrawUtils.js
+│   │   ├── contexts/
+│   │   │   └── AuthContext.jsx     # JWT 기반 (profile.isAdmin 포함)
+│   │   ├── components/
+│   │   │   ├── Navbar.jsx          # isAdmin 시 "관리자 패널" 링크 노출
+│   │   │   ├── ProtectedRoute.jsx  # allowedRole + requireAdmin prop
+│   │   │   └── study/
+│   │   │       └── DrawingToolbar.jsx
+│   │   ├── layouts/
+│   │   │   ├── MainLayout.jsx
+│   │   │   └── DashboardLayout.jsx
+│   │   └── pages/
+│   │       ├── Admin/
+│   │       │   └── AdminPanel.jsx  # ★ 신규: 4탭 관리자 패널
+│   │       ├── Home.jsx
+│   │       ├── Login.jsx
+│   │       ├── OAuthCallback.jsx
+│   │       ├── ChooseRole.jsx
+│   │       ├── Classrooms/
+│   │       │   ├── ClassroomList.jsx
+│   │       │   └── ClassroomDetail.jsx
+│   │       ├── Chapters/
+│   │       │   ├── ChapterList.jsx
+│   │       │   └── Editor.jsx
+│   │       ├── Study/
+│   │       │   ├── StudyViewer.jsx
+│   │       │   └── TeacherStudyViewer.jsx
+│   │       ├── Monitor/
+│   │       │   ├── ChapterMonitor.jsx
+│   │       │   └── StudentWorkViewer.jsx
+│   │       ├── Board/              # 게시판
+│   │       └── Assignment/         # 과제
+│   │
+│   └── shared/src/types/
+│       ├── auth.ts                 # TokenPayload, Profile (isAdmin: boolean 포함)
+│       ├── models.ts
+│       ├── api.ts
+│       ├── socket.ts
+│       └── excalidraw.ts
+│
 ├── tests/
-│   ├── example.spec.ts             # Playwright 예제
-│   └── navigation.spec.js          # MathChois 네비게이션 테스트 (구 mock 기반, 재작성 필요)
-├── .claude/
-│   └── memory/                     # 프로젝트 로컬 상세 문서
-│       ├── architecture.md         # 이 파일
-│       ├── supabase-schema.md      # DB 스키마, RLS, RPC, Storage
-│       └── studyviewer-details.md  # Excalidraw 통합 상세
-├── CLAUDE.md                       # Claude Code 정적 아키텍처 가이드
-├── package.json                    # 패키지명: temp-app
-├── vite.config.js                  # port 3000, @excalidraw/excalidraw optimizeDeps 필요
-├── playwright.config.ts            # Chromium only, testDir: ./tests, baseURL: localhost:5173
-├── eslint.config.js
-└── index.html                      # title: "MathChois", referrerPolicy: no-referrer-when-downgrade
+│   ├── example.spec.ts
+│   └── navigation.spec.js          # 재작성 필요 (JWT 기반)
+├── .claude/memory/
+│   ├── architecture.md             # 이 파일
+│   ├── supabase-schema.md          # DB 스키마 (Drizzle 기준으로 업데이트 필요)
+│   └── studyviewer-details.md
+├── CLAUDE.md
+└── MIGRATION_PROGRESS.md           # 마이그레이션 체크리스트
 ```
 
 ---
@@ -71,6 +117,10 @@ ErrorBoundary
         /login       → Login
         /choose-role → ChooseRole
 
+      ProtectedRoute (requireAdmin)            ← ★ Admin Routes
+        DashboardLayout
+          /admin     → AdminPanel
+
       ProtectedRoute (allowedRole="teacher")
         DashboardLayout (Navbar + 사이드바)
           /teacher/dashboard                                              → TeacherDashboard
@@ -78,9 +128,9 @@ ErrorBoundary
           /teacher/classrooms/:id                                         → ClassroomDetail
           /teacher/classrooms/:classroomId/chapters                       → ChapterList
           /teacher/chapters/:id/edit                                      → Editor (ChapterEditor)
-          /teacher/classrooms/:classroomId/chapters/:chapterId/monitor    → ChapterMonitor ★
-        /teacher/classrooms/:classroomId/chapters/:chapterId/monitor/:studentId → StudentWorkViewer (전체화면) ★
-        /teacher/classrooms/:classroomId/chapters/:chapterId/study/page/:pageId → TeacherStudyViewer (전체화면) ★
+          /teacher/classrooms/:classroomId/chapters/:chapterId/monitor    → ChapterMonitor
+        /teacher/classrooms/:classroomId/chapters/:chapterId/monitor/:studentId → StudentWorkViewer (전체화면)
+        /teacher/classrooms/:classroomId/chapters/:chapterId/study/page/:pageId → TeacherStudyViewer (전체화면)
 
       ProtectedRoute (allowedRole="student")
         DashboardLayout
@@ -92,32 +142,37 @@ ErrorBoundary
 
 ---
 
-## AuthContext 상세 (src/contexts/AuthContext.jsx)
+## AuthContext 상세 (packages/client/src/contexts/AuthContext.jsx)
 
 ### Context value
-- `user` — Supabase Auth user 객체
-- `profile` — profiles 테이블 row `{ id, name, email, avatar_url, role }`
+- `user` — JWT 디코딩된 사용자 정보 (`{ id, email, ... }`)
+- `profile` — API에서 가져온 profiles 행 `{ id, name, email, avatarUrl, role, isAdmin }`
 - `isAuthenticated` — `!!user`
 - `isLoading` — 앱 초기 세션 로드 중 여부
-- `signInWithGoogle()` — Supabase OAuth, redirectTo: `${origin}/auth/callback`
-- `signOut()` — Supabase signOut + state 초기화
-- `updateRole(role)` — profiles 테이블 update + profile state 갱신
+- `signInWithGoogle()` — Google OAuth 리다이렉트
+- `signOut()` — 토큰 삭제 + state 초기화 + Socket.IO 연결 해제
+- `updateRole(role)` — API로 role 업데이트 + profile state 갱신
 
-### 초기화 로직
-1. `initializeAuth()`: `supabase.auth.getSession()` 호출 (5초 타임아웃과 경쟁)
-2. profile 없으면 3회 retry (500ms 간격) — DB trigger가 늦게 실행될 수 있어서
-3. `onAuthStateChange` 구독: SIGNED_IN / SIGNED_OUT / TOKEN_REFRESHED 처리
+### isAdmin 흐름
+- 서버: `auth.service.ts`의 `INITIAL_ADMIN_EMAIL = 'complete860127@gmail.com'`
+- 첫 로그인 시 `findOrCreateProfile`에서 해당 이메일이면 `isAdmin: true` 자동 설정
+- `signAccessToken`이 JWT payload에 `isAdmin` 포함
+- 클라이언트: `profile.isAdmin` 으로 관리자 여부 확인
+- Navbar에서 `profile?.isAdmin` 조건으로 "관리자 패널" 링크 노출
 
 ---
 
-## ProtectedRoute 로직 (src/components/ProtectedRoute.jsx)
+## ProtectedRoute 로직 (packages/client/src/components/ProtectedRoute.jsx)
+
+Props: `allowedRole` (선택), `requireAdmin` (선택)
 
 ```
-isLoading            → "로딩 중..." 표시
-!isAuthenticated     → /login 리다이렉트
-!profile?.role       → /choose-role 리다이렉트
-role !== allowedRole → /${profile.role}/dashboard 리다이렉트
-통과                 → <Outlet />
+isLoading                           → "로딩 중..." 표시
+!isAuthenticated                    → /login 리다이렉트
+!profile?.role                      → /choose-role 리다이렉트
+requireAdmin && !profile?.isAdmin   → /${profile.role}/classrooms 리다이렉트
+allowedRole && role !== allowedRole → /${profile.role}/classrooms 리다이렉트
+통과                                → <Outlet />
 ```
 
 ---
@@ -190,6 +245,35 @@ role !== allowedRole → /${profile.role}/dashboard 리다이렉트
 - draw 모드에서 필기 저장 시 `__tn_` prefix element 제외 (교사 코멘트는 저장 안 함)
 - 레이아웃: `height: 100dvh` + `overflow-hidden` (Chrome 주소창 스와이프 제스처 지원)
 - 네비바·툴바 접기/펼치기 버튼 (`toolbarCollapsed` state)
+
+### AdminPanel (packages/client/src/pages/Admin/AdminPanel.jsx)
+
+- 라우트: `/admin` — `ProtectedRoute requireAdmin` + `DashboardLayout` 안
+- React.lazy로 지연 로드
+- **4개 탭:**
+  | 탭 | 기능 |
+  |---|---|
+  | 사용자 관리 (UsersTab) | 전체 사용자 목록, 검색, 역할 변경, 관리자 토글, 삭제, 데이터 초기화, 상세 패널(DB rows + Storage) |
+  | 클래스룸 (ClassroomsTab) | 전체 클래스룸 표 — 담당 교사, 학생 수, 단원 수, 코드, 생성일 |
+  | 시스템 현황 (StatsTab) | 요약 카드 (사용자/교사/학생/클래스룸 수), Storage 사용량, DB 테이블 row 수 |
+  | 데이터 초기화 (ResetTab) | "RESET" 입력 확인 후 비관리자 전체 삭제 |
+- **보안 체크:** 자기 자신 삭제/관리자 해제 방지 (클라이언트 + 서버 양쪽)
+
+### Admin API Endpoints (packages/server/src/routes/admin.ts)
+
+모든 엔드포인트: `preHandler: [authenticate, requireAdmin]`
+
+```
+GET    /api/admin/users              전체 사용자 목록 (classroomCount 포함)
+GET    /api/admin/users/:id/detail   사용자 상세 (dbRows: teacher/student 구분, storageBytes)
+PATCH  /api/admin/users/:id/role     역할 변경 (teacher | student)
+PATCH  /api/admin/users/:id/admin    관리자 토글 (isAdmin boolean)
+DELETE /api/admin/users/:id          사용자 삭제 (자기 자신 방지)
+POST   /api/admin/users/:id/reset    사용자 데이터 초기화 (계정 유지, 데이터만 삭제)
+GET    /api/admin/classrooms         전체 클래스룸 개요 (교사명, 학생 수, 단원 수)
+GET    /api/admin/stats              시스템 통계 (사용자 수, Storage, DB rows)
+POST   /api/admin/reset              전체 데이터 초기화 (관리자 계정 유지)
+```
 
 ---
 

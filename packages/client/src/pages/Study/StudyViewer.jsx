@@ -29,10 +29,10 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
   const [currentPageIndex, setCurrentPageIndex] = useState(() =>
     Math.max(0, pages.findIndex((p) => p.id === initialPageId))
   );
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const containerRef = useRef(null);
   const excApiRef = useRef(null);
-  const [status, setStatus] = useState('loading'); // 'loading' | 'empty' | 'ok'
+  const [status, setStatus] = useState('loading'); // 'loading' | 'ok'
   const [noteElements, setNoteElements] = useState([]);
   const [noteFiles, setNoteFiles] = useState({});
   const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
@@ -62,17 +62,10 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
     const pid = currentPage.id;
 
     const applyData = (d) => {
-      if (d.elements.length === 0) {
-        setNoteElements([]);
-        setNoteFiles({});
-        setDbBgPosition(null);
-        setStatus('empty');
-      } else {
-        setNoteElements(d.elements);
-        setNoteFiles(d.files);
-        setDbBgPosition(d.bgPosition);
-        setStatus('ok');
-      }
+      setNoteElements(d.elements);
+      setNoteFiles(d.files);
+      setDbBgPosition(d.bgPosition);
+      setStatus('ok');
     };
 
     if (_teacherNotesModalCache.has(pid)) {
@@ -94,7 +87,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
       })
       .catch((err) => {
         console.error('교사 필기 로드 실패:', err);
-        setStatus('empty');
+        applyData({ elements: [], files: {}, bgPosition: null });
       });
   }, [currentPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -114,13 +107,6 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
 
           /* 캐시 갱신 */
           _teacherNotesModalCache.set(currentPage.id, { elements: els, files, bgPosition: bgPos });
-
-          if (els.length === 0) {
-            setNoteElements([]);
-            setNoteFiles({});
-            setStatus('empty');
-            return;
-          }
 
           setNoteElements(els);
           setNoteFiles(files);
@@ -293,11 +279,6 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
           <div ref={containerRef} className="flex-1 relative overflow-hidden bg-gray-50">
             {status === 'loading' && (
               <div className="flex items-center justify-center h-full text-gray-400">불러오는 중...</div>
-            )}
-            {status === 'empty' && (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                이 페이지에 교사 필기가 없습니다.
-              </div>
             )}
             {status === 'ok' && (
               <>

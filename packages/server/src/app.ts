@@ -69,6 +69,11 @@ export function buildApp() {
       if (request.url.startsWith('/api/')) {
         return reply.status(404).send({ error: 'Not found' });
       }
+      // 민감 경로 보호 (봇/스캐너 차단)
+      const blocked = /^\/(\.env|\.git|\.DS_Store|\.vscode|actuator|swagger|debug|graphql|telescope)/i;
+      if (blocked.test(request.url)) {
+        return reply.status(404).send({ error: 'Not found' });
+      }
       return reply.sendFile('index.html');
     });
   }

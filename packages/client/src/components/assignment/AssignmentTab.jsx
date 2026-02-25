@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, ClipboardList, Clock, Trophy, Users, Loader, X, Download } from 'lucide-react';
+import { Plus, Trash2, ClipboardList, Clock, Trophy, Users, Loader, X, Download, Edit2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
@@ -280,7 +280,7 @@ const AssignmentTab = ({ classroomId, isTeacher, onUnsubmittedCount }) => {
                         title="편집"
                         className="p-1.5 text-gray-400 hover:text-blue-600 rounded-md hover:bg-blue-50 cursor-pointer"
                       >
-                        <ClipboardList className="h-4 w-4" />
+                        <Edit2 className="h-4 w-4" />
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); setDeleteTarget(asn); }}

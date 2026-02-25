@@ -29,7 +29,7 @@ const TEACHER_COMMENT_PREFIX = '__atc_';
    이 모달은 현재 빈 상태로 표시됩니다. 서버에 해당 엔드포인트 추가 후 연동 필요. */
 function TeacherNotesModal({ page, onClose }) {
   const containerRef = useRef(null);
-  const [status, setStatus] = useState('loading'); // 'loading' | 'empty' | 'ok'
+  const [status, setStatus] = useState('loading'); // 'loading' | 'ok'
   const [noteElements, setNoteElements] = useState([]);
   const [noteFiles, setNoteFiles] = useState({});
   const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
@@ -44,8 +44,8 @@ function TeacherNotesModal({ page, onClose }) {
 
   useEffect(() => {
     // TODO: 서버에 assignment_teacher_notes API 필요
-    // 현재 해당 엔드포인트가 없으므로 빈 상태로 표시
-    setStatus('empty');
+    // 현재 해당 엔드포인트가 없으므로 이미지만 표시
+    setStatus('ok');
   }, [page.id]);
 
   const handleMount = useCallback(async (apiRef) => {
@@ -110,11 +110,6 @@ function TeacherNotesModal({ page, onClose }) {
         <div ref={containerRef} className="flex-1 relative overflow-hidden bg-gray-50">
           {status === 'loading' && (
             <div className="flex items-center justify-center h-full text-gray-400">불러오는 중...</div>
-          )}
-          {status === 'empty' && (
-            <div className="flex items-center justify-center h-full text-gray-400">
-              이 페이지에 교사 필기가 없습니다.
-            </div>
           )}
           {status === 'ok' && (
             <>
