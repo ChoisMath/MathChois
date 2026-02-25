@@ -101,8 +101,10 @@ const Home = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {features.map(({ icon: Icon, title, description }) => (
               <div key={title} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-                <Icon className="h-8 w-8 text-blue-600 mb-3" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">{title}</h3>
+                <div className="flex items-center gap-3 mb-2">
+                  <Icon className="h-7 w-7 text-blue-600 shrink-0" />
+                  <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+                </div>
                 <p className="text-sm text-gray-600">{description}</p>
               </div>
             ))}
