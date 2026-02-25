@@ -8,6 +8,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import OAuthCallback from './pages/OAuthCallback';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
 const ChooseRole      = lazy(() => import('./pages/ChooseRole'));
 const ClassroomList   = lazy(() => import('./pages/Classrooms/ClassroomList'));
 const ClassroomDetail = lazy(() => import('./pages/Classrooms/ClassroomDetail'));
@@ -84,6 +86,8 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/choose-role" element={<ChooseRole />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
           </Route>
 
           {/* Teacher Routes */}

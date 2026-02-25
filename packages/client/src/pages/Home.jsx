@@ -15,7 +15,7 @@ const Home = () => {
   const { profile, isAuthenticated, signInWithGoogle } = useAuth();
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] bg-gray-50 p-4">
+    <div className="relative flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] bg-gray-50 p-4">
       <div className="text-center max-w-2xl mx-auto">
         <div className="flex justify-center mb-6">
           <BookOpen className="h-20 w-20 text-blue-600" />
@@ -63,6 +63,12 @@ const Home = () => {
           </div>
         )}
       </div>
+
+      <footer className="absolute bottom-4 left-0 right-0 flex justify-center gap-4 text-xs text-gray-400">
+        <Link to="/privacy" className="hover:text-gray-600">개인정보처리방침</Link>
+        <span>|</span>
+        <Link to="/terms" className="hover:text-gray-600">서비스 이용약관</Link>
+      </footer>
     </div>
   );
 };
