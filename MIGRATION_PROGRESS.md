@@ -5,9 +5,9 @@
 
 ## 현재 상태
 
-- **현재 Phase**: Phase 3-4 서버측 완료 → Phase 5 Socket.IO 시작 예정
+- **현재 Phase**: Phase 0-5 서버측 전체 완료 → 클라이언트 전환 시작 예정
 - **마지막 작업 세션**: 2026-02-25
-- **다음 할 일**: Phase 5 Socket.IO 서버 구현, 이후 클라이언트 전환 (2-5 일괄)
+- **다음 할 일**: 클라이언트 Supabase→API 전환 (Phase 2-5 클라이언트 코드 일괄 전환)
 - **블로커**: 없음
 - **참고**: Supabase는 현재 서비스 중이나, 이전할 데이터 없음. 새 백엔드를 처음부터 구축.
 
@@ -244,11 +244,13 @@
 ## Phase 5: 실시간 (Socket.IO)
 
 ### 5-1. 서버 Socket.IO
-- [ ] `socket/index.ts` — Socket.IO 서버 + JWT 인증 미들웨어
-- [ ] `socket/handlers/notes.ts` — join/leave room, student-note:updated
-- [ ] `socket/handlers/comments.ts` — teacher-comment:updated
-- [ ] `socket/handlers/assignments.ts` — submission:updated, asn-comment:updated
-- [ ] 각 서비스(.service.ts)에 DB upsert 후 io.to(room).emit() 추가
+- [x] `socket/index.ts` — Socket.IO 서버 + JWT 인증 미들웨어
+- [x] `socket/handlers/notes.ts` — emitStudentNoteUpdated (chapter + work rooms)
+- [x] `socket/handlers/comments.ts` — emitTeacherCommentUpdated
+- [x] `socket/handlers/assignments.ts` — emitSubmissionUpdated, emitAssignmentCommentUpdated
+- [x] notes 라우트에서 upsert 후 emit 연동
+- [x] comments 라우트에서 upsert 후 emit 연동
+- [x] submissions 라우트에서 upsert 후 emit 연동
 
 ### 5-2. 클라이언트 Socket.IO
 - [ ] `src/lib/socket.ts` 생성 (싱글톤, 재연결, room join/leave, visibilitychange)

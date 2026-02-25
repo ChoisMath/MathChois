@@ -6,6 +6,9 @@ import {
   getAssignmentTeacherComment,
   upsertAssignmentTeacherComment,
 } from '../services/note.service.js';
+import { getIO } from '../socket/index.js';
+import { emitTeacherCommentUpdated } from '../socket/handlers/comments.js';
+import { emitAssignmentCommentUpdated } from '../socket/handlers/assignments.js';
 import type { ExcalidrawData } from '@mathchois/shared';
 
 export async function commentRoutes(app: FastifyInstance) {
@@ -32,12 +35,25 @@ export async function commentRoutes(app: FastifyInstance) {
   }>('/api/comments/:pageId/:studentId', {
     preHandler: [authenticate],
   }, async (request) => {
-    return upsertTeacherStudentComment(
+    const result = await upsertTeacherStudentComment(
       request.user.sub,
       request.params.studentId,
       request.params.pageId,
       request.body.excalidrawData,
     );
+
+    // Socket.IO 브로드캐스트
+    try {
+      const io = getIO();
+      emitTeacherCommentUpdated(
+        io,
+        request.params.pageId,
+        request.params.studentId,
+        result.updatedAt!,
+      );
+    } catch { /* Socket.IO 미초기화 시 무시 */ }
+
+    return result;
   });
 
   // ─── Assignment Teacher Comments ──────────────
@@ -61,11 +77,24 @@ export async function commentRoutes(app: FastifyInstance) {
   }>('/api/assignment-comments/:pageId/:studentId', {
     preHandler: [authenticate],
   }, async (request) => {
-    return upsertAssignmentTeacherComment(
+    const result = await upsertAssignmentTeacherComment(
       request.user.sub,
       request.params.studentId,
       request.params.pageId,
       request.body.excalidrawData,
     );
+
+    // Socket.IO 브로드캐스트
+    try {
+      const io = getIO();
+      emitAssignmentCommentUpdated(
+        io,
+        request.params.pageId,
+        request.params.studentId,
+        result.updatedAt!,
+      );
+    } catch { /* Socket.IO 미초기화 시 무시 */ }
+
+    return result;
   });
 }

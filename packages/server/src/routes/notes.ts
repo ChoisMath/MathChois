@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
+import { getIO } from '../socket/index.js';
+import { emitStudentNoteUpdated } from '../socket/handlers/notes.js';
 import {
   getStudentNote,
   upsertStudentNote,
@@ -28,15 +30,31 @@ export async function noteRoutes(app: FastifyInstance) {
   /** PUT /api/notes/student/:pageId — 학생 필기 upsert */
   app.put<{
     Params: { pageId: string };
-    Body: { excalidrawData: ExcalidrawData };
+    Body: { excalidrawData: ExcalidrawData; chapterId?: string };
   }>('/api/notes/student/:pageId', {
     preHandler: [authenticate],
   }, async (request) => {
-    return upsertStudentNote(
+    const result = await upsertStudentNote(
       request.user.sub,
       request.params.pageId,
       request.body.excalidrawData,
     );
+
+    // Socket.IO 브로드캐스트 (chapterId가 있으면 chapter room에도 emit)
+    try {
+      const io = getIO();
+      if (request.body.chapterId) {
+        emitStudentNoteUpdated(
+          io,
+          request.body.chapterId,
+          request.params.pageId,
+          request.user.sub,
+          result.updatedAt!,
+        );
+      }
+    } catch { /* Socket.IO 미초기화 시 무시 */ }
+
+    return result;
   });
 
   /** GET /api/notes/student-bulk — 복수 페이지 필기 일괄 조회 */

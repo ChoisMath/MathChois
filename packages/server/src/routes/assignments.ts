@@ -16,6 +16,8 @@ import {
   upsertSubmission,
 } from '../services/assignment.service.js';
 import { isClassroomOwner } from '../services/classroom.service.js';
+import { getIO } from '../socket/index.js';
+import { emitSubmissionUpdated } from '../socket/handlers/assignments.js';
 
 export async function assignmentRoutes(app: FastifyInstance) {
 
@@ -183,10 +185,24 @@ export async function assignmentRoutes(app: FastifyInstance) {
   }>('/api/submissions/:assignmentId', {
     preHandler: [authenticate],
   }, async (request) => {
-    return upsertSubmission({
+    const result = await upsertSubmission({
       assignmentId: request.params.assignmentId,
       studentId: request.user.sub,
       ...request.body,
     });
+
+    // Socket.IO 브로드캐스트
+    try {
+      const io = getIO();
+      emitSubmissionUpdated(
+        io,
+        request.params.assignmentId,
+        request.user.sub,
+        result.status ?? 'draft',
+        result.score,
+      );
+    } catch { /* Socket.IO 미초기화 시 무시 */ }
+
+    return result;
   });
 }
