@@ -9,6 +9,7 @@ import {
   deleteAssignment,
   isAssignmentOwner,
   getAssignmentPages,
+  getAssignmentPageById,
   createAssignmentPage,
   deleteAssignmentPage,
   getSubmissionsByAssignment,
@@ -145,17 +146,22 @@ export async function assignmentRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>('/api/assignment-pages/:id', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
-    const deleted = await deleteAssignmentPage(request.params.id);
-    if (!deleted) {
+    const page = await getAssignmentPageById(request.params.id);
+    if (!page) {
       return reply.status(404).send({ error: 'Assignment page not found' });
     }
-    return deleted;
+    const isOwner = await isAssignmentOwner(page.assignmentId, request.user.sub);
+    if (!isOwner) {
+      return reply.status(403).send({ error: 'Not the assignment owner' });
+    }
+    await deleteAssignmentPage(request.params.id);
+    return page;
   });
 
-  // ─── GET /api/assignments/:id/submissions — 제출 목록
+  // ─── GET /api/assignments/:id/submissions — 제출 목록 (교사만)
 
   app.get<{ Params: { id: string } }>('/api/assignments/:id/submissions', {
-    preHandler: [authenticate],
+    preHandler: [authenticate, requireRole('teacher')],
   }, async (request) => {
     return getSubmissionsByAssignment(request.params.id);
   });

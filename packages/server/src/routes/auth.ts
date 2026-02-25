@@ -112,10 +112,10 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.get('/api/auth/me', {
     preHandler: [authenticate],
-  }, async (request) => {
+  }, async (request, reply) => {
     const profile = await getProfileById(request.user.sub);
     if (!profile) {
-      throw { statusCode: 404, message: 'Profile not found' };
+      return reply.status(404).send({ error: 'Profile not found' });
     }
     return {
       profile: {

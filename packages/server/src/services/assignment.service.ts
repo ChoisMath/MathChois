@@ -102,6 +102,16 @@ export async function getAssignmentPages(assignmentId: string) {
     .orderBy(assignmentPages.position);
 }
 
+/** 과제 페이지 단일 조회 */
+export async function getAssignmentPageById(id: string) {
+  const rows = await db
+    .select()
+    .from(assignmentPages)
+    .where(eq(assignmentPages.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 /** 과제 페이지 생성 */
 export async function createAssignmentPage(data: {
   assignmentId: string;

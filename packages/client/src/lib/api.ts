@@ -8,6 +8,7 @@
 import type { Profile } from '@mathchois/shared';
 
 let _accessToken: string | null = null;
+let _refreshPromise: Promise<{ token: string; profile: Profile } | null> | null = null;
 
 // AuthContext에서 token 변경 시 호출
 export function setAccessToken(token: string | null) {
@@ -40,9 +41,9 @@ async function apiFetch<T>(
 
   const res = await fetch(url, { ...options, headers, credentials: 'include' });
 
-  // 401 → refresh 시도 후 재시도 (1회)
+  // 401 → refresh 시도 후 재시도 (1회, singleton으로 중복 방지)
   if (res.status === 401 && retry) {
-    const refreshed = await refreshToken();
+    const refreshed = await refreshTokenOnce();
     if (refreshed) {
       return apiFetch<T>(url, options, false);
     }
@@ -70,6 +71,16 @@ export class ApiError extends Error {
 }
 
 // ─── Auth endpoints ──────────────────────────────
+
+/** 동시 401 요청들이 refresh를 중복 호출하지 않도록 singleton promise 패턴 */
+function refreshTokenOnce(): Promise<{ token: string; profile: Profile } | null> {
+  if (!_refreshPromise) {
+    _refreshPromise = refreshToken().finally(() => {
+      _refreshPromise = null;
+    });
+  }
+  return _refreshPromise;
+}
 
 /** 앱 시작 시 refresh token으로 세션 복원 */
 export async function refreshToken(): Promise<{

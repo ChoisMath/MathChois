@@ -29,18 +29,6 @@ export async function classroomRoutes(app: FastifyInstance) {
     return getStudentClassrooms(sub);
   });
 
-  // ─── GET /api/classrooms/:id — 교실 상세 ─────
-
-  app.get<{ Params: { id: string } }>('/api/classrooms/:id', {
-    preHandler: [authenticate],
-  }, async (request, reply) => {
-    const classroom = await getClassroomById(request.params.id);
-    if (!classroom) {
-      return reply.status(404).send({ error: 'Classroom not found' });
-    }
-    return classroom;
-  });
-
   // ─── POST /api/classrooms — 교실 생성 ────────
 
   app.post<{
@@ -54,6 +42,46 @@ export async function classroomRoutes(app: FastifyInstance) {
     }
     const classroom = await createClassroom(request.user.sub, name.trim());
     return reply.status(201).send(classroom);
+  });
+
+  // ─── POST /api/classrooms/join — 코드로 참가 ──
+  // ⚠️ /join은 /:id 보다 먼저 등록해야 Fastify가 'join'을 :id로 캡처하지 않음
+
+  app.post<{
+    Body: { code: string };
+  }>('/api/classrooms/join', {
+    preHandler: [authenticate, requireRole('student')],
+  }, async (request, reply) => {
+    const { code } = request.body;
+    if (!code?.trim()) {
+      return reply.status(400).send({ error: 'Code is required' });
+    }
+    const result = await joinClassroomByCode(request.user.sub, code);
+    if (result.error) {
+      return reply.status(400).send({ error: result.error });
+    }
+    return result;
+  });
+
+  // ─── GET /api/classrooms/other/:excludeId — 다른 교실 목록 (import/export)
+  // ⚠️ /other/:excludeId도 /:id 보다 먼저 등록
+
+  app.get<{ Params: { excludeId: string } }>('/api/classrooms/other/:excludeId', {
+    preHandler: [authenticate, requireRole('teacher')],
+  }, async (request) => {
+    return getOtherClassrooms(request.user.sub, request.params.excludeId);
+  });
+
+  // ─── GET /api/classrooms/:id — 교실 상세 ─────
+
+  app.get<{ Params: { id: string } }>('/api/classrooms/:id', {
+    preHandler: [authenticate],
+  }, async (request, reply) => {
+    const classroom = await getClassroomById(request.params.id);
+    if (!classroom) {
+      return reply.status(404).send({ error: 'Classroom not found' });
+    }
+    return classroom;
   });
 
   // ─── PATCH /api/classrooms/:id — 교실 수정 ───
@@ -88,24 +116,6 @@ export async function classroomRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
-  // ─── POST /api/classrooms/join — 코드로 참가 ──
-
-  app.post<{
-    Body: { code: string };
-  }>('/api/classrooms/join', {
-    preHandler: [authenticate, requireRole('student')],
-  }, async (request, reply) => {
-    const { code } = request.body;
-    if (!code?.trim()) {
-      return reply.status(400).send({ error: 'Code is required' });
-    }
-    const result = await joinClassroomByCode(request.user.sub, code);
-    if (result.error) {
-      return reply.status(400).send({ error: result.error });
-    }
-    return result;
-  });
-
   // ─── GET /api/classrooms/:id/members — 멤버 ──
 
   app.get<{ Params: { id: string } }>('/api/classrooms/:id/members', {
@@ -134,13 +144,5 @@ export async function classroomRoutes(app: FastifyInstance) {
 
     await removeClassroomMember(id, studentId);
     return reply.status(204).send();
-  });
-
-  // ─── GET /api/classrooms/other/:excludeId — 다른 교실 목록 (import/export)
-
-  app.get<{ Params: { excludeId: string } }>('/api/classrooms/other/:excludeId', {
-    preHandler: [authenticate, requireRole('teacher')],
-  }, async (request) => {
-    return getOtherClassrooms(request.user.sub, request.params.excludeId);
   });
 }

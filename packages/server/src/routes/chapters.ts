@@ -10,8 +10,9 @@ import {
   reorderChapters,
   getChapterClassroomId,
 } from '../services/chapter.service.js';
-import { getPagesByChapter, createPages } from '../services/page.service.js';
+import { getPagesByChapter, createPages, getPageImageUrls, findSharedImageUrls } from '../services/page.service.js';
 import { isClassroomOwner } from '../services/classroom.service.js';
+import { removeFile, urlToStoragePath } from '../services/storage.service.js';
 
 export async function chapterRoutes(app: FastifyInstance) {
 
@@ -98,8 +99,22 @@ export async function chapterRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Not the classroom owner' });
     }
 
-    // TODO: Phase 3에서 Storage 파일 정리 추가
+    // Storage 파일 정리: orphan 이미지만 삭제 (다른 챕터에서 공유되지 않는 것)
+    const imageUrls = await getPageImageUrls(request.params.id);
+    const sharedUrls = await findSharedImageUrls(imageUrls, request.params.id);
+    const sharedSet = new Set(sharedUrls);
+    const orphanUrls = imageUrls.filter((url) => !sharedSet.has(url));
+
     await deleteChapter(request.params.id);
+
+    // DB 삭제 후 파일 정리 (실패해도 무시 — 고아 파일은 치명적이지 않음)
+    await Promise.all(
+      orphanUrls.map((url) => {
+        const parsed = urlToStoragePath(url);
+        if (parsed) return removeFile(parsed.bucket, parsed.path);
+      }),
+    );
+
     return reply.status(204).send();
   });
 
