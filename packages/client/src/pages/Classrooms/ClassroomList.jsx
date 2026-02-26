@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Plus, Users, ArrowRight, Loader, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { refreshSidebar } from '../../lib/sidebarRefresh';
 
 const ClassroomList = () => {
   const { profile } = useAuth();
+  const location = useLocation();
   const isTeacher = profile?.role === 'teacher';
   const prefix = isTeacher ? '/teacher' : '/student';
 
@@ -29,10 +31,9 @@ const ClassroomList = () => {
   };
 
   useEffect(() => {
-    const timer = setTimeout(fetchClassrooms, 0);
-    return () => clearTimeout(timer);
+    fetchClassrooms();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [location.key]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -44,6 +45,7 @@ const ClassroomList = () => {
       setNewName('');
       setShowCreateModal(false);
       fetchClassrooms();
+      refreshSidebar();
     } catch (err) {
       console.error('[ClassroomList] 클래스룸 생성 오류:', err);
       setCreateError(err.message);

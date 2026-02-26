@@ -88,6 +88,7 @@ export const teacherNotes = pgTable('teacher_notes', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (t) => [
   unique().on(t.teacherId, t.pageId),
+  index('idx_teacher_notes_page').on(t.pageId),
 ]);
 
 // ─── teacher_student_comments ───────────────────────
@@ -206,4 +207,5 @@ export const assignmentTeacherComments = pgTable('assignment_teacher_comments', 
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (t) => [
   unique().on(t.teacherId, t.studentId, t.pageId),
+  index('idx_atc_page_student').on(t.pageId, t.studentId),
 ]);

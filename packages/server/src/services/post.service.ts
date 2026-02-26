@@ -2,7 +2,7 @@ import { eq, desc, inArray, and } from 'drizzle-orm';
 import { db } from '../config/database.js';
 import { posts, postFiles, postClassrooms, classroomMembers, classrooms } from '../db/schema.js';
 
-/** 특정 교실에 게시된 글 조회 (BoardTab용) */
+/** 특정 교실에 게시된 글 조회 (BoardTab용) — N+1 제거 */
 export async function getPostsByClassroom(classroomId: string) {
   const links = await db
     .select({ postId: postClassrooms.postId })
@@ -18,16 +18,20 @@ export async function getPostsByClassroom(classroomId: string) {
     .where(inArray(posts.id, postIds))
     .orderBy(desc(posts.createdAt));
 
-  return Promise.all(rows.map(async (post) => {
-    const files = await db
-      .select()
-      .from(postFiles)
-      .where(eq(postFiles.postId, post.id));
-    return { ...post, files };
-  }));
+  // 파일 일괄 조회
+  const allFiles = postIds.length > 0
+    ? await db.select().from(postFiles).where(inArray(postFiles.postId, postIds))
+    : [];
+  const filesByPost = new Map<string, typeof allFiles>();
+  for (const f of allFiles) {
+    if (!filesByPost.has(f.postId)) filesByPost.set(f.postId, []);
+    filesByPost.get(f.postId)!.push(f);
+  }
+
+  return rows.map((post) => ({ ...post, files: filesByPost.get(post.id) ?? [] }));
 }
 
-/** 교사: 자신의 게시글 전체 조회 */
+/** 교사: 자신의 게시글 전체 조회 — N+1 제거 */
 export async function getTeacherPosts(teacherId: string) {
   const rows = await db
     .select()
@@ -35,31 +39,45 @@ export async function getTeacherPosts(teacherId: string) {
     .where(eq(posts.teacherId, teacherId))
     .orderBy(desc(posts.createdAt));
 
-  return Promise.all(rows.map(async (post) => {
-    const files = await db
-      .select()
-      .from(postFiles)
-      .where(eq(postFiles.postId, post.id));
+  if (rows.length === 0) return [];
+  const postIds = rows.map((p) => p.id);
 
-    const classroomLinks = await db
-      .select({
-        classroomId: postClassrooms.classroomId,
-        classroomName: classrooms.name,
-      })
-      .from(postClassrooms)
-      .innerJoin(classrooms, eq(postClassrooms.classroomId, classrooms.id))
-      .where(eq(postClassrooms.postId, post.id));
+  // 파일 일괄 조회
+  const allFiles = await db.select().from(postFiles).where(inArray(postFiles.postId, postIds));
+  const filesByPost = new Map<string, typeof allFiles>();
+  for (const f of allFiles) {
+    if (!filesByPost.has(f.postId)) filesByPost.set(f.postId, []);
+    filesByPost.get(f.postId)!.push(f);
+  }
 
+  // 교실 링크 일괄 조회
+  const allLinks = await db
+    .select({
+      postId: postClassrooms.postId,
+      classroomId: postClassrooms.classroomId,
+      classroomName: classrooms.name,
+    })
+    .from(postClassrooms)
+    .innerJoin(classrooms, eq(postClassrooms.classroomId, classrooms.id))
+    .where(inArray(postClassrooms.postId, postIds));
+  const linksByPost = new Map<string, typeof allLinks>();
+  for (const l of allLinks) {
+    if (!linksByPost.has(l.postId)) linksByPost.set(l.postId, []);
+    linksByPost.get(l.postId)!.push(l);
+  }
+
+  return rows.map((post) => {
+    const links = linksByPost.get(post.id) ?? [];
     return {
       ...post,
-      files,
-      classroomIds: classroomLinks.map((l) => l.classroomId),
-      classroomNames: classroomLinks.map((l) => l.classroomName),
+      files: filesByPost.get(post.id) ?? [],
+      classroomIds: links.map((l) => l.classroomId),
+      classroomNames: links.map((l) => l.classroomName),
     };
-  }));
+  });
 }
 
-/** 학생: 소속 교실에 게시된 글만 조회 */
+/** 학생: 소속 교실에 게시된 글만 조회 — N+1 제거 */
 export async function getStudentPosts(studentId: string) {
   // 학생이 속한 교실 ID
   const memberRows = await db
@@ -85,13 +103,17 @@ export async function getStudentPosts(studentId: string) {
     .where(inArray(posts.id, postIds))
     .orderBy(desc(posts.createdAt));
 
-  return Promise.all(rows.map(async (post) => {
-    const files = await db
-      .select()
-      .from(postFiles)
-      .where(eq(postFiles.postId, post.id));
-    return { ...post, files };
-  }));
+  // 파일 일괄 조회
+  const allFiles = postIds.length > 0
+    ? await db.select().from(postFiles).where(inArray(postFiles.postId, postIds))
+    : [];
+  const filesByPost = new Map<string, typeof allFiles>();
+  for (const f of allFiles) {
+    if (!filesByPost.has(f.postId)) filesByPost.set(f.postId, []);
+    filesByPost.get(f.postId)!.push(f);
+  }
+
+  return rows.map((post) => ({ ...post, files: filesByPost.get(post.id) ?? [] }));
 }
 
 /** 게시글 단일 조회 (편집용: files + classroomIds 포함) */

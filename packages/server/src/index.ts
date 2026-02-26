@@ -1,6 +1,7 @@
 import { buildApp } from './app.js';
 import { env } from './config/env.js';
 import { setupSocketIO } from './socket/index.js';
+import { pgClient } from './config/database.js';
 
 async function main() {
   const app = buildApp();
@@ -8,6 +9,16 @@ async function main() {
   // Fastify의 raw HTTP 서버에 Socket.IO 연결
   await app.ready();
   setupSocketIO(app.server);
+
+  // Graceful shutdown
+  const shutdown = async () => {
+    console.log('Shutting down gracefully...');
+    await app.close();
+    await pgClient.end();
+    process.exit(0);
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 
   try {
     await app.listen({ port: env.PORT, host: '0.0.0.0' });

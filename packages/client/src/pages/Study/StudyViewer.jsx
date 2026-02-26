@@ -10,7 +10,8 @@ import { api } from '../../lib/api';
 import { subscribeToRoom } from '../../lib/socket';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
-import { BG_ELEMENT_ID, BG_FILE_ID, ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE, fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages } from '../../lib/excalidrawUtils';
+import { BG_ELEMENT_ID, BG_FILE_ID, ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE, EXCALIDRAW_UI_OPTIONS, fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages } from '../../lib/excalidrawUtils';
+import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
@@ -283,27 +284,17 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
             {status === 'ok' && (
               <>
                 <style>{ALWAYS_HIDE_CSS}{PANEL_HIDE_CSS}</style>
+                <ExcalidrawErrorBoundary key={currentPage.id + '_tmodal'}>
                 <Excalidraw
-                  key={currentPage.id + '_tmodal'}
                   excalidrawAPI={handleMount}
                   initialData={{
                     elements: noteElements,
                     appState: { viewBackgroundColor: 'transparent', scrollX: 0, scrollY: 0 },
                   }}
                   viewModeEnabled={true}
-                  UIOptions={{
-                    canvasActions: {
-                      changeViewBackgroundColor: false,
-                      clearCanvas:               false,
-                      export:                    false,
-                      loadScene:                 false,
-                      saveToActiveFile:          false,
-                      toggleTheme:               false,
-                      saveAsImage:               false,
-                    },
-                    tools: { image: false },
-                  }}
+                  UIOptions={EXCALIDRAW_UI_OPTIONS}
                 />
+                </ExcalidrawErrorBoundary>
               </>
             )}
           </div>
@@ -352,6 +343,7 @@ const StudyViewer = () => {
   const activeToolRef         = useRef('freedraw');
   const activeTouchesRef      = useRef(0);
   const lastTouchCenterYRef   = useRef(null);
+  const mountedRef            = useRef(true);
 
   /* ── 터치 제어 (팜 리젝션 & 펜 모드 2핑거 세로 스크롤 하이재킹) ── */
   useEffect(() => {
@@ -462,6 +454,8 @@ const StudyViewer = () => {
     };
   }, []);
 
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
   /* ── 인접 페이지 이미지 백그라운드 프리패치 ── */
   useEffect(() => { currentPageRef.current  = currentPage;  }, [currentPage]);
   useEffect(() => { noteElementsRef.current = noteElements; }, [noteElements]);
@@ -546,6 +540,7 @@ const StudyViewer = () => {
                   });
 
             const [noteData, commentData] = await Promise.all([notePromise, commentPromise]);
+            if (!mountedRef.current) return;
 
             setNoteElements(noteData.elements);
             bgPositionRef.current          = noteData.bgPosition;
@@ -571,6 +566,7 @@ const StudyViewer = () => {
       `comments:${currentPage.id}:${user.id}`,
       'teacher-comment:updated',
       async (data) => {
+        if (!mountedRef.current) return;
         // 교사 코멘트가 업데이트됨 → 최신 데이터를 API에서 다시 가져옴
         const excApi = excalidrawAPIRef.current;
         if (!excApi) return;
@@ -653,6 +649,7 @@ const StudyViewer = () => {
 
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
+      if (!mountedRef.current) return;
       setSaveStatus('saving');
       const allFiles = excalidrawAPIRef.current?.getFiles() ?? {};
       const teacherFileIds = new Set(Object.keys(teacherCommentFilesRef.current));
@@ -963,8 +960,8 @@ const StudyViewer = () => {
           <style>{ALWAYS_HIDE_CSS}{(drawMode && showExcalidrawPanel) ? '' : PANEL_HIDE_CSS}</style>
 
           {currentPage ? (
+            <ExcalidrawErrorBoundary key={currentPage.id}>
             <Excalidraw
-              key={currentPage.id}
               excalidrawAPI={handleExcalidrawMount}
               viewModeEnabled={false}
               initialData={{
@@ -978,19 +975,9 @@ const StudyViewer = () => {
                 },
               }}
               onChange={handleExcalidrawChange}
-              UIOptions={{
-                canvasActions: {
-                  changeViewBackgroundColor: false,
-                  clearCanvas:               false,
-                  export:                    false,
-                  loadScene:                 false,
-                  saveToActiveFile:          false,
-                  toggleTheme:               false,
-                  saveAsImage:               false,
-                },
-                tools: { image: false },
-              }}
+              UIOptions={EXCALIDRAW_UI_OPTIONS}
             />
+            </ExcalidrawErrorBoundary>
           ) : (
             <div className="flex items-center justify-center h-full text-gray-400">
               페이지가 없습니다.

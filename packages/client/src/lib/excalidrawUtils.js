@@ -12,6 +12,19 @@ export const TOOLS = [
   { type: 'text',      label: '텍스트' },
 ];
 
+export const EXCALIDRAW_UI_OPTIONS = {
+  canvasActions: {
+    changeViewBackgroundColor: false,
+    clearCanvas: false,
+    export: false,
+    loadScene: false,
+    saveToActiveFile: false,
+    toggleTheme: false,
+    saveAsImage: false,
+  },
+  tools: { image: false },
+};
+
 /* ─────────── Excalidraw CSS ─────────── */
 export const ALWAYS_HIDE_CSS = `
   .excalidraw .App-toolbar,
@@ -46,13 +59,36 @@ export const GRID_STYLE = {
   backgroundSize: '20px 20px',
 };
 
-/* ─────────── 이미지 캐시 (세션 내 유지, 새로고침 시 초기화) ─────────── */
-const _imgCache  = new Map(); // url → { dataUrl, mimeType }
-const _sizeCache = new Map(); // dataUrl → { w, h }
+/* ─────────── 이미지 캐시 (LRU, 세션 내 유지, 새로고침 시 초기화) ─────────── */
+const MAX_IMG_CACHE = 50;
+const MAX_SIZE_CACHE = 100;
+const _imgCache  = new Map(); // url → Promise<{ dataUrl, mimeType }>
+const _sizeCache = new Map(); // dataUrl → Promise<{ w, h }>
 
-/* ─────────── 유틸: 이미지 URL → DataURL (캐시 적용) ─────────── */
+function lruSet(map, key, value, maxSize) {
+  if (map.has(key)) map.delete(key);
+  if (map.size >= maxSize) {
+    const oldest = map.keys().next().value;
+    map.delete(oldest);
+  }
+  map.set(key, value);
+}
+
+/* ─────────── 유틸: 이미지 URL → DataURL (LRU 캐시) ─────────── */
 export async function fetchAsDataUrl(url) {
-  if (_imgCache.has(url)) return _imgCache.get(url);
+  if (_imgCache.has(url)) {
+    const cached = _imgCache.get(url);
+    _imgCache.delete(url);  // LRU: 끝으로 이동
+    _imgCache.set(url, cached);
+    return cached;
+  }
+  const promise = _doFetch(url);
+  lruSet(_imgCache, url, promise, MAX_IMG_CACHE);
+  promise.catch(() => _imgCache.delete(url));
+  return promise;
+}
+
+async function _doFetch(url) {
   const res = await fetch(url, { mode: 'cors' });
   if (!res.ok) throw new Error(`Image fetch failed: ${res.status} ${url}`);
   const blob = await res.blob();
@@ -62,35 +98,39 @@ export async function fetchAsDataUrl(url) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
-      const result = { dataUrl: reader.result, mimeType: blob.type || 'image/jpeg' };
-      _imgCache.set(url, result);
-      resolve(result);
+      resolve({ dataUrl: reader.result, mimeType: blob.type || 'image/jpeg' });
     };
     reader.onerror = () => reject(new Error(`FileReader failed for ${url}`));
     reader.readAsDataURL(blob);
   });
 }
 
-/* ─────────── 유틸: DataURL → 이미지 자연 크기 (캐시 적용) ─────────── */
+/* ─────────── 유틸: DataURL → 이미지 자연 크기 (LRU 캐시) ─────────── */
 export function getImageNaturalSize(dataUrl) {
-  if (_sizeCache.has(dataUrl)) return Promise.resolve(_sizeCache.get(dataUrl));
-  return new Promise((resolve, reject) => {
+  if (_sizeCache.has(dataUrl)) {
+    const cached = _sizeCache.get(dataUrl);
+    _sizeCache.delete(dataUrl);  // LRU: 끝으로 이동
+    _sizeCache.set(dataUrl, cached);
+    return cached;
+  }
+  const promise = new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => {
-      const result = { w: img.naturalWidth, h: img.naturalHeight };
-      _sizeCache.set(dataUrl, result);
-      resolve(result);
-    };
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
     img.onerror = () => reject(new Error('Image decode failed'));
     img.src = dataUrl;
   });
+  lruSet(_sizeCache, dataUrl, promise, MAX_SIZE_CACHE);
+  promise.catch(() => _sizeCache.delete(dataUrl));
+  return promise;
 }
 
 /* ─────────── 인접 페이지 이미지 백그라운드 프리패치 ─────────── */
 export function prefetchImages(urls) {
   urls.forEach((url) => {
     if (url && !_imgCache.has(url)) {
-      fetchAsDataUrl(url).catch(() => {});
+      fetchAsDataUrl(url).catch((err) => {
+        console.warn('[prefetch]', url, err.message);
+      });
     }
   });
 }

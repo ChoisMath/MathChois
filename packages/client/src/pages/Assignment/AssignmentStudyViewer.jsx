@@ -16,7 +16,9 @@ import {
   BG_ELEMENT_ID, BG_FILE_ID,
   ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE,
   fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages,
+  EXCALIDRAW_UI_OPTIONS,
 } from '../../lib/excalidrawUtils';
+import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 
 /* 세션 내 캐시 */
 const _notesCache    = new Map(); // `${userId}_${pageId}` → { elements, bgPosition, files }
@@ -114,27 +116,17 @@ function TeacherNotesModal({ page, onClose }) {
           {status === 'ok' && (
             <>
               <style>{ALWAYS_HIDE_CSS}{PANEL_HIDE_CSS}</style>
+              <ExcalidrawErrorBoundary key={page.id + '_modal'}>
               <Excalidraw
-                key={page.id + '_modal'}
                 excalidrawAPI={handleMount}
                 initialData={{
                   elements: noteElements,
                   appState: { viewBackgroundColor: 'transparent', scrollX: 0, scrollY: 0 },
                 }}
                 viewModeEnabled={true}
-                UIOptions={{
-                  canvasActions: {
-                    changeViewBackgroundColor: false,
-                    clearCanvas:               false,
-                    export:                    false,
-                    loadScene:                 false,
-                    saveToActiveFile:          false,
-                    toggleTheme:               false,
-                    saveAsImage:               false,
-                  },
-                  tools: { image: false },
-                }}
+                UIOptions={EXCALIDRAW_UI_OPTIONS}
               />
+              </ExcalidrawErrorBoundary>
             </>
           )}
         </div>
@@ -816,8 +808,8 @@ const AssignmentStudyViewer = () => {
         <div ref={containerRef} style={GRID_STYLE} className="flex-1 relative overflow-hidden">
           <style>{ALWAYS_HIDE_CSS}{(drawMode && showExcalidrawPanel) ? '' : PANEL_HIDE_CSS}</style>
           {currentPage ? (
+            <ExcalidrawErrorBoundary key={currentPage.id}>
             <Excalidraw
-              key={currentPage.id}
               excalidrawAPI={handleExcalidrawMount}
               viewModeEnabled={false}
               initialData={{
@@ -830,11 +822,9 @@ const AssignmentStudyViewer = () => {
                 },
               }}
               onChange={handleExcalidrawChange}
-              UIOptions={{
-                canvasActions: { changeViewBackgroundColor: false, clearCanvas: false, export: false, loadScene: false, saveToActiveFile: false, toggleTheme: false, saveAsImage: false },
-                tools: { image: false },
-              }}
+              UIOptions={EXCALIDRAW_UI_OPTIONS}
             />
+            </ExcalidrawErrorBoundary>
           ) : (
             <div className="flex items-center justify-center h-full text-gray-400">
               페이지가 없습니다.

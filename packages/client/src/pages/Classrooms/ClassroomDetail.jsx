@@ -19,6 +19,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { refreshSidebar } from '../../lib/sidebarRefresh';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 
@@ -273,6 +274,7 @@ const ClassroomDetail = () => {
     try {
       await api.patch(`/api/classrooms/${id}`, { name: trimmed });
       setClassroom((prev) => ({ ...prev, name: trimmed }));
+      refreshSidebar();
     } catch (err) {
       console.error('[ClassroomDetail] 이름 수정 오류:', err);
     }
@@ -307,6 +309,7 @@ const ClassroomDetail = () => {
     setDeleting(true);
     try {
       await api.delete(`/api/classrooms/${id}`);
+      refreshSidebar();
       navigate('/teacher/classrooms', { replace: true });
     } catch (err) {
       window.alert(`삭제 실패: ${err.message}`);

@@ -52,7 +52,9 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post<{
     Body: { email: string; password: string; name: string };
-  }>('/api/auth/signup', async (request, reply) => {
+  }>('/api/auth/signup', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     const { email, password, name } = request.body ?? {};
 
     if (!email || !password || !name) {
@@ -101,7 +103,9 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post<{
     Body: { email: string; password: string };
-  }>('/api/auth/login', async (request, reply) => {
+  }>('/api/auth/login', {
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     const { email, password } = request.body ?? {};
 
     if (!email || !password) {
@@ -161,7 +165,9 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post<{
     Body: { email: string };
-  }>('/api/auth/forgot-password', async (request, reply) => {
+  }>('/api/auth/forgot-password', {
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     const { email } = request.body ?? {};
 
     if (!email) {

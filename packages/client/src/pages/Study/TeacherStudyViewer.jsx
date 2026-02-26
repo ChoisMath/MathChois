@@ -18,7 +18,9 @@ import {
   getImageNaturalSize,
   createBgElement,
   prefetchImages,
+  EXCALIDRAW_UI_OPTIONS,
 } from '../../lib/excalidrawUtils';
+import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
@@ -550,8 +552,8 @@ const TeacherStudyViewer = () => {
           <style>{ALWAYS_HIDE_CSS}{showExcalidrawPanel ? '' : PANEL_HIDE_CSS}</style>
 
           {currentPage ? (
+            <ExcalidrawErrorBoundary key={currentPage.id}>
             <Excalidraw
-              key={currentPage.id}
               excalidrawAPI={handleExcalidrawMount}
               viewModeEnabled={false}
               initialData={{
@@ -565,19 +567,9 @@ const TeacherStudyViewer = () => {
                 },
               }}
               onChange={handleExcalidrawChange}
-              UIOptions={{
-                canvasActions: {
-                  changeViewBackgroundColor: false,
-                  clearCanvas:               false,
-                  export:                    false,
-                  loadScene:                 false,
-                  saveToActiveFile:          false,
-                  toggleTheme:               false,
-                  saveAsImage:               false,
-                },
-                tools: { image: false },
-              }}
+              UIOptions={EXCALIDRAW_UI_OPTIONS}
             />
+            </ExcalidrawErrorBoundary>
           ) : (
             <div className="flex items-center justify-center h-full text-gray-400">
               페이지가 없습니다.

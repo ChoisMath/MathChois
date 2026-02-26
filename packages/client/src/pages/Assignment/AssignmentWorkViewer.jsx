@@ -15,7 +15,9 @@ import {
   BG_ELEMENT_ID, BG_FILE_ID,
   ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE,
   fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages,
+  EXCALIDRAW_UI_OPTIONS,
 } from '../../lib/excalidrawUtils';
+import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 
 const TEACHER_COMMENT_PREFIX = '__atc_';
 
@@ -628,8 +630,8 @@ const AssignmentWorkViewer = () => {
         <div ref={containerRef} style={GRID_STYLE} className="flex-1 relative overflow-hidden">
           <style>{ALWAYS_HIDE_CSS}{showExcalidrawPanel ? '' : PANEL_HIDE_CSS}</style>
           {currentPage ? (
+            <ExcalidrawErrorBoundary key={currentPage.id}>
             <Excalidraw
-              key={currentPage.id}
               excalidrawAPI={handleExcalidrawMount}
               viewModeEnabled={false}
               initialData={{
@@ -637,11 +639,9 @@ const AssignmentWorkViewer = () => {
                 appState: { viewBackgroundColor: 'transparent', currentItemStrokeColor: '#e03131', currentItemStrokeWidth: 2, scrollX: 0, scrollY: 0 },
               }}
               onChange={handleExcalidrawChange}
-              UIOptions={{
-                canvasActions: { changeViewBackgroundColor: false, clearCanvas: false, export: false, loadScene: false, saveToActiveFile: false, toggleTheme: false, saveAsImage: false },
-                tools: { image: false },
-              }}
+              UIOptions={EXCALIDRAW_UI_OPTIONS}
             />
+            </ExcalidrawErrorBoundary>
           ) : (
             <div className="flex items-center justify-center h-full text-gray-400">페이지가 없습니다.</div>
           )}

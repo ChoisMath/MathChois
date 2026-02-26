@@ -1,8 +1,8 @@
-import { eq, desc, and, sql } from 'drizzle-orm';
+import { eq, desc, and, sql, inArray } from 'drizzle-orm';
 import { db } from '../config/database.js';
 import { chapters, pages } from '../db/schema.js';
 
-/** 교실의 챕터 목록 (페이지 수 포함) */
+/** 교실의 챕터 목록 (페이지 수 포함) — 2쿼리로 N+1 제거 */
 export async function getChaptersByClassroom(classroomId: string) {
   const chapRows = await db
     .select()
@@ -10,23 +10,25 @@ export async function getChaptersByClassroom(classroomId: string) {
     .where(eq(chapters.classroomId, classroomId))
     .orderBy(chapters.position);
 
-  // 각 챕터의 페이지 목록 가져오기
-  const result = await Promise.all(
-    chapRows.map(async (ch) => {
-      const pageRows = await db
-        .select({ id: pages.id, position: pages.position })
+  const chapterIds = chapRows.map((c) => c.id);
+  const allPages = chapterIds.length > 0
+    ? await db
+        .select({ id: pages.id, chapterId: pages.chapterId, position: pages.position })
         .from(pages)
-        .where(eq(pages.chapterId, ch.id))
-        .orderBy(pages.position);
+        .where(inArray(pages.chapterId, chapterIds))
+        .orderBy(pages.position)
+    : [];
 
-      return {
-        ...ch,
-        pages: pageRows,
-      };
-    }),
-  );
+  const pagesByChapter = new Map<string, typeof allPages>();
+  for (const p of allPages) {
+    if (!pagesByChapter.has(p.chapterId)) pagesByChapter.set(p.chapterId, []);
+    pagesByChapter.get(p.chapterId)!.push(p);
+  }
 
-  return result;
+  return chapRows.map((ch) => ({
+    ...ch,
+    pages: pagesByChapter.get(ch.id) ?? [],
+  }));
 }
 
 /** 단일 챕터 조회 */

@@ -4,6 +4,7 @@ import { Users, LogIn, LayoutList, Loader } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../lib/api';
+import { subscribeSidebarRefresh } from '../lib/sidebarRefresh';
 
 /* ── 학생 전용 사이드바 ── */
 function StudentSidebar() {
@@ -137,6 +138,9 @@ function TeacherSidebar() {
   const location = useLocation();
 
   const [classrooms, setClassrooms] = useState([]);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => subscribeSidebarRefresh(setRefreshKey), []);
 
   useEffect(() => {
     if (!user) return;
@@ -144,7 +148,7 @@ function TeacherSidebar() {
       .then((data) => setClassrooms(data || []))
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, location.pathname]); // pathname 변경 시 재조회 (이름 수정 후 갱신)
+  }, [user?.id, refreshKey]);
 
   return (
     <div className="p-4 flex flex-col gap-5">

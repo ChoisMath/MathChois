@@ -67,8 +67,9 @@ export async function noteRoutes(app: FastifyInstance) {
     Querystring: { pageIds: string };
   }>('/api/notes/student-bulk', {
     preHandler: [authenticate],
-  }, async (request) => {
+  }, async (request, reply) => {
     const ids = request.query.pageIds?.split(',').filter(Boolean) ?? [];
+    if (ids.length > 100) return reply.status(400).send({ error: 'Too many IDs (max 100)' });
     return getStudentNotesBulk(request.user.sub, ids);
   });
 
@@ -108,8 +109,9 @@ export async function noteRoutes(app: FastifyInstance) {
     Querystring: { pageIds: string };
   }>('/api/notes/teacher-bulk', {
     preHandler: [authenticate],
-  }, async (request) => {
+  }, async (request, reply) => {
     const ids = request.query.pageIds?.split(',').filter(Boolean) ?? [];
+    if (ids.length > 100) return reply.status(400).send({ error: 'Too many IDs (max 100)' });
     return getTeacherNotesBulk(request.user.sub, ids);
   });
 
@@ -119,8 +121,9 @@ export async function noteRoutes(app: FastifyInstance) {
     Querystring: { pageIds: string };
   }>('/api/notes/student-notes-for/:studentId', {
     preHandler: [authenticate],
-  }, async (request) => {
+  }, async (request, reply) => {
     const ids = request.query.pageIds?.split(',').filter(Boolean) ?? [];
+    if (ids.length > 100) return reply.status(400).send({ error: 'Too many IDs (max 100)' });
     return getStudentNotesBulkByTeacher(request.params.studentId, ids);
   });
 
@@ -130,8 +133,9 @@ export async function noteRoutes(app: FastifyInstance) {
     Querystring: { pageIds: string };
   }>('/api/notes/teacher-comments-for/:studentId', {
     preHandler: [authenticate],
-  }, async (request) => {
+  }, async (request, reply) => {
     const ids = request.query.pageIds?.split(',').filter(Boolean) ?? [];
+    if (ids.length > 100) return reply.status(400).send({ error: 'Too many IDs (max 100)' });
     return getTeacherCommentsBulk(request.params.studentId, ids);
   });
 
@@ -165,8 +169,9 @@ export async function noteRoutes(app: FastifyInstance) {
     Querystring: { pageIds: string; studentId?: string };
   }>('/api/assignment-notes/:assignmentId/bulk', {
     preHandler: [authenticate],
-  }, async (request) => {
+  }, async (request, reply) => {
     const ids = request.query.pageIds?.split(',').filter(Boolean) ?? [];
+    if (ids.length > 100) return reply.status(400).send({ error: 'Too many IDs (max 100)' });
     // 교사가 특정 학생 필기 조회 시 studentId 쿼리 파라미터 사용
     const targetStudentId = request.query.studentId ?? request.user.sub;
     return getAssignmentNotesBulk(

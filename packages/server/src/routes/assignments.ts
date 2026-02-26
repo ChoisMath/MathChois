@@ -274,8 +274,9 @@ export async function assignmentRoutes(app: FastifyInstance) {
     Querystring: { assignmentIds: string };
   }>('/api/submissions/counts', {
     preHandler: [authenticate, requireRole('teacher')],
-  }, async (request) => {
+  }, async (request, reply) => {
     const ids = request.query.assignmentIds?.split(',').filter(Boolean) ?? [];
+    if (ids.length > 100) return reply.status(400).send({ error: 'Too many IDs (max 100)' });
     return getSubmissionCounts(ids);
   });
 
@@ -285,8 +286,9 @@ export async function assignmentRoutes(app: FastifyInstance) {
     Querystring: { assignmentIds: string };
   }>('/api/submissions/student', {
     preHandler: [authenticate, requireRole('student')],
-  }, async (request) => {
+  }, async (request, reply) => {
     const ids = request.query.assignmentIds?.split(',').filter(Boolean) ?? [];
+    if (ids.length > 100) return reply.status(400).send({ error: 'Too many IDs (max 100)' });
     return getStudentSubmissions(request.user.sub, ids);
   });
 

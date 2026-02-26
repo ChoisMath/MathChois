@@ -179,11 +179,19 @@ export async function updateRole(role: 'teacher' | 'student'): Promise<{
   return result;
 }
 
+// ─── In-flight GET deduplication ─────────────────
+
+const _inflightGets = new Map<string, Promise<any>>();
+
 // ─── Generic CRUD helpers ────────────────────────
 
 export const api = {
   get<T>(url: string): Promise<T> {
-    return apiFetch<T>(url);
+    if (_inflightGets.has(url)) return _inflightGets.get(url)! as Promise<T>;
+    const promise = apiFetch<T>(url);
+    _inflightGets.set(url, promise);
+    promise.finally(() => _inflightGets.delete(url));
+    return promise;
   },
 
   post<T>(url: string, body?: unknown): Promise<T> {

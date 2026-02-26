@@ -2,8 +2,11 @@ import Fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
+import rateLimit from '@fastify/rate-limit';
 import path from 'node:path';
+import { sql } from 'drizzle-orm';
 import { env } from './config/env.js';
+import { db } from './config/database.js';
 import { authRoutes } from './routes/auth.js';
 import { classroomRoutes } from './routes/classrooms.js';
 import { chapterRoutes } from './routes/chapters.js';
@@ -28,6 +31,16 @@ export function buildApp() {
 
   app.register(fastifyCookie);
 
+  app.register(rateLimit, {
+    max: 200,
+    timeWindow: '1 minute',
+    errorResponseBuilder: () => ({
+      statusCode: 429,
+      error: 'Too Many Requests',
+      message: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
+    }),
+  });
+
   app.register(fastifyMultipart, {
     limits: {
       fileSize: 10 * 1024 * 1024, // 10MB per file
@@ -49,8 +62,13 @@ export function buildApp() {
 
   // ─── Health check ───────────────────────────────────
 
-  app.get('/api/health', async () => {
-    return { status: 'ok', timestamp: new Date().toISOString() };
+  app.get('/api/health', async (_request, reply) => {
+    try {
+      await db.execute(sql`SELECT 1`);
+      return { status: 'ok', timestamp: new Date().toISOString() };
+    } catch {
+      return reply.status(503).send({ status: 'error', message: 'Database unavailable' });
+    }
   });
 
   // ─── Static file serving (production) ───────────────
