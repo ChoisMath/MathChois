@@ -210,6 +210,38 @@ export async function updateProfileName(userId: string, name: string) {
   return updated ?? null;
 }
 
+// ─── Email Verification Token ────────────────────
+
+/** 이메일 인증 토큰 생성 (24시간 유효) */
+export function signEmailVerificationToken(data: {
+  email: string;
+  passwordHash: string;
+  name: string;
+}): string {
+  return jwt.sign(
+    { ...data, purpose: 'email-verification' },
+    env.JWT_SECRET,
+    { expiresIn: '24h' },
+  );
+}
+
+/** 이메일 인증 토큰 검증 → 가입 정보 반환 */
+export function verifyEmailVerificationToken(
+  token: string,
+): { email: string; passwordHash: string; name: string } | null {
+  try {
+    const payload = jwt.verify(token, env.JWT_SECRET) as any;
+    if (payload.purpose !== 'email-verification') return null;
+    return {
+      email: payload.email,
+      passwordHash: payload.passwordHash,
+      name: payload.name,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ─── Password Reset Token ───────────────────────
 
 /** 비밀번호 초기화 토큰 생성 (1시간 유효) */

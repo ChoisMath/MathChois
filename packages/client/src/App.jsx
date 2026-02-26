@@ -8,6 +8,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { Navigate } from 'react-router-dom';
 import Home from './pages/Home';
 import OAuthCallback from './pages/OAuthCallback';
+import ResetPassword from './pages/ResetPassword';
+import VerifyEmail from './pages/VerifyEmail';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 const ChooseRole      = lazy(() => import('./pages/ChooseRole'));
@@ -81,7 +83,9 @@ function App() {
           {/* OAuth Callback */}
           <Route path="/auth/callback" element={<OAuthCallback />} />
 
-          {/* Public Routes */}
+          {/* Public Routes (no layout) */}
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
+          <Route path="/verify-email/:token" element={<VerifyEmail />} />
           <Route element={<MainLayout />}>
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Navigate to="/" replace />} />

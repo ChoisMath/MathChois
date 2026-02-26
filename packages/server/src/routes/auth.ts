@@ -17,8 +17,10 @@ import {
   verifyRefreshToken,
   signPasswordResetToken,
   verifyPasswordResetToken,
+  signEmailVerificationToken,
+  verifyEmailVerificationToken,
 } from '../services/auth.service.js';
-import { isMailConfigured, sendPasswordResetEmail } from '../services/mail.service.js';
+import { isMailConfigured, sendPasswordResetEmail, sendVerificationEmail } from '../services/mail.service.js';
 import { authenticate } from '../middleware/auth.js';
 import { env } from '../config/env.js';
 
@@ -48,7 +50,7 @@ function toProfileResponse(p: NonNullable<Awaited<ReturnType<typeof getProfileBy
 
 export async function authRoutes(app: FastifyInstance) {
 
-  // ─── POST /api/auth/signup — 이메일/비밀번호 회원가입 ────
+  // ─── POST /api/auth/signup — 이메일 가입확인 메일 발송 ────
 
   app.post<{
     Body: { email: string; password: string; name: string };
@@ -71,6 +73,10 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: '비밀번호는 4자 이상이어야 합니다.' });
     }
 
+    if (!isMailConfigured()) {
+      return reply.status(503).send({ error: '이메일 발송이 설정되지 않았습니다. 관리자에게 문의해 주세요.' });
+    }
+
     // 이메일 정규화
     const normalizedEmail = email.toLowerCase().trim();
 
@@ -81,21 +87,62 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     try {
+      // 비밀번호 해싱 후 인증 토큰에 포함 (DB에는 아직 저장하지 않음)
       const passwordHashed = await hashPassword(password);
-      const profile = await createEmailProfile(normalizedEmail, passwordHashed, name.trim());
+      const token = signEmailVerificationToken({
+        email: normalizedEmail,
+        passwordHash: passwordHashed,
+        name: name.trim(),
+      });
+
+      const baseUrl = env.APP_URL || `${request.protocol}://${request.hostname}`;
+      const verifyUrl = `${baseUrl}/verify-email/${token}`;
+
+      await sendVerificationEmail(normalizedEmail, verifyUrl, name.trim());
+
+      return { success: true, message: '가입확인 이메일을 전송했습니다. 이메일을 확인해 주세요.' };
+    } catch (err) {
+      app.log.error(err, 'Email signup / verification mail failed');
+      return reply.status(500).send({ error: '이메일 전송에 실패했습니다. 잠시 후 다시 시도해 주세요.' });
+    }
+  });
+
+  // ─── POST /api/auth/verify-email — 이메일 가입확인 토큰 검증 + 계정 생성 ────
+
+  app.post<{
+    Body: { token: string };
+  }>('/api/auth/verify-email', async (request, reply) => {
+    const { token } = request.body ?? {};
+
+    if (!token) {
+      return reply.status(400).send({ error: '토큰이 필요합니다.' });
+    }
+
+    const data = verifyEmailVerificationToken(token);
+    if (!data) {
+      return reply.status(400).send({ error: '인증 링크가 만료되었거나 올바르지 않습니다.' });
+    }
+
+    // 이메일 중복 확인 (이미 가입된 경우)
+    const existing = await getProfileByEmail(data.email);
+    if (existing) {
+      return reply.status(409).send({ error: '이미 등록된 이메일입니다. 로그인해 주세요.' });
+    }
+
+    try {
+      const profile = await createEmailProfile(data.email, data.passwordHash, data.name);
 
       const accessToken = signAccessToken(profile);
-      const refreshToken = signRefreshToken(profile.id);
-      reply.setCookie('refresh_token', refreshToken, REFRESH_COOKIE_OPTIONS);
+      const refreshTokenValue = signRefreshToken(profile.id);
+      reply.setCookie('refresh_token', refreshTokenValue, REFRESH_COOKIE_OPTIONS);
 
       return { token: accessToken, profile: toProfileResponse(profile) };
     } catch (err: any) {
-      // DB unique 제약 위반 (race condition)
       if (err?.code === '23505' || err?.message?.includes('unique')) {
-        return reply.status(409).send({ error: '이미 등록된 이메일입니다.' });
+        return reply.status(409).send({ error: '이미 등록된 이메일입니다. 로그인해 주세요.' });
       }
-      app.log.error(err, 'Email signup failed');
-      return reply.status(500).send({ error: '회원가입 처리 중 오류가 발생했습니다.' });
+      app.log.error(err, 'Email verification / account creation failed');
+      return reply.status(500).send({ error: '계정 생성 중 오류가 발생했습니다.' });
     }
   });
 
@@ -188,7 +235,7 @@ export async function authRoutes(app: FastifyInstance) {
     try {
       const token = signPasswordResetToken(profile.id);
       const baseUrl = env.APP_URL || `${request.protocol}://${request.hostname}`;
-      const resetUrl = `${baseUrl}/api/auth/reset-password/${token}`;
+      const resetUrl = `${baseUrl}/reset-password/${token}`;
 
       await sendPasswordResetEmail(profile.email!, resetUrl, profile.name);
 
@@ -199,29 +246,31 @@ export async function authRoutes(app: FastifyInstance) {
     }
   });
 
-  // ─── GET /api/auth/reset-password/:token — 비밀번호 초기화 실행 ────
+  // ─── POST /api/auth/reset-password — 비밀번호 초기화 토큰 검증 + 실행 ────
 
-  app.get<{
-    Params: { token: string };
-  }>('/api/auth/reset-password/:token', async (request, reply) => {
-    const profileId = verifyPasswordResetToken(request.params.token);
+  app.post<{
+    Body: { token: string };
+  }>('/api/auth/reset-password', async (request, reply) => {
+    const { token } = request.body ?? {};
 
-    const clientUrl = env.APP_URL || (env.NODE_ENV === 'production' ? '' : 'http://localhost:3000');
+    if (!token) {
+      return reply.status(400).send({ error: '토큰이 필요합니다.' });
+    }
 
+    const profileId = verifyPasswordResetToken(token);
     if (!profileId) {
-      return reply.redirect(`${clientUrl}/?reset_error=invalid`);
+      return reply.status(400).send({ error: '초기화 링크가 만료되었거나 올바르지 않습니다.' });
     }
 
     const profile = await getProfileById(profileId);
     if (!profile || profile.authMethod !== 'email') {
-      return reply.redirect(`${clientUrl}/?reset_error=invalid`);
+      return reply.status(400).send({ error: '초기화 링크가 만료되었거나 올바르지 않습니다.' });
     }
 
     // mustResetPassword 설정
     await setMustResetPassword(profileId);
 
-    // 로그인 페이지로 리다이렉트 (새 창에서 열림)
-    return reply.redirect(`${clientUrl}/?password_reset=true`);
+    return { success: true };
   });
 
   // ─── GET /api/auth/google — Google OAuth 시작 ────

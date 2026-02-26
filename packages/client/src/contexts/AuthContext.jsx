@@ -62,13 +62,12 @@ export function AuthProvider({ children }) {
     setProfile(null);
   }, []);
 
-  // ─── 이메일 회원가입 ─────────────────────────
+  // ─── 이메일 회원가입 (가입확인 이메일 발송) ────
 
   const signUpWithEmail = useCallback(async (email, password, name) => {
     const result = await apiSignUp(email, password, name);
-    setProfile(result.profile);
-    try { connectSocket(); } catch { /* ignore */ }
-    return result.profile;
+    // 계정이 바로 생성되지 않음 — 이메일 확인 후 생성됨
+    return result;
   }, []);
 
   // ─── 이메일 로그인 ──────────────────────────

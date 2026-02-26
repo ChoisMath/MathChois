@@ -63,9 +63,11 @@ const Login = () => {
   const handleSignUp = async (e) => {
     e.preventDefault();
     setError('');
+    setInfoMsg('');
     setSubmitting(true);
     try {
-      await signUpWithEmail(email, password, name);
+      const result = await signUpWithEmail(email, password, name);
+      setInfoMsg(result.message || '가입확인 이메일을 전송했습니다.');
     } catch (err) {
       setError(err.message || '회원가입에 실패했습니다.');
     } finally {
@@ -310,18 +312,24 @@ const Login = () => {
               </div>
 
               {error && <p className="text-sm text-red-600">{error}</p>}
+              {infoMsg && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p className="text-sm text-green-700">{infoMsg}</p>
+                  <p className="text-xs text-green-600 mt-1">이메일의 가입확인 버튼을 클릭하면 가입이 완료됩니다.</p>
+                </div>
+              )}
 
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !!infoMsg}
                 className="w-full py-3 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 cursor-pointer transition-colors"
               >
-                {submitting ? '가입 중...' : '학생으로 가입하기'}
+                {submitting ? '전송 중...' : '학생으로 가입하기'}
               </button>
             </form>
 
             <p className="text-xs text-gray-400 mt-3">
-              가입 시 자동으로 학생 역할이 설정됩니다.
+              가입확인 이메일이 전송되며, 확인 후 학생 계정이 생성됩니다.
             </p>
 
             <div className="mt-4 flex justify-between items-center text-sm">

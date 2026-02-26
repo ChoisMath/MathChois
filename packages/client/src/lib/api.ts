@@ -113,18 +113,33 @@ export async function getMe(): Promise<{ profile: Profile }> {
   return apiFetch('/api/auth/me');
 }
 
-/** 이메일 회원가입 */
+/** 이메일 회원가입 (가입확인 이메일 발송) */
 export async function signUpWithEmail(email: string, password: string, name: string): Promise<{
-  token: string;
-  profile: Profile;
+  success: boolean;
+  message: string;
 }> {
-  const result = await apiFetch<{ token: string; profile: Profile }>(
+  return apiFetch<{ success: boolean; message: string }>(
     '/api/auth/signup',
     {
       method: 'POST',
       body: JSON.stringify({ email, password, name }),
     },
     false, // no retry on 401
+  );
+}
+
+/** 이메일 가입확인 토큰 검증 → 계정 생성 + 로그인 */
+export async function verifyEmail(token: string): Promise<{
+  token: string;
+  profile: Profile;
+}> {
+  const result = await apiFetch<{ token: string; profile: Profile }>(
+    '/api/auth/verify-email',
+    {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    },
+    false,
   );
   _accessToken = result.token;
   return result;
@@ -161,6 +176,14 @@ export async function requestPasswordReset(email: string): Promise<{ success: bo
   return apiFetch('/api/auth/forgot-password', {
     method: 'POST',
     body: JSON.stringify({ email }),
+  }, false);
+}
+
+/** 비밀번호 초기화 토큰 검증 (이메일 링크 클릭 시) */
+export async function verifyResetToken(token: string): Promise<{ success: boolean }> {
+  return apiFetch('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
   }, false);
 }
 
