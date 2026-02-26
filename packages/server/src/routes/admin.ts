@@ -12,7 +12,7 @@ import {
   resetAllData,
   resetUserData,
 } from '../services/admin.service.js';
-import { setMustResetPassword, updateProfileName } from '../services/auth.service.js';
+import { getProfileById, setMustResetPassword, updateProfileName } from '../services/auth.service.js';
 
 export async function adminRoutes(app: FastifyInstance) {
 
@@ -133,13 +133,15 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string } }>('/api/admin/users/:id/reset-password', {
     preHandler: [authenticate, requireAdmin],
   }, async (request, reply) => {
-    const updated = await setMustResetPassword(request.params.id);
-    if (!updated) {
+    // authMethod 먼저 확인 (Google 계정에 플래그 설정 방지)
+    const profile = await getProfileById(request.params.id);
+    if (!profile) {
       return reply.status(404).send({ error: 'User not found' });
     }
-    if (updated.authMethod !== 'email') {
+    if (profile.authMethod !== 'email') {
       return reply.status(400).send({ error: 'Google 계정은 비밀번호 초기화가 불가합니다.' });
     }
+    await setMustResetPassword(request.params.id);
     return { success: true };
   });
 

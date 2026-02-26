@@ -9,12 +9,16 @@ import {
   hashPassword,
   verifyPassword,
   updatePassword,
+  setMustResetPassword,
   updateProfileRole,
   updateProfileName,
   signAccessToken,
   signRefreshToken,
   verifyRefreshToken,
+  signPasswordResetToken,
+  verifyPasswordResetToken,
 } from '../services/auth.service.js';
+import { isMailConfigured, sendPasswordResetEmail } from '../services/mail.service.js';
 import { authenticate } from '../middleware/auth.js';
 import { env } from '../config/env.js';
 
@@ -65,22 +69,29 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: '비밀번호는 4자 이상이어야 합니다.' });
     }
 
+    // 이메일 정규화
+    const normalizedEmail = email.toLowerCase().trim();
+
     // 이메일 중복 확인
-    const existing = await getProfileByEmail(email);
+    const existing = await getProfileByEmail(normalizedEmail);
     if (existing) {
       return reply.status(409).send({ error: '이미 등록된 이메일입니다.' });
     }
 
     try {
       const passwordHashed = await hashPassword(password);
-      const profile = await createEmailProfile(email, passwordHashed, name.trim());
+      const profile = await createEmailProfile(normalizedEmail, passwordHashed, name.trim());
 
       const accessToken = signAccessToken(profile);
       const refreshToken = signRefreshToken(profile.id);
       reply.setCookie('refresh_token', refreshToken, REFRESH_COOKIE_OPTIONS);
 
       return { token: accessToken, profile: toProfileResponse(profile) };
-    } catch (err) {
+    } catch (err: any) {
+      // DB unique 제약 위반 (race condition)
+      if (err?.code === '23505' || err?.message?.includes('unique')) {
+        return reply.status(409).send({ error: '이미 등록된 이메일입니다.' });
+      }
       app.log.error(err, 'Email signup failed');
       return reply.status(500).send({ error: '회원가입 처리 중 오류가 발생했습니다.' });
     }
@@ -97,7 +108,7 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: '이메일과 비밀번호를 입력해 주세요.' });
     }
 
-    const profile = await getProfileByEmail(email);
+    const profile = await getProfileByEmail(email.toLowerCase().trim());
     if (!profile || profile.authMethod !== 'email' || !profile.passwordHash) {
       return reply.status(401).send({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
     }
@@ -144,6 +155,67 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     return { profile: toProfileResponse(updated) };
+  });
+
+  // ─── POST /api/auth/forgot-password — 비밀번호 초기화 이메일 발송 ────
+
+  app.post<{
+    Body: { email: string };
+  }>('/api/auth/forgot-password', async (request, reply) => {
+    const { email } = request.body ?? {};
+
+    if (!email) {
+      return reply.status(400).send({ error: '이메일을 입력해 주세요.' });
+    }
+
+    if (!isMailConfigured()) {
+      return reply.status(503).send({ error: '이메일 발송이 설정되지 않았습니다. 관리자에게 문의해 주세요.' });
+    }
+
+    const profile = await getProfileByEmail(email.toLowerCase().trim());
+
+    // 보안: 이메일 존재 여부를 노출하지 않음 (항상 같은 응답)
+    if (!profile || profile.authMethod !== 'email') {
+      return { success: true, message: '해당 이메일로 초기화 링크를 전송했습니다.' };
+    }
+
+    try {
+      const token = signPasswordResetToken(profile.id);
+      const baseUrl = env.APP_URL || `${request.protocol}://${request.hostname}`;
+      const resetUrl = `${baseUrl}/api/auth/reset-password/${token}`;
+
+      await sendPasswordResetEmail(profile.email!, resetUrl, profile.name);
+
+      return { success: true, message: '해당 이메일로 초기화 링크를 전송했습니다.' };
+    } catch (err) {
+      app.log.error(err, 'Failed to send password reset email');
+      return reply.status(500).send({ error: '이메일 전송에 실패했습니다. 잠시 후 다시 시도해 주세요.' });
+    }
+  });
+
+  // ─── GET /api/auth/reset-password/:token — 비밀번호 초기화 실행 ────
+
+  app.get<{
+    Params: { token: string };
+  }>('/api/auth/reset-password/:token', async (request, reply) => {
+    const profileId = verifyPasswordResetToken(request.params.token);
+
+    const clientUrl = env.APP_URL || (env.NODE_ENV === 'production' ? '' : 'http://localhost:3000');
+
+    if (!profileId) {
+      return reply.redirect(`${clientUrl}/login?reset_error=invalid`);
+    }
+
+    const profile = await getProfileById(profileId);
+    if (!profile || profile.authMethod !== 'email') {
+      return reply.redirect(`${clientUrl}/login?reset_error=invalid`);
+    }
+
+    // mustResetPassword 설정
+    await setMustResetPassword(profileId);
+
+    // 로그인 페이지로 리다이렉트 (새 창에서 열림)
+    return reply.redirect(`${clientUrl}/login?password_reset=true`);
   });
 
   // ─── GET /api/auth/google — Google OAuth 시작 ────

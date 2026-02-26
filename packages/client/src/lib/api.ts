@@ -156,6 +156,14 @@ export async function updateName(name: string): Promise<{ profile: Profile }> {
   });
 }
 
+/** 비밀번호 초기화 이메일 요청 */
+export async function requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  }, false);
+}
+
 export async function updateRole(role: 'teacher' | 'student'): Promise<{
   token: string;
   profile: Profile;

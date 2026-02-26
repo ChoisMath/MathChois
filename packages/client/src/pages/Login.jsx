@@ -1,19 +1,36 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { BookOpen, Mail, Lock, User, ArrowLeft } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { BookOpen, Mail, Lock, User, ArrowLeft, Send } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { requestPasswordReset } from '../lib/api';
 
 const Login = () => {
   const { isAuthenticated, isLoading, profile, signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [mode, setMode] = useState('main'); // 'main' | 'email-login' | 'signup'
+  const [mode, setMode] = useState('main'); // 'main' | 'email-login' | 'signup' | 'forgot-password'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [passwordResetMsg, setPasswordResetMsg] = useState('');
+  const [infoMsg, setInfoMsg] = useState('');
+
+  // URL 파라미터 처리 (비밀번호 초기화 리다이렉트)
+  useEffect(() => {
+    if (searchParams.get('password_reset') === 'true') {
+      setMode('email-login');
+      setInfoMsg('비밀번호가 초기화되었습니다. 새 비밀번호로 로그인해 주세요.');
+      // URL 파라미터 제거
+      setSearchParams({}, { replace: true });
+    }
+    if (searchParams.get('reset_error') === 'invalid') {
+      setMode('email-login');
+      setError('초기화 링크가 만료되었거나 올바르지 않습니다.');
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -29,12 +46,12 @@ const Login = () => {
   const handleEmailLogin = async (e) => {
     e.preventDefault();
     setError('');
-    setPasswordResetMsg('');
+    setInfoMsg('');
     setSubmitting(true);
     try {
       const result = await signInWithEmail(email, password);
       if (result.passwordReset) {
-        setPasswordResetMsg('비밀번호가 새로 설정되었습니다.');
+        setInfoMsg('비밀번호가 새로 설정되었습니다.');
       }
     } catch (err) {
       setError(err.message || '로그인에 실패했습니다.');
@@ -56,12 +73,27 @@ const Login = () => {
     }
   };
 
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setError('');
+    setInfoMsg('');
+    setSubmitting(true);
+    try {
+      const result = await requestPasswordReset(email);
+      setInfoMsg(result.message || '초기화 이메일을 전송했습니다.');
+    } catch (err) {
+      setError(err.message || '이메일 전송에 실패했습니다.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const resetForm = () => {
     setEmail('');
     setPassword('');
     setName('');
     setError('');
-    setPasswordResetMsg('');
+    setInfoMsg('');
   };
 
   return (
@@ -71,7 +103,10 @@ const Login = () => {
           <BookOpen className="h-20 w-20 text-blue-600" />
         </div>
         <h1 className="text-3xl font-bold text-gray-900 mb-6 tracking-tight">
-          {mode === 'main' ? '로그인' : mode === 'email-login' ? '이메일로 로그인' : '학생 회원가입'}
+          {mode === 'main' && '로그인'}
+          {mode === 'email-login' && '이메일로 로그인'}
+          {mode === 'signup' && '학생 회원가입'}
+          {mode === 'forgot-password' && '비밀번호 찾기'}
         </h1>
 
         {/* 메인 모드: Google 로그인 + 이메일 로그인 버튼 */}
@@ -147,7 +182,7 @@ const Login = () => {
               </div>
 
               {error && <p className="text-sm text-red-600">{error}</p>}
-              {passwordResetMsg && <p className="text-sm text-green-600">{passwordResetMsg}</p>}
+              {infoMsg && <p className="text-sm text-green-600">{infoMsg}</p>}
 
               <button
                 type="submit"
@@ -166,11 +201,70 @@ const Login = () => {
                 <ArrowLeft className="h-4 w-4" />
                 뒤로
               </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { setError(''); setInfoMsg(''); setMode('forgot-password'); }}
+                  className="text-gray-500 hover:text-gray-700 cursor-pointer"
+                >
+                  비밀번호 분실
+                </button>
+                <button
+                  onClick={() => { resetForm(); setMode('signup'); }}
+                  className="text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                >
+                  회원가입
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 비밀번호 분실 */}
+        {mode === 'forgot-password' && (
+          <div className="max-w-xs mx-auto">
+            <p className="text-sm text-gray-600 mb-4 text-left">
+              가입할 때 사용한 이메일 주소를 입력하면 비밀번호 초기화 링크를 보내드립니다.
+            </p>
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="이메일"
+                  required
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {error && <p className="text-sm text-red-600">{error}</p>}
+              {infoMsg && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p className="text-sm text-green-700">{infoMsg}</p>
+                  <p className="text-xs text-green-600 mt-1">
+                    이메일의 초기화 버튼을 클릭한 후 새 비밀번호로 로그인하세요.
+                  </p>
+                </div>
+              )}
+
               <button
-                onClick={() => { resetForm(); setMode('signup'); }}
-                className="text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                type="submit"
+                disabled={submitting || !!infoMsg}
+                className="w-full py-3 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 cursor-pointer transition-colors flex items-center justify-center gap-2"
               >
-                회원가입
+                <Send className="h-4 w-4" />
+                {submitting ? '전송 중...' : '초기화 이메일 전송'}
+              </button>
+            </form>
+
+            <div className="mt-4 flex justify-between items-center text-sm">
+              <button
+                onClick={() => { resetForm(); setMode('email-login'); }}
+                className="flex items-center gap-1 text-gray-500 hover:text-gray-700 cursor-pointer"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                로그인으로 돌아가기
               </button>
             </div>
           </div>

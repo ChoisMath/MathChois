@@ -151,24 +151,25 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
   return bcrypt.compare(plain, hash);
 }
 
-/** 이메일로 프로필 조회 */
+/** 이메일로 프로필 조회 (lowercase 정규화) */
 export async function getProfileByEmail(email: string) {
   const rows = await db
     .select()
     .from(profiles)
-    .where(eq(profiles.email, email))
+    .where(eq(profiles.email, email.toLowerCase()))
     .limit(1);
   return rows[0] ?? null;
 }
 
-/** 이메일/비밀번호로 학생 계정 생성 */
+/** 이메일/비밀번호로 학생 계정 생성 (이메일 lowercase 정규화) */
 export async function createEmailProfile(email: string, passwordHash: string, name: string) {
-  const shouldBeAdmin = email === INITIAL_ADMIN_EMAIL;
+  const normalizedEmail = email.toLowerCase();
+  const shouldBeAdmin = normalizedEmail === INITIAL_ADMIN_EMAIL;
 
   const [created] = await db
     .insert(profiles)
     .values({
-      email,
+      email: normalizedEmail,
       passwordHash,
       name,
       role: 'student',
@@ -207,6 +208,24 @@ export async function updateProfileName(userId: string, name: string) {
     .where(eq(profiles.id, userId))
     .returning();
   return updated ?? null;
+}
+
+// ─── Password Reset Token ───────────────────────
+
+/** 비밀번호 초기화 토큰 생성 (1시간 유효) */
+export function signPasswordResetToken(profileId: string): string {
+  return jwt.sign({ sub: profileId, purpose: 'password-reset' }, env.JWT_SECRET, { expiresIn: '1h' });
+}
+
+/** 비밀번호 초기화 토큰 검증 → profileId 반환 */
+export function verifyPasswordResetToken(token: string): string | null {
+  try {
+    const payload = jwt.verify(token, env.JWT_SECRET) as { sub: string; purpose?: string };
+    if (payload.purpose !== 'password-reset') return null;
+    return payload.sub;
+  } catch {
+    return null;
+  }
 }
 
 // ─── JWT ──────────────────────────────────────────

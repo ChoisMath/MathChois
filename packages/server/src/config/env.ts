@@ -9,6 +9,13 @@ const envSchema = z.object({
   VOLUME_PATH: z.string().default('./local-storage'),
   PORT: z.coerce.number().default(3001),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  // SMTP (비밀번호 초기화 이메일 발송용 — 선택)
+  SMTP_HOST: z.string().default('smtp.gmail.com'),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),  // 발신자 표시 이름+주소 (없으면 SMTP_USER 사용)
+  APP_URL: z.string().optional(),    // 프론트 URL (이메일 링크용, 없으면 자동 감지)
 });
 
 function loadEnv() {
