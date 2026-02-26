@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { BookOpen, PenTool, Monitor, Users, FileText } from 'lucide-react';
+import { BookOpen, PenTool, Monitor, Users, FileText, Mail } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const GoogleIcon = () => (
@@ -86,8 +86,26 @@ const Home = () => {
                 <GoogleIcon />
                 Google로 계속하기
               </button>
-              <p className="text-sm text-gray-500 mt-4">
-                Google 계정으로 로그인하시면 자동으로 가입됩니다.
+
+              <div className="relative w-full max-w-xs">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-gray-50 text-gray-500">또는</span>
+                </div>
+              </div>
+
+              <Link
+                to="/login"
+                className="flex items-center gap-3 px-6 py-3 bg-white border border-gray-300 rounded-full shadow-sm hover:shadow-md hover:bg-gray-50 transition-all text-base font-medium text-gray-700"
+              >
+                <Mail className="h-5 w-5 text-gray-500" />
+                이메일로 로그인 / 회원가입
+              </Link>
+
+              <p className="text-sm text-gray-500 mt-2">
+                Google 계정을 사용할 수 없는 학생은 이메일로 가입하세요.
               </p>
             </div>
           )}
