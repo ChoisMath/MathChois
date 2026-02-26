@@ -3,6 +3,7 @@ export interface TokenPayload {
   sub: string;  // profile.id
   role: 'teacher' | 'student' | null;
   isAdmin: boolean;
+  mustResetPassword?: boolean;
   iat?: number;
   exp?: number;
 }
@@ -10,12 +11,14 @@ export interface TokenPayload {
 /** 프론트엔드에서 사용하는 사용자 프로필 */
 export interface Profile {
   id: string;
-  googleId: string;
+  googleId: string | null;
   name: string | null;
   email: string | null;
   avatarUrl: string | null;
   role: 'teacher' | 'student' | null;
   isAdmin: boolean;
+  authMethod: 'google' | 'email';
+  mustResetPassword?: boolean;
 }
 
 /** 로그인 응답 */

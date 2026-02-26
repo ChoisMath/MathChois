@@ -1,5 +1,13 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { refreshToken, logout as apiLogout, updateRole as apiUpdateRole, setAccessToken } from '../lib/api';
+import {
+  refreshToken,
+  logout as apiLogout,
+  updateRole as apiUpdateRole,
+  signUpWithEmail as apiSignUp,
+  signInWithEmail as apiSignIn,
+  updateName as apiUpdateName,
+  setAccessToken,
+} from '../lib/api';
 import { connectSocket, disconnectSocket, reconnectWithToken } from '../lib/socket';
 
 const AuthContext = createContext(null);
@@ -54,6 +62,32 @@ export function AuthProvider({ children }) {
     setProfile(null);
   }, []);
 
+  // ─── 이메일 회원가입 ─────────────────────────
+
+  const signUpWithEmail = useCallback(async (email, password, name) => {
+    const result = await apiSignUp(email, password, name);
+    setProfile(result.profile);
+    try { connectSocket(); } catch { /* ignore */ }
+    return result.profile;
+  }, []);
+
+  // ─── 이메일 로그인 ──────────────────────────
+
+  const signInWithEmail = useCallback(async (email, password) => {
+    const result = await apiSignIn(email, password);
+    setProfile(result.profile);
+    try { connectSocket(); } catch { /* ignore */ }
+    return { profile: result.profile, passwordReset: result.passwordReset };
+  }, []);
+
+  // ─── 이름 업데이트 ──────────────────────────
+
+  const updateName = useCallback(async (name) => {
+    const result = await apiUpdateName(name);
+    setProfile(result.profile);
+    return result.profile;
+  }, []);
+
   // ─── 역할 업데이트 ────────────────────────────
 
   const updateRole = useCallback(async (role) => {
@@ -76,8 +110,11 @@ export function AuthProvider({ children }) {
         isAuthenticated: !!profile,
         isLoading,
         signInWithGoogle,
+        signUpWithEmail,
+        signInWithEmail,
         signOut,
         updateRole,
+        updateName,
       }}
     >
       {children}

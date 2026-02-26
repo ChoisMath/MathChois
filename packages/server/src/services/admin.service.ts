@@ -40,6 +40,8 @@ export async function getAllUsers() {
     avatarUrl: p.avatarUrl,
     role: p.role,
     isAdmin: p.isAdmin,
+    authMethod: p.authMethod,
+    mustResetPassword: p.mustResetPassword,
     classroomCount: p.role === 'teacher'
       ? (tMap[p.id] ?? 0)
       : (sMap[p.id] ?? 0),

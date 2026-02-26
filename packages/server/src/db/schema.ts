@@ -7,12 +7,15 @@ import type { ExcalidrawData } from '@mathchois/shared';
 
 export const profiles = pgTable('profiles', {
   id: uuid('id').defaultRandom().primaryKey(),
-  googleId: text('google_id').unique().notNull(),
+  googleId: text('google_id').unique(),
   name: text('name'),
-  email: text('email'),
+  email: text('email').unique(),
   avatarUrl: text('avatar_url'),
   role: text('role'),  // 'teacher' | 'student' | null
   isAdmin: boolean('is_admin').default(false).notNull(),
+  authMethod: text('auth_method').default('google').notNull(),  // 'google' | 'email'
+  passwordHash: text('password_hash'),
+  mustResetPassword: boolean('must_reset_password').default(false).notNull(),
 });
 
 // ─── classrooms ─────────────────────────────────────

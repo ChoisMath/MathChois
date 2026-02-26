@@ -12,6 +12,7 @@ import {
   resetAllData,
   resetUserData,
 } from '../services/admin.service.js';
+import { setMustResetPassword, updateProfileName } from '../services/auth.service.js';
 
 export async function adminRoutes(app: FastifyInstance) {
 
@@ -125,5 +126,39 @@ export async function adminRoutes(app: FastifyInstance) {
     preHandler: [authenticate, requireAdmin],
   }, async () => {
     return resetAllData();
+  });
+
+  // ─── POST /api/admin/users/:id/reset-password — 비밀번호 초기화 ──
+
+  app.post<{ Params: { id: string } }>('/api/admin/users/:id/reset-password', {
+    preHandler: [authenticate, requireAdmin],
+  }, async (request, reply) => {
+    const updated = await setMustResetPassword(request.params.id);
+    if (!updated) {
+      return reply.status(404).send({ error: 'User not found' });
+    }
+    if (updated.authMethod !== 'email') {
+      return reply.status(400).send({ error: 'Google 계정은 비밀번호 초기화가 불가합니다.' });
+    }
+    return { success: true };
+  });
+
+  // ─── PATCH /api/admin/users/:id/name — 사용자 이름 변경 ──
+
+  app.patch<{
+    Params: { id: string };
+    Body: { name: string };
+  }>('/api/admin/users/:id/name', {
+    preHandler: [authenticate, requireAdmin],
+  }, async (request, reply) => {
+    const { name } = request.body ?? {};
+    if (!name || !name.trim()) {
+      return reply.status(400).send({ error: '이름을 입력해 주세요.' });
+    }
+    const updated = await updateProfileName(request.params.id, name.trim());
+    if (!updated) {
+      return reply.status(404).send({ error: 'User not found' });
+    }
+    return updated;
   });
 }

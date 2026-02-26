@@ -4,7 +4,13 @@ import {
   exchangeGoogleCode,
   findOrCreateProfile,
   getProfileById,
+  getProfileByEmail,
+  createEmailProfile,
+  hashPassword,
+  verifyPassword,
+  updatePassword,
   updateProfileRole,
+  updateProfileName,
   signAccessToken,
   signRefreshToken,
   verifyRefreshToken,
@@ -31,10 +37,114 @@ function toProfileResponse(p: NonNullable<Awaited<ReturnType<typeof getProfileBy
     avatarUrl: p.avatarUrl,
     role: p.role,
     isAdmin: p.isAdmin,
+    authMethod: p.authMethod,
+    mustResetPassword: p.mustResetPassword,
   };
 }
 
 export async function authRoutes(app: FastifyInstance) {
+
+  // ─── POST /api/auth/signup — 이메일/비밀번호 회원가입 ────
+
+  app.post<{
+    Body: { email: string; password: string; name: string };
+  }>('/api/auth/signup', async (request, reply) => {
+    const { email, password, name } = request.body ?? {};
+
+    if (!email || !password || !name) {
+      return reply.status(400).send({ error: '이메일, 비밀번호, 이름을 모두 입력해 주세요.' });
+    }
+
+    // 이메일 형식 검증
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return reply.status(400).send({ error: '올바른 이메일 형식이 아닙니다.' });
+    }
+
+    // 비밀번호 길이 검증
+    if (password.length < 4) {
+      return reply.status(400).send({ error: '비밀번호는 4자 이상이어야 합니다.' });
+    }
+
+    // 이메일 중복 확인
+    const existing = await getProfileByEmail(email);
+    if (existing) {
+      return reply.status(409).send({ error: '이미 등록된 이메일입니다.' });
+    }
+
+    try {
+      const passwordHashed = await hashPassword(password);
+      const profile = await createEmailProfile(email, passwordHashed, name.trim());
+
+      const accessToken = signAccessToken(profile);
+      const refreshToken = signRefreshToken(profile.id);
+      reply.setCookie('refresh_token', refreshToken, REFRESH_COOKIE_OPTIONS);
+
+      return { token: accessToken, profile: toProfileResponse(profile) };
+    } catch (err) {
+      app.log.error(err, 'Email signup failed');
+      return reply.status(500).send({ error: '회원가입 처리 중 오류가 발생했습니다.' });
+    }
+  });
+
+  // ─── POST /api/auth/login — 이메일/비밀번호 로그인 ────
+
+  app.post<{
+    Body: { email: string; password: string };
+  }>('/api/auth/login', async (request, reply) => {
+    const { email, password } = request.body ?? {};
+
+    if (!email || !password) {
+      return reply.status(400).send({ error: '이메일과 비밀번호를 입력해 주세요.' });
+    }
+
+    const profile = await getProfileByEmail(email);
+    if (!profile || profile.authMethod !== 'email' || !profile.passwordHash) {
+      return reply.status(401).send({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
+    }
+
+    // mustResetPassword 상태: 입력한 비밀번호가 새 비밀번호가 됨
+    if (profile.mustResetPassword) {
+      const newHash = await hashPassword(password);
+      const updated = await updatePassword(profile.id, newHash);
+      if (updated) {
+        const accessToken = signAccessToken(updated);
+        const refreshToken = signRefreshToken(updated.id);
+        reply.setCookie('refresh_token', refreshToken, REFRESH_COOKIE_OPTIONS);
+        return { token: accessToken, profile: toProfileResponse(updated), passwordReset: true };
+      }
+    }
+
+    const valid = await verifyPassword(password, profile.passwordHash);
+    if (!valid) {
+      return reply.status(401).send({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
+    }
+
+    const accessToken = signAccessToken(profile);
+    const refreshToken = signRefreshToken(profile.id);
+    reply.setCookie('refresh_token', refreshToken, REFRESH_COOKIE_OPTIONS);
+
+    return { token: accessToken, profile: toProfileResponse(profile) };
+  });
+
+  // ─── PATCH /api/profiles/name — 이름 변경 ────────
+
+  app.patch<{
+    Body: { name: string };
+  }>('/api/profiles/name', {
+    preHandler: [authenticate],
+  }, async (request, reply) => {
+    const { name } = request.body ?? {};
+    if (!name || !name.trim()) {
+      return reply.status(400).send({ error: '이름을 입력해 주세요.' });
+    }
+
+    const updated = await updateProfileName(request.user.sub, name.trim());
+    if (!updated) {
+      return reply.status(404).send({ error: 'Profile not found' });
+    }
+
+    return { profile: toProfileResponse(updated) };
+  });
 
   // ─── GET /api/auth/google — Google OAuth 시작 ────
 

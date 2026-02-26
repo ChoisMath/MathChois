@@ -113,6 +113,49 @@ export async function getMe(): Promise<{ profile: Profile }> {
   return apiFetch('/api/auth/me');
 }
 
+/** 이메일 회원가입 */
+export async function signUpWithEmail(email: string, password: string, name: string): Promise<{
+  token: string;
+  profile: Profile;
+}> {
+  const result = await apiFetch<{ token: string; profile: Profile }>(
+    '/api/auth/signup',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email, password, name }),
+    },
+    false, // no retry on 401
+  );
+  _accessToken = result.token;
+  return result;
+}
+
+/** 이메일 로그인 */
+export async function signInWithEmail(email: string, password: string): Promise<{
+  token: string;
+  profile: Profile;
+  passwordReset?: boolean;
+}> {
+  const result = await apiFetch<{ token: string; profile: Profile; passwordReset?: boolean }>(
+    '/api/auth/login',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    },
+    false, // no retry on 401
+  );
+  _accessToken = result.token;
+  return result;
+}
+
+/** 이름 변경 */
+export async function updateName(name: string): Promise<{ profile: Profile }> {
+  return apiFetch('/api/profiles/name', {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+}
+
 export async function updateRole(role: 'teacher' | 'student'): Promise<{
   token: string;
   profile: Profile;

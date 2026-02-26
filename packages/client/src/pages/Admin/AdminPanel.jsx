@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Users, Building2, BarChart3, Trash2, Shield, ShieldOff,
   UserCog, ChevronDown, ChevronUp, RefreshCw, AlertTriangle,
-  HardDrive, Database, X, Search,
+  HardDrive, Database, X, Search, KeyRound, Pencil, Check, Mail,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -133,6 +133,49 @@ function UsersTab() {
     }
   };
 
+  const [editingNameId, setEditingNameId] = useState(null);
+  const [editNameValue, setEditNameValue] = useState('');
+
+  const handleResetPassword = async (userId, userName, authMethod) => {
+    if (authMethod !== 'email') {
+      alert('Google 계정은 비밀번호 초기화가 불가합니다.');
+      return;
+    }
+    if (!confirm(`"${userName}"의 비밀번호를 초기화하시겠습니까?\n다음 로그인 시 입력하는 비밀번호가 새 비밀번호로 설정됩니다.`)) return;
+    setActionLoading(userId);
+    try {
+      await api.post(`/api/admin/users/${userId}/reset-password`);
+      alert('비밀번호가 초기화되었습니다.\n사용자가 다음 로그인 시 새 비밀번호를 설정합니다.');
+      await fetchUsers();
+    } catch (err) {
+      alert(err.message || '비밀번호 초기화 실패');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const startEditName = (userId, currentName) => {
+    setEditingNameId(userId);
+    setEditNameValue(currentName || '');
+  };
+
+  const handleSaveName = async (userId) => {
+    if (!editNameValue.trim()) {
+      alert('이름을 입력해 주세요.');
+      return;
+    }
+    setActionLoading(userId);
+    try {
+      await api.patch(`/api/admin/users/${userId}/name`, { name: editNameValue.trim() });
+      setEditingNameId(null);
+      await fetchUsers();
+    } catch (err) {
+      alert(err.message || '이름 변경 실패');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const filtered = users.filter(u => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -160,17 +203,60 @@ function UsersTab() {
       {/* 사용자 목록 */}
       <div className="space-y-2">
         {filtered.map(u => (
-          <div key={u.id} className="border border-gray-200 rounded-lg bg-white overflow-hidden">
+          <div key={u.id} className="border border-gray-200 rounded-lg bg-white overflow-hidden group/row">
             <div className="flex items-center gap-3 p-3">
               {/* 아바타 + 이름 */}
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 {u.avatarUrl
                   ? <img src={u.avatarUrl} alt="" className="h-8 w-8 rounded-full flex-shrink-0" referrerPolicy="no-referrer" />
-                  : <div className="h-8 w-8 rounded-full bg-gray-200 flex-shrink-0" />
+                  : <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                      {u.authMethod === 'email' && <Mail className="h-4 w-4 text-gray-400" />}
+                    </div>
                 }
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-gray-900 truncate">{u.name || '(이름 없음)'}</div>
-                  <div className="text-xs text-gray-500 truncate">{u.email}</div>
+                  {editingNameId === u.id ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={editNameValue}
+                        onChange={e => setEditNameValue(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleSaveName(u.id)}
+                        className="text-sm border border-blue-300 rounded px-1.5 py-0.5 w-28 focus:ring-blue-500 focus:border-blue-500"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleSaveName(u.id)}
+                        className="p-0.5 text-green-600 hover:bg-green-50 rounded cursor-pointer"
+                        title="저장"
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setEditingNameId(null)}
+                        className="p-0.5 text-gray-400 hover:bg-gray-100 rounded cursor-pointer"
+                        title="취소"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm font-medium text-gray-900 truncate">{u.name || '(이름 없음)'}</span>
+                      <button
+                        onClick={() => startEditName(u.id, u.name)}
+                        className="p-0.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded cursor-pointer opacity-0 group-hover/row:opacity-100 transition-opacity"
+                        title="이름 변경"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
+                  <div className="text-xs text-gray-500 truncate flex items-center gap-1">
+                    {u.email}
+                    {u.authMethod === 'email' && (
+                      <span className="px-1 py-0 text-[10px] font-medium rounded bg-violet-100 text-violet-600">이메일</span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -214,6 +300,22 @@ function UsersTab() {
                 >
                   {u.isAdmin ? <Shield className="h-4 w-4" /> : <ShieldOff className="h-4 w-4" />}
                 </button>
+
+                {/* 비밀번호 초기화 (이메일 계정만) */}
+                {u.authMethod === 'email' && (
+                  <button
+                    onClick={() => handleResetPassword(u.id, u.name, u.authMethod)}
+                    disabled={actionLoading === u.id}
+                    title={u.mustResetPassword ? '비밀번호 초기화 대기 중' : '비밀번호 초기화'}
+                    className={`p-1.5 rounded transition-colors cursor-pointer ${
+                      u.mustResetPassword
+                        ? 'text-amber-600 bg-amber-50'
+                        : 'text-violet-500 hover:bg-violet-50'
+                    }`}
+                  >
+                    <KeyRound className="h-4 w-4" />
+                  </button>
+                )}
 
                 {/* 데이터 초기화 */}
                 <button

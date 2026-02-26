@@ -1,5 +1,6 @@
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
 import { env } from '../config/env.js';
 import { db } from '../config/database.js';
@@ -53,7 +54,7 @@ export async function findOrCreateProfile(googleUser: {
 }) {
   const shouldBeAdmin = googleUser.email === INITIAL_ADMIN_EMAIL;
 
-  // 기존 사용자 조회
+  // 1) googleId로 기존 사용자 조회
   const existing = await db
     .select()
     .from(profiles)
@@ -68,7 +69,6 @@ export async function findOrCreateProfile(googleUser: {
         name: googleUser.name,
         email: googleUser.email,
         avatarUrl: googleUser.avatarUrl,
-        // 최초 관리자 이메일이면 isAdmin 보장
         ...(shouldBeAdmin && !existing[0].isAdmin ? { isAdmin: true } : {}),
       })
       .where(eq(profiles.id, existing[0].id))
@@ -76,7 +76,33 @@ export async function findOrCreateProfile(googleUser: {
     return updated;
   }
 
-  // 새 사용자 생성
+  // 2) 같은 이메일의 email 계정이 있으면 Google 연동 (authMethod → google)
+  if (googleUser.email) {
+    const emailAccount = await db
+      .select()
+      .from(profiles)
+      .where(eq(profiles.email, googleUser.email))
+      .limit(1);
+
+    if (emailAccount.length > 0) {
+      const [updated] = await db
+        .update(profiles)
+        .set({
+          googleId: googleUser.googleId,
+          name: googleUser.name,
+          avatarUrl: googleUser.avatarUrl,
+          authMethod: 'google',
+          passwordHash: null,
+          mustResetPassword: false,
+          ...(shouldBeAdmin && !emailAccount[0].isAdmin ? { isAdmin: true } : {}),
+        })
+        .where(eq(profiles.id, emailAccount[0].id))
+        .returning();
+      return updated;
+    }
+  }
+
+  // 3) 새 사용자 생성
   const [created] = await db
     .insert(profiles)
     .values({
@@ -84,6 +110,7 @@ export async function findOrCreateProfile(googleUser: {
       email: googleUser.email,
       name: googleUser.name,
       avatarUrl: googleUser.avatarUrl,
+      authMethod: 'google',
       isAdmin: shouldBeAdmin,
     })
     .returning();
@@ -110,14 +137,87 @@ export async function updateProfileRole(id: string, role: 'teacher' | 'student')
   return updated ?? null;
 }
 
+// ─── Email/Password Auth ─────────────────────────
+
+const BCRYPT_ROUNDS = 10;
+
+/** 비밀번호 해싱 */
+export async function hashPassword(plain: string): Promise<string> {
+  return bcrypt.hash(plain, BCRYPT_ROUNDS);
+}
+
+/** 비밀번호 검증 */
+export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(plain, hash);
+}
+
+/** 이메일로 프로필 조회 */
+export async function getProfileByEmail(email: string) {
+  const rows = await db
+    .select()
+    .from(profiles)
+    .where(eq(profiles.email, email))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** 이메일/비밀번호로 학생 계정 생성 */
+export async function createEmailProfile(email: string, passwordHash: string, name: string) {
+  const shouldBeAdmin = email === INITIAL_ADMIN_EMAIL;
+
+  const [created] = await db
+    .insert(profiles)
+    .values({
+      email,
+      passwordHash,
+      name,
+      role: 'student',
+      authMethod: 'email',
+      isAdmin: shouldBeAdmin,
+    })
+    .returning();
+  return created;
+}
+
+/** 비밀번호 업데이트 */
+export async function updatePassword(userId: string, newPasswordHash: string) {
+  const [updated] = await db
+    .update(profiles)
+    .set({ passwordHash: newPasswordHash, mustResetPassword: false })
+    .where(eq(profiles.id, userId))
+    .returning();
+  return updated ?? null;
+}
+
+/** 비밀번호 초기화 플래그 설정 (관리자용) */
+export async function setMustResetPassword(userId: string) {
+  const [updated] = await db
+    .update(profiles)
+    .set({ mustResetPassword: true })
+    .where(eq(profiles.id, userId))
+    .returning();
+  return updated ?? null;
+}
+
+/** 사용자 이름 변경 */
+export async function updateProfileName(userId: string, name: string) {
+  const [updated] = await db
+    .update(profiles)
+    .set({ name })
+    .where(eq(profiles.id, userId))
+    .returning();
+  return updated ?? null;
+}
+
 // ─── JWT ──────────────────────────────────────────
 
 /** Access Token 발급 (15분) */
-export function signAccessToken(profile: { id: string; role: string | null; isAdmin: boolean }): string {
+export function signAccessToken(profile: { id: string; role: string | null; isAdmin: boolean; mustResetPassword?: boolean }): string {
   const payload: TokenPayload = {
     sub: profile.id,
     role: profile.role as TokenPayload['role'],
     isAdmin: profile.isAdmin,
+    ...(profile.mustResetPassword ? { mustResetPassword: true } : {}),
   };
   return jwt.sign(payload, env.JWT_SECRET, { expiresIn: '15m' });
 }
