@@ -13,7 +13,7 @@ const ProtectedRoute = ({ allowedRole, requireAdmin }) => {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   if (!profile?.role) {

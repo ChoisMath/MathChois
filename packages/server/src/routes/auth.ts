@@ -203,19 +203,19 @@ export async function authRoutes(app: FastifyInstance) {
     const clientUrl = env.APP_URL || (env.NODE_ENV === 'production' ? '' : 'http://localhost:3000');
 
     if (!profileId) {
-      return reply.redirect(`${clientUrl}/login?reset_error=invalid`);
+      return reply.redirect(`${clientUrl}/?reset_error=invalid`);
     }
 
     const profile = await getProfileById(profileId);
     if (!profile || profile.authMethod !== 'email') {
-      return reply.redirect(`${clientUrl}/login?reset_error=invalid`);
+      return reply.redirect(`${clientUrl}/?reset_error=invalid`);
     }
 
     // mustResetPassword 설정
     await setMustResetPassword(profileId);
 
     // 로그인 페이지로 리다이렉트 (새 창에서 열림)
-    return reply.redirect(`${clientUrl}/login?password_reset=true`);
+    return reply.redirect(`${clientUrl}/?password_reset=true`);
   });
 
   // ─── GET /api/auth/google — Google OAuth 시작 ────
