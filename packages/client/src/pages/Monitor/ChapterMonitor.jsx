@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, PenLine, Users, FileText, Download } from 'lucide-react';
 import { api } from '../../lib/api';
-import { subscribeToRoom } from '../../lib/socket';
+import { subscribeToRoom, getSocket } from '../../lib/socket';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
@@ -35,6 +35,7 @@ const ChapterMonitor = () => {
   const [members, setMembers]         = useState([]);
   const [notesSummary, setNotesSummary] = useState({});
   const [loading, setLoading]         = useState(true);
+  const [presence, setPresence]       = useState({}); // { [studentId]: { pageId, studentName, joinedAt } }
 
   const { downloadMultiplePages } = usePdfDownloader();
   const [downloadingStudentId, setDownloadingStudentId] = useState(null);
@@ -104,6 +105,62 @@ const ChapterMonitor = () => {
     });
   }, [chapterId, pages]);
 
+  /* ── 학생 접속 상태(Presence) 구독 ── */
+  useEffect(() => {
+    if (pages.length === 0) return;
+    const sock = getSocket();
+    if (!sock) return;
+
+    // 1) 초기 상태 조회 (Socket.IO ack callback)
+    const fetchPresence = () => {
+      sock.emit('presence:get', { chapterId }, (list) => {
+        if (!Array.isArray(list)) return;
+        const map = {};
+        for (const entry of list) {
+          map[entry.studentId] = {
+            pageId: entry.pageId,
+            studentName: entry.studentName,
+            joinedAt: entry.joinedAt,
+          };
+        }
+        setPresence(map);
+      });
+    };
+
+    if (sock.connected) fetchPresence();
+
+    // 2) 실시간 업데이트 구독
+    const onUpdated = (data) => {
+      setPresence((prev) => ({
+        ...prev,
+        [data.studentId]: {
+          pageId: data.pageId,
+          studentName: data.studentName,
+          joinedAt: data.joinedAt,
+        },
+      }));
+    };
+    const onLeft = (data) => {
+      setPresence((prev) => {
+        const next = { ...prev };
+        delete next[data.studentId];
+        return next;
+      });
+    };
+
+    sock.on('presence:updated', onUpdated);
+    sock.on('presence:left', onLeft);
+
+    // 3) 교사 소켓 재연결 시 다시 조회
+    sock.on('connect', fetchPresence);
+
+    return () => {
+      sock.off('presence:updated', onUpdated);
+      sock.off('presence:left', onLeft);
+      sock.off('connect', fetchPresence);
+    };
+  }, [chapterId, pages]);
+
   /* ── 교사 필기 버튼 → 마지막 방문 페이지 (없으면 첫 페이지) ── */
   const handleTeacherNote = () => {
     if (pages.length === 0) return;
@@ -162,6 +219,11 @@ const ChapterMonitor = () => {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <h1 className="text-2xl font-bold text-gray-900">{chapter?.title} — 학생 현황</h1>
+          {Object.keys(presence).length > 0 && (
+            <span className="text-sm text-green-600 font-medium">
+              {Object.keys(presence).length}명 접속 중
+            </span>
+          )}
         </div>
         <button
           onClick={handleTeacherNote}
@@ -198,6 +260,11 @@ const ChapterMonitor = () => {
             const done = summary.pagesWithNotes.size;
             const total = pages.length;
             const pct = total > 0 ? done / total : 0;
+            const isOnline = !!presence[m.studentId];
+            const currentPageId = presence[m.studentId]?.pageId;
+            const currentPageIndex = currentPageId
+              ? pages.findIndex((p) => p.id === currentPageId)
+              : -1;
 
             return (
               <div
@@ -209,16 +276,28 @@ const ChapterMonitor = () => {
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {profile?.avatarUrl ? (
-                      <img src={profile.avatarUrl} alt={profile.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
-                    ) : (
-                      <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm font-bold shrink-0">
-                        {(profile?.name || '?')[0]}
-                      </div>
-                    )}
-                    <p className="font-medium text-gray-900 text-sm truncate">
-                      {profile?.name || '이름 없음'}
-                    </p>
+                    <div className="relative">
+                      {profile?.avatarUrl ? (
+                        <img src={profile.avatarUrl} alt={profile.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm font-bold shrink-0">
+                          {(profile?.name || '?')[0]}
+                        </div>
+                      )}
+                      {isOnline && (
+                        <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-900 text-sm truncate">
+                        {profile?.name || '이름 없음'}
+                      </p>
+                      {isOnline && currentPageIndex >= 0 && (
+                        <p className="text-xs text-green-600 truncate">
+                          {currentPageIndex + 1}페이지 학습 중
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <PdfDownloadButton
                     onClick={(e) => handleDownloadStudentPdf(e, m)}

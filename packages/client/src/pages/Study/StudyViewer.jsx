@@ -7,7 +7,7 @@ import {
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
-import { subscribeToRoom } from '../../lib/socket';
+import { subscribeToRoom, getSocket } from '../../lib/socket';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
 import { BG_ELEMENT_ID, BG_FILE_ID, ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE, EXCALIDRAW_UI_OPTIONS, fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages } from '../../lib/excalidrawUtils';
@@ -557,6 +557,45 @@ const StudyViewer = () => {
     };
     fetchData();
   }, [chapterId, pageId, navigate, user]);
+
+  /* ── 학생 접속 상태(Presence) 전송 ── */
+  useEffect(() => {
+    if (!user || !chapterId || !currentPage) return;
+    const sock = getSocket();
+    if (!sock?.connected) return;
+
+    sock.emit('presence:enter', {
+      chapterId,
+      pageId: currentPage.id,
+      studentName: user.name || '이름 없음',
+    });
+  }, [chapterId, currentPage?.id, user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Presence 생명주기: 언마운트 시 leave + 재연결 시 재전송 ── */
+  useEffect(() => {
+    if (!user || !chapterId) return;
+    const sock = getSocket();
+    if (!sock) return;
+
+    const handleReconnect = () => {
+      const cp = currentPageRef.current;
+      if (cp) {
+        sock.emit('presence:enter', {
+          chapterId,
+          pageId: cp.id,
+          studentName: user.name || '이름 없음',
+        });
+      }
+    };
+    sock.on('connect', handleReconnect);
+
+    return () => {
+      sock.off('connect', handleReconnect);
+      if (sock.connected) {
+        sock.emit('presence:leave', { chapterId });
+      }
+    };
+  }, [chapterId, user]);
 
   /* ── 교사 코멘트 Socket.IO 구독 ── */
   useEffect(() => {

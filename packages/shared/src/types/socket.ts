@@ -16,6 +16,9 @@ export interface ClientToServerEvents {
   'leave:asn-comments': (data: { pageId: string; studentId: string }) => void;
   'join:teacher-notes': (data: { pageId: string }) => void;
   'leave:teacher-notes': (data: { pageId: string }) => void;
+  'presence:enter': (data: { chapterId: string; pageId: string; studentName: string }) => void;
+  'presence:leave': (data: { chapterId: string }) => void;
+  'presence:get': (data: { chapterId: string }, callback: (list: PresenceEntry[]) => void) => void;
 }
 
 /** 서버 → 클라이언트 이벤트 */
@@ -25,6 +28,8 @@ export interface ServerToClientEvents {
   'submission:updated': (data: SubmissionUpdatedPayload) => void;
   'asn-comment:updated': (data: AsnCommentUpdatedPayload) => void;
   'teacher-note:updated': (data: TeacherNoteUpdatedPayload) => void;
+  'presence:updated': (data: PresenceEntry) => void;
+  'presence:left': (data: { studentId: string }) => void;
 }
 
 // ─── 이벤트 페이로드 ──────────────────────────────
@@ -63,4 +68,13 @@ export interface AsnCommentUpdatedPayload {
 export interface TeacherNoteUpdatedPayload {
   pageId: string;
   updatedAt: string;
+}
+
+// ─── Presence (학생 접속 상태) ─────────────────
+
+export interface PresenceEntry {
+  studentId: string;
+  studentName: string;
+  pageId: string;
+  joinedAt: string; // ISO string
 }

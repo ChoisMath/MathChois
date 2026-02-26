@@ -9,6 +9,7 @@ import type { TokenPayload } from '@mathchois/shared';
 import { registerNoteHandlers } from './handlers/notes.js';
 import { registerCommentHandlers } from './handlers/comments.js';
 import { registerAssignmentHandlers } from './handlers/assignments.js';
+import { registerPresenceHandlers } from './handlers/presence.js';
 
 let io: Server | null = null;
 
@@ -158,6 +159,7 @@ export function setupSocketIO(httpServer: HttpServer): Server {
     registerNoteHandlers(io!, socket, user);
     registerCommentHandlers(io!, socket, user);
     registerAssignmentHandlers(io!, socket, user);
+    registerPresenceHandlers(io!, socket, user);
   });
 
   return io;
