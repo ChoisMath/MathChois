@@ -5,11 +5,11 @@
 
 ## 현재 상태
 
-- **현재 Phase**: Phase 0-5 전체 완료 (서버+클라이언트), Phase 6 진행중
-- **마지막 작업 세션**: 2026-02-25
-- **다음 할 일**: supabase 패키지 제거 후 npm install, 커밋, Railway 배포
-- **블로커**: Bash 도구 temp 파일 오류 (수동 실행 필요)
-- **참고**: Supabase는 현재 서비스 중이나, 이전할 데이터 없음. 새 백엔드를 처음부터 구축.
+- **현재 Phase**: Phase 0-6 전체 완료, Phase 7 미착수
+- **마지막 작업 세션**: 2026-02-27
+- **프로덕션**: `class.chois.ai.kr` 배포 완료, 정상 운영 중
+- **DB 상태**: 스키마 코드(`schema.ts`)와 프로덕션 DB 100% 일치 확인 (2026-02-27)
+- **다음 할 일**: Phase 7 (TypeScript 정리) 또는 추가 기능 개발
 
 ---
 
@@ -53,8 +53,8 @@
 - [x] Vite 프록시 설정 (`/api` → localhost:3001, `/socket.io` → ws)
 
 ### 0-6. 통합 확인
-- [ ] DB 연결 확인 — Railway DB 준비 후
-- [ ] `drizzle-kit push` 실행 — Railway DB 준비 후
+- [x] DB 연결 확인
+- [x] `drizzle-kit push` 실행 완료 (프로덕션 DB 스키마 동기화 확인)
 - [x] 서버 단독 실행 확인
 - [x] 프론트엔드 빌드 확인
 - [x] **Phase 0 완료 커밋**
@@ -137,7 +137,7 @@
 ## Phase 5: 실시간 (Socket.IO)
 
 ### 5-1. 서버 Socket.IO
-- [x] 전체 완료 (index.ts, handlers: notes, comments, assignments)
+- [x] 전체 완료 (index.ts, handlers: notes, comments, assignments, presence)
 
 ### 5-2. 클라이언트 Socket.IO
 - [x] `src/lib/socket.ts` 생성 (싱글톤, 재연결, room 관리, visibilitychange)
@@ -148,6 +148,10 @@
 - [x] `AssignmentMonitor` — subscribeToRoom('assignment:...', 'submission:updated')
 - [x] `AssignmentStudyViewer` — subscribeToRoom('asn-comments:...', 'asn-comment:updated')
 - [x] `SortablePageItem.jsx` — imageUrl camelCase 수정
+- [x] 학생 접속 상태(Presence) 실시간 추적 (2026-02-27)
+  - 서버: `handlers/presence.ts` — 인메모리 presence 관리, 권한 검증
+  - 클라이언트: `StudyViewer` — presence:enter/leave + 재연결 처리
+  - 클라이언트: `ChapterMonitor` — 접속 상태 표시 (초록 점 + "N페이지 학습 중")
 
 ---
 
@@ -161,20 +165,25 @@
 - [x] `.env.local`에서 VITE_SUPABASE_* 환경변수 불필요
 
 ### 6-2. 프로덕션 배포
-- [ ] `npm install` 실행 (lockfile에서 supabase 제거)
-- [ ] 커밋 + 푸시
-- [ ] Railway Volume 마운트 설정 (`/data/storage`)
-- [ ] Railway 환경변수 설정 (DATABASE_URL, JWT_SECRET, GOOGLE_*, etc.)
-- [ ] Google Cloud Console: 프로덕션 OAuth redirect URI 추가
-- [ ] Railway PostgreSQL에 `drizzle-kit push` 실행
-- [ ] 배포 + 전체 기능 E2E 테스트
+- [x] `npm install` 실행 (lockfile에서 supabase 제거, bcrypt 추가)
+- [x] 커밋 + 푸시
+- [x] Railway Volume 마운트 설정 (`/data/storage`)
+- [x] Railway 환경변수 설정 (DATABASE_URL, JWT_SECRET, GOOGLE_*, SMTP_*, VOLUME_PATH)
+- [x] Google Cloud Console: 프로덕션 OAuth redirect URI 추가
+- [x] Google OAuth 브랜딩 검증 완료 (2026-02-26)
+  - packages/client/index.html: 정적 HTML fallback + og:url, canonical meta 추가
+  - packages/client/public/privacy.html: 정적 개인정보처리방침 페이지 신규
+  - packages/client/public/robots.txt: 크롤러 허용 정책
+  - DNS: Cloudflare proxy 비활성화 → Railway IP 직접 연결 (class.chois.ai.kr → 66.33.22.1)
+- [x] Railway PostgreSQL `drizzle-kit push` 완료 (DB 스키마 동기화 확인)
+- [x] 배포 완료 — Railway ChoisClass 서비스 SUCCESS (2026-02-27)
 
 ### 6-3. 검증
-- [ ] 프로덕션에서 전체 로그인 플로우
-- [ ] 프로덕션에서 이미지 업로드/다운로드
-- [ ] 프로덕션에서 필기 저장/불러오기
-- [ ] 프로덕션에서 Socket.IO 실시간 동기화
-- [ ] **Phase 6 완료 커밋**
+- [x] 프로덕션에서 전체 로그인 플로우 (Google OAuth + 이메일/비밀번호)
+- [x] 프로덕션에서 이미지 업로드/다운로드
+- [x] 프로덕션에서 필기 저장/불러오기
+- [x] 프로덕션에서 Socket.IO 실시간 동기화
+- [x] **Phase 6 완료**
 
 ---
 
@@ -196,3 +205,4 @@
 | 02-25 | 1 | api.ts 401 race condition (동시 다중 refresh) | ✅ | singleton promise 패턴 |
 | 02-25 | 4 | 학생이 본인 코멘트 읽기 불가 (GET /api/comments 서버 버그) | ✅ | GET /api/comments/:pageId/for-student 추가 |
 | 02-25 | 5 | AssignmentWorkViewer에 assignment notes Realtime 없음 | ⚠️ | TODO — 서버 Socket.IO 이벤트 미구현 |
+| 02-27 | 6 | drizzle-kit push가 pg_stat_statements 뷰 삭제 시도 | ✅ | Railway 내부 확장 충돌 — 수동 SQL 대신 직접 스키마 비교로 확인 |

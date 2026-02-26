@@ -110,7 +110,9 @@ E:\Projects\MathChois\
 ErrorBoundary
   AuthProvider
     BrowserRouter
-      /auth/callback → OAuthCallback (레이아웃 없음)
+      /auth/callback        → OAuthCallback (레이아웃 없음)
+      /verify-email/:token  → VerifyEmail (레이아웃 없음) ← ★ 신규
+      /reset-password/:token → ResetPassword (레이아웃 없음) ← ★ 신규
 
       MainLayout (Navbar만)
         /            → Home
@@ -142,6 +144,103 @@ ErrorBoundary
 
 ---
 
+## 이메일 회원가입 2단계 검증 (Email Signup Verification)
+
+### 흐름
+1. **SignUp (Home/Login 페이지)**
+   - 사용자가 이메일, 비밀번호, 이름 입력 후 "회원가입" 버튼
+   - Client: `api.signUpWithEmail(email, password, name)` 호출
+   - **반환값**: `{ success: true, message: "가입확인 이메일을 전송했습니다." }` (accounts created 아직 안 함)
+   - 페이지에 success message 표시 (auto-login 아님)
+
+2. **Email Verification Link**
+   - Server: `POST /api/auth/signup`
+     - `signEmailVerificationToken(email, passwordHash, name)` JWT 생성 (유효기간: 24h)
+     - `sendVerificationEmail(to, verifyUrl, userName)` 이메일 발송
+     - 형식: `${APP_URL}/verify-email/${token}`
+   - 사용자가 이메일 확인 후 "가입확인" 버튼 클릭 → `/verify-email/:token` 라우트로 이동
+
+3. **Token Verification & Account Creation**
+   - Client: `VerifyEmail.jsx` 컴포넌트
+     - URL에서 token 파라미터 추출
+     - `api.verifyEmail(token)` 호출
+     - Server: `POST /api/auth/verify-email`
+       - `verifyEmailVerificationToken(token)` 으로 토큰 검증
+       - 토큰 payload: `{ email, passwordHash, name }` 추출
+       - 중복 이메일 확인 후 `createEmailProfile(email, passwordHash, name)` 으로 프로필 생성
+       - Access JWT + Refresh cookie 반환
+       - 클라이언트는 `{ token, profile }` 받음
+     - `window.location.href = '/'` 전체 새로고침 → AuthContext가 refresh cookie에서 세션 복원
+
+4. **VerifyEmail 컴포넌트 에러 처리**
+   - 토큰 만료/유효하지 않음 → error message + "홈으로 돌아가기" 링크
+   - cancellation token으로 race condition 방지 (컴포넌트 언마운트 시)
+
+### 서버 구현
+
+**Token Functions (auth.service.ts)**
+- `signEmailVerificationToken(data)`: `{ email, passwordHash, name }` → JWT (24h)
+- `verifyEmailVerificationToken(token)`: JWT 검증 + payload 추출
+
+**Endpoints (auth.ts)**
+```
+POST /api/auth/signup
+  Body: { email, password, name }
+  Rate limit: 10/minute
+  검증:
+    - 이메일 형식 확인
+    - 비밀번호 길이 4자 이상
+    - SMTP 설정 확인
+    - 중복 이메일 확인
+  응답: { success, message } (account 아직 생성 안 함)
+
+POST /api/auth/verify-email
+  Body: { token }
+  검증: 토큰 유효성, 이메일 중복
+  응답: { token, profile }
+  Side effects: refresh_token 쿠키 설정
+```
+
+**Mail Function (mail.service.ts)**
+```
+sendVerificationEmail(to, verifyUrl, userName)
+  - 한국어 템플릿
+  - "가입확인" 버튼 + 24시간 유효성 안내
+  - ChoisClass 브랜딩
+```
+
+### 클라이언트 구현
+
+**API Functions (api.ts)**
+```
+signUpWithEmail(email, password, name): Promise<{ success, message }>
+  - Body validation (client side)
+  - POST /api/auth/signup
+  - 반환: success message (자동 로그인 X)
+
+verifyEmail(token): Promise<void>
+  - POST /api/auth/verify-email
+  - 성공: AuthContext refresh-token 쿠키 자동 인식
+  - 실패: error message throw
+```
+
+**VerifyEmail.jsx**
+```
+- Routes: /verify-email/:token
+- URL에서 token 파라미터 추출
+- useEffect에서 api.verifyEmail(token) 호출
+- 성공: window.location.href = '/'
+- 에러: error message + home link
+```
+
+**Password Reset (별도 흐름)**
+- `/reset-password/:token` 라우트 (ResetPassword.jsx 컴포넌트)
+- 메일 링크: `GET /api/auth/reset-password/:token` (서버에서 Fastify redirect)
+- 검증: `POST /api/auth/reset-password` (JSON)
+- 클라이언트: `verifyResetToken(token)` 호출 후 home으로 리다이렉트
+
+---
+
 ## AuthContext 상세 (packages/client/src/contexts/AuthContext.jsx)
 
 ### Context value
@@ -150,6 +249,8 @@ ErrorBoundary
 - `isAuthenticated` — `!!user`
 - `isLoading` — 앱 초기 세션 로드 중 여부
 - `signInWithGoogle()` — Google OAuth 리다이렉트
+- `signUpWithEmail(email, password, name)` — 검증 이메일 발송 (반환: `{ success, message }`)
+- `signInWithEmail(email, password)` — 이메일 로그인 (반환: JWT)
 - `signOut()` — 토큰 삭제 + state 초기화 + Socket.IO 연결 해제
 - `updateRole(role)` — API로 role 업데이트 + profile state 갱신
 
