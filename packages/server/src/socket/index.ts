@@ -1,10 +1,10 @@
 import { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { env } from '../config/env.js';
 import { db } from '../config/database.js';
-import { chapters, pages, classrooms, assignments, assignmentPages } from '../db/schema.js';
+import { chapters, pages, classrooms, classroomMembers, assignments, assignmentPages } from '../db/schema.js';
 import type { TokenPayload } from '@mathchois/shared';
 import { registerNoteHandlers } from './handlers/notes.js';
 import { registerCommentHandlers } from './handlers/comments.js';
@@ -21,11 +21,12 @@ export function getIO(): Server {
 // ─── Room 패턴 정규식 ─────────────────────────
 
 const ROOM_PATTERNS = {
-  chapter:     /^chapter:([\w-]+)$/,
-  work:        /^work:([\w-]+):([\w-]+)$/,
-  comments:    /^comments:([\w-]+):([\w-]+)$/,
-  assignment:  /^assignment:([\w-]+)$/,
-  asnComments: /^asn-comments:([\w-]+):([\w-]+)$/,
+  chapter:      /^chapter:([\w-]+)$/,
+  work:         /^work:([\w-]+):([\w-]+)$/,
+  comments:     /^comments:([\w-]+):([\w-]+)$/,
+  teacherNotes: /^teacher-notes:([\w-]+)$/,
+  assignment:   /^assignment:([\w-]+)$/,
+  asnComments:  /^asn-comments:([\w-]+):([\w-]+)$/,
 };
 
 /** page → chapter → classroom → teacherId 추적 */
@@ -96,6 +97,41 @@ async function validateRoomAccess(user: TokenPayload, room: string): Promise<boo
     const asn = await db.select({ teacherId: assignments.teacherId })
       .from(assignments).where(eq(assignments.id, asnPage[0].assignmentId)).limit(1);
     return asn[0]?.teacherId === user.sub;
+  }
+
+  // teacher-notes:{pageId} → 교실 소속 학생 또는 교실 소유 교사
+  m = room.match(ROOM_PATTERNS.teacherNotes);
+  if (m) {
+    const pageId = m[1];
+    // page → chapter → classroom 추적
+    const page = await db.select({ chapterId: pages.chapterId })
+      .from(pages).where(eq(pages.id, pageId)).limit(1);
+    if (!page[0]) return false;
+    const chapter = await db.select({ classroomId: chapters.classroomId })
+      .from(chapters).where(eq(chapters.id, page[0].chapterId)).limit(1);
+    if (!chapter[0]) return false;
+    const cls = await db.select({ teacherId: classrooms.teacherId })
+      .from(classrooms).where(eq(classrooms.id, chapter[0].classroomId)).limit(1);
+    if (!cls[0]) return false;
+
+    // 교사: 교실 소유자만
+    if (user.role === 'teacher') {
+      return cls[0].teacherId === user.sub;
+    }
+
+    // 학생: 교실 구성원만
+    if (user.role === 'student') {
+      const member = await db.select({ id: classroomMembers.id })
+        .from(classroomMembers)
+        .where(and(
+          eq(classroomMembers.classroomId, chapter[0].classroomId),
+          eq(classroomMembers.studentId, user.sub),
+        ))
+        .limit(1);
+      return member.length > 0;
+    }
+
+    return false;
   }
 
   return false; // 알 수 없는 room 패턴
