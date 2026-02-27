@@ -48,6 +48,81 @@ export async function getAllUsers() {
   }));
 }
 
+/** 교사 → 클래스룸 → 학생 계층 구조 조회 */
+export async function getTeachersWithStudents() {
+  // 4 queries, no N+1
+  const allTeachers = await db.select().from(profiles).where(eq(profiles.role, 'teacher'));
+  const allClassrooms = await db.select().from(classrooms);
+  const allMembers = await db
+    .select({
+      classroomId: classroomMembers.classroomId,
+      studentId: classroomMembers.studentId,
+      joinedAt: classroomMembers.joinedAt,
+      name: profiles.name,
+      email: profiles.email,
+      avatarUrl: profiles.avatarUrl,
+      authMethod: profiles.authMethod,
+      mustResetPassword: profiles.mustResetPassword,
+    })
+    .from(classroomMembers)
+    .innerJoin(profiles, eq(classroomMembers.studentId, profiles.id));
+  const allStudents = await db.select().from(profiles).where(eq(profiles.role, 'student'));
+
+  // Build classroom map: classroomId → { ...classroom, students[] }
+  const classroomMap = new Map<string, { id: string; name: string; classCode: string; teacherId: string; students: typeof allMembers }>();
+  for (const c of allClassrooms) {
+    classroomMap.set(c.id, { id: c.id, name: c.name, classCode: c.classCode!, teacherId: c.teacherId, students: [] });
+  }
+  for (const m of allMembers) {
+    classroomMap.get(m.classroomId)?.students.push(m);
+  }
+
+  // Build teacher hierarchy (only teachers with classrooms)
+  const assignedStudentIds = new Set(allMembers.map(m => m.studentId));
+  const teachers = allTeachers
+    .filter(t => allClassrooms.some(c => c.teacherId === t.id))
+    .map(t => {
+      const tClassrooms = allClassrooms
+        .filter(c => c.teacherId === t.id)
+        .map(c => {
+          const entry = classroomMap.get(c.id)!;
+          const students = entry.students
+            .map(s => ({
+              id: s.studentId,
+              name: s.name,
+              email: s.email,
+              avatarUrl: s.avatarUrl,
+              authMethod: s.authMethod,
+              mustResetPassword: s.mustResetPassword,
+              joinedAt: s.joinedAt,
+            }))
+            .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+          return { id: entry.id, name: entry.name, classCode: entry.classCode, students };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return {
+        teacher: { id: t.id, name: t.name, email: t.email, avatarUrl: t.avatarUrl },
+        classrooms: tClassrooms,
+      };
+    })
+    .sort((a, b) => (a.teacher.name ?? '').localeCompare(b.teacher.name ?? ''));
+
+  // Unassigned students (role='student' but not in any classroom)
+  const unassignedStudents = allStudents
+    .filter(s => !assignedStudentIds.has(s.id))
+    .map(s => ({
+      id: s.id,
+      name: s.name,
+      email: s.email,
+      avatarUrl: s.avatarUrl,
+      authMethod: s.authMethod,
+      mustResetPassword: s.mustResetPassword,
+    }))
+    .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+
+  return { teachers, unassignedStudents };
+}
+
 /** 사용자 역할 변경 */
 export async function updateUserRole(userId: string, role: 'teacher' | 'student') {
   const [updated] = await db

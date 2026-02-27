@@ -3,6 +3,7 @@ import { authenticate } from '../middleware/auth.js';
 import { requireAdmin } from '../middleware/roleGuard.js';
 import {
   getAllUsers,
+  getTeachersWithStudents,
   updateUserRole,
   setUserAdmin,
   deleteUser,
@@ -22,6 +23,14 @@ export async function adminRoutes(app: FastifyInstance) {
     preHandler: [authenticate, requireAdmin],
   }, async () => {
     return getAllUsers();
+  });
+
+  // ─── GET /api/admin/teachers-with-students — 교사→클래스→학생 계층 ──
+
+  app.get('/api/admin/teachers-with-students', {
+    preHandler: [authenticate, requireAdmin],
+  }, async () => {
+    return getTeachersWithStudents();
   });
 
   // ─── GET /api/admin/users/:id/detail — 사용자 상세 ──

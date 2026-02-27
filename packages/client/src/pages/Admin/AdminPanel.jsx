@@ -3,6 +3,7 @@ import {
   Users, Building2, BarChart3, Trash2, Shield, ShieldOff,
   UserCog, ChevronDown, ChevronUp, RefreshCw, AlertTriangle,
   HardDrive, Database, X, Search, KeyRound, Pencil, Check, Mail,
+  ChevronRight, GraduationCap, FolderOpen,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -34,6 +35,18 @@ function UsersTab() {
   const [userDetail, setUserDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
+  const [editingNameId, setEditingNameId] = useState(null);
+  const [editNameValue, setEditNameValue] = useState('');
+
+  // Sub-tab state
+  const [subTab, setSubTab] = useState('teachers');
+
+  // Hierarchy state (students sub-tab)
+  const [hierarchy, setHierarchy] = useState(null);
+  const [hierarchyLoading, setHierarchyLoading] = useState(false);
+  const [expandedTeachers, setExpandedTeachers] = useState(new Set());
+  const [expandedClassrooms, setExpandedClassrooms] = useState(new Set());
+  const [studentSearch, setStudentSearch] = useState('');
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -46,7 +59,36 @@ function UsersTab() {
     }
   }, []);
 
+  const fetchHierarchy = useCallback(async () => {
+    setHierarchyLoading(true);
+    try {
+      const data = await api.get('/api/admin/teachers-with-students');
+      setHierarchy(data);
+    } catch (err) {
+      console.error('계층 데이터 로드 실패:', err);
+    } finally {
+      setHierarchyLoading(false);
+    }
+  }, []);
+
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  // Lazy load hierarchy on first students sub-tab switch
+  useEffect(() => {
+    if (subTab === 'students' && !hierarchy) {
+      fetchHierarchy();
+    }
+  }, [subTab, hierarchy, fetchHierarchy]);
+
+  // Reset edit state on sub-tab switch
+  const handleSubTabChange = (tab) => {
+    setSubTab(tab);
+    setEditingNameId(null);
+  };
+
+  const syncHierarchy = useCallback(async () => {
+    if (hierarchy) await fetchHierarchy();
+  }, [hierarchy, fetchHierarchy]);
 
   const toggleDetail = async (userId) => {
     if (expandedUser === userId) {
@@ -71,6 +113,7 @@ function UsersTab() {
     try {
       await api.patch(`/api/admin/users/${userId}/role`, { role: newRole });
       await fetchUsers();
+      await syncHierarchy();
       if (expandedUser === userId) {
         const detail = await api.get(`/api/admin/users/${userId}/detail`);
         setUserDetail(detail);
@@ -98,17 +141,21 @@ function UsersTab() {
     }
   };
 
-  const handleDelete = async (userId, userName) => {
+  const handleDelete = async (userId, userName, fromStudentTab = false) => {
     if (userId === me?.id) {
       alert('자기 자신은 삭제할 수 없습니다.');
       return;
     }
-    if (!confirm(`정말 "${userName}" 사용자를 삭제하시겠습니까?\n모든 데이터가 영구 삭제됩니다.`)) return;
+    const msg = fromStudentTab
+      ? `"${userName}" 학생을 삭제하시겠습니까?\n모든 클래스에서 삭제되며 전체 데이터가 영구 삭제됩니다.`
+      : `정말 "${userName}" 사용자를 삭제하시겠습니까?\n모든 데이터가 영구 삭제됩니다.`;
+    if (!confirm(msg)) return;
     setActionLoading(userId);
     try {
       await api.delete(`/api/admin/users/${userId}`);
       setExpandedUser(null);
       await fetchUsers();
+      await syncHierarchy();
     } catch (err) {
       alert(err.message || '삭제 실패');
     } finally {
@@ -122,6 +169,7 @@ function UsersTab() {
     try {
       await api.post(`/api/admin/users/${userId}/reset`);
       await fetchUsers();
+      await syncHierarchy();
       if (expandedUser === userId) {
         const detail = await api.get(`/api/admin/users/${userId}/detail`);
         setUserDetail(detail);
@@ -132,9 +180,6 @@ function UsersTab() {
       setActionLoading(null);
     }
   };
-
-  const [editingNameId, setEditingNameId] = useState(null);
-  const [editNameValue, setEditNameValue] = useState('');
 
   const handleResetPassword = async (userId, userName, authMethod) => {
     if (authMethod !== 'email') {
@@ -147,6 +192,7 @@ function UsersTab() {
       await api.post(`/api/admin/users/${userId}/reset-password`);
       alert('비밀번호가 초기화되었습니다.\n사용자가 다음 로그인 시 새 비밀번호를 설정합니다.');
       await fetchUsers();
+      await syncHierarchy();
     } catch (err) {
       alert(err.message || '비밀번호 초기화 실패');
     } finally {
@@ -169,6 +215,7 @@ function UsersTab() {
       await api.patch(`/api/admin/users/${userId}/name`, { name: editNameValue.trim() });
       setEditingNameId(null);
       await fetchUsers();
+      await syncHierarchy();
     } catch (err) {
       alert(err.message || '이름 변경 실패');
     } finally {
@@ -176,244 +223,502 @@ function UsersTab() {
     }
   };
 
-  const filtered = users.filter(u => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (u.name?.toLowerCase().includes(q)) || (u.email?.toLowerCase().includes(q));
-  });
+  // Counts for sub-tab badges
+  const teacherCount = users.filter(u => u.role === 'teacher' || !u.role).length;
+  const studentCount = users.filter(u => u.role === 'student').length;
 
   if (loading) return <p className="text-gray-500 py-8 text-center">로딩 중...</p>;
 
-  return (
-    <div>
-      {/* 검색 */}
-      <div className="mb-4 relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="이름 또는 이메일 검색..."
-          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
-        />
+  // ─── Inline name edit component ───
+  const NameCell = ({ id, name, authMethod, avatarUrl, compact = false }) => (
+    <div className="flex items-center gap-2 min-w-0 flex-1">
+      {avatarUrl
+        ? <img src={avatarUrl} alt="" className="h-8 w-8 rounded-full flex-shrink-0" referrerPolicy="no-referrer" />
+        : <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+            {authMethod === 'email' && <Mail className="h-4 w-4 text-gray-400" />}
+          </div>
+      }
+      <div className="min-w-0">
+        {editingNameId === id ? (
+          <div className="flex items-center gap-1">
+            <input
+              type="text"
+              value={editNameValue}
+              onChange={e => setEditNameValue(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSaveName(id)}
+              className="text-sm border border-blue-300 rounded px-1.5 py-0.5 w-28 focus:ring-blue-500 focus:border-blue-500"
+              autoFocus
+            />
+            <button onClick={() => handleSaveName(id)} className="p-0.5 text-green-600 hover:bg-green-50 rounded cursor-pointer" title="저장">
+              <Check className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={() => setEditingNameId(null)} className="p-0.5 text-gray-400 hover:bg-gray-100 rounded cursor-pointer" title="취소">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 group/name">
+            <span className={`font-medium text-gray-900 truncate ${compact ? 'text-xs' : 'text-sm'}`}>{name || '(이름 없음)'}</span>
+            <button
+              onClick={() => startEditName(id, name)}
+              className="p-0.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded cursor-pointer opacity-0 group-hover/name:opacity-100 transition-opacity"
+              title="이름 변경"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+        {!compact && (
+          <div className="text-xs text-gray-500 truncate">{/* email shown externally */}</div>
+        )}
       </div>
+    </div>
+  );
 
-      <div className="text-sm text-gray-500 mb-3">총 {filtered.length}명</div>
+  // ─── Student action buttons (used in hierarchy view) ───
+  const StudentActions = ({ student }) => (
+    <div className="flex items-center gap-0.5 flex-shrink-0">
+      {student.authMethod === 'email' && (
+        <button
+          onClick={() => handleResetPassword(student.id, student.name, student.authMethod)}
+          disabled={actionLoading === student.id}
+          title={student.mustResetPassword ? '비밀번호 초기화 대기 중' : '비밀번호 초기화'}
+          className={`p-1 rounded transition-colors cursor-pointer ${
+            student.mustResetPassword ? 'text-amber-600 bg-amber-50' : 'text-violet-500 hover:bg-violet-50'
+          }`}
+        >
+          <KeyRound className="h-3.5 w-3.5" />
+        </button>
+      )}
+      <button
+        onClick={() => handleResetUser(student.id, student.name)}
+        disabled={actionLoading === student.id}
+        title="데이터 초기화"
+        className="p-1 text-orange-500 hover:bg-orange-50 rounded transition-colors cursor-pointer"
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+      </button>
+      <button
+        onClick={() => handleDelete(student.id, student.name, true)}
+        disabled={actionLoading === student.id || student.id === me?.id}
+        title="학생 삭제"
+        className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer disabled:opacity-30"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
 
-      {/* 사용자 목록 */}
-      <div className="space-y-2">
-        {filtered.map(u => (
-          <div key={u.id} className="border border-gray-200 rounded-lg bg-white overflow-hidden group/row">
-            <div className="flex items-center gap-3 p-3">
-              {/* 아바타 + 이름 */}
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                {u.avatarUrl
-                  ? <img src={u.avatarUrl} alt="" className="h-8 w-8 rounded-full flex-shrink-0" referrerPolicy="no-referrer" />
-                  : <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                      {u.authMethod === 'email' && <Mail className="h-4 w-4 text-gray-400" />}
-                    </div>
-                }
-                <div className="min-w-0">
-                  {editingNameId === u.id ? (
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="text"
-                        value={editNameValue}
-                        onChange={e => setEditNameValue(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && handleSaveName(u.id)}
-                        className="text-sm border border-blue-300 rounded px-1.5 py-0.5 w-28 focus:ring-blue-500 focus:border-blue-500"
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => handleSaveName(u.id)}
-                        className="p-0.5 text-green-600 hover:bg-green-50 rounded cursor-pointer"
-                        title="저장"
-                      >
-                        <Check className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setEditingNameId(null)}
-                        className="p-0.5 text-gray-400 hover:bg-gray-100 rounded cursor-pointer"
-                        title="취소"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm font-medium text-gray-900 truncate">{u.name || '(이름 없음)'}</span>
-                      <button
-                        onClick={() => startEditName(u.id, u.name)}
-                        className="p-0.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded cursor-pointer opacity-0 group-hover/row:opacity-100 transition-opacity"
-                        title="이름 변경"
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </button>
-                    </div>
+  // ─── Teachers sub-tab rendering ───
+  const renderTeachersTab = () => {
+    const filtered = users
+      .filter(u => u.role === 'teacher' || !u.role)
+      .filter(u => {
+        if (!search) return true;
+        const q = search.toLowerCase();
+        return u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
+      });
+
+    return (
+      <>
+        <div className="mb-4 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="이름 또는 이메일 검색..."
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+
+        <div className="text-sm text-gray-500 mb-3">총 {filtered.length}명</div>
+
+        <div className="space-y-2">
+          {filtered.map(u => (
+            <div key={u.id} className="border border-gray-200 rounded-lg bg-white overflow-hidden group/row">
+              <div className="flex items-center gap-3 p-3">
+                <NameCell id={u.id} name={u.name} authMethod={u.authMethod} avatarUrl={u.avatarUrl} />
+                <div className="text-xs text-gray-500 truncate flex items-center gap-1 flex-shrink-0 max-w-[180px]">
+                  {u.email}
+                  {u.authMethod === 'email' && (
+                    <span className="px-1 py-0 text-[10px] font-medium rounded bg-violet-100 text-violet-600">이메일</span>
                   )}
-                  <div className="text-xs text-gray-500 truncate flex items-center gap-1">
-                    {u.email}
-                    {u.authMethod === 'email' && (
-                      <span className="px-1 py-0 text-[10px] font-medium rounded bg-violet-100 text-violet-600">이메일</span>
-                    )}
-                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <RoleBadge role={u.role} />
+                  {u.isAdmin && <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">관리자</span>}
+                </div>
+                <span className="text-xs text-gray-500 flex-shrink-0 w-16 text-center">{u.classroomCount}개 클래스</span>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <select
+                    value={u.role || ''}
+                    onChange={e => handleRoleChange(u.id, e.target.value)}
+                    disabled={actionLoading === u.id}
+                    className="text-xs border border-gray-300 rounded px-1.5 py-1 cursor-pointer"
+                  >
+                    <option value="" disabled>역할</option>
+                    <option value="teacher">교사</option>
+                    <option value="student">학생</option>
+                  </select>
+                  <button
+                    onClick={() => handleAdminToggle(u.id, u.isAdmin)}
+                    disabled={actionLoading === u.id}
+                    title={u.isAdmin ? '관리자 해제' : '관리자 지정'}
+                    className={`p-1.5 rounded transition-colors cursor-pointer ${u.isAdmin ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-50'}`}
+                  >
+                    {u.isAdmin ? <Shield className="h-4 w-4" /> : <ShieldOff className="h-4 w-4" />}
+                  </button>
+                  {u.authMethod === 'email' && (
+                    <button
+                      onClick={() => handleResetPassword(u.id, u.name, u.authMethod)}
+                      disabled={actionLoading === u.id}
+                      title={u.mustResetPassword ? '비밀번호 초기화 대기 중' : '비밀번호 초기화'}
+                      className={`p-1.5 rounded transition-colors cursor-pointer ${u.mustResetPassword ? 'text-amber-600 bg-amber-50' : 'text-violet-500 hover:bg-violet-50'}`}
+                    >
+                      <KeyRound className="h-4 w-4" />
+                    </button>
+                  )}
+                  <button onClick={() => handleResetUser(u.id, u.name)} disabled={actionLoading === u.id} title="데이터 초기화" className="p-1.5 text-orange-500 hover:bg-orange-50 rounded transition-colors cursor-pointer">
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => handleDelete(u.id, u.name)} disabled={actionLoading === u.id || u.id === me?.id} title="사용자 삭제" className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer disabled:opacity-30">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => toggleDetail(u.id)} title="상세 정보" className="p-1.5 text-gray-500 hover:bg-gray-50 rounded transition-colors cursor-pointer">
+                    {expandedUser === u.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
 
-              {/* 역할 */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <RoleBadge role={u.role} />
-                {u.isAdmin && (
-                  <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">관리자</span>
+              {expandedUser === u.id && (
+                <div className="border-t border-gray-100 bg-gray-50 p-4">
+                  {detailLoading ? (
+                    <p className="text-sm text-gray-500">로딩 중...</p>
+                  ) : userDetail ? (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-1"><HardDrive className="h-4 w-4" /> Storage</h4>
+                        <p className="text-lg font-semibold text-gray-900">{formatBytes(userDetail.storageBytes)}</p>
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-1"><Database className="h-4 w-4" /> Database (교사)</h4>
+                        <ul className="space-y-0.5 text-gray-600">
+                          <li>클래스룸: {userDetail.dbRows.teacher.classrooms}</li>
+                          <li>게시물: {userDetail.dbRows.teacher.posts}</li>
+                          <li>교사 필기: {userDetail.dbRows.teacher.teacherNotes}</li>
+                          <li>코멘트: {userDetail.dbRows.teacher.comments}</li>
+                          <li>과제: {userDetail.dbRows.teacher.assignments}</li>
+                          <li>과제 코멘트: {userDetail.dbRows.teacher.assignmentComments}</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-1"><Database className="h-4 w-4" /> Database (학생)</h4>
+                        <ul className="space-y-0.5 text-gray-600">
+                          <li>가입 클래스: {userDetail.dbRows.student.memberships}</li>
+                          <li>필기 노트: {userDetail.dbRows.student.notes}</li>
+                          <li>과제 제출: {userDetail.dbRows.student.submissions}</li>
+                          <li>과제 필기: {userDetail.dbRows.student.assignmentNotes}</li>
+                        </ul>
+                      </div>
+                      {userDetail.classrooms?.length > 0 && (
+                        <div className="md:col-span-3">
+                          <h4 className="font-medium text-gray-700 mb-2">{u.role === 'teacher' ? '개설한 클래스룸' : '가입한 클래스룸'}</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {userDetail.classrooms.map(c => (
+                              <span key={c.id} className="px-2 py-1 bg-white border border-gray-200 rounded text-xs text-gray-700">
+                                {c.name} <span className="text-gray-400">({c.classCode})</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">정보를 불러올 수 없습니다.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  };
+
+  // ─── Students sub-tab rendering (hierarchy view) ───
+  const renderStudentsTab = () => {
+    if (hierarchyLoading && !hierarchy) {
+      return <p className="text-gray-500 py-8 text-center">로딩 중...</p>;
+    }
+    if (!hierarchy) {
+      return <p className="text-gray-500 py-8 text-center">데이터를 불러올 수 없습니다.</p>;
+    }
+
+    const { teachers: teacherEntries, unassignedStudents } = hierarchy;
+    const q = studentSearch.toLowerCase();
+    const isSearching = !!q;
+
+    // Filter helpers
+    const matchStudent = (s) => s.name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q);
+
+    // Filtered hierarchy
+    const filteredTeachers = isSearching
+      ? teacherEntries
+          .map(te => ({
+            ...te,
+            classrooms: te.classrooms
+              .map(cr => ({ ...cr, students: cr.students.filter(matchStudent) }))
+              .filter(cr => cr.students.length > 0),
+          }))
+          .filter(te => te.classrooms.length > 0)
+      : teacherEntries;
+
+    const filteredUnassigned = isSearching
+      ? unassignedStudents.filter(matchStudent)
+      : unassignedStudents;
+
+    // Summary counts
+    const totalStudents = teacherEntries.reduce((sum, te) => sum + te.classrooms.reduce((s2, cr) => s2 + cr.students.length, 0), 0) + unassignedStudents.length;
+
+    const toggleTeacher = (teacherId) => {
+      setExpandedTeachers(prev => {
+        const next = new Set(prev);
+        next.has(teacherId) ? next.delete(teacherId) : next.add(teacherId);
+        return next;
+      });
+    };
+
+    const toggleClassroom = (classroomId) => {
+      setExpandedClassrooms(prev => {
+        const next = new Set(prev);
+        next.has(classroomId) ? next.delete(classroomId) : next.add(classroomId);
+        return next;
+      });
+    };
+
+    const isTeacherOpen = (teacherId) => isSearching || expandedTeachers.has(teacherId);
+    const isClassroomOpen = (classroomId) => isSearching || expandedClassrooms.has(classroomId);
+
+    return (
+      <>
+        {/* Search */}
+        <div className="mb-4 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            value={studentSearch}
+            onChange={e => setStudentSearch(e.target.value)}
+            placeholder="학생 이름 또는 이메일 검색..."
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+
+        {/* Summary */}
+        <div className="text-sm text-gray-500 mb-3">
+          교사 {teacherEntries.length}명 · 클래스룸 {teacherEntries.reduce((s, te) => s + te.classrooms.length, 0)}개 · 학생 {totalStudents}명
+          {unassignedStudents.length > 0 && <span className="text-gray-400"> (미배정 {unassignedStudents.length}명)</span>}
+        </div>
+
+        {/* Empty state */}
+        {filteredTeachers.length === 0 && filteredUnassigned.length === 0 && (
+          <p className="text-gray-400 py-8 text-center">
+            {isSearching ? '검색 결과가 없습니다.' : '클래스룸을 개설한 교사가 없습니다.'}
+          </p>
+        )}
+
+        {/* Teacher → Classroom → Student hierarchy */}
+        <div className="space-y-1">
+          {filteredTeachers.map(({ teacher, classrooms: tClassrooms }) => {
+            const tStudentCount = tClassrooms.reduce((s, cr) => s + cr.students.length, 0);
+            const tOpen = isTeacherOpen(teacher.id);
+            return (
+              <div key={teacher.id}>
+                {/* Teacher row */}
+                <button
+                  onClick={() => toggleTeacher(teacher.id)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer text-left"
+                >
+                  {tOpen
+                    ? <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    : <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  }
+                  <span className="text-sm font-medium text-gray-800">{teacher.name || '(이름 없음)'}</span>
+                  <span className="text-xs text-gray-400 truncate">{teacher.email}</span>
+                  <span className="ml-auto text-xs text-gray-500 flex-shrink-0">
+                    {tClassrooms.length}개 클래스 · {tStudentCount}명
+                  </span>
+                </button>
+
+                {/* Classrooms */}
+                {tOpen && (
+                  <div className="ml-4 space-y-0.5">
+                    {tClassrooms.map(cr => {
+                      const crOpen = isClassroomOpen(cr.id);
+                      return (
+                        <div key={cr.id}>
+                          {/* Classroom row */}
+                          <button
+                            onClick={() => toggleClassroom(cr.id)}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 rounded hover:bg-gray-50 transition-colors cursor-pointer text-left"
+                          >
+                            {crOpen
+                              ? <ChevronDown className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                              : <ChevronRight className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                            }
+                            <FolderOpen className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                            <span className="text-sm text-gray-700">{cr.name}</span>
+                            <span className="text-xs font-mono text-gray-400">({cr.classCode})</span>
+                            <span className="ml-auto text-xs text-gray-500 flex-shrink-0">{cr.students.length}명</span>
+                          </button>
+
+                          {/* Students */}
+                          {crOpen && (
+                            <div className="ml-8 space-y-0.5 py-0.5">
+                              {cr.students.length === 0 ? (
+                                <p className="text-xs text-gray-400 px-3 py-1">학생이 없습니다</p>
+                              ) : cr.students.map(s => (
+                                <div key={s.id} className="flex items-center gap-2 px-3 py-1.5 rounded hover:bg-gray-50 group/student">
+                                  <GraduationCap className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                                  <div className="min-w-0 flex-1">
+                                    {editingNameId === s.id ? (
+                                      <div className="flex items-center gap-1">
+                                        <input
+                                          type="text"
+                                          value={editNameValue}
+                                          onChange={e => setEditNameValue(e.target.value)}
+                                          onKeyDown={e => e.key === 'Enter' && handleSaveName(s.id)}
+                                          className="text-xs border border-blue-300 rounded px-1.5 py-0.5 w-24 focus:ring-blue-500 focus:border-blue-500"
+                                          autoFocus
+                                        />
+                                        <button onClick={() => handleSaveName(s.id)} className="p-0.5 text-green-600 hover:bg-green-50 rounded cursor-pointer" title="저장">
+                                          <Check className="h-3 w-3" />
+                                        </button>
+                                        <button onClick={() => setEditingNameId(null)} className="p-0.5 text-gray-400 hover:bg-gray-100 rounded cursor-pointer" title="취소">
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-xs font-medium text-gray-800">{s.name || '(이름 없음)'}</span>
+                                        <button
+                                          onClick={() => startEditName(s.id, s.name)}
+                                          className="p-0.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded cursor-pointer opacity-0 group-hover/student:opacity-100 transition-opacity"
+                                          title="이름 변경"
+                                        >
+                                          <Pencil className="h-2.5 w-2.5" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <span className="text-xs text-gray-400 truncate max-w-[160px] flex-shrink-0 flex items-center gap-1">
+                                    {s.email}
+                                    {s.authMethod === 'email' && (
+                                      <span className="px-1 py-0 text-[10px] font-medium rounded bg-violet-100 text-violet-600">이메일</span>
+                                    )}
+                                  </span>
+                                  <StudentActions student={s} />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
+            );
+          })}
 
-              {/* 클래스룸 수 */}
-              <span className="text-xs text-gray-500 flex-shrink-0 w-16 text-center">
-                {u.classroomCount}개 클래스
-              </span>
-
-              {/* 액션 버튼들 */}
-              <div className="flex items-center gap-1 flex-shrink-0">
-                {/* 역할 변경 */}
-                <select
-                  value={u.role || ''}
-                  onChange={e => handleRoleChange(u.id, e.target.value)}
-                  disabled={actionLoading === u.id}
-                  className="text-xs border border-gray-300 rounded px-1.5 py-1 cursor-pointer"
-                >
-                  <option value="" disabled>역할</option>
-                  <option value="teacher">교사</option>
-                  <option value="student">학생</option>
-                </select>
-
-                {/* 관리자 토글 */}
-                <button
-                  onClick={() => handleAdminToggle(u.id, u.isAdmin)}
-                  disabled={actionLoading === u.id}
-                  title={u.isAdmin ? '관리자 해제' : '관리자 지정'}
-                  className={`p-1.5 rounded transition-colors cursor-pointer ${
-                    u.isAdmin
-                      ? 'text-amber-600 hover:bg-amber-50'
-                      : 'text-gray-400 hover:bg-gray-50'
-                  }`}
-                >
-                  {u.isAdmin ? <Shield className="h-4 w-4" /> : <ShieldOff className="h-4 w-4" />}
-                </button>
-
-                {/* 비밀번호 초기화 (이메일 계정만) */}
-                {u.authMethod === 'email' && (
-                  <button
-                    onClick={() => handleResetPassword(u.id, u.name, u.authMethod)}
-                    disabled={actionLoading === u.id}
-                    title={u.mustResetPassword ? '비밀번호 초기화 대기 중' : '비밀번호 초기화'}
-                    className={`p-1.5 rounded transition-colors cursor-pointer ${
-                      u.mustResetPassword
-                        ? 'text-amber-600 bg-amber-50'
-                        : 'text-violet-500 hover:bg-violet-50'
-                    }`}
-                  >
-                    <KeyRound className="h-4 w-4" />
-                  </button>
-                )}
-
-                {/* 데이터 초기화 */}
-                <button
-                  onClick={() => handleResetUser(u.id, u.name)}
-                  disabled={actionLoading === u.id}
-                  title="데이터 초기화"
-                  className="p-1.5 text-orange-500 hover:bg-orange-50 rounded transition-colors cursor-pointer"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </button>
-
-                {/* 삭제 */}
-                <button
-                  onClick={() => handleDelete(u.id, u.name)}
-                  disabled={actionLoading === u.id || u.id === me?.id}
-                  title="사용자 삭제"
-                  className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer disabled:opacity-30"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-
-                {/* 상세 펼치기 */}
-                <button
-                  onClick={() => toggleDetail(u.id)}
-                  title="상세 정보"
-                  className="p-1.5 text-gray-500 hover:bg-gray-50 rounded transition-colors cursor-pointer"
-                >
-                  {expandedUser === u.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </button>
+          {/* Unassigned students */}
+          {filteredUnassigned.length > 0 && (
+            <div className="mt-4">
+              <div className="flex items-center gap-2 px-3 py-2 border-t border-gray-200">
+                <span className="text-sm font-medium text-gray-500">미배정 학생 ({filteredUnassigned.length}명)</span>
+              </div>
+              <div className="ml-4 space-y-0.5 py-0.5">
+                {filteredUnassigned.map(s => (
+                  <div key={s.id} className="flex items-center gap-2 px-3 py-1.5 rounded hover:bg-gray-50 group/student">
+                    <GraduationCap className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      {editingNameId === s.id ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={editNameValue}
+                            onChange={e => setEditNameValue(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleSaveName(s.id)}
+                            className="text-xs border border-blue-300 rounded px-1.5 py-0.5 w-24 focus:ring-blue-500 focus:border-blue-500"
+                            autoFocus
+                          />
+                          <button onClick={() => handleSaveName(s.id)} className="p-0.5 text-green-600 hover:bg-green-50 rounded cursor-pointer" title="저장">
+                            <Check className="h-3 w-3" />
+                          </button>
+                          <button onClick={() => setEditingNameId(null)} className="p-0.5 text-gray-400 hover:bg-gray-100 rounded cursor-pointer" title="취소">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs font-medium text-gray-800">{s.name || '(이름 없음)'}</span>
+                          <button
+                            onClick={() => startEditName(s.id, s.name)}
+                            className="p-0.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded cursor-pointer opacity-0 group-hover/student:opacity-100 transition-opacity"
+                            title="이름 변경"
+                          >
+                            <Pencil className="h-2.5 w-2.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-400 truncate max-w-[160px] flex-shrink-0 flex items-center gap-1">
+                      {s.email}
+                      {s.authMethod === 'email' && (
+                        <span className="px-1 py-0 text-[10px] font-medium rounded bg-violet-100 text-violet-600">이메일</span>
+                      )}
+                    </span>
+                    <StudentActions student={s} />
+                  </div>
+                ))}
               </div>
             </div>
+          )}
+        </div>
+      </>
+    );
+  };
 
-            {/* 상세 패널 */}
-            {expandedUser === u.id && (
-              <div className="border-t border-gray-100 bg-gray-50 p-4">
-                {detailLoading ? (
-                  <p className="text-sm text-gray-500">로딩 중...</p>
-                ) : userDetail ? (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                    {/* Storage */}
-                    <div>
-                      <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-1">
-                        <HardDrive className="h-4 w-4" /> Storage
-                      </h4>
-                      <p className="text-lg font-semibold text-gray-900">{formatBytes(userDetail.storageBytes)}</p>
-                    </div>
-
-                    {/* DB Rows */}
-                    <div>
-                      <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-1">
-                        <Database className="h-4 w-4" /> Database (교사)
-                      </h4>
-                      <ul className="space-y-0.5 text-gray-600">
-                        <li>클래스룸: {userDetail.dbRows.teacher.classrooms}</li>
-                        <li>게시물: {userDetail.dbRows.teacher.posts}</li>
-                        <li>교사 필기: {userDetail.dbRows.teacher.teacherNotes}</li>
-                        <li>코멘트: {userDetail.dbRows.teacher.comments}</li>
-                        <li>과제: {userDetail.dbRows.teacher.assignments}</li>
-                        <li>과제 코멘트: {userDetail.dbRows.teacher.assignmentComments}</li>
-                      </ul>
-                    </div>
-
-                    <div>
-                      <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-1">
-                        <Database className="h-4 w-4" /> Database (학생)
-                      </h4>
-                      <ul className="space-y-0.5 text-gray-600">
-                        <li>가입 클래스: {userDetail.dbRows.student.memberships}</li>
-                        <li>필기 노트: {userDetail.dbRows.student.notes}</li>
-                        <li>과제 제출: {userDetail.dbRows.student.submissions}</li>
-                        <li>과제 필기: {userDetail.dbRows.student.assignmentNotes}</li>
-                      </ul>
-                    </div>
-
-                    {/* 클래스룸 목록 */}
-                    {userDetail.classrooms?.length > 0 && (
-                      <div className="md:col-span-3">
-                        <h4 className="font-medium text-gray-700 mb-2">
-                          {u.role === 'teacher' ? '개설한 클래스룸' : '가입한 클래스룸'}
-                        </h4>
-                        <div className="flex flex-wrap gap-2">
-                          {userDetail.classrooms.map(c => (
-                            <span key={c.id} className="px-2 py-1 bg-white border border-gray-200 rounded text-xs text-gray-700">
-                              {c.name} <span className="text-gray-400">({c.classCode})</span>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">정보를 불러올 수 없습니다.</p>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
+  return (
+    <div>
+      {/* Sub-tab pills */}
+      <div className="flex gap-2 mb-5">
+        <button
+          onClick={() => handleSubTabChange('teachers')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-full transition-colors cursor-pointer ${
+            subTab === 'teachers'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          <Users className="h-3.5 w-3.5" />
+          교사 ({teacherCount})
+        </button>
+        <button
+          onClick={() => handleSubTabChange('students')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-full transition-colors cursor-pointer ${
+            subTab === 'students'
+              ? 'bg-green-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          <GraduationCap className="h-3.5 w-3.5" />
+          학생 ({studentCount})
+        </button>
       </div>
+
+      {subTab === 'teachers' && renderTeachersTab()}
+      {subTab === 'students' && renderStudentsTab()}
     </div>
   );
 }
