@@ -169,21 +169,32 @@ export function setupSocketIO(httpServer: HttpServer): Server {
 
   io.on('connection', (socket) => {
     const user = socket.data.user as TokenPayload;
+    console.log('[Socket] Connected:', user.sub, user.role);
+
+    socket.on('disconnect', (reason) => {
+      console.log('[Socket] Disconnected:', user.sub, reason);
+    });
 
     // Room join with authorization
     socket.on('join-room', async (room: string) => {
-      // 이미 검증된 room은 바로 join
-      if (socket.data.validatedRooms.has(room)) {
-        socket.join(room);
-        return;
-      }
+      try {
+        // 이미 검증된 room은 바로 join
+        if (socket.data.validatedRooms.has(room)) {
+          socket.join(room);
+          return;
+        }
 
-      const allowed = await validateRoomAccess(user, room);
-      if (allowed) {
-        socket.data.validatedRooms.add(room);
-        socket.join(room);
-      } else {
-        socket.emit('error', { message: 'Access denied' });
+        const allowed = await validateRoomAccess(user, room);
+        if (allowed) {
+          socket.data.validatedRooms.add(room);
+          socket.join(room);
+        } else {
+          console.warn('[Socket] Access denied:', { room, userId: user.sub, role: user.role });
+          socket.emit('error', { message: 'Access denied', room });
+        }
+      } catch (err) {
+        console.error('[Socket] Room join error:', { room, userId: user.sub, error: err });
+        socket.emit('error', { message: 'Room join failed', room });
       }
     });
 

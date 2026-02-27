@@ -35,12 +35,17 @@ export function connectSocket(): Socket {
     return socket;
   }
 
-  // 기존 연결이 있으면 정리
+  // 소켓이 존재하지만 미연결 — auth 교체 후 재연결 (리스너 보존!)
   if (socket) {
-    socket.removeAllListeners();
-    socket.disconnect();
+    socket.auth = { token };
+    if (!socket.connected) {
+      socket.disconnect();
+      socket.connect();
+    }
+    return socket;
   }
 
+  // 최초 생성
   socket = io(SOCKET_URL, {
     auth: { token },
     reconnection: true,
@@ -52,9 +57,18 @@ export function connectSocket(): Socket {
 
   // 재연결 시 기존 room 자동 재참가
   socket.on('connect', () => {
+    console.debug('[Socket] Connected, rejoining', joinedRooms.size, 'rooms');
     for (const room of joinedRooms) {
       socket!.emit('join-room', room);
     }
+  });
+
+  socket.on('connect_error', (err) => {
+    console.error('[Socket] Connection error:', err.message);
+  });
+
+  socket.on('error', (data: unknown) => {
+    console.warn('[Socket] Server error:', data);
   });
 
   return socket;
@@ -70,12 +84,14 @@ export function disconnectSocket(): void {
   joinedRooms.clear();
 }
 
-/** access token 갱신 시 호출 — 재연결 */
+/** access token 갱신 시 호출 — auth만 교체하고 재연결 (이벤트 리스너 보존) */
 export function reconnectWithToken(): void {
-  const wasConnected = socket?.connected;
-  if (wasConnected || joinedRooms.size > 0) {
-    connectSocket();
-  }
+  const token = getAccessToken();
+  if (!token || !socket) return;
+
+  socket.auth = { token };
+  socket.disconnect();
+  socket.connect();
 }
 
 // ─── Room 관리 ─────────────────────────────────

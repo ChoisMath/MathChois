@@ -7,7 +7,7 @@ import {
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
-import { connectSocket, subscribeToRoom } from '../../lib/socket';
+import { subscribeToRoom } from '../../lib/socket';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
@@ -401,7 +401,6 @@ const AssignmentStudyViewer = () => {
   /* Socket.IO: 교사 코멘트 실시간 구독 */
   useEffect(() => {
     if (!currentPage || !user) return;
-    try { connectSocket(); } catch { /* 토큰 없음 */ }
     return subscribeToRoom(
       `asn-comments:${currentPage.id}:${user.id}`,
       'asn-comment:updated',
@@ -435,7 +434,6 @@ const AssignmentStudyViewer = () => {
   /* Socket.IO: 제출 상태 실시간 구독 (교사 채점/반려 반영) */
   useEffect(() => {
     if (!user) return;
-    try { connectSocket(); } catch { /* 토큰 없음 */ }
     return subscribeToRoom(
       `assignment:${assignmentId}`,
       'submission:updated',

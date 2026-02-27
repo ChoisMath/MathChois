@@ -76,43 +76,47 @@ export function registerPresenceHandlers(io: Server, socket: Socket, user: Token
   // 학생 이벤트
   if (user.role === 'student') {
     socket.on('presence:enter', async (data) => {
-      const { chapterId, pageId, studentName } = data || {};
-      if (!chapterId || !pageId) return;
+      try {
+        const { chapterId, pageId, studentName } = data || {};
+        if (!chapterId || !pageId) return;
 
-      const allowed = await validateStudentChapterAccess(user.sub, chapterId);
-      if (!allowed) return;
+        const allowed = await validateStudentChapterAccess(user.sub, chapterId);
+        if (!allowed) return;
 
-      // 이전에 다른 챕터에 있었으면 기존 presence 제거
-      const prev = socketToPresence.get(socket.id);
-      if (prev && prev.chapterId !== chapterId) {
-        removePresence(io, socket.id);
+        // 이전에 다른 챕터에 있었으면 기존 presence 제거
+        const prev = socketToPresence.get(socket.id);
+        if (prev && prev.chapterId !== chapterId) {
+          removePresence(io, socket.id);
+        }
+
+        // chapterPresence에 저장
+        let chMap = chapterPresence.get(chapterId);
+        if (!chMap) {
+          chMap = new Map();
+          chapterPresence.set(chapterId, chMap);
+        }
+
+        const existing = chMap.get(user.sub);
+        chMap.set(user.sub, {
+          pageId,
+          socketId: socket.id,
+          studentName: studentName || '이름 없음',
+          joinedAt: existing?.joinedAt || new Date(),
+        });
+
+        // 역인덱스 업데이트
+        socketToPresence.set(socket.id, { chapterId, studentId: user.sub });
+
+        // 브로드캐스트
+        io.to(`chapter:${chapterId}`).emit('presence:updated', {
+          studentId: user.sub,
+          studentName: studentName || '이름 없음',
+          pageId,
+          joinedAt: (existing?.joinedAt || new Date()).toISOString(),
+        });
+      } catch (err) {
+        console.error('[Socket] Presence enter error:', err);
       }
-
-      // chapterPresence에 저장
-      let chMap = chapterPresence.get(chapterId);
-      if (!chMap) {
-        chMap = new Map();
-        chapterPresence.set(chapterId, chMap);
-      }
-
-      const existing = chMap.get(user.sub);
-      chMap.set(user.sub, {
-        pageId,
-        socketId: socket.id,
-        studentName: studentName || '이름 없음',
-        joinedAt: existing?.joinedAt || new Date(),
-      });
-
-      // 역인덱스 업데이트
-      socketToPresence.set(socket.id, { chapterId, studentId: user.sub });
-
-      // 브로드캐스트
-      io.to(`chapter:${chapterId}`).emit('presence:updated', {
-        studentId: user.sub,
-        studentName: studentName || '이름 없음',
-        pageId,
-        joinedAt: (existing?.joinedAt || new Date()).toISOString(),
-      });
     });
 
     socket.on('presence:leave', () => {

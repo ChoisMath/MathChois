@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Users, Clock, Download } from 'lucide-react';
 import { api } from '../../lib/api';
-import { connectSocket, subscribeToRoom } from '../../lib/socket';
+import { subscribeToRoom } from '../../lib/socket';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 
@@ -71,7 +71,6 @@ const AssignmentMonitor = () => {
 
   /* Socket.IO: assignment_submissions 변경 감지 */
   useEffect(() => {
-    try { connectSocket(); } catch { /* 토큰 없음 */ }
     return subscribeToRoom(`assignment:${assignmentId}`, 'submission:updated', (data) => {
       if (!data?.studentId) return;
       setSubmissions((prev) => ({
