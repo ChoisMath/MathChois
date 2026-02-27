@@ -3,6 +3,10 @@ import { exportToBlob } from '@excalidraw/excalidraw';
 import { jsPDF } from 'jspdf';
 import { fetchAsDataUrl, getImageNaturalSize, createBgElement, BG_FILE_ID } from './excalidrawUtils';
 
+// A4 @ 150 DPI = 1240 × 1754 px. 긴 쪽 기준으로 해상도 제한.
+const PDF_MAX_DIMENSION = 1754;
+const PDF_JPEG_QUALITY = 0.85;
+
 /**
  * Creates a hidden Excalidraw-like PDF from element arrays
  * It fetches the background image and correctly positions the objects.
@@ -39,7 +43,9 @@ export const downloadElementsAsPdf = async (elements, files, bgImageUrl, filenam
                 exportPadding: 0,
             },
             files: finalFiles,
-            mimeType: "image/png",
+            maxWidthOrHeight: PDF_MAX_DIMENSION,
+            mimeType: "image/jpeg",
+            quality: PDF_JPEG_QUALITY,
         });
 
         const dataUrl = await new Promise((resolve, reject) => {
@@ -70,7 +76,7 @@ export const downloadElementsAsPdf = async (elements, files, bgImageUrl, filenam
         const marginX = (a4Width - finalWidth) / 2;
         const marginY = Math.max(0, (a4Height - finalHeight) / 2);
 
-        pdf.addImage(dataUrl, 'PNG', marginX, marginY, finalWidth, finalHeight);
+        pdf.addImage(dataUrl, 'JPEG', marginX, marginY, finalWidth, finalHeight);
         pdf.save(filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
 
         return true;
@@ -134,7 +140,9 @@ export function usePdfDownloader() {
                     elements: finalElements,
                     appState: { viewBackgroundColor: '#ffffff', exportBackground: true, exportWithDarkMode: false, exportPadding: 0 },
                     files: finalFiles,
-                    mimeType: "image/png",
+                    maxWidthOrHeight: PDF_MAX_DIMENSION,
+                    mimeType: "image/jpeg",
+                    quality: PDF_JPEG_QUALITY,
                 });
 
                 const dataUrl = await new Promise((resolve) => {
@@ -154,7 +162,7 @@ export function usePdfDownloader() {
                 const marginX = (a4Width - finalWidth) / 2;
                 const marginY = Math.max(0, (a4Height - finalHeight) / 2);
 
-                pdf.addImage(dataUrl, 'PNG', marginX, marginY, finalWidth, finalHeight);
+                pdf.addImage(dataUrl, 'JPEG', marginX, marginY, finalWidth, finalHeight);
 
                 if (i < pageDataList.length - 1) {
                     pdf.addPage();
