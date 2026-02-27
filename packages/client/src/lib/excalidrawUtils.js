@@ -135,6 +135,21 @@ export function prefetchImages(urls) {
   });
 }
 
+/* ─────────── 배경 이미지 위치/크기 계산 ─────────── */
+const BG_MARGIN = 20; // px
+
+export function calculateBgPosition(containerWidth, containerHeight, imageWidth, imageHeight) {
+  const availW = containerWidth  - BG_MARGIN * 2;
+  const availH = containerHeight - BG_MARGIN;
+  const scale  = Math.min(availW / imageWidth, availH / imageHeight);
+  return {
+    x:      BG_MARGIN,
+    y:      BG_MARGIN,
+    width:  imageWidth  * scale,
+    height: imageHeight * scale,
+  };
+}
+
 /* ─────────── Excalidraw image element 생성 ─────────── */
 export function createBgElement(x, y, w, h) {
   return {

@@ -16,7 +16,7 @@ import {
   BG_ELEMENT_ID, BG_FILE_ID,
   ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE,
   fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages,
-  EXCALIDRAW_UI_OPTIONS,
+  calculateBgPosition, EXCALIDRAW_UI_OPTIONS,
 } from '../../lib/excalidrawUtils';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 
@@ -55,18 +55,15 @@ function TeacherNotesModal({ page, onClose }) {
     try {
       const { dataUrl, mimeType } = await fetchAsDataUrl(page.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
-      const W = containerRef.current.clientWidth  || 800;
-      const H = containerRef.current.clientHeight || 900;
-      const scale = Math.min(W / iW, H / iH);
 
       let bgW, bgH, bgX, bgY;
       if (dbBgPosition) {
         ({ width: bgW, height: bgH, x: bgX, y: bgY } = dbBgPosition);
       } else {
-        bgW = iW * scale;
-        bgH = iH * scale;
-        bgX = (W - bgW) / 2;
-        bgY = (H - bgH) / 2;
+        const W = containerRef.current.clientWidth  || 800;
+        const H = containerRef.current.clientHeight || 900;
+        const pos = calculateBgPosition(W, H, iW, iH);
+        bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
       }
 
       bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
@@ -531,9 +528,8 @@ const AssignmentStudyViewer = () => {
       } else {
         const W = containerRef.current.clientWidth  || 800;
         const H = containerRef.current.clientHeight || 1000;
-        const scale = Math.min(W / iW, H / iH);
-        bgW = iW * scale; bgH = iH * scale;
-        bgX = (W - bgW) / 2; bgY = (H - bgH) / 2;
+        const pos = calculateBgPosition(W, H, iW, iH);
+        bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
         bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
       }
       await new Promise((r) => setTimeout(r, 0));

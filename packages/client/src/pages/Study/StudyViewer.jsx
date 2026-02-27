@@ -10,7 +10,7 @@ import { api } from '../../lib/api';
 import { subscribeToRoom, getSocket } from '../../lib/socket';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
-import { BG_ELEMENT_ID, BG_FILE_ID, ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE, EXCALIDRAW_UI_OPTIONS, fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages } from '../../lib/excalidrawUtils';
+import { BG_ELEMENT_ID, BG_FILE_ID, ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE, EXCALIDRAW_UI_OPTIONS, fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages, calculateBgPosition } from '../../lib/excalidrawUtils';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
@@ -140,19 +140,16 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
     try {
       const { dataUrl, mimeType } = await fetchAsDataUrl(currentPage.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
-      const W = containerRef.current.clientWidth  || 800;
-      const H = containerRef.current.clientHeight || 900;
-      const scale = Math.min(W / iW, H / iH);
 
       let bgW, bgH, bgX, bgY;
       const savedBg = dbBgPosition;
       if (savedBg) {
         ({ width: bgW, height: bgH, x: bgX, y: bgY } = savedBg);
       } else {
-        bgW = iW * scale;
-        bgH = iH * scale;
-        bgX = (W - bgW) / 2;
-        bgY = (H - bgH) / 2;
+        const W = containerRef.current.clientWidth  || 800;
+        const H = containerRef.current.clientHeight || 900;
+        const pos = calculateBgPosition(W, H, iW, iH);
+        bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
       }
 
       bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
@@ -746,13 +743,10 @@ const StudyViewer = () => {
       if (saved) {
         ({ x: bgX, y: bgY, width: bgW, height: bgH } = saved);
       } else {
-        const W     = containerRef.current.clientWidth  || 800;
-        const H     = containerRef.current.clientHeight || 1000;
-        const scale = Math.min(W / iW, H / iH);
-        bgW = iW * scale;
-        bgH = iH * scale;
-        bgX = (W - bgW) / 2;
-        bgY = (H - bgH) / 2;
+        const W = containerRef.current.clientWidth  || 800;
+        const H = containerRef.current.clientHeight || 1000;
+        const pos = calculateBgPosition(W, H, iW, iH);
+        bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
         bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
       }
 

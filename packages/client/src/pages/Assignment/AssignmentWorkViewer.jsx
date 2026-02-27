@@ -16,7 +16,7 @@ import {
   BG_ELEMENT_ID, BG_FILE_ID,
   ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE,
   fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages,
-  EXCALIDRAW_UI_OPTIONS,
+  calculateBgPosition, EXCALIDRAW_UI_OPTIONS,
 } from '../../lib/excalidrawUtils';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 
@@ -312,9 +312,8 @@ const AssignmentWorkViewer = () => {
       } else {
         const W = containerRef.current.clientWidth  || 800;
         const H = containerRef.current.clientHeight || 1000;
-        const scale = Math.min(W / iW, H / iH);
-        bgW = iW * scale; bgH = iH * scale;
-        bgX = (W - bgW) / 2; bgY = (H - bgH) / 2;
+        const pos = calculateBgPosition(W, H, iW, iH);
+        bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
         bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
       }
       apiRef.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);

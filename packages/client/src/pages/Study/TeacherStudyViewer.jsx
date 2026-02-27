@@ -18,6 +18,7 @@ import {
   getImageNaturalSize,
   createBgElement,
   prefetchImages,
+  calculateBgPosition,
   EXCALIDRAW_UI_OPTIONS,
 } from '../../lib/excalidrawUtils';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
@@ -348,13 +349,10 @@ const TeacherStudyViewer = () => {
       if (saved) {
         ({ x: bgX, y: bgY, width: bgW, height: bgH } = saved);
       } else {
-        const W     = containerRef.current.clientWidth  || 800;
-        const H     = containerRef.current.clientHeight || 1000;
-        const scale = Math.min(W / iW, H / iH);
-        bgW = iW * scale;
-        bgH = iH * scale;
-        bgX = (W - bgW) / 2;
-        bgY = (H - bgH) / 2;
+        const W = containerRef.current.clientWidth  || 800;
+        const H = containerRef.current.clientHeight || 1000;
+        const pos = calculateBgPosition(W, H, iW, iH);
+        bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
         bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
       }
 
