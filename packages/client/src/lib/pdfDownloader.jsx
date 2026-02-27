@@ -6,6 +6,8 @@ import { fetchAsDataUrl, getImageNaturalSize, createBgElement, BG_FILE_ID } from
 // A4 @ 150 DPI = 1240 × 1754 px. 긴 쪽 기준으로 해상도 제한.
 const PDF_MAX_DIMENSION = 1754;
 const PDF_JPEG_QUALITY = 0.85;
+const PDF_MARGIN_TOP = 10;   // mm
+const PDF_MARGIN_SIDE = 10;  // mm (좌우 각각)
 
 /**
  * Creates a hidden Excalidraw-like PDF from element arrays
@@ -69,12 +71,14 @@ export const downloadElementsAsPdf = async (elements, files, bgImageUrl, filenam
         img.src = dataUrl;
         await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
 
-        const imgRatio = Math.min(a4Width / img.width, a4Height / img.height);
+        const usableWidth = a4Width - PDF_MARGIN_SIDE * 2;
+        const usableHeight = a4Height - PDF_MARGIN_TOP;
+        const imgRatio = Math.min(usableWidth / img.width, usableHeight / img.height);
         const finalWidth = img.width * imgRatio;
         const finalHeight = img.height * imgRatio;
-        
+
         const marginX = (a4Width - finalWidth) / 2;
-        const marginY = Math.max(0, (a4Height - finalHeight) / 2);
+        const marginY = PDF_MARGIN_TOP;
 
         pdf.addImage(dataUrl, 'JPEG', marginX, marginY, finalWidth, finalHeight);
         pdf.save(filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
@@ -155,12 +159,14 @@ export function usePdfDownloader() {
                 img.src = dataUrl;
                 await new Promise((resolve) => { img.onload = resolve; });
 
-                const imgRatio = Math.min(a4Width / img.width, a4Height / img.height);
+                const usableWidth = a4Width - PDF_MARGIN_SIDE * 2;
+                const usableHeight = a4Height - PDF_MARGIN_TOP;
+                const imgRatio = Math.min(usableWidth / img.width, usableHeight / img.height);
                 const finalWidth = img.width * imgRatio;
                 const finalHeight = img.height * imgRatio;
-                
+
                 const marginX = (a4Width - finalWidth) / 2;
-                const marginY = Math.max(0, (a4Height - finalHeight) / 2);
+                const marginY = PDF_MARGIN_TOP;
 
                 pdf.addImage(dataUrl, 'JPEG', marginX, marginY, finalWidth, finalHeight);
 
