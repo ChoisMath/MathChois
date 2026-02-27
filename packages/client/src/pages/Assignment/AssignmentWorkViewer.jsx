@@ -7,6 +7,7 @@ import {
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
+import { subscribeToRoom } from '../../lib/socket';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
@@ -227,8 +228,37 @@ const AssignmentWorkViewer = () => {
     fetchData();
   }, [assignmentId, studentId]);
 
-  /* TODO: 학생 필기 실시간 업데이트 — 현재 서버에 assignment note 변경 Socket.IO 이벤트가 없음.
-     페이지 변경 시 최신 데이터를 다시 fetch하여 반영합니다. */
+  /* Socket.IO: 학생 과제 필기 실시간 구독 */
+  useEffect(() => {
+    if (!currentPage) return;
+    return subscribeToRoom(
+      `asn-work:${currentPage.id}:${studentId}`,
+      'asn-note:updated',
+      async () => {
+        const excApi = excalidrawAPIRef.current;
+        if (!excApi) return;
+        try {
+          const snData = await api.get(`/api/assignment-notes/${assignmentId}/${currentPage.id}?studentId=${studentId}`);
+          const newStudentEls = (snData?.excalidrawData?.elements || []).map((el) => ({
+            ...el, id: STUDENT_NOTE_PREFIX + el.id, locked: true, opacity: 60,
+          }));
+          studentEls.current = newStudentEls;
+          bgPositionRef.current = snData?.excalidrawData?.bgPosition ?? bgPositionRef.current;
+          const newStudentFiles = snData?.excalidrawData?.files ?? {};
+          if (Object.keys(newStudentFiles).length > 0) {
+            excApi.addFiles(Object.values(newStudentFiles));
+            savedStudentFilesRef.current = { ...savedStudentFilesRef.current, ...newStudentFiles };
+          }
+          const preserved = excApi.getSceneElements().filter(
+            (el) => !el.id.startsWith(STUDENT_NOTE_PREFIX)
+          );
+          excApi.updateScene({ elements: [...preserved, ...newStudentEls], commitToHistory: false });
+        } catch (err) {
+          console.error('학생 필기 실시간 갱신 실패:', err);
+        }
+      }
+    );
+  }, [currentPage?.id, studentId, assignmentId]);
 
   /* ── 전역 터치/스크롤 제어: 모바일 URL바 숨김 허용 및 좌우 이동/줌 방지 ── */
   useEffect(() => {

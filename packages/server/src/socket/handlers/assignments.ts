@@ -27,6 +27,20 @@ export function emitSubmissionUpdated(
   });
 }
 
+/** 과제 학생 필기 변경 브로드캐스트 */
+export function emitAssignmentNoteUpdated(
+  io: Server,
+  pageId: string,
+  studentId: string,
+  updatedAt: Date,
+) {
+  io.to(`asn-work:${pageId}:${studentId}`).emit('asn-note:updated', {
+    pageId,
+    studentId,
+    updatedAt: updatedAt.toISOString(),
+  });
+}
+
 /** 과제 교사 코멘트 변경 브로드캐스트 */
 export function emitAssignmentCommentUpdated(
   io: Server,

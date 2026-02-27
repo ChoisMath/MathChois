@@ -27,6 +27,7 @@ const ROOM_PATTERNS = {
   teacherNotes: /^teacher-notes:([\w-]+)$/,
   assignment:   /^assignment:([\w-]+)$/,
   asnComments:  /^asn-comments:([\w-]+):([\w-]+)$/,
+  asnWork:      /^asn-work:([\w-]+):([\w-]+)$/,
 };
 
 /** page → chapter → classroom → teacherId 추적 */
@@ -91,6 +92,19 @@ async function validateRoomAccess(user: TokenPayload, room: string): Promise<boo
     const [, pageId, studentId] = m;
     if (user.role === 'student' && user.sub === studentId) return true;
     if (user.role !== 'teacher') return false;
+    const asnPage = await db.select({ assignmentId: assignmentPages.assignmentId })
+      .from(assignmentPages).where(eq(assignmentPages.id, pageId)).limit(1);
+    if (!asnPage[0]) return false;
+    const asn = await db.select({ teacherId: assignments.teacherId })
+      .from(assignments).where(eq(assignments.id, asnPage[0].assignmentId)).limit(1);
+    return asn[0]?.teacherId === user.sub;
+  }
+
+  // asn-work:{pageId}:{studentId} → teacher만 (과제 소유자)
+  m = room.match(ROOM_PATTERNS.asnWork);
+  if (m) {
+    if (user.role !== 'teacher') return false;
+    const [, pageId] = m;
     const asnPage = await db.select({ assignmentId: assignmentPages.assignmentId })
       .from(assignmentPages).where(eq(assignmentPages.id, pageId)).limit(1);
     if (!asnPage[0]) return false;
