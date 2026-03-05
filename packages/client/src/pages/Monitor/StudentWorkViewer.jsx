@@ -58,7 +58,6 @@ const StudentWorkViewer = () => {
   const savedTeacherFilesRef  = useRef({});   // 교사가 삽입한 이미지 파일
   const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
-  const activeToolRef         = useRef('freedraw');
 
   /* scene data refs — avoid re-render loops */
   const studentEls = useRef([]);
@@ -160,7 +159,12 @@ const StudentWorkViewer = () => {
     );
   }, [currentPage, studentId]);
 
-  const { isTouchingRef, lastZoomRef, lastScrollXRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, activeToolRef });
+  const [screenLocked, setScreenLocked] = useState(false);
+  const screenLockedRef   = useRef(false);
+  const screenLockBaseRef = useRef({ zoom: 1, scrollX: 0, scrollY: 0 });
+  useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
+
+  useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef });
 
   /* ── 페이지 변경 시 scene 데이터 로드 ── */
   useEffect(() => {
@@ -236,6 +240,16 @@ const StudentWorkViewer = () => {
     }
   }, []);
 
+  const handleToggleScreenLock = useCallback(() => {
+    setScreenLocked(prev => {
+      if (!prev && excalidrawAPIRef.current) {
+        const s = excalidrawAPIRef.current.getAppState();
+        screenLockBaseRef.current = { zoom: s.zoom.value, scrollX: s.scrollX, scrollY: s.scrollY };
+      }
+      return !prev;
+    });
+  }, []);
+
   /* ── Excalidraw 마운트 ── */
   const handleExcalidrawMount = useCallback(async (excApi) => {
     excalidrawAPIRef.current = excApi;
@@ -258,24 +272,18 @@ const StudentWorkViewer = () => {
 
   /* ── onChange: 코멘트 모드 + 실제 변경 시에만 저장 ── */
   const handleExcalidrawChange = useCallback((elements, appState) => {
-    if (appState) {
-      activeToolRef.current = appState.activeTool.type;
-      const isFreedraw = appState.activeTool.type === 'freedraw';
-
-      if (isFreedraw) {
-        if (!isTouchingRef.current) {
-          if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
-            excalidrawAPIRef.current?.updateScene({
-              appState: {
-                zoom: { value: lastZoomRef.current },
-                scrollX: lastScrollXRef.current
-              }
-            });
+    if (appState && screenLockedRef.current) {
+      const base = screenLockBaseRef.current;
+      if (appState.zoom.value !== base.zoom ||
+          appState.scrollX !== base.scrollX ||
+          appState.scrollY !== base.scrollY) {
+        excalidrawAPIRef.current?.updateScene({
+          appState: {
+            zoom: { value: base.zoom },
+            scrollX: base.scrollX,
+            scrollY: base.scrollY,
           }
-        }
-      } else {
-        lastZoomRef.current = appState.zoom.value;
-        lastScrollXRef.current = appState.scrollX;
+        });
       }
     }
 
@@ -490,6 +498,8 @@ const StudentWorkViewer = () => {
           apiRef={excalidrawAPIRef}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
+          screenLocked={screenLocked}
+          onToggleScreenLock={handleToggleScreenLock}
         />
       )}
 

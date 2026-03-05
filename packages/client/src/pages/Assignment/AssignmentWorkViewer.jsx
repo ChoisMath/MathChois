@@ -66,9 +66,12 @@ const AssignmentWorkViewer = () => {
   const sidebarScrollRef     = useRef(null);
   const studentEls           = useRef([]);
   const teacherEls           = useRef([]);
-  const activeToolRef         = useRef('freedraw');
+  const [screenLocked, setScreenLocked] = useState(false);
+  const screenLockedRef   = useRef(false);
+  const screenLockBaseRef = useRef({ zoom: 1, scrollX: 0, scrollY: 0 });
+  useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
-  const { isTouchingRef, lastZoomRef, lastScrollXRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, activeToolRef });
+  useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -219,6 +222,16 @@ const AssignmentWorkViewer = () => {
     }
   }, []);
 
+  const handleToggleScreenLock = useCallback(() => {
+    setScreenLocked(prev => {
+      if (!prev && excalidrawAPIRef.current) {
+        const s = excalidrawAPIRef.current.getAppState();
+        screenLockBaseRef.current = { zoom: s.zoom.value, scrollX: s.scrollX, scrollY: s.scrollY };
+      }
+      return !prev;
+    });
+  }, []);
+
   const handleExcalidrawMount = useCallback(async (apiRef) => {
     excalidrawAPIRef.current = apiRef;
     const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
@@ -233,18 +246,18 @@ const AssignmentWorkViewer = () => {
   }, [rebuildScene]);
 
   const handleExcalidrawChange = useCallback((elements, appState) => {
-    if (appState) {
-      activeToolRef.current = appState.activeTool.type;
-      const isFreedraw = appState.activeTool.type === 'freedraw';
-      if (isFreedraw) {
-        if (!isTouchingRef.current && (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current)) {
-          excalidrawAPIRef.current?.updateScene({
-            appState: { zoom: { value: lastZoomRef.current }, scrollX: lastScrollXRef.current }
-          });
-        }
-      } else {
-        lastZoomRef.current = appState.zoom.value;
-        lastScrollXRef.current = appState.scrollX;
+    if (appState && screenLockedRef.current) {
+      const base = screenLockBaseRef.current;
+      if (appState.zoom.value !== base.zoom ||
+          appState.scrollX !== base.scrollX ||
+          appState.scrollY !== base.scrollY) {
+        excalidrawAPIRef.current?.updateScene({
+          appState: {
+            zoom: { value: base.zoom },
+            scrollX: base.scrollX,
+            scrollY: base.scrollY,
+          }
+        });
       }
     }
 
@@ -529,6 +542,8 @@ const AssignmentWorkViewer = () => {
           apiRef={excalidrawAPIRef}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
+          screenLocked={screenLocked}
+          onToggleScreenLock={handleToggleScreenLock}
         />
       )}
 

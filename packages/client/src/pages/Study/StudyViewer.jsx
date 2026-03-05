@@ -335,10 +335,14 @@ const StudyViewer = () => {
   const lastSavedRef          = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
   const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
-  const activeToolRef         = useRef('freedraw');
   const mountedRef            = useRef(true);
 
-  const { isTouchingRef, lastZoomRef, lastScrollXRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, activeToolRef });
+  const [screenLocked, setScreenLocked] = useState(false);
+  const screenLockedRef   = useRef(false);
+  const screenLockBaseRef = useRef({ zoom: 1, scrollX: 0, scrollY: 0 });
+  useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
+
+  useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef });
 
 
   useEffect(() => () => { mountedRef.current = false; }, []);
@@ -528,27 +532,20 @@ const StudyViewer = () => {
     );
   }, [currentPage, user]);
 
-  /* ── Excalidraw onChange & 스마트 좌우 패닝 잠금 ── */
+  /* ── Excalidraw onChange & 화면 고정 ── */
   const handleExcalidrawChange = useCallback((elements, appState) => {
-    if (appState) {
-      activeToolRef.current = appState.activeTool.type;
-      const isFreedraw = appState.activeTool.type === 'freedraw';
-
-      if (isFreedraw) {
-        if (!isTouchingRef.current) {
-          if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
-            excalidrawAPIRef.current?.updateScene({
-              appState: {
-                zoom: { value: lastZoomRef.current },
-                scrollX: lastScrollXRef.current
-              }
-            });
+    if (appState && screenLockedRef.current) {
+      const base = screenLockBaseRef.current;
+      if (appState.zoom.value !== base.zoom ||
+          appState.scrollX !== base.scrollX ||
+          appState.scrollY !== base.scrollY) {
+        excalidrawAPIRef.current?.updateScene({
+          appState: {
+            zoom: { value: base.zoom },
+            scrollX: base.scrollX,
+            scrollY: base.scrollY,
           }
-        }
-      } else {
-        // 펜이 아닐 때(커서 등): 줌 및 좌우 스크롤 허용 (기준점 갱신)
-        lastZoomRef.current = appState.zoom.value;
-        lastScrollXRef.current = appState.scrollX;
+        });
       }
     }
     /* 뷰 모드에서는 저장하지 않음 */
@@ -604,6 +601,16 @@ const StudyViewer = () => {
       setSaveStatus('saved');
     }, 1500);
   }, [chapterId]);
+
+  const handleToggleScreenLock = useCallback(() => {
+    setScreenLocked(prev => {
+      if (!prev && excalidrawAPIRef.current) {
+        const s = excalidrawAPIRef.current.getAppState();
+        screenLockBaseRef.current = { zoom: s.zoom.value, scrollX: s.scrollX, scrollY: s.scrollY };
+      }
+      return !prev;
+    });
+  }, []);
 
   /* ── Excalidraw 마운트: bg + 학생 필기 + 교사 코멘트 ── */
   const handleExcalidrawMount = useCallback(async (excApi) => {
@@ -831,6 +838,8 @@ const StudyViewer = () => {
           apiRef={excalidrawAPIRef}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
+          screenLocked={screenLocked}
+          onToggleScreenLock={handleToggleScreenLock}
         />
       )}
 

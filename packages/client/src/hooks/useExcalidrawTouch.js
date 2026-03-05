@@ -3,20 +3,16 @@ import { useEffect, useRef } from 'react';
 /**
  * Excalidraw 터치/제스처 제어 훅
  *
- * - 비펜 도구: 핀치줌 + 상하좌우 팬 허용 (Excalidraw 자체 처리)
- * - 펜(freedraw) 도구: 줌/수평이동 차단, 2핑거 세로 스크롤만 허용
  * - 팜 리젝션: 큰 터치 반경(>25px) 무시
  * - Safari gesture 이벤트 차단: iPad 화면 점프 방지
+ * - screenLocked=false: 모든 도구에서 핀치줌/팬 자유 (Excalidraw 자체 처리)
+ * - screenLocked=true: 2핑거 이상 터치 차단 → 필기만 가능
  *
- * @param {{ excalidrawAPIRef: React.RefObject, containerRef: React.RefObject, activeToolRef: React.RefObject }} opts
- * @returns {{ isTouchingRef: React.RefObject, lastZoomRef: React.RefObject, lastScrollXRef: React.RefObject }}
+ * @param {{ excalidrawAPIRef: React.RefObject, containerRef: React.RefObject, screenLockedRef: React.RefObject }} opts
  */
-export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, activeToolRef }) {
-  const isTouchingRef       = useRef(false);
-  const lastZoomRef         = useRef(1);
-  const lastScrollXRef      = useRef(0);
-  const activeTouchesRef    = useRef(0);
-  const lastTouchCenterYRef = useRef(null);
+export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef }) {
+  const isTouchingRef    = useRef(false);
+  const activeTouchesRef = useRef(0);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -40,10 +36,11 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, activeToolR
       if (!isExcalidraw) return;
       if (e.pointerType === 'touch' && (e.width > 25 || e.height > 25)) {
         e.preventDefault();
-        // freedraw 모드에서만 stopPropagation — 비펜 모드에서는 Excalidraw에 이벤트 전달
-        if (activeToolRef.current === 'freedraw') {
-          e.stopPropagation();
-        }
+        e.stopPropagation();
+      }
+      // 화면 고정 모드: 2핑거 이상 → Excalidraw에 전달 차단
+      if (screenLockedRef.current && e.pointerType === 'touch' && activeTouchesRef.current >= 2) {
+        e.stopPropagation();
       }
     };
 
@@ -53,19 +50,17 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, activeToolR
       if (e.pointerType === 'touch') {
         if (e.width > 25 || e.height > 25) {
           e.preventDefault();
-          if (activeToolRef.current === 'freedraw') {
-            e.stopPropagation();
-          }
+          e.stopPropagation();
           return;
         }
-        // freedraw 모드 2핑거: Excalidraw 내부 핀치줌/팬 차단
-        if (activeTouchesRef.current >= 2 && activeToolRef.current === 'freedraw') {
+        // 화면 고정 모드: 2핑거 이상 → Excalidraw에 전달 차단
+        if (screenLockedRef.current && activeTouchesRef.current >= 2) {
           e.stopPropagation();
         }
       }
     };
 
-    /* ── 4. 터치 이벤트 (팜 리젝션 + freedraw 2핑거 하이재킹) ── */
+    /* ── 4. 터치 이벤트 (팜 리젝션 + 화면 고정) ── */
     const handleTouchStart = (e) => {
       activeTouchesRef.current = e.touches.length;
       isTouchingRef.current = true;
@@ -81,17 +76,14 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, activeToolR
       }
       if (isPalm) {
         if (e.cancelable) e.preventDefault();
-        if (activeToolRef.current === 'freedraw') {
-          e.stopPropagation();
-        }
+        e.stopPropagation();
         return;
       }
 
-      // freedraw 2핑거 시작: 세로 스크롤 하이재킹 준비
-      if (activeToolRef.current === 'freedraw' && e.touches.length === 2) {
-        lastTouchCenterYRef.current = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      } else {
-        lastTouchCenterYRef.current = null;
+      // 화면 고정 모드: 2핑거 이상 차단
+      if (screenLockedRef.current && e.touches.length >= 2) {
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
       }
     };
 
@@ -109,36 +101,20 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, activeToolR
       }
       if (isPalm) {
         if (e.cancelable) e.preventDefault();
-        if (activeToolRef.current === 'freedraw') {
-          e.stopPropagation();
-        }
+        e.stopPropagation();
         return;
       }
 
-      // freedraw 모드 2핑거 패닝 하이재킹 (수직 스크롤만 허용)
-      if (activeToolRef.current === 'freedraw' && e.touches.length === 2) {
+      // 화면 고정 모드: 2핑거 이상 차단
+      if (screenLockedRef.current && e.touches.length >= 2) {
         e.stopPropagation();
         if (e.cancelable) e.preventDefault();
-
-        const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-        if (lastTouchCenterYRef.current !== null) {
-          const deltaY = centerY - lastTouchCenterYRef.current;
-          const excApi = excalidrawAPIRef.current;
-          if (excApi) {
-            const appState = excApi.getAppState();
-            excApi.updateScene({
-              appState: { scrollY: appState.scrollY + (deltaY / appState.zoom.value) }
-            });
-          }
-        }
-        lastTouchCenterYRef.current = centerY;
       }
     };
 
     const handleTouchEnd = (e) => {
       activeTouchesRef.current = e.touches.length;
       if (e.touches.length === 0) isTouchingRef.current = false;
-      if (e.touches.length < 2) lastTouchCenterYRef.current = null;
     };
 
     /* ── 5. 이벤트 등록 (컨테이너 캡처 단계) ── */
@@ -163,5 +139,5 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, activeToolR
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { isTouchingRef, lastZoomRef, lastScrollXRef };
+  return { isTouchingRef };
 }

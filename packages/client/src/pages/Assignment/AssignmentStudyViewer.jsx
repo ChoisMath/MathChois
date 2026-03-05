@@ -175,9 +175,12 @@ const AssignmentStudyViewer = () => {
   const activeSidebarItemRef = useRef(null);
   const sidebarScrollRef     = useRef(null);
   const mountedRef           = useRef(true);
-  const activeToolRef         = useRef('freedraw');
+  const [screenLocked, setScreenLocked] = useState(false);
+  const screenLockedRef   = useRef(false);
+  const screenLockBaseRef = useRef({ zoom: 1, scrollX: 0, scrollY: 0 });
+  useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
-  const { isTouchingRef, lastZoomRef, lastScrollXRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, activeToolRef });
+  useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -348,24 +351,18 @@ const AssignmentStudyViewer = () => {
 
   /* onChange: 저장 */
   const handleExcalidrawChange = useCallback((elements, appState) => {
-    if (appState) {
-      activeToolRef.current = appState.activeTool.type;
-      const isFreedraw = appState.activeTool.type === 'freedraw';
-
-      if (isFreedraw) {
-        if (!isTouchingRef.current) {
-          if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
-            excalidrawAPIRef.current?.updateScene({
-              appState: {
-                zoom: { value: lastZoomRef.current },
-                scrollX: lastScrollXRef.current
-              }
-            });
+    if (appState && screenLockedRef.current) {
+      const base = screenLockBaseRef.current;
+      if (appState.zoom.value !== base.zoom ||
+          appState.scrollX !== base.scrollX ||
+          appState.scrollY !== base.scrollY) {
+        excalidrawAPIRef.current?.updateScene({
+          appState: {
+            zoom: { value: base.zoom },
+            scrollX: base.scrollX,
+            scrollY: base.scrollY,
           }
-        }
-      } else {
-        lastZoomRef.current = appState.zoom.value;
-        lastScrollXRef.current = appState.scrollX;
+        });
       }
     }
 
@@ -407,6 +404,16 @@ const AssignmentStudyViewer = () => {
       if (mountedRef.current) { lastSavedRef.current = serialized; setSaveStatus('saved'); }
     }, 1500);
   }, [assignmentId, isLocked]);
+
+  const handleToggleScreenLock = useCallback(() => {
+    setScreenLocked(prev => {
+      if (!prev && excalidrawAPIRef.current) {
+        const s = excalidrawAPIRef.current.getAppState();
+        screenLockBaseRef.current = { zoom: s.zoom.value, scrollX: s.scrollX, scrollY: s.scrollY };
+      }
+      return !prev;
+    });
+  }, []);
 
   /* Excalidraw 마운트 */
   const handleExcalidrawMount = useCallback(async (apiRef) => {
@@ -755,6 +762,8 @@ const AssignmentStudyViewer = () => {
           apiRef={excalidrawAPIRef}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
+          screenLocked={screenLocked}
+          onToggleScreenLock={handleToggleScreenLock}
         />
       )}
 

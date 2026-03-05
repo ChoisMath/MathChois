@@ -58,11 +58,15 @@ const TeacherStudyViewer = () => {
   const mountedRef            = useRef(true);
   const lastSavedRef          = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
   const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
-  const activeToolRef         = useRef('freedraw');
 
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
 
-  const { isTouchingRef, lastZoomRef, lastScrollXRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, activeToolRef });
+  const [screenLocked, setScreenLocked] = useState(false);
+  const screenLockedRef   = useRef(false);
+  const screenLockBaseRef = useRef({ zoom: 1, scrollX: 0, scrollY: 0 });
+  useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
+
+  useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -132,29 +136,20 @@ const TeacherStudyViewer = () => {
     fetchData();
   }, [chapterId, pageId, navigate, classroomId, user]);
 
-  /* ── onChange → teacher_notes upsert & 스마트 좌우 패닝 잠금 ── */
+  /* ── onChange → teacher_notes upsert & 화면 고정 ── */
   const handleExcalidrawChange = useCallback((elements, appState) => {
-    if (appState) {
-      activeToolRef.current = appState.activeTool.type;
-      const isFreedraw = appState.activeTool.type === 'freedraw';
-      
-      if (isFreedraw) {
-        // 프리드로우(펜) 모드: 터치(패닝) 진행 중일 때는 강제 씬 업데이트를 생략하여 Excalidraw 좌표 피드백루프 파괴 방지.
-        // 손가락을 떼었을 때만 줌과 X오프셋을 원래대로 스냅백시킴.
-        if (!isTouchingRef.current) {
-          if (appState.zoom.value !== lastZoomRef.current || appState.scrollX !== lastScrollXRef.current) {
-            excalidrawAPIRef.current?.updateScene({
-              appState: { 
-                zoom: { value: lastZoomRef.current }, 
-                scrollX: lastScrollXRef.current 
-              }
-            });
+    if (appState && screenLockedRef.current) {
+      const base = screenLockBaseRef.current;
+      if (appState.zoom.value !== base.zoom ||
+          appState.scrollX !== base.scrollX ||
+          appState.scrollY !== base.scrollY) {
+        excalidrawAPIRef.current?.updateScene({
+          appState: {
+            zoom: { value: base.zoom },
+            scrollX: base.scrollX,
+            scrollY: base.scrollY,
           }
-        }
-      } else {
-        // 프리드로우가 아닐 때(커서 등): 줌 및 좌우 스크롤 허용 (기준점 갱신)
-        lastZoomRef.current = appState.zoom.value;
-        lastScrollXRef.current = appState.scrollX;
+        });
       }
     }
     const bgEl = elements.find((el) => el.id === BG_ELEMENT_ID);
@@ -200,6 +195,16 @@ const TeacherStudyViewer = () => {
       }
     }, 1500);
   }, [user]);
+
+  const handleToggleScreenLock = useCallback(() => {
+    setScreenLocked(prev => {
+      if (!prev && excalidrawAPIRef.current) {
+        const s = excalidrawAPIRef.current.getAppState();
+        screenLockBaseRef.current = { zoom: s.zoom.value, scrollX: s.scrollX, scrollY: s.scrollY };
+      }
+      return !prev;
+    });
+  }, []);
 
   /* ── Excalidraw 마운트 ── */
   const handleExcalidrawMount = useCallback(async (api) => {
@@ -386,6 +391,8 @@ const TeacherStudyViewer = () => {
           apiRef={excalidrawAPIRef}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
+          screenLocked={screenLocked}
+          onToggleScreenLock={handleToggleScreenLock}
         />
       )}
 

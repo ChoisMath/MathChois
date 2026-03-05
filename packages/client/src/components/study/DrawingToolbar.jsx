@@ -4,6 +4,7 @@ import {
   MousePointer, Pen, Type, Square, Circle, Triangle,
   Eraser, Minus, Trash2, Pipette, Plus, Scissors,
   SlidersHorizontal, Hand, Shapes, ChevronDown, ImagePlus, Dot,
+  Lock, Unlock,
 } from 'lucide-react';
 import {
   BG_ELEMENT_ID,
@@ -28,7 +29,7 @@ const SHAPE_TOOL_ICONS = {
 const SHAPE_TOOLS    = ['rectangle', 'ellipse', 'triangle'];
 const SAVEABLE_TOOLS = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse', 'triangle'];
 
-function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
+function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onToggleScreenLock }) {
   const [activeTool, setActiveTool]       = useState(() => {
     const saved = localStorage.getItem('mc_active_tool') || 'freedraw';
     return SAVEABLE_TOOLS.includes(saved) ? saved : 'freedraw';
@@ -583,6 +584,17 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel }) {
           />
         </svg>
       </div>
+
+      {/* 화면 고정 */}
+      {onToggleScreenLock && (
+        <button onClick={onToggleScreenLock}
+          title={screenLocked ? '화면 고정 해제' : '화면 고정 — 확대/축소·이동 차단'}
+          className={`p-1.5 rounded-md transition-colors cursor-pointer flex-shrink-0 ${
+            screenLocked ? 'bg-amber-100 text-amber-600' : 'text-gray-600 hover:bg-gray-100'
+          }`}>
+          {screenLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+        </button>
+      )}
 
       <div className="w-px h-6 bg-gray-200 mx-1 flex-shrink-0" />
 
