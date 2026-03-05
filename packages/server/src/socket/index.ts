@@ -77,13 +77,28 @@ async function validateRoomAccess(user: TokenPayload, room: string): Promise<boo
     return teacherId === user.sub;
   }
 
-  // assignment:{assignmentId} → teacher만 (과제 소유자)
+  // assignment:{assignmentId} → teacher (소유자) 또는 교실 소속 학생
   m = room.match(ROOM_PATTERNS.assignment);
   if (m) {
-    if (user.role !== 'teacher') return false;
-    const asn = await db.select({ teacherId: assignments.teacherId })
-      .from(assignments).where(eq(assignments.id, m[1])).limit(1);
-    return asn[0]?.teacherId === user.sub;
+    const asn = await db.select({
+      teacherId: assignments.teacherId,
+      classroomId: assignments.classroomId,
+    }).from(assignments).where(eq(assignments.id, m[1])).limit(1);
+    if (!asn[0]) return false;
+
+    if (user.role === 'teacher') return asn[0].teacherId === user.sub;
+
+    if (user.role === 'student') {
+      const member = await db.select({ id: classroomMembers.id })
+        .from(classroomMembers)
+        .where(and(
+          eq(classroomMembers.classroomId, asn[0].classroomId),
+          eq(classroomMembers.studentId, user.sub),
+        ))
+        .limit(1);
+      return member.length > 0;
+    }
+    return false;
   }
 
   // asn-comments:{pageId}:{studentId} → teacher (과제 소유자) 또는 본인 학생
