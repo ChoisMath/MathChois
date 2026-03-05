@@ -21,7 +21,9 @@ import {
   prefetchImages,
   calculateBgPosition,
   EXCALIDRAW_UI_OPTIONS,
+  TOUCH_CSS,
 } from '../../lib/excalidrawUtils';
+import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 
 const STUDENT_NOTE_PREFIX = '__sn_';
@@ -56,9 +58,7 @@ const StudentWorkViewer = () => {
   const savedTeacherFilesRef  = useRef({});   // 교사가 삽입한 이미지 파일
   const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
-  const isTouchingRef         = useRef(false);
-  const lastZoomRef           = useRef(1);
-  const lastScrollXRef        = useRef(0);
+  const activeToolRef         = useRef('freedraw');
 
   /* scene data refs — avoid re-render loops */
   const studentEls = useRef([]);
@@ -160,126 +160,7 @@ const StudentWorkViewer = () => {
     );
   }, [currentPage, studentId]);
 
-  const activeToolRef         = useRef('freedraw');
-  const activeTouchesRef      = useRef(0);
-  const lastTouchCenterYRef   = useRef(null);
-
-  /* ── 터치 제어 (팜 리젝션 & 펜 모드 2핑거 세로 스크롤 하이재킹) ── */
-  useEffect(() => {
-    const handlePointerDown = (e) => {
-      const isExcalidraw = e.target.closest('.excalidraw');
-      if (!isExcalidraw) return;
-      if (e.pointerType === 'touch' && (e.width > 25 || e.height > 25)) {
-        e.stopPropagation();
-      }
-    };
-
-    const handlePointerMove = (e) => {
-      const isExcalidraw = e.target.closest('.excalidraw');
-      if (!isExcalidraw) return;
-      if (e.pointerType === 'touch') {
-        if (e.width > 25 || e.height > 25) {
-          e.stopPropagation();
-          return;
-        }
-        if (activeTouchesRef.current >= 2 && activeToolRef.current === 'freedraw') {
-          e.stopPropagation();
-        }
-      }
-    };
-
-    const handleTouchStart = (e) => {
-      activeTouchesRef.current = e.touches.length;
-      isTouchingRef.current = true;
-      const isExcalidraw = e.target.closest('.excalidraw');
-      if (!isExcalidraw) return;
-
-      let isPalm = false;
-      for (let i = 0; i < e.touches.length; i++) {
-        if (e.touches[i].radiusX > 25 || e.touches[i].radiusY > 25) {
-          isPalm = true; break;
-        }
-      }
-      if (isPalm) {
-        e.stopPropagation();
-        if (e.cancelable) e.preventDefault();
-        return;
-      }
-
-      if (activeToolRef.current === 'freedraw' && e.touches.length === 2) {
-        lastTouchCenterYRef.current = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      } else {
-        lastTouchCenterYRef.current = null;
-      }
-    };
-
-    const handleTouchMove = (e) => {
-      activeTouchesRef.current = e.touches.length;
-      const isExcalidraw = e.target.closest('.excalidraw');
-      if (!isExcalidraw) return;
-
-      let isPalm = false;
-      for (let i = 0; i < e.touches.length; i++) {
-        if (e.touches[i].radiusX > 25 || e.touches[i].radiusY > 25) {
-          isPalm = true; break;
-        }
-      }
-      if (isPalm) {
-        e.stopPropagation();
-        if (e.cancelable) e.preventDefault();
-        return;
-      }
-
-      // 펜 모드 2핑거 패닝 하이재킹 (수직 스크롤만 허용)
-      if (activeToolRef.current === 'freedraw' && e.touches.length === 2) {
-        e.stopPropagation();
-        if (e.cancelable) e.preventDefault();
-
-        const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-        if (lastTouchCenterYRef.current !== null) {
-          const deltaY = centerY - lastTouchCenterYRef.current;
-          const excApi = excalidrawAPIRef.current;
-          if (excApi) {
-            const appState = excApi.getAppState();
-            excApi.updateScene({
-              appState: { scrollY: appState.scrollY + (deltaY / appState.zoom.value) }
-            });
-          }
-        }
-        lastTouchCenterYRef.current = centerY;
-      }
-    };
-
-    const handleTouchEnd = (e) => {
-      activeTouchesRef.current = e.touches.length;
-      if (e.touches.length === 0) isTouchingRef.current = false;
-      if (e.touches.length < 2) lastTouchCenterYRef.current = null;
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: false });
-    document.addEventListener('pointermove', handlePointerMove, { capture: true, passive: false });
-    document.addEventListener('touchstart', handleTouchStart, { capture: true, passive: false });
-    document.addEventListener('touchmove', handleTouchMove, { capture: true, passive: false });
-    document.addEventListener('touchend', handleTouchEnd, { capture: true, passive: true });
-    document.addEventListener('touchcancel', handleTouchEnd, { capture: true, passive: true });
-
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown, { capture: true });
-      document.removeEventListener('pointermove', handlePointerMove, { capture: true });
-      document.removeEventListener('touchstart', handleTouchStart, { capture: true });
-      document.removeEventListener('touchmove', handleTouchMove, { capture: true });
-      document.removeEventListener('touchend', handleTouchEnd, { capture: true });
-      document.removeEventListener('touchcancel', handleTouchEnd, { capture: true });
-    };
-  }, []);
-
-  /* ── 전역 터치/스크롤 제어: 모바일 URL바 숨김 허용 및 좌우 이동/줌 방지 ── */
-  useEffect(() => {
-    document.body.style.touchAction = 'pan-y';
-    return () => {
-      document.body.style.touchAction = '';
-    };
-  }, []);
+  const { isTouchingRef, lastZoomRef, lastScrollXRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, activeToolRef });
 
   /* ── 페이지 변경 시 scene 데이터 로드 ── */
   useEffect(() => {
@@ -654,7 +535,7 @@ const StudentWorkViewer = () => {
           style={GRID_STYLE}
           className="flex-1 relative overflow-hidden"
         >
-          <style>{ALWAYS_HIDE_CSS}{showExcalidrawPanel ? '' : PANEL_HIDE_CSS}</style>
+          <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{showExcalidrawPanel ? '' : PANEL_HIDE_CSS}</style>
 
           {currentPage ? (
             <ExcalidrawErrorBoundary key={currentPage.id}>

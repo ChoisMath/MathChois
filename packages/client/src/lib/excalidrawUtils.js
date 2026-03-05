@@ -48,6 +48,14 @@ export const PANEL_HIDE_CSS = `
   .excalidraw .layer-ui__wrapper__footer,
   .excalidraw [data-testid="footer"] { display: none !important; }
 `;
+export const TOUCH_CSS = `
+  .excalidraw {
+    touch-action: none !important;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+`;
 
 /* ─────────── 모눈종이 배경 ─────────── */
 export const GRID_STYLE = {
