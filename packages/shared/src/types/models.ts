@@ -142,3 +142,13 @@ export interface AssignmentTeacherComment {
   excalidrawData: ExcalidrawData;
   updatedAt: string;
 }
+
+export interface AssignmentSubmissionFile {
+  id: string;
+  submissionId: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  mimeType: string | null;
+  createdAt: string;
+}

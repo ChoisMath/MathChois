@@ -20,6 +20,11 @@ import {
   reorderAssignmentPages,
   getAssignmentPageImageUrls,
   findSharedAssignmentImageUrls,
+  getSubmissionFiles,
+  getSubmissionFilesByAssignment,
+  upsertSubmissionFiles,
+  getSubmissionFileUrls,
+  getSubmissionFileUrlsByAssignment,
 } from '../services/assignment.service.js';
 import { isClassroomOwner } from '../services/classroom.service.js';
 import { removeFile, urlToStoragePath, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
@@ -121,7 +126,10 @@ export async function assignmentRoutes(app: FastifyInstance) {
     const sharedSet = new Set(sharedUrls);
     const orphanUrls = imageUrls.filter((url) => !sharedSet.has(url));
 
-    app.log.info({ assignmentId: request.params.id, total: imageUrls.length, shared: sharedUrls.length, orphans: orphanUrls.length }, 'Assignment storage cleanup');
+    // 제출 파일 URL 수집 (DB CASCADE 삭제 전에)
+    const allSubmissionFileUrls = await getSubmissionFileUrlsByAssignment(request.params.id);
+
+    app.log.info({ assignmentId: request.params.id, total: imageUrls.length, shared: sharedUrls.length, orphans: orphanUrls.length, submissionFiles: allSubmissionFileUrls.length }, 'Assignment storage cleanup');
 
     await deleteAssignment(request.params.id);
 
@@ -146,6 +154,14 @@ export async function assignmentRoutes(app: FastifyInstance) {
       const parentDir = urlToParentDir(orphanUrls[0]);
       if (parentDir) {
         await removeDirectoryIfEmpty(parentDir.bucket, parentDir.dir);
+      }
+    }
+
+    // 제출 파일 스토리지 정리
+    for (const url of allSubmissionFileUrls) {
+      const parsed = urlToStoragePath(url);
+      if (parsed) {
+        try { await removeFile(parsed.bucket, parsed.path); } catch { /* ignore */ }
       }
     }
 
@@ -265,7 +281,9 @@ export async function assignmentRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/api/assignments/:id/submissions', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request) => {
-    return getSubmissionsByAssignment(request.params.id);
+    const subsData = await getSubmissionsByAssignment(request.params.id);
+    const fileMap = await getSubmissionFilesByAssignment(request.params.id);
+    return subsData.map(s => ({ ...s, files: fileMap.get(s.id) ?? [] }));
   });
 
   // ─── GET /api/submissions/counts — 과제별 제출 수 (교사)
@@ -303,19 +321,42 @@ export async function assignmentRoutes(app: FastifyInstance) {
       score?: number | null;
       maxScore?: number | null;
       rejectionComment?: string | null;
+      files?: { fileName: string; fileUrl: string; fileSize: number; mimeType?: string }[];
     };
   }>('/api/submissions/:assignmentId', {
     preHandler: [authenticate],
-  }, async (request) => {
+  }, async (request, reply) => {
+    // 서버 측 파일 개수 검증
+    if (request.body.files && request.body.files.length > 5) {
+      return reply.status(400).send({ error: '첨부파일은 최대 5개까지 가능합니다.' });
+    }
+
     // 교사가 채점/반려 시 body.studentId 사용, 학생 본인 제출 시 request.user.sub 사용
     const targetStudentId = request.body.studentId ?? request.user.sub;
-    const { studentId: _ignore, ...bodyRest } = request.body;
+    const { studentId: _ignore, files: _filesIgnore, ...bodyRest } = request.body;
 
     const result = await upsertSubmission({
       assignmentId: request.params.assignmentId,
       studentId: targetStudentId,
       ...bodyRest,
     });
+
+    // 파일 처리 (files가 명시적으로 전달된 경우만)
+    if (request.body.files !== undefined) {
+      const oldUrls = await getSubmissionFileUrls(result.id);
+      const newUrlSet = new Set(request.body.files.map(f => f.fileUrl));
+      const orphanUrls = oldUrls.filter(url => !newUrlSet.has(url));
+
+      await upsertSubmissionFiles(result.id, request.body.files);
+
+      // 고아 파일 스토리지 정리 (비동기, 실패해도 제출은 성공)
+      for (const url of orphanUrls) {
+        const parsed = urlToStoragePath(url);
+        if (parsed) {
+          try { await removeFile(parsed.bucket, parsed.path); } catch { /* ignore */ }
+        }
+      }
+    }
 
     // Socket.IO 브로드캐스트
     try {
@@ -330,5 +371,22 @@ export async function assignmentRoutes(app: FastifyInstance) {
     } catch { /* Socket.IO 미초기화 시 무시 */ }
 
     return result;
+  });
+
+  // ─── GET /api/submissions/:assignmentId/files — 제출 파일 조회
+
+  app.get<{
+    Params: { assignmentId: string };
+    Querystring: { studentId?: string };
+  }>('/api/submissions/:assignmentId/files', {
+    preHandler: [authenticate],
+  }, async (request) => {
+    const studentId = request.user.role === 'teacher'
+      ? (request.query.studentId ?? request.user.sub)
+      : request.user.sub;
+
+    const subs = await getStudentSubmissions(studentId, [request.params.assignmentId]);
+    if (subs.length === 0) return [];
+    return getSubmissionFiles(subs[0].id);
   });
 }

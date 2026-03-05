@@ -82,6 +82,7 @@ export interface UpdateSubmissionRequest {
   status?: string;
   score?: number;
   rejectionComment?: string;
+  files?: { fileName: string; fileUrl: string; fileSize: number; mimeType?: string }[];
 }
 
 // ─── Files ──────────────────────────────────────────

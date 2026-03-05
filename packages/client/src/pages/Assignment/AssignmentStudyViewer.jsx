@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, ChevronRight, Menu, Pencil, Send,
-  ChevronUp, ChevronDown, GraduationCap, X, Download, Loader
+  ChevronUp, ChevronDown, GraduationCap, X, Download, Loader, Paperclip
 } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
@@ -20,6 +20,7 @@ import {
 } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
+import FileAttachmentPanel from './components/FileAttachmentPanel';
 
 /* 세션 내 캐시 */
 const _notesCache    = new Map(); // `${userId}_${pageId}` → { elements, bgPosition, files }
@@ -150,6 +151,13 @@ const AssignmentStudyViewer = () => {
   const [showTeacherNotesModal, setShowTeacherNotesModal] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [submitting, setSubmitting]   = useState(false);
+  const [submissionFiles, setSubmissionFiles] = useState([]);
+  const [newFiles, setNewFiles] = useState([]);
+  const [deletedFileIds, setDeletedFileIds] = useState(new Set());
+  const [showFilesPanel, setShowFilesPanel] = useState(false);
+  const [fileError, setFileError] = useState('');
+  const [uploadProgress, setUploadProgress] = useState('');
+  const fileInputRef = useRef(null);
   const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
 
   const containerRef         = useRef(null);
@@ -218,6 +226,14 @@ const AssignmentStudyViewer = () => {
         // subData is an array; find the one for this assignment
         const mySub = (subData || []).find(s => s.assignmentId === assignmentId) || null;
         setSubmission(mySub);
+
+        // 제출 파일 로드
+        if (mySub) {
+          try {
+            const files = await api.get(`/api/submissions/${assignmentId}/files`);
+            setSubmissionFiles(files || []);
+          } catch { /* ignore */ }
+        }
 
         if (pgs.length > 0) {
           const found = pgs.find((p) => p.id === pageId);
@@ -438,20 +454,89 @@ const AssignmentStudyViewer = () => {
     }
   }, []);
 
+  /* 파일 첨부 핸들러 */
+  const MAX_SUBMISSION_FILES = 5;
+  const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+  const handleFileAdd = (e) => {
+    const added = Array.from(e.target.files);
+    const currentCount = (submissionFiles.length - deletedFileIds.size) + newFiles.length;
+    if (currentCount + added.length > MAX_SUBMISSION_FILES) {
+      setFileError(`첨부파일은 최대 ${MAX_SUBMISSION_FILES}개까지 가능합니다.`);
+      return;
+    }
+    const oversized = added.filter(f => f.size > MAX_FILE_SIZE);
+    if (oversized.length > 0) {
+      setFileError('파일 크기는 10MB 이하여야 합니다.');
+      return;
+    }
+    setFileError('');
+    setNewFiles(prev => [...prev, ...added]);
+    e.target.value = '';
+  };
+
+  const handleRemoveNewFile = (idx) => setNewFiles(prev => prev.filter((_, i) => i !== idx));
+  const handleRemoveExistingFile = (fileId) => setDeletedFileIds(prev => new Set(prev).add(fileId));
+
   /* 제출 처리 */
   const handleSubmit = async () => {
     if (!user || !assignment) return;
     if (!confirm('과제를 제출하시겠습니까? 제출 후에는 수정이 불가능합니다.')) return;
     setSubmitting(true);
+
     const now = new Date();
     const isLateSubmit = assignment.deadline ? now > new Date(assignment.deadline) : false;
+
     try {
+      // 1. 새 파일 업로드
+      const uploadedFiles = [];
+      let failedCount = 0;
+      for (let i = 0; i < newFiles.length; i++) {
+        setUploadProgress(`파일 업로드 중... (${i + 1}/${newFiles.length})`);
+        try {
+          const formData = new FormData();
+          formData.append('file', newFiles[i]);
+          const result = await api.upload(
+            `/api/files/upload?bucket=submission-files&directory=submissions/${assignmentId}/${user.id}`,
+            formData
+          );
+          uploadedFiles.push({
+            fileName: newFiles[i].name,
+            fileUrl: result.url,
+            fileSize: result.fileSize ?? newFiles[i].size,
+            mimeType: result.mimeType ?? newFiles[i].type,
+          });
+        } catch (err) {
+          failedCount++;
+          console.error(`파일 업로드 실패 (${newFiles[i].name}):`, err);
+        }
+      }
+      setUploadProgress('');
+
+      if (failedCount > 0 && !confirm(`${failedCount}개 파일 업로드에 실패했습니다. 나머지만으로 제출하시겠습니까?`)) {
+        setSubmitting(false);
+        return;
+      }
+
+      // 2. 기존 유지 파일 + 업로드 파일 합산
+      const keptFiles = submissionFiles
+        .filter(f => !deletedFileIds.has(f.id))
+        .map(f => ({ fileName: f.fileName, fileUrl: f.fileUrl, fileSize: f.fileSize, mimeType: f.mimeType }));
+      const allFiles = [...keptFiles, ...uploadedFiles];
+
+      // 3. 제출 API 호출
       const data = await api.put(`/api/submissions/${assignmentId}`, {
         status: isLateSubmit ? 'late_submitted' : 'submitted',
         isLate: isLateSubmit,
         maxScore: assignment.maxScore,
+        files: allFiles,
       });
-      if (data) setSubmission(data);
+      if (data) {
+        setSubmission(data);
+        setSubmissionFiles(allFiles.map((f, i) => ({ ...f, id: `temp-${i}` })));
+        setNewFiles([]);
+        setDeletedFileIds(new Set());
+      }
     } catch (err) {
       console.error('제출 실패:', err);
     }
@@ -514,6 +599,7 @@ const AssignmentStudyViewer = () => {
   };
 
   const canSubmit = !isLocked && submission?.status !== 'submitted';
+  const fileCount = (submissionFiles.length - deletedFileIds.size) + newFiles.length;
 
   return (
     <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
@@ -569,6 +655,27 @@ const AssignmentStudyViewer = () => {
               isDownloading={isDownloading}
               className="mt-0 ml-1 py-1 px-2 text-[10px]"
             />
+          )}
+
+          {/* 파일 첨부 토글 */}
+          <button
+            onClick={() => setShowFilesPanel(v => !v)}
+            title="파일 첨부"
+            className={`relative p-1.5 rounded-md transition-colors cursor-pointer ${
+              showFilesPanel ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Paperclip className="h-5 w-5" />
+            {fileCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-purple-600 text-white text-[10px] rounded-full flex items-center justify-center">
+                {fileCount}
+              </span>
+            )}
+          </button>
+
+          {/* 업로드 진행률 */}
+          {uploadProgress && (
+            <span className="text-xs text-purple-600">{uploadProgress}</span>
           )}
 
           {/* 제출 버튼 */}
@@ -648,6 +755,22 @@ const AssignmentStudyViewer = () => {
           apiRef={excalidrawAPIRef}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
+        />
+      )}
+
+      {/* 파일 첨부 패널 */}
+      {showFilesPanel && (
+        <FileAttachmentPanel
+          readOnly={isLocked}
+          existingFiles={submissionFiles}
+          newFiles={newFiles}
+          deletedFileIds={deletedFileIds}
+          onFileAdd={handleFileAdd}
+          onRemoveNew={handleRemoveNewFile}
+          onRemoveExisting={handleRemoveExistingFile}
+          fileError={fileError}
+          fileInputRef={fileInputRef}
+          maxFiles={5}
         />
       )}
 

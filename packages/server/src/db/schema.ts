@@ -181,6 +181,19 @@ export const assignmentSubmissions = pgTable('assignment_submissions', {
   index('idx_assignment_submissions_assignment').on(t.assignmentId),
 ]);
 
+// ─── assignment_submission_files ────────────────────
+
+export const assignmentSubmissionFiles = pgTable('assignment_submission_files', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  submissionId: uuid('submission_id').notNull()
+    .references(() => assignmentSubmissions.id, { onDelete: 'cascade' }),
+  fileName: text('file_name').notNull(),
+  fileUrl: text('file_url').notNull(),
+  fileSize: integer('file_size').notNull(),
+  mimeType: text('mime_type'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+});
+
 // ─── assignment_notes ───────────────────────────────
 
 export const assignmentNotes = pgTable('assignment_notes', {

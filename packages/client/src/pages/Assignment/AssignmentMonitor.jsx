@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Clock, Download } from 'lucide-react';
+import { ArrowLeft, Users, Clock, Download, Paperclip } from 'lucide-react';
 import { api } from '../../lib/api';
 import { subscribeToRoom } from '../../lib/socket';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
@@ -187,7 +187,15 @@ const AssignmentMonitor = () => {
                 </div>
 
                 <div className="flex items-center justify-between mt-auto pt-2 border-t border-transparent text-gray-400 hover:border-gray-100">
-                  <span className={`text-xs font-medium ${text}`}>{label}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-xs font-medium ${text}`}>{label}</span>
+                    {sub?.files?.length > 0 && (
+                      <span className="flex items-center gap-0.5 text-xs text-purple-600">
+                        <Paperclip className="h-3 w-3" />
+                        {sub.files.length}
+                      </span>
+                    )}
+                  </div>
                   <div className="text-right">
                     {sub?.status === 'graded' && sub.score != null && (
                       <span className="text-xs font-semibold text-blue-700 block mb-0.5">

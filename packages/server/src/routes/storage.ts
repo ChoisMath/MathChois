@@ -3,6 +3,15 @@ import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import { uploadFile, readFile, removeFile } from '../services/storage.service.js';
 
+// 학생 업로드 허용 버킷
+const STUDENT_ALLOWED_BUCKETS = new Set(['submission-files']);
+
+// 학생 업로드 허용 MIME 타입
+const STUDENT_ALLOWED_MIMES = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic',
+  'application/pdf',
+]);
+
 export async function storageRoutes(app: FastifyInstance) {
 
   // ─── POST /api/files/upload — 파일 업로드 ─────
@@ -10,12 +19,17 @@ export async function storageRoutes(app: FastifyInstance) {
   app.post<{
     Querystring: { bucket: string; directory: string };
   }>('/api/files/upload', {
-    preHandler: [authenticate, requireRole('teacher')],
+    preHandler: [authenticate],
   }, async (request, reply) => {
     const { bucket, directory } = request.query;
 
     if (!bucket || !directory) {
       return reply.status(400).send({ error: 'bucket and directory are required' });
+    }
+
+    // 학생은 허용 버킷만 접근 가능
+    if (request.user.role === 'student' && !STUDENT_ALLOWED_BUCKETS.has(bucket)) {
+      return reply.status(403).send({ error: 'Permission denied for this bucket' });
     }
 
     const file = await request.file();
@@ -28,6 +42,11 @@ export async function storageRoutes(app: FastifyInstance) {
       chunks.push(chunk);
     }
     const data = Buffer.concat(chunks);
+
+    // 학생 업로드 MIME 타입 제한
+    if (request.user.role === 'student' && !STUDENT_ALLOWED_MIMES.has(file.mimetype)) {
+      return reply.status(400).send({ error: '허용되지 않은 파일 형식입니다.' });
+    }
 
     const timestamp = Date.now();
     const safeName = file.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -48,7 +67,7 @@ export async function storageRoutes(app: FastifyInstance) {
   app.post<{
     Querystring: { bucket: string; directory: string };
   }>('/api/files/upload-multiple', {
-    preHandler: [authenticate, requireRole('teacher')],
+    preHandler: [authenticate],
   }, async (request, reply) => {
     const { bucket, directory } = request.query;
 
@@ -56,10 +75,20 @@ export async function storageRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'bucket and directory are required' });
     }
 
+    // 학생은 허용 버킷만 접근 가능
+    if (request.user.role === 'student' && !STUDENT_ALLOWED_BUCKETS.has(bucket)) {
+      return reply.status(403).send({ error: 'Permission denied for this bucket' });
+    }
+
     const parts = request.files();
     const results: { url: string; fileName: string; fileSize: number; mimeType: string }[] = [];
 
     for await (const part of parts) {
+      // 학생 업로드 MIME 타입 제한
+      if (request.user.role === 'student' && !STUDENT_ALLOWED_MIMES.has(part.mimetype)) {
+        return reply.status(400).send({ error: '허용되지 않은 파일 형식입니다.' });
+      }
+
       const chunks: Buffer[] = [];
       for await (const chunk of part.file) {
         chunks.push(chunk);

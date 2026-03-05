@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, ChevronRight, Pencil, ChevronUp, ChevronDown, Menu,
-  CheckCircle, XCircle, Trophy, Loader, X
+  CheckCircle, XCircle, Trophy, Loader, X, Paperclip
 } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
@@ -20,6 +20,7 @@ import {
 } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
+import FileAttachmentPanel from './components/FileAttachmentPanel';
 
 const TEACHER_COMMENT_PREFIX = '__atc_';
 
@@ -41,6 +42,8 @@ const AssignmentWorkViewer = () => {
   const [showExcalidrawPanel, setShowExcalidrawPanel] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [loading, setLoading]               = useState(true);
+  const [submissionFiles, setSubmissionFiles] = useState([]);
+  const [showFilesPanel, setShowFilesPanel] = useState(false);
   const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
 
   /* 채점 UI 상태 */
@@ -109,6 +112,12 @@ const AssignmentWorkViewer = () => {
         const studentSub = (subsData || []).find(s => s.studentId === studentId) || null;
         setSubmission(studentSub);
         if (studentSub?.score != null) setScoreInput(String(studentSub.score));
+
+        // 제출 파일 로드
+        try {
+          const files = await api.get(`/api/submissions/${assignmentId}/files?studentId=${studentId}`);
+          setSubmissionFiles(files || []);
+        } catch { /* ignore */ }
       } catch (err) {
         console.error('데이터 로드 실패:', err);
       }
@@ -407,6 +416,22 @@ const AssignmentWorkViewer = () => {
             <span className="text-xs font-medium text-orange-600 px-2 py-1 bg-orange-50 rounded-md">반려됨</span>
           )}
 
+          {/* 첨부파일 */}
+          <button
+            onClick={() => setShowFilesPanel(v => !v)}
+            title={`첨부파일 ${submissionFiles.length}개`}
+            className={`relative p-1.5 rounded-md transition-colors cursor-pointer ${
+              showFilesPanel ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Paperclip className="h-5 w-5" />
+            {submissionFiles.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-purple-600 text-white text-[10px] rounded-full flex items-center justify-center">
+                {submissionFiles.length}
+              </span>
+            )}
+          </button>
+
           {/* PDF 다운로드 */}
           {currentPage && studentEls.current && (
             <PdfDownloadButton
@@ -504,6 +529,22 @@ const AssignmentWorkViewer = () => {
           apiRef={excalidrawAPIRef}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
+        />
+      )}
+
+      {/* 파일 첨부 패널 (읽기 전용) */}
+      {showFilesPanel && (
+        <FileAttachmentPanel
+          readOnly={true}
+          existingFiles={submissionFiles}
+          newFiles={[]}
+          deletedFileIds={new Set()}
+          onFileAdd={() => {}}
+          onRemoveNew={() => {}}
+          onRemoveExisting={() => {}}
+          fileError=""
+          fileInputRef={{ current: null }}
+          maxFiles={5}
         />
       )}
 

@@ -2,7 +2,7 @@ import { eq, and, inArray, desc, sql, ne } from 'drizzle-orm';
 import { db } from '../config/database.js';
 import {
   assignments, assignmentPages, assignmentSubmissions,
-  assignmentNotes, assignmentTeacherComments,
+  assignmentNotes, assignmentTeacherComments, assignmentSubmissionFiles,
 } from '../db/schema.js';
 
 // ─── Assignments ────────────────────────────────
@@ -279,4 +279,72 @@ export async function upsertSubmission(data: {
     .returning();
 
   return result;
+}
+
+// ─── Submission Files ────────────────────────────
+
+/** 단일 제출의 파일 목록 */
+export async function getSubmissionFiles(submissionId: string) {
+  return db.select().from(assignmentSubmissionFiles)
+    .where(eq(assignmentSubmissionFiles.submissionId, submissionId));
+}
+
+/** N+1 방지 벌크 로드: 과제의 모든 제출 파일을 Map으로 반환 */
+export async function getSubmissionFilesByAssignment(assignmentId: string) {
+  const subs = await db.select({ id: assignmentSubmissions.id })
+    .from(assignmentSubmissions)
+    .where(eq(assignmentSubmissions.assignmentId, assignmentId));
+
+  if (subs.length === 0) return new Map<string, typeof assignmentSubmissionFiles.$inferSelect[]>();
+
+  const subIds = subs.map(s => s.id);
+  const allFiles = await db.select().from(assignmentSubmissionFiles)
+    .where(inArray(assignmentSubmissionFiles.submissionId, subIds));
+
+  const map = new Map<string, typeof assignmentSubmissionFiles.$inferSelect[]>();
+  for (const f of allFiles) {
+    if (!map.has(f.submissionId)) map.set(f.submissionId, []);
+    map.get(f.submissionId)!.push(f);
+  }
+  return map;
+}
+
+/** 트랜잭션으로 제출 파일 교체 (삭제 + 삽입) */
+export async function upsertSubmissionFiles(
+  submissionId: string,
+  files: { fileName: string; fileUrl: string; fileSize: number; mimeType?: string }[]
+) {
+  await db.transaction(async (tx) => {
+    await tx.delete(assignmentSubmissionFiles)
+      .where(eq(assignmentSubmissionFiles.submissionId, submissionId));
+    if (files.length > 0) {
+      await tx.insert(assignmentSubmissionFiles).values(
+        files.map(f => ({
+          submissionId,
+          fileName: f.fileName,
+          fileUrl: f.fileUrl,
+          fileSize: f.fileSize,
+          mimeType: f.mimeType ?? null,
+        }))
+      );
+    }
+  });
+}
+
+/** 단일 제출의 파일 URL 목록 (스토리지 정리용) */
+export async function getSubmissionFileUrls(submissionId: string): Promise<string[]> {
+  const rows = await db.select({ fileUrl: assignmentSubmissionFiles.fileUrl })
+    .from(assignmentSubmissionFiles)
+    .where(eq(assignmentSubmissionFiles.submissionId, submissionId));
+  return rows.map(r => r.fileUrl);
+}
+
+/** 과제 삭제 시 모든 제출 파일 URL 목록 (스토리지 정리용) */
+export async function getSubmissionFileUrlsByAssignment(assignmentId: string): Promise<string[]> {
+  const rows = await db
+    .select({ fileUrl: assignmentSubmissionFiles.fileUrl })
+    .from(assignmentSubmissionFiles)
+    .innerJoin(assignmentSubmissions, eq(assignmentSubmissionFiles.submissionId, assignmentSubmissions.id))
+    .where(eq(assignmentSubmissions.assignmentId, assignmentId));
+  return rows.map(r => r.fileUrl);
 }
