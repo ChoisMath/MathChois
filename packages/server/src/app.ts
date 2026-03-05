@@ -3,6 +3,7 @@ import fastifyCookie from '@fastify/cookie';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import rateLimit from '@fastify/rate-limit';
+import jwt from 'jsonwebtoken';
 import path from 'node:path';
 import { sql } from 'drizzle-orm';
 import { env } from './config/env.js';
@@ -32,8 +33,36 @@ export function buildApp() {
   app.register(fastifyCookie);
 
   app.register(rateLimit, {
-    max: 200,
+    max: 300,
     timeWindow: '1 minute',
+
+    // JWT에서 userId 추출 → 사용자별 버킷. 미인증 요청은 IP 기반
+    keyGenerator: (request) => {
+      try {
+        const auth = request.headers.authorization;
+        if (auth?.startsWith('Bearer ')) {
+          const payload = jwt.decode(auth.slice(7)) as { sub?: string } | null;
+          if (payload?.sub) return `user:${payload.sub}`;
+        }
+      } catch { /* IP fallback */ }
+      return request.ip;
+    },
+
+    // 정적 파일, Socket.IO, Health check는 rate limit에서 제외
+    allowList: (request, _key) => {
+      const url = request.url;
+      return url.startsWith('/assets/')
+        || url.startsWith('/socket.io/')
+        || url === '/favicon.svg'
+        || url === '/favicon.ico'
+        || url === '/api/health';
+    },
+
+    // 429 발생 시 로깅 (디버깅용)
+    onExceeded: (request, key) => {
+      request.log.warn({ key, url: request.url }, 'Rate limit exceeded');
+    },
+
     errorResponseBuilder: () => ({
       statusCode: 429,
       error: 'Too Many Requests',
@@ -80,6 +109,11 @@ export function buildApp() {
       root: clientDist,
       prefix: '/',
       wildcard: false,
+      setHeaders: (res, filePath) => {
+        if (filePath.includes('/assets/')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
     });
 
     // SPA fallback: non-API routes → index.html
