@@ -65,9 +65,8 @@ function PostCard({ post, isTeacher, navigate }) {
               {post.files.map((f) => (
                 <a
                   key={f.id}
-                  href={f.fileUrl}
-                  target="_blank"
-                  rel="noreferrer"
+                  href={f.fileUrl + '?download=true'}
+                  download={f.fileName}
                   className="flex items-center gap-2 p-2 bg-gray-50 rounded-md hover:bg-blue-50 transition-colors"
                 >
                   <Paperclip className="h-4 w-4 text-gray-400 flex-shrink-0" />

@@ -89,13 +89,18 @@ export async function storageRoutes(app: FastifyInstance) {
     const prefix = '/api/files/';
     const rest = url.slice(prefix.length);
 
-    const slashIdx = rest.indexOf('/');
+    // 쿼리 스트링 분리
+    const qIdx = rest.indexOf('?');
+    const pathPart = qIdx === -1 ? rest : rest.slice(0, qIdx);
+    const download = (request.query as Record<string, string>).download === 'true';
+
+    const slashIdx = pathPart.indexOf('/');
     if (slashIdx === -1) {
       return reply.status(400).send({ error: 'Invalid file path' });
     }
 
-    const bucket = rest.slice(0, slashIdx);
-    const filePath = rest.slice(slashIdx + 1);
+    const bucket = pathPart.slice(0, slashIdx);
+    const filePath = pathPart.slice(slashIdx + 1);
 
     const result = await readFile(bucket, filePath);
     if (!result) {
@@ -105,6 +110,14 @@ export async function storageRoutes(app: FastifyInstance) {
     // 파일명에 타임스탬프 포함 → immutable 캐시
     reply.header('Content-Type', result.mimeType);
     reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+
+    if (download) {
+      // 타임스탬프 접두사 제거 (예: 1709712000000_report.pdf → report.pdf)
+      const baseName = filePath.split('/').pop() || 'download';
+      const originalName = baseName.replace(/^\d+_/, '');
+      reply.header('Content-Disposition', `attachment; filename="${encodeURIComponent(originalName)}"`);
+    }
+
     return reply.send(result.data);
   });
 

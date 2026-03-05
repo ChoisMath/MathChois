@@ -258,7 +258,7 @@ const BoardPostEditor = () => {
           {existingFiles.filter((f) => !deletedFileIds.has(f.id)).map((f) => (
             <div key={f.id} className="flex items-center gap-2 mb-1 p-2 bg-gray-50 rounded-md">
               <Paperclip className="h-4 w-4 text-gray-400 flex-shrink-0" />
-              <a href={f.fileUrl} target="_blank" rel="noreferrer"
+              <a href={f.fileUrl + '?download=true'} download={f.fileName}
                 className="text-sm text-blue-600 hover:underline truncate flex-1">
                 {f.fileName}
               </a>
