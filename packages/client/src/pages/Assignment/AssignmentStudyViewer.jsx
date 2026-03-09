@@ -178,6 +178,7 @@ const AssignmentStudyViewer = () => {
   const [screenLocked, setScreenLocked] = useState(false);
   const screenLockedRef   = useRef(false);
   const screenLockBaseRef = useRef({ zoom: 1, scrollX: 0, scrollY: 0 });
+  const isRestoringRef    = useRef(false);
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
   useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef });
@@ -351,11 +352,14 @@ const AssignmentStudyViewer = () => {
 
   /* onChange: 저장 */
   const handleExcalidrawChange = useCallback((elements, appState) => {
+    if (isRestoringRef.current) return;
+
     if (appState && screenLockedRef.current) {
       const base = screenLockBaseRef.current;
       if (appState.zoom.value !== base.zoom ||
           appState.scrollX !== base.scrollX ||
           appState.scrollY !== base.scrollY) {
+        isRestoringRef.current = true;
         excalidrawAPIRef.current?.updateScene({
           appState: {
             zoom: { value: base.zoom },
@@ -363,6 +367,8 @@ const AssignmentStudyViewer = () => {
             scrollY: base.scrollY,
           }
         });
+        requestAnimationFrame(() => { isRestoringRef.current = false; });
+        return;
       }
     }
 

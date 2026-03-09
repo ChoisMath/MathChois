@@ -36,7 +36,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       if (!isExcalidraw) return;
       if (e.pointerType === 'touch' && (e.width > 25 || e.height > 25)) {
         e.preventDefault();
-        e.stopPropagation();
+        if (screenLockedRef.current) e.stopPropagation();
       }
       // 화면 고정 모드: 2핑거 이상 → Excalidraw에 전달 차단
       if (screenLockedRef.current && e.pointerType === 'touch' && activeTouchesRef.current >= 2) {
@@ -50,7 +50,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       if (e.pointerType === 'touch') {
         if (e.width > 25 || e.height > 25) {
           e.preventDefault();
-          e.stopPropagation();
+          if (screenLockedRef.current) e.stopPropagation();
           return;
         }
         // 화면 고정 모드: 2핑거 이상 → Excalidraw에 전달 차단
@@ -76,7 +76,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       }
       if (isPalm) {
         if (e.cancelable) e.preventDefault();
-        e.stopPropagation();
+        if (screenLockedRef.current) e.stopPropagation();
         return;
       }
 
@@ -101,7 +101,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       }
       if (isPalm) {
         if (e.cancelable) e.preventDefault();
-        e.stopPropagation();
+        if (screenLockedRef.current) e.stopPropagation();
         return;
       }
 
