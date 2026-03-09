@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, PenLine, Users, FileText, Download } from 'lucide-react';
 import { api } from '../../lib/api';
-import { subscribeToRoom, getSocket } from '../../lib/socket';
+import { joinRoom, leaveRoom, getSocket } from '../../lib/socket';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
@@ -85,11 +85,16 @@ const ChapterMonitor = () => {
     fetchData();
   }, [classroomId, chapterId]);
 
-  /* ── Socket.IO 구독 ── */
+  /* ── Socket.IO: notes + presence (단일 room 구독) ── */
   useEffect(() => {
     if (pages.length === 0) return;
+    const sock = getSocket();
+    if (!sock) return;
 
-    return subscribeToRoom(`chapter:${chapterId}`, 'student-note:updated', (data) => {
+    joinRoom(`chapter:${chapterId}`);
+
+    // 학생 필기 업데이트
+    const onNoteUpdated = (data) => {
       const { studentId, pageId, updatedAt } = data;
       if (!studentId || !pageId) return;
       setNotesSummary((prev) => {
@@ -97,67 +102,46 @@ const ChapterMonitor = () => {
           ? { ...prev[studentId], pagesWithNotes: new Set(prev[studentId].pagesWithNotes) }
           : { pagesWithNotes: new Set(), updatedAt: null };
         entry.pagesWithNotes.add(pageId);
-        if (!entry.updatedAt || updatedAt > entry.updatedAt) {
-          entry.updatedAt = updatedAt;
-        }
+        if (!entry.updatedAt || updatedAt > entry.updatedAt) entry.updatedAt = updatedAt;
         return { ...prev, [studentId]: entry };
       });
-    });
-  }, [chapterId, pages]);
+    };
 
-  /* ── 학생 접속 상태(Presence) 구독 ── */
-  useEffect(() => {
-    if (pages.length === 0) return;
-    const sock = getSocket();
-    if (!sock) return;
-
-    // 1) 초기 상태 조회 (Socket.IO ack callback)
+    // Presence 초기 조회
     const fetchPresence = () => {
       sock.emit('presence:get', { chapterId }, (list) => {
         if (!Array.isArray(list)) return;
         const map = {};
         for (const entry of list) {
-          map[entry.studentId] = {
-            pageId: entry.pageId,
-            studentName: entry.studentName,
-            joinedAt: entry.joinedAt,
-          };
+          map[entry.studentId] = { pageId: entry.pageId, studentName: entry.studentName, joinedAt: entry.joinedAt };
         }
         setPresence(map);
       });
     };
-
     if (sock.connected) fetchPresence();
 
-    // 2) 실시간 업데이트 구독
+    // Presence 실시간
     const onUpdated = (data) => {
       setPresence((prev) => ({
         ...prev,
-        [data.studentId]: {
-          pageId: data.pageId,
-          studentName: data.studentName,
-          joinedAt: data.joinedAt,
-        },
+        [data.studentId]: { pageId: data.pageId, studentName: data.studentName, joinedAt: data.joinedAt },
       }));
     };
     const onLeft = (data) => {
-      setPresence((prev) => {
-        const next = { ...prev };
-        delete next[data.studentId];
-        return next;
-      });
+      setPresence((prev) => { const next = { ...prev }; delete next[data.studentId]; return next; });
     };
 
+    sock.on('student-note:updated', onNoteUpdated);
     sock.on('presence:updated', onUpdated);
     sock.on('presence:left', onLeft);
-
-    // 3) 교사 소켓 재연결 시 다시 조회
     sock.on('connect', fetchPresence);
 
     return () => {
+      sock.off('student-note:updated', onNoteUpdated);
       sock.off('presence:updated', onUpdated);
       sock.off('presence:left', onLeft);
       sock.off('connect', fetchPresence);
+      leaveRoom(`chapter:${chapterId}`);
     };
   }, [chapterId, pages]);
 
