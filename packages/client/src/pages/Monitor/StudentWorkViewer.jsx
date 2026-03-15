@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Pencil, ChevronUp, ChevronDown, Menu } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
@@ -32,7 +32,9 @@ const STUDENT_NOTE_PREFIX = '__sn_';
 const StudentWorkViewer = () => {
   const { classroomId, chapterId, studentId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
+  const initialPageIdRef = useRef(location.state?.initialPageId ?? null);
 
   const [chapter, setChapter]             = useState(null);
   const [pages, setPages]                 = useState([]);
@@ -112,6 +114,12 @@ const StudentWorkViewer = () => {
         setChapter(chap);
         setPages(pgs || []);
         setStudentProfile(profile);
+
+        if (initialPageIdRef.current && pgs?.length > 0) {
+          const idx = pgs.findIndex(p => p.id === initialPageIdRef.current);
+          if (idx >= 0) setCurrentPageIndex(idx);
+          initialPageIdRef.current = null;
+        }
       } catch (err) {
         console.error('StudentWorkViewer fetchData error:', err);
       }

@@ -66,11 +66,12 @@ const ChapterMonitor = () => {
           const summary = {};
           for (const n of (summaryData?.notes || [])) {
             if (!summary[n.studentId]) {
-              summary[n.studentId] = { pagesWithNotes: new Set(), updatedAt: null };
+              summary[n.studentId] = { pagesWithNotes: new Set(), updatedAt: null, lastPageId: null };
             }
             summary[n.studentId].pagesWithNotes.add(n.pageId);
             if (!summary[n.studentId].updatedAt || n.updatedAt > summary[n.studentId].updatedAt) {
               summary[n.studentId].updatedAt = n.updatedAt;
+              summary[n.studentId].lastPageId = n.pageId;
             }
           }
           setNotesSummary(summary);
@@ -100,9 +101,12 @@ const ChapterMonitor = () => {
       setNotesSummary((prev) => {
         const entry = prev[studentId]
           ? { ...prev[studentId], pagesWithNotes: new Set(prev[studentId].pagesWithNotes) }
-          : { pagesWithNotes: new Set(), updatedAt: null };
+          : { pagesWithNotes: new Set(), updatedAt: null, lastPageId: null };
         entry.pagesWithNotes.add(pageId);
-        if (!entry.updatedAt || updatedAt > entry.updatedAt) entry.updatedAt = updatedAt;
+        if (!entry.updatedAt || updatedAt > entry.updatedAt) {
+          entry.updatedAt = updatedAt;
+          entry.lastPageId = pageId;
+        }
         return { ...prev, [studentId]: entry };
       });
     };
@@ -253,9 +257,15 @@ const ChapterMonitor = () => {
             return (
               <div
                 key={m.studentId}
-                onClick={() => navigate(
-                  `/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor/${m.studentId}`
-                )}
+                onClick={() => {
+                  const initialPageId = isOnline
+                    ? currentPageId
+                    : notesSummary[m.studentId]?.lastPageId;
+                  navigate(
+                    `/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor/${m.studentId}`,
+                    initialPageId ? { state: { initialPageId } } : undefined
+                  );
+                }}
                 className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all flex flex-col h-full"
               >
                 <div className="flex items-center justify-between mb-3">
