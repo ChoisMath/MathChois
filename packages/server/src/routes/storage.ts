@@ -32,34 +32,39 @@ export async function storageRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Permission denied for this bucket' });
     }
 
-    const file = await request.file();
-    if (!file) {
-      return reply.status(400).send({ error: 'No file uploaded' });
+    try {
+      const file = await request.file();
+      if (!file) {
+        return reply.status(400).send({ error: 'No file uploaded' });
+      }
+
+      const chunks: Buffer[] = [];
+      for await (const chunk of file.file) {
+        chunks.push(chunk);
+      }
+      const data = Buffer.concat(chunks);
+
+      // 학생 업로드 MIME 타입 제한
+      if (request.user.role === 'student' && !STUDENT_ALLOWED_MIMES.has(file.mimetype)) {
+        return reply.status(400).send({ error: '허용되지 않은 파일 형식입니다.' });
+      }
+
+      const timestamp = Date.now();
+      const safeName = file.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const fileName = `${timestamp}_${safeName}`;
+
+      const url = await uploadFile(bucket, directory, fileName, data);
+
+      return {
+        url,
+        fileName: file.filename,
+        fileSize: data.length,
+        mimeType: file.mimetype,
+      };
+    } catch (err) {
+      request.log.error({ err }, 'File upload failed');
+      return reply.status(500).send({ error: '파일 업로드에 실패했습니다.' });
     }
-
-    const chunks: Buffer[] = [];
-    for await (const chunk of file.file) {
-      chunks.push(chunk);
-    }
-    const data = Buffer.concat(chunks);
-
-    // 학생 업로드 MIME 타입 제한
-    if (request.user.role === 'student' && !STUDENT_ALLOWED_MIMES.has(file.mimetype)) {
-      return reply.status(400).send({ error: '허용되지 않은 파일 형식입니다.' });
-    }
-
-    const timestamp = Date.now();
-    const safeName = file.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const fileName = `${timestamp}_${safeName}`;
-
-    const url = await uploadFile(bucket, directory, fileName, data);
-
-    return {
-      url,
-      fileName: file.filename,
-      fileSize: data.length,
-      mimeType: file.mimetype,
-    };
   });
 
   // ─── POST /api/files/upload-multiple — 복수 파일 업로드
@@ -80,35 +85,45 @@ export async function storageRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Permission denied for this bucket' });
     }
 
-    const parts = request.files();
-    const results: { url: string; fileName: string; fileSize: number; mimeType: string }[] = [];
+    try {
+      const MAX_FILES = 20;
+      const parts = request.files();
+      const results: { url: string; fileName: string; fileSize: number; mimeType: string }[] = [];
 
-    for await (const part of parts) {
-      // 학생 업로드 MIME 타입 제한
-      if (request.user.role === 'student' && !STUDENT_ALLOWED_MIMES.has(part.mimetype)) {
-        return reply.status(400).send({ error: '허용되지 않은 파일 형식입니다.' });
+      for await (const part of parts) {
+        if (results.length >= MAX_FILES) {
+          return reply.status(400).send({ error: `최대 ${MAX_FILES}개 파일만 업로드할 수 있습니다.` });
+        }
+
+        // 학생 업로드 MIME 타입 제한
+        if (request.user.role === 'student' && !STUDENT_ALLOWED_MIMES.has(part.mimetype)) {
+          return reply.status(400).send({ error: '허용되지 않은 파일 형식입니다.' });
+        }
+
+        const chunks: Buffer[] = [];
+        for await (const chunk of part.file) {
+          chunks.push(chunk);
+        }
+        const data = Buffer.concat(chunks);
+
+        const timestamp = Date.now();
+        const safeName = part.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const fileName = `${timestamp}_${safeName}`;
+
+        const url = await uploadFile(bucket, directory, fileName, data);
+        results.push({
+          url,
+          fileName: part.filename,
+          fileSize: data.length,
+          mimeType: part.mimetype,
+        });
       }
 
-      const chunks: Buffer[] = [];
-      for await (const chunk of part.file) {
-        chunks.push(chunk);
-      }
-      const data = Buffer.concat(chunks);
-
-      const timestamp = Date.now();
-      const safeName = part.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const fileName = `${timestamp}_${safeName}`;
-
-      const url = await uploadFile(bucket, directory, fileName, data);
-      results.push({
-        url,
-        fileName: part.filename,
-        fileSize: data.length,
-        mimeType: part.mimetype,
-      });
+      return results;
+    } catch (err) {
+      request.log.error({ err }, 'Multiple file upload failed');
+      return reply.status(500).send({ error: '파일 업로드에 실패했습니다.' });
     }
-
-    return results;
   });
 
   // ─── GET /api/files/:bucket/* — 파일 서빙 ────

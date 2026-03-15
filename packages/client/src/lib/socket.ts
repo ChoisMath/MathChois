@@ -12,6 +12,7 @@ import { getAccessToken } from './api';
 
 let socket: Socket | null = null;
 const joinedRooms = new Set<string>();
+let visibilityHandler: (() => void) | null = null;
 
 /** Socket.IO 서버 URL (dev: Vite proxy 사용) */
 const SOCKET_URL = import.meta.env.VITE_API_URL ?? '';
@@ -71,6 +72,16 @@ export function connectSocket(): Socket {
     console.warn('[Socket] Server error:', data);
   });
 
+  // 모바일 visibilitychange 재연결
+  if (typeof document !== 'undefined' && !visibilityHandler) {
+    visibilityHandler = () => {
+      if (document.visibilityState === 'visible' && socket && !socket.connected) {
+        socket.connect();
+      }
+    };
+    document.addEventListener('visibilitychange', visibilityHandler);
+  }
+
   return socket;
 }
 
@@ -82,6 +93,10 @@ export function disconnectSocket(): void {
     socket = null;
   }
   joinedRooms.clear();
+  if (visibilityHandler) {
+    document.removeEventListener('visibilitychange', visibilityHandler);
+    visibilityHandler = null;
+  }
 }
 
 /** access token 갱신 시 호출 — auth만 교체하고 재연결 (이벤트 리스너 보존) */
@@ -146,12 +161,3 @@ export function subscribeToRoom(
   };
 }
 
-// ─── 모바일 visibilitychange 재연결 ───────────
-
-if (typeof document !== 'undefined') {
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && socket && !socket.connected) {
-      socket.connect();
-    }
-  });
-}

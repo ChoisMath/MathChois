@@ -114,7 +114,9 @@ export const posts = pgTable('posts', {
   content: text('content').default(''),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-});
+}, (t) => [
+  index('idx_posts_teacher').on(t.teacherId),
+]);
 
 // ─── post_files ─────────────────────────────────────
 

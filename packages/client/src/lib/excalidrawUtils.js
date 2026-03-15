@@ -158,6 +158,44 @@ export function calculateBgPosition(containerWidth, containerHeight, imageWidth,
   };
 }
 
+/* ─────────── 컨테이너 레이아웃 완료 대기 ─────────── */
+export function waitForLayout(container, timeout = 2000) {
+  return new Promise((resolve) => {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (w > 0 && h > 0) {
+      resolve({ width: w, height: h });
+      return;
+    }
+    /* 컨테이너가 이미 DOM에서 분리된 경우 즉시 폴백 */
+    if (!container.isConnected) {
+      resolve({ width: 800, height: 600 });
+      return;
+    }
+    let settled = false;
+    const settle = (width, height) => {
+      if (settled) return;
+      settled = true;
+      observer.disconnect();
+      clearTimeout(timer);
+      resolve({ width, height });
+    };
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          settle(width, height);
+          return;
+        }
+      }
+    });
+    observer.observe(container);
+    const timer = setTimeout(() => {
+      settle(container.clientWidth || 800, container.clientHeight || 600);
+    }, timeout);
+  });
+}
+
 /* ─────────── Excalidraw image element 생성 ─────────── */
 export function createBgElement(x, y, w, h) {
   return {

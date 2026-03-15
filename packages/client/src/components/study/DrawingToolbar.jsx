@@ -315,7 +315,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
     localStorage.setItem('mc_stroke_width', String(w));
     if (onBaseWidthChange) onBaseWidthChange(w);
     const zoom = apiRef.current?.getAppState()?.zoom?.value || 1;
-    apiRef.current?.updateScene({ appState: { currentItemStrokeWidth: w / zoom } });
+    apiRef.current?.updateScene({ appState: { currentItemStrokeWidth: w / zoom }, commitToHistory: false });
   };
 
   const handleToggleImageMove = () => {

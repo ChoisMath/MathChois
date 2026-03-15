@@ -21,6 +21,7 @@ import {
   calculateBgPosition,
   EXCALIDRAW_UI_OPTIONS,
   TOUCH_CSS,
+  waitForLayout,
 } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
@@ -77,8 +78,10 @@ const TeacherStudyViewer = () => {
     return () => { mountedRef.current = false; };
   }, []);
 
-  useEffect(() => { currentPageRef.current  = currentPage;  }, [currentPage]);
-  useEffect(() => { noteElementsRef.current = noteElements; }, [noteElements]);
+  useEffect(() => {
+    currentPageRef.current  = currentPage;
+    noteElementsRef.current = noteElements;
+  }, [currentPage, noteElements]);
 
   /* ── 데이터 로드 ── */
   useEffect(() => {
@@ -144,8 +147,8 @@ const TeacherStudyViewer = () => {
   const handleExcalidrawChange = useCallback((elements, appState) => {
     if (isRestoringRef.current || isAdjustingWidthRef.current) return;
 
-    /* 줌-독립 펜 두께 */
-    if (appState && appState.zoom?.value !== lastZoomRef.current) {
+    /* 줌-독립 펜 두께 (미세 부동소수점 변동 무시) */
+    if (appState && Math.abs((appState.zoom?.value || 1) - lastZoomRef.current) > 0.001) {
       lastZoomRef.current = appState.zoom.value;
       const tool = excalidrawAPIRef.current?.getAppState()?.activeTool?.type;
       if (tool === 'freedraw' && baseStrokeWidthRef.current) {
@@ -191,8 +194,7 @@ const TeacherStudyViewer = () => {
 
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      if (!mountedRef.current) return;
-      setSaveStatus('saving');
+      if (mountedRef.current) setSaveStatus('saving');
       const allFiles  = excalidrawAPIRef.current?.getFiles() ?? {};
       const { [BG_FILE_ID]: _bgf, ...userFiles } = allFiles;
       try {
@@ -203,19 +205,17 @@ const TeacherStudyViewer = () => {
             ...(Object.keys(userFiles).length > 0 && { files: userFiles }),
           },
         });
-      } catch (err) {
-        console.error('교사 필기 저장 실패:', err);
-      }
-      if (mountedRef.current) {
-        /* 노트 캐시 갱신 — 다음 방문 시 즉시 표시 */
+        /* 노트 캐시 갱신 — 저장 성공 시에만 */
         _notesCache.set(`${user.id}_${page.id}`, {
           elements:   teacherEls,
           bgPosition: bgPositionRef.current,
           files:      userFiles,
         });
         lastSavedRef.current = serialized;
-        setSaveStatus('saved');
+      } catch (err) {
+        console.error('교사 필기 저장 실패:', err);
       }
+      if (mountedRef.current) setSaveStatus('saved');
     }, 1500);
   }, [user]);
 
@@ -258,11 +258,10 @@ const TeacherStudyViewer = () => {
 
       let bgX, bgY, bgW, bgH;
       const saved = bgPositionRef.current;
-      if (saved) {
+      if (saved && saved.width > 10 && saved.height > 10) {
         ({ x: bgX, y: bgY, width: bgW, height: bgH } = saved);
       } else {
-        const W = containerRef.current.clientWidth  || 800;
-        const H = containerRef.current.clientHeight || 1000;
+        const { width: W, height: H } = await waitForLayout(containerRef.current);
         const pos = calculateBgPosition(W, H, iW, iH);
         bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
         bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };

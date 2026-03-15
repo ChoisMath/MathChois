@@ -5,6 +5,7 @@ import { eq, and } from 'drizzle-orm';
 import { env } from '../config/env.js';
 import { db } from '../config/database.js';
 import { chapters, pages, classrooms, classroomMembers, assignments, assignmentPages } from '../db/schema.js';
+import type { FastifyBaseLogger } from 'fastify';
 import type { TokenPayload } from '@mathchois/shared';
 import { registerNoteHandlers } from './handlers/notes.js';
 import { registerCommentHandlers } from './handlers/comments.js';
@@ -166,7 +167,10 @@ async function validateRoomAccess(user: TokenPayload, room: string): Promise<boo
   return false; // 알 수 없는 room 패턴
 }
 
-export function setupSocketIO(httpServer: HttpServer): Server {
+let log: FastifyBaseLogger;
+
+export function setupSocketIO(httpServer: HttpServer, logger: FastifyBaseLogger): Server {
+  log = logger;
   io = new Server(httpServer, {
     cors: {
       origin: env.NODE_ENV === 'production' ? false : 'http://localhost:3000',
@@ -187,7 +191,7 @@ export function setupSocketIO(httpServer: HttpServer): Server {
     try {
       const payload = jwt.verify(token, env.JWT_SECRET) as TokenPayload;
       socket.data.user = payload;
-      socket.data.validatedRooms = new Set<string>();
+      socket.data.validatedRooms = new Map<string, number>();
       next();
     } catch {
       next(new Error('Invalid token'));
@@ -198,31 +202,31 @@ export function setupSocketIO(httpServer: HttpServer): Server {
 
   io.on('connection', (socket) => {
     const user = socket.data.user as TokenPayload;
-    console.log('[Socket] Connected:', user.sub, user.role);
+    log.info({ userId: user.sub, role: user.role }, 'Socket connected');
 
     socket.on('disconnect', (reason) => {
-      console.log('[Socket] Disconnected:', user.sub, reason);
+      log.info({ userId: user.sub, reason }, 'Socket disconnected');
     });
 
-    // Room join with authorization
+    // Room join with authorization (TTL 캐시: 30초 내 재검증 스킵)
     socket.on('join-room', async (room: string) => {
       try {
-        // 이미 검증된 room은 바로 join
-        if (socket.data.validatedRooms.has(room)) {
+        const cached = socket.data.validatedRooms.get(room);
+        if (cached && Date.now() - cached < 30_000) {
           socket.join(room);
           return;
         }
 
         const allowed = await validateRoomAccess(user, room);
         if (allowed) {
-          socket.data.validatedRooms.add(room);
+          socket.data.validatedRooms.set(room, Date.now());
           socket.join(room);
         } else {
-          console.warn('[Socket] Access denied:', { room, userId: user.sub, role: user.role });
+          log.warn({ room, userId: user.sub, role: user.role }, 'Socket access denied');
           socket.emit('error', { message: 'Access denied', room });
         }
       } catch (err) {
-        console.error('[Socket] Room join error:', { room, userId: user.sub, error: err });
+        log.error({ room, userId: user.sub, err }, 'Socket room join error');
         socket.emit('error', { message: 'Room join failed', room });
       }
     });

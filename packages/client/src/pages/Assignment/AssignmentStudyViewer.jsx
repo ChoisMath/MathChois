@@ -16,7 +16,7 @@ import {
   BG_ELEMENT_ID, BG_FILE_ID,
   ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE,
   fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages,
-  calculateBgPosition, EXCALIDRAW_UI_OPTIONS, TOUCH_CSS,
+  calculateBgPosition, EXCALIDRAW_UI_OPTIONS, TOUCH_CSS, waitForLayout,
 } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
@@ -59,11 +59,10 @@ function TeacherNotesModal({ page, onClose }) {
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
 
       let bgW, bgH, bgX, bgY;
-      if (dbBgPosition) {
+      if (dbBgPosition && dbBgPosition.width > 10 && dbBgPosition.height > 10) {
         ({ width: bgW, height: bgH, x: bgX, y: bgY } = dbBgPosition);
       } else {
-        const W = containerRef.current.clientWidth  || 800;
-        const H = containerRef.current.clientHeight || 900;
+        const { width: W, height: H } = await waitForLayout(containerRef.current);
         const pos = calculateBgPosition(W, H, iW, iH);
         bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
       }
@@ -175,6 +174,7 @@ const AssignmentStudyViewer = () => {
   const activeSidebarItemRef = useRef(null);
   const sidebarScrollRef     = useRef(null);
   const mountedRef           = useRef(true);
+  const commentDebounceRef   = useRef(null);
   const [screenLocked, setScreenLocked] = useState(false);
   const screenLockedRef   = useRef(false);
   const screenLockBaseRef = useRef({ zoom: 1, scrollX: 0, scrollY: 0 });
@@ -184,22 +184,25 @@ const AssignmentStudyViewer = () => {
   const isAdjustingWidthRef  = useRef(false);
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
-  useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
+  const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
 
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
-  useEffect(() => { currentPageRef.current  = currentPage;  }, [currentPage]);
-  useEffect(() => { noteElementsRef.current = noteElements; }, [noteElements]);
-  useEffect(() => { userRef.current         = user;         }, [user]);
-  useEffect(() => { drawModeRef.current     = drawMode;     }, [drawMode]);
+  useEffect(() => {
+    currentPageRef.current  = currentPage;
+    noteElementsRef.current = noteElements;
+    userRef.current         = user;
+    drawModeRef.current     = drawMode;
+  }, [currentPage, noteElements, user, drawMode]);
 
   /* 잠금 여부: submitted/graded이면 편집 불가 */
   const isLocked = ['submitted', 'late_submitted', 'graded'].includes(submission?.status);
 
   useEffect(() => {
+    if (drawMode) triggerPalmRejectionWarmup();
     if (drawMode && excalidrawAPIRef.current) {
       const apiRef = excalidrawAPIRef.current;
       const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
@@ -315,29 +318,32 @@ const AssignmentStudyViewer = () => {
     return subscribeToRoom(
       `asn-comments:${currentPage.id}:${user.id}`,
       'asn-comment:updated',
-      async (data) => {
-        // 코멘트가 업데이트되면 최신 데이터를 다시 fetch
-        try {
-          const comment = await api.get(`/api/assignment-comments/${currentPage.id}/${user.id}`);
-          const apiRef = excalidrawAPIRef.current;
-          if (!apiRef) return;
-          const newCommentEls = (comment?.excalidrawData?.elements || []).map((el) => ({
-            ...el, id: TEACHER_COMMENT_PREFIX + el.id, locked: true, opacity: 60,
-          }));
-          const newCommentFiles = comment?.excalidrawData?.files ?? {};
-          if (Object.keys(newCommentFiles).length > 0) {
-            apiRef.addFiles(Object.values(newCommentFiles));
-            teacherCommentFilesRef.current = { ...teacherCommentFilesRef.current, ...newCommentFiles };
+      (data) => {
+        clearTimeout(commentDebounceRef.current);
+        commentDebounceRef.current = setTimeout(async () => {
+          // 코멘트가 업데이트되면 최신 데이터를 다시 fetch
+          try {
+            const comment = await api.get(`/api/assignment-comments/${currentPage.id}/${user.id}`);
+            const apiRef = excalidrawAPIRef.current;
+            if (!apiRef) return;
+            const newCommentEls = (comment?.excalidrawData?.elements || []).map((el) => ({
+              ...el, id: TEACHER_COMMENT_PREFIX + el.id, locked: true, opacity: 60,
+            }));
+            const newCommentFiles = comment?.excalidrawData?.files ?? {};
+            if (Object.keys(newCommentFiles).length > 0) {
+              apiRef.addFiles(Object.values(newCommentFiles));
+              teacherCommentFilesRef.current = { ...teacherCommentFilesRef.current, ...newCommentFiles };
+            }
+            _commentsCache.set(`${user.id}_${currentPage.id}`, {
+              elements: newCommentEls, files: teacherCommentFilesRef.current,
+            });
+            teacherCommentsRef.current = newCommentEls;
+            const preserved = apiRef.getSceneElements().filter((el) => !el.id.startsWith(TEACHER_COMMENT_PREFIX));
+            apiRef.updateScene({ elements: [...preserved, ...newCommentEls], commitToHistory: false });
+          } catch (err) {
+            console.error('코멘트 실시간 업데이트 실패:', err);
           }
-          _commentsCache.set(`${user.id}_${currentPage.id}`, {
-            elements: newCommentEls, files: teacherCommentFilesRef.current,
-          });
-          teacherCommentsRef.current = newCommentEls;
-          const preserved = apiRef.getSceneElements().filter((el) => !el.id.startsWith(TEACHER_COMMENT_PREFIX));
-          apiRef.updateScene({ elements: [...preserved, ...newCommentEls], commitToHistory: false });
-        } catch (err) {
-          console.error('코멘트 실시간 업데이트 실패:', err);
-        }
+        }, 300);
       }
     );
   }, [currentPage, user]);
@@ -360,8 +366,8 @@ const AssignmentStudyViewer = () => {
   const handleExcalidrawChange = useCallback((elements, appState) => {
     if (isRestoringRef.current || isAdjustingWidthRef.current) return;
 
-    /* 줌-독립 펜 두께 */
-    if (appState && appState.zoom?.value !== lastZoomRef.current) {
+    /* 줌-독립 펜 두께 (미세 부동소수점 변동 무시) */
+    if (appState && Math.abs((appState.zoom?.value || 1) - lastZoomRef.current) > 0.001) {
       lastZoomRef.current = appState.zoom.value;
       const tool = excalidrawAPIRef.current?.getAppState()?.activeTool?.type;
       if (tool === 'freedraw' && baseStrokeWidthRef.current) {
@@ -406,8 +412,7 @@ const AssignmentStudyViewer = () => {
     if (serialized === lastSavedRef.current) return;
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      if (!mountedRef.current) return;
-      setSaveStatus('saving');
+      if (mountedRef.current) setSaveStatus('saving');
       const allFiles = excalidrawAPIRef.current?.getFiles() ?? {};
       const teacherFileIds = new Set(Object.keys(teacherCommentFilesRef.current));
       const userFiles = Object.fromEntries(
@@ -421,13 +426,14 @@ const AssignmentStudyViewer = () => {
             ...(Object.keys(userFiles).length > 0 && { files: userFiles }),
           },
         });
+        _notesCache.set(`${cu.id}_${page.id}`, {
+          elements: userEls, bgPosition: bgPositionRef.current, files: userFiles,
+        });
+        lastSavedRef.current = serialized;
       } catch (err) {
         console.error('필기 저장 실패:', err);
       }
-      _notesCache.set(`${cu.id}_${page.id}`, {
-        elements: userEls, bgPosition: bgPositionRef.current, files: userFiles,
-      });
-      if (mountedRef.current) { lastSavedRef.current = serialized; setSaveStatus('saved'); }
+      if (mountedRef.current) setSaveStatus('saved');
     }, 1500);
   }, [assignmentId, isLocked]);
 
@@ -463,11 +469,10 @@ const AssignmentStudyViewer = () => {
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
       let bgX, bgY, bgW, bgH;
       const saved = bgPositionRef.current;
-      if (saved) {
+      if (saved && saved.width > 10 && saved.height > 10) {
         ({ x: bgX, y: bgY, width: bgW, height: bgH } = saved);
       } else {
-        const W = containerRef.current.clientWidth  || 800;
-        const H = containerRef.current.clientHeight || 1000;
+        const { width: W, height: H } = await waitForLayout(containerRef.current);
         const pos = calculateBgPosition(W, H, iW, iH);
         bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
         bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };

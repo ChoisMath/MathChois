@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 /**
  * Excalidraw 터치/제스처 제어 훅
@@ -18,6 +18,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
   const pinchStateRef        = useRef(null); // { startDist, startZoom, lastCenterX, lastCenterY }
   const touchPointerIdsRef   = useRef(new Set()); // pointer ID 기반 즉시 추적
   const isSyntheticUpRef     = useRef(false); // synthetic pointerup 디스패치 시 자체 핸들러 무시용
+  const penLastTimeRef       = useRef(0);      // 마지막 스타일러스 이벤트 시각 (0=미감지)
+  const drawModeWarmupRef    = useRef(0);      // 드로우 모드 전환 warmup 시각
 
   useEffect(() => {
     const container = containerRef.current;
@@ -44,12 +46,34 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
 
+      // 스타일러스(펜) 이벤트 시각 갱신
+      if (e.pointerType === 'pen') {
+        penLastTimeRef.current = Date.now();
+      }
+
       // pointer ID 기반 즉시 추적 (touchstart보다 먼저 발생)
       if (e.pointerType === 'touch') {
         touchPointerIdsRef.current.add(e.pointerId);
       }
 
-      // 팜 리젝션
+      // 펜 우선 팜 리젝션: 최근 500ms 내 펜 사용 시 단일 touch 차단
+      // (2손가락 핀치줌은 아래 로직에서 별도 처리되므로 통과시킴)
+      if (e.pointerType === 'touch' && penLastTimeRef.current > 0
+          && Date.now() - penLastTimeRef.current < 500) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      // 드로우 모드 warmup: 모드 전환 후 300ms 내 touch 차단
+      if (e.pointerType === 'touch' && drawModeWarmupRef.current > 0
+          && Date.now() - drawModeWarmupRef.current < 300) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      // 팜 리젝션 (크기 기반 — 비 스타일러스 기기용)
       if (e.pointerType === 'touch' && (e.width > 25 || e.height > 25)) {
         e.preventDefault();
         if (screenLockedRef.current) e.stopPropagation();
@@ -92,8 +116,24 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     const handlePointerMove = (e) => {
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
+      // 펜 pointermove도 시각 갱신 (필기 중 연속 추적)
+      if (e.pointerType === 'pen') {
+        penLastTimeRef.current = Date.now();
+      }
       if (e.pointerType === 'touch') {
-        // 팜 리젝션
+        // 펜 우선 팜 리젝션 (시간 기반)
+        if (penLastTimeRef.current > 0 && Date.now() - penLastTimeRef.current < 500) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        // 드로우 모드 warmup
+        if (drawModeWarmupRef.current > 0 && Date.now() - drawModeWarmupRef.current < 300) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        // 팜 리젝션 (크기 기반)
         if (e.width > 25 || e.height > 25) {
           e.preventDefault();
           if (screenLockedRef.current) e.stopPropagation();
@@ -132,7 +172,22 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
 
-      // 팜 리젝션
+      // 펜 우선 팜 리젝션 (시간 기반, 단일 터치만 — 2손가락 핀치줌 허용)
+      if (penLastTimeRef.current > 0 && Date.now() - penLastTimeRef.current < 500
+          && e.touches.length < 2) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      // 드로우 모드 warmup (단일 터치만)
+      if (drawModeWarmupRef.current > 0 && Date.now() - drawModeWarmupRef.current < 300
+          && e.touches.length < 2) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      // 팜 리젝션 (크기 기반)
       let isPalm = false;
       for (let i = 0; i < e.touches.length; i++) {
         if (e.touches[i].radiusX > 25 || e.touches[i].radiusY > 25) {
@@ -178,7 +233,22 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
 
-      // 팜 리젝션
+      // 펜 우선 팜 리젝션 (시간 기반, 단일 터치만 — 2손가락 핀치줌 허용)
+      if (penLastTimeRef.current > 0 && Date.now() - penLastTimeRef.current < 500
+          && e.touches.length < 2) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      // 드로우 모드 warmup (단일 터치만)
+      if (drawModeWarmupRef.current > 0 && Date.now() - drawModeWarmupRef.current < 300
+          && e.touches.length < 2) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      // 팜 리젝션 (크기 기반)
       let isPalm = false;
       for (let i = 0; i < e.touches.length; i++) {
         if (e.touches[i].radiusX > 25 || e.touches[i].radiusY > 25) {
@@ -233,7 +303,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
             if (baseStrokeWidthRef?.current) {
               appStateUpdate.currentItemStrokeWidth = baseStrokeWidthRef.current / newZoom;
             }
-            excApi.updateScene({ appState: appStateUpdate });
+            excApi.updateScene({ appState: appStateUpdate, commitToHistory: false });
           }
         }
       }
@@ -271,5 +341,9 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { isTouchingRef };
+  const triggerPalmRejectionWarmup = useCallback(() => {
+    drawModeWarmupRef.current = Date.now();
+  }, []);
+
+  return { isTouchingRef, triggerPalmRejectionWarmup };
 }

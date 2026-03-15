@@ -8,7 +8,7 @@ async function main() {
 
   // Fastify의 raw HTTP 서버에 Socket.IO 연결
   await app.ready();
-  setupSocketIO(app.server);
+  setupSocketIO(app.server, app.log);
 
   // Graceful shutdown
   const shutdown = async () => {

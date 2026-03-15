@@ -10,7 +10,7 @@ import { api } from '../../lib/api';
 import { subscribeToRoom, getSocket } from '../../lib/socket';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
-import { BG_ELEMENT_ID, BG_FILE_ID, ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, TOUCH_CSS, GRID_STYLE, EXCALIDRAW_UI_OPTIONS, fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages, calculateBgPosition } from '../../lib/excalidrawUtils';
+import { BG_ELEMENT_ID, BG_FILE_ID, ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, TOUCH_CSS, GRID_STYLE, EXCALIDRAW_UI_OPTIONS, fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages, calculateBgPosition, waitForLayout } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
@@ -144,11 +144,10 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
 
       let bgW, bgH, bgX, bgY;
       const savedBg = dbBgPosition;
-      if (savedBg) {
+      if (savedBg && savedBg.width > 10 && savedBg.height > 10) {
         ({ width: bgW, height: bgH, x: bgX, y: bgY } = savedBg);
       } else {
-        const W = containerRef.current.clientWidth  || 800;
-        const H = containerRef.current.clientHeight || 900;
+        const { width: W, height: H } = await waitForLayout(containerRef.current);
         const pos = calculateBgPosition(W, H, iW, iH);
         bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
       }
@@ -336,6 +335,7 @@ const StudyViewer = () => {
   const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
   const mountedRef            = useRef(true);
+  const commentDebounceRef    = useRef(null);
 
   const [screenLocked, setScreenLocked] = useState(false);
   const screenLockedRef      = useRef(false);
@@ -346,19 +346,22 @@ const StudyViewer = () => {
   const isAdjustingWidthRef  = useRef(false);
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
-  useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
+  const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
 
 
   useEffect(() => () => { mountedRef.current = false; }, []);
 
-  /* ── 인접 페이지 이미지 백그라운드 프리패치 ── */
-  useEffect(() => { currentPageRef.current  = currentPage;  }, [currentPage]);
-  useEffect(() => { noteElementsRef.current = noteElements; }, [noteElements]);
-  useEffect(() => { userRef.current         = user;         }, [user]);
-  useEffect(() => { drawModeRef.current     = drawMode;     }, [drawMode]);
+  /* ── ref 동기화 (통합) ── */
+  useEffect(() => {
+    currentPageRef.current  = currentPage;
+    noteElementsRef.current = noteElements;
+    userRef.current         = user;
+    drawModeRef.current     = drawMode;
+  }, [currentPage, noteElements, user, drawMode]);
 
   /* 필기 모드 전환 시 저장된 도구/색상/굵기 복원 */
   useEffect(() => {
+    if (drawMode) triggerPalmRejectionWarmup();
     if (drawMode && excalidrawAPIRef.current) {
       const excApi = excalidrawAPIRef.current;
       const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
@@ -502,39 +505,42 @@ const StudyViewer = () => {
     return subscribeToRoom(
       `comments:${currentPage.id}:${user.id}`,
       'teacher-comment:updated',
-      async (data) => {
-        if (!mountedRef.current) return;
-        // 교사 코멘트가 업데이트됨 → 최신 데이터를 API에서 다시 가져옴
-        const excApi = excalidrawAPIRef.current;
-        if (!excApi) return;
+      (data) => {
+        clearTimeout(commentDebounceRef.current);
+        commentDebounceRef.current = setTimeout(async () => {
+          if (!mountedRef.current) return;
+          // 교사 코멘트가 업데이트됨 → 최신 데이터를 API에서 다시 가져옴
+          const excApi = excalidrawAPIRef.current;
+          if (!excApi) return;
 
-        try {
-          const comments = await api.get(`/api/comments/${currentPage.id}/for-student`);
+          try {
+            const comments = await api.get(`/api/comments/${currentPage.id}/for-student`);
 
-          const newCommentEls = (comments || []).flatMap((n) =>
-            (n.excalidrawData?.elements || []).map((el) => ({
-              ...el, id: TEACHER_NOTE_PREFIX + el.id, locked: true, opacity: 60,
-            }))
-          );
-          const newCommentFiles = Object.assign({}, ...(comments || []).map((n) => n.excalidrawData?.files ?? {}));
+            const newCommentEls = (comments || []).flatMap((n) =>
+              (n.excalidrawData?.elements || []).map((el) => ({
+                ...el, id: TEACHER_NOTE_PREFIX + el.id, locked: true, opacity: 60,
+              }))
+            );
+            const newCommentFiles = Object.assign({}, ...(comments || []).map((n) => n.excalidrawData?.files ?? {}));
 
-          /* 교사 코멘트 이미지 파일 — Excalidraw에 즉시 등록 */
-          if (Object.keys(newCommentFiles).length > 0) {
-            excApi.addFiles(Object.values(newCommentFiles));
-            teacherCommentFilesRef.current = { ...teacherCommentFilesRef.current, ...newCommentFiles };
+            /* 교사 코멘트 이미지 파일 — Excalidraw에 즉시 등록 */
+            if (Object.keys(newCommentFiles).length > 0) {
+              excApi.addFiles(Object.values(newCommentFiles));
+              teacherCommentFilesRef.current = { ...teacherCommentFilesRef.current, ...newCommentFiles };
+            }
+            /* 코멘트 캐시 갱신 — 다음 방문 시 최신 데이터 즉시 표시 */
+            _commentsCache.set(`${user.id}_${currentPage.id}`, {
+              elements: newCommentEls, files: teacherCommentFilesRef.current,
+            });
+            teacherCommentsRef.current = newCommentEls;
+            const preserved = excApi.getSceneElements().filter(
+              (el) => !el.id.startsWith(TEACHER_NOTE_PREFIX)
+            );
+            excApi.updateScene({ elements: [...preserved, ...newCommentEls], commitToHistory: false });
+          } catch (err) {
+            console.error('교사 코멘트 실시간 갱신 실패:', err);
           }
-          /* 코멘트 캐시 갱신 — 다음 방문 시 최신 데이터 즉시 표시 */
-          _commentsCache.set(`${user.id}_${currentPage.id}`, {
-            elements: newCommentEls, files: teacherCommentFilesRef.current,
-          });
-          teacherCommentsRef.current = newCommentEls;
-          const preserved = excApi.getSceneElements().filter(
-            (el) => !el.id.startsWith(TEACHER_NOTE_PREFIX)
-          );
-          excApi.updateScene({ elements: [...preserved, ...newCommentEls], commitToHistory: false });
-        } catch (err) {
-          console.error('교사 코멘트 실시간 갱신 실패:', err);
-        }
+        }, 300);
       }
     );
   }, [currentPage, user]);
@@ -543,8 +549,8 @@ const StudyViewer = () => {
   const handleExcalidrawChange = useCallback((elements, appState) => {
     if (isRestoringRef.current || isAdjustingWidthRef.current) return;
 
-    /* 줌-독립 펜 두께: 줌 변경 감지 시 자동 보정 */
-    if (appState && appState.zoom?.value !== lastZoomRef.current) {
+    /* 줌-독립 펜 두께: 줌 변경 감지 시 자동 보정 (미세 부동소수점 변동 무시) */
+    if (appState && Math.abs((appState.zoom?.value || 1) - lastZoomRef.current) > 0.001) {
       lastZoomRef.current = appState.zoom.value;
       const tool = excalidrawAPIRef.current?.getAppState()?.activeTool?.type;
       if (tool === 'freedraw' && baseStrokeWidthRef.current) {
@@ -598,8 +604,7 @@ const StudyViewer = () => {
 
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      if (!mountedRef.current) return;
-      setSaveStatus('saving');
+      if (mountedRef.current) setSaveStatus('saving');
       const allFiles = excalidrawAPIRef.current?.getFiles() ?? {};
       const teacherFileIds = new Set(Object.keys(teacherCommentFilesRef.current));
       const userFiles = Object.fromEntries(
@@ -614,17 +619,17 @@ const StudyViewer = () => {
           },
           chapterId,
         });
+        /* 노트 캐시 갱신 — 저장 성공 시에만 */
+        _notesCache.set(`${cu.id}_${page.id}`, {
+          elements:   userEls,
+          bgPosition: bgPositionRef.current,
+          files:      userFiles,
+        });
+        lastSavedRef.current = serialized;
       } catch (err) {
         console.error('학생 필기 저장 실패:', err);
       }
-      /* 노트 캐시 갱신 — 다음 방문 시 즉시 표시 */
-      _notesCache.set(`${cu.id}_${page.id}`, {
-        elements:   userEls,
-        bgPosition: bgPositionRef.current,
-        files:      userFiles,
-      });
-      lastSavedRef.current = serialized;
-      setSaveStatus('saved');
+      if (mountedRef.current) setSaveStatus('saved');
     }, 1500);
   }, [chapterId]);
 
@@ -666,11 +671,10 @@ const StudyViewer = () => {
 
       let bgX, bgY, bgW, bgH;
       const saved = bgPositionRef.current;
-      if (saved) {
+      if (saved && saved.width > 10 && saved.height > 10) {
         ({ x: bgX, y: bgY, width: bgW, height: bgH } = saved);
       } else {
-        const W = containerRef.current.clientWidth  || 800;
-        const H = containerRef.current.clientHeight || 1000;
+        const { width: W, height: H } = await waitForLayout(containerRef.current);
         const pos = calculateBgPosition(W, H, iW, iH);
         bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
         bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };

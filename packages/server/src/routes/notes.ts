@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
+import { requireRole } from '../middleware/roleGuard.js';
 import { getIO } from '../socket/index.js';
 import { emitStudentNoteUpdated, emitTeacherNoteUpdated } from '../socket/handlers/notes.js';
 import { emitAssignmentNoteUpdated } from '../socket/handlers/assignments.js';
@@ -74,9 +75,9 @@ export async function noteRoutes(app: FastifyInstance) {
     return getStudentNotesBulk(request.user.sub, ids);
   });
 
-  /** GET /api/notes/student-summary/:chapterId — 챕터 학생 진도 요약 */
+  /** GET /api/notes/student-summary/:chapterId — 챕터 학생 진도 요약 (교사 전용) */
   app.get<{ Params: { chapterId: string } }>('/api/notes/student-summary/:chapterId', {
-    preHandler: [authenticate],
+    preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
     const chapter = await getChapterById(request.params.chapterId);
     if (!chapter) {
@@ -116,24 +117,24 @@ export async function noteRoutes(app: FastifyInstance) {
     return getTeacherNotesBulk(request.user.sub, ids);
   });
 
-  /** GET /api/notes/student-notes-for/:studentId — 교사가 특정 학생 필기 일괄 조회 */
+  /** GET /api/notes/student-notes-for/:studentId — 교사가 특정 학생 필기 일괄 조회 (교사 전용) */
   app.get<{
     Params: { studentId: string };
     Querystring: { pageIds: string };
   }>('/api/notes/student-notes-for/:studentId', {
-    preHandler: [authenticate],
+    preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
     const ids = request.query.pageIds?.split(',').filter(Boolean) ?? [];
     if (ids.length > 100) return reply.status(400).send({ error: 'Too many IDs (max 100)' });
     return getStudentNotesBulkByTeacher(request.params.studentId, ids);
   });
 
-  /** GET /api/notes/teacher-comments-for/:studentId — 교사 코멘트 일괄 조회 (특정 학생, 복수 페이지) */
+  /** GET /api/notes/teacher-comments-for/:studentId — 교사 코멘트 일괄 조회 (교사 전용) */
   app.get<{
     Params: { studentId: string };
     Querystring: { pageIds: string };
   }>('/api/notes/teacher-comments-for/:studentId', {
-    preHandler: [authenticate],
+    preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
     const ids = request.query.pageIds?.split(',').filter(Boolean) ?? [];
     if (ids.length > 100) return reply.status(400).send({ error: 'Too many IDs (max 100)' });

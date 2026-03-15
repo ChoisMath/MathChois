@@ -16,9 +16,9 @@ const VOLUME_ROOT = path.resolve(env.VOLUME_PATH);
 
 // ─── Users ─────────────────────────────────────────
 
-/** 모든 사용자 목록 (클래스룸 수 포함) */
-export async function getAllUsers() {
-  const allProfiles = await db.select().from(profiles);
+/** 모든 사용자 목록 (클래스룸 수 포함, limit 기본 500) */
+export async function getAllUsers(limit = 500) {
+  const allProfiles = await db.select().from(profiles).limit(limit);
 
   const teacherCounts = await db
     .select({ teacherId: classrooms.teacherId, cnt: count() })
@@ -267,8 +267,14 @@ export async function getClassroomOverview() {
 
 // ─── Stats ─────────────────────────────────────────
 
-/** 시스템 전체 통계 */
+let _statsCache: { data: unknown; ts: number } | null = null;
+const STATS_CACHE_TTL = 30_000; // 30초
+
+/** 시스템 전체 통계 (TTL 30초 캐시) */
 export async function getSystemStats() {
+  if (_statsCache && Date.now() - _statsCache.ts < STATS_CACHE_TTL) {
+    return _statsCache.data;
+  }
   // DB 테이블 row 수
   const tableStats = await Promise.all([
     db.select({ cnt: count() }).from(profiles).then(r => ({ table: 'profiles', rows: r[0].cnt })),
@@ -305,11 +311,13 @@ export async function getSystemStats() {
   const students = allProfiles.filter(p => p.role === 'student').length;
   const [classroomTotal] = await db.select({ cnt: count() }).from(classrooms);
 
-  return {
+  const result = {
     summary: { totalUsers, teachers, students, classrooms: classroomTotal.cnt },
     storage: { totalSize: totalStorage, buckets: bucketStats },
     database: tableStats,
   };
+  _statsCache = { data: result, ts: Date.now() };
+  return result;
 }
 
 // ─── Reset ─────────────────────────────────────────

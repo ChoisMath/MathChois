@@ -41,6 +41,7 @@ const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage,
         src={page.imageUrl}
         alt={`페이지 ${index + 1}`}
         className="w-full h-auto object-contain bg-white"
+        loading="lazy"
         draggable={false}
       />
       <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">

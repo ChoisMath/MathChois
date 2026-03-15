@@ -1,5 +1,7 @@
 import Fastify from 'fastify';
+import fastifyCompress from '@fastify/compress';
 import fastifyCookie from '@fastify/cookie';
+import fastifyHelmet from '@fastify/helmet';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import rateLimit from '@fastify/rate-limit';
@@ -30,6 +32,10 @@ export function buildApp() {
 
   // ─── Plugins ────────────────────────────────────────
 
+  app.register(fastifyCompress, { threshold: 1024 }); // 1KB 이상 응답 gzip 압축
+  app.register(fastifyHelmet, {
+    contentSecurityPolicy: false, // SPA에서 인라인 스크립트/스타일 필요
+  });
   app.register(fastifyCookie);
 
   app.register(rateLimit, {
@@ -88,6 +94,17 @@ export function buildApp() {
   app.register(noteRoutes);
   app.register(commentRoutes);
   app.register(adminRoutes);
+
+  // ─── Global Error Handler ──────────────────────────
+
+  app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
+    const statusCode = error.statusCode ?? 500;
+    request.log.error({ err: error, url: request.url, method: request.method }, 'Request error');
+    reply.status(statusCode).send({
+      error: statusCode >= 500 ? 'Internal Server Error' : error.message,
+      statusCode,
+    });
+  });
 
   // ─── Health check ───────────────────────────────────
 
