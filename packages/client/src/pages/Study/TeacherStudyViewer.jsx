@@ -147,6 +147,12 @@ const TeacherStudyViewer = () => {
   const handleExcalidrawChange = useCallback((elements, appState) => {
     if (isRestoringRef.current || isAdjustingWidthRef.current) return;
 
+    /* Excalidraw 내부 penMode 비활성화 — OS 팜 리젝션에 위임 */
+    if (appState?.penMode) {
+      excalidrawAPIRef.current?.updateScene({ appState: { penMode: false }, commitToHistory: false });
+      return;
+    }
+
     /* 줌-독립 펜 두께 (미세 부동소수점 변동 무시) */
     if (appState && Math.abs((appState.zoom?.value || 1) - lastZoomRef.current) > 0.001) {
       lastZoomRef.current = appState.zoom.value;
