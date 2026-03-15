@@ -29,7 +29,7 @@ const SHAPE_TOOL_ICONS = {
 const SHAPE_TOOLS    = ['rectangle', 'ellipse', 'triangle'];
 const SAVEABLE_TOOLS = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse', 'triangle'];
 
-function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onToggleScreenLock }) {
+function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onToggleScreenLock, onBaseWidthChange }) {
   const [activeTool, setActiveTool]       = useState(() => {
     const saved = localStorage.getItem('mc_active_tool') || 'freedraw';
     return SAVEABLE_TOOLS.includes(saved) ? saved : 'freedraw';
@@ -278,11 +278,12 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
       });
       return;
     } else if (type === 'freedraw') {
-      /* 펜 모드 복귀 시: 기존에 사용자가 지정했던 펜 두께(strokeWidth)로 복구 (기본 0.2) */
+      /* 펜 모드 복귀 시: 기존에 사용자가 지정했던 펜 두께(strokeWidth)로 복구 (줌 보정) */
+      const zoom = api?.getAppState()?.zoom?.value || 1;
       api?.updateScene({
         appState: {
           activeTool: { type: 'freedraw', locked: false },
-          currentItemStrokeWidth: strokeWidthRef.current,
+          currentItemStrokeWidth: strokeWidthRef.current / zoom,
         },
         commitToHistory: false,
       });
@@ -312,7 +313,9 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
   const applyWidth = (w) => {
     setStrokeWidth(w);
     localStorage.setItem('mc_stroke_width', String(w));
-    apiRef.current?.updateScene({ appState: { currentItemStrokeWidth: w } });
+    if (onBaseWidthChange) onBaseWidthChange(w);
+    const zoom = apiRef.current?.getAppState()?.zoom?.value || 1;
+    apiRef.current?.updateScene({ appState: { currentItemStrokeWidth: w / zoom } });
   };
 
   const handleToggleImageMove = () => {

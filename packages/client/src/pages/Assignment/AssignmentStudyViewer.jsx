@@ -178,10 +178,13 @@ const AssignmentStudyViewer = () => {
   const [screenLocked, setScreenLocked] = useState(false);
   const screenLockedRef   = useRef(false);
   const screenLockBaseRef = useRef({ zoom: 1, scrollX: 0, scrollY: 0 });
-  const isRestoringRef    = useRef(false);
+  const isRestoringRef       = useRef(false);
+  const baseStrokeWidthRef   = useRef(parseFloat(localStorage.getItem('mc_stroke_width') || '0.2'));
+  const lastZoomRef          = useRef(1);
+  const isAdjustingWidthRef  = useRef(false);
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
-  useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef });
+  useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -204,7 +207,10 @@ const AssignmentStudyViewer = () => {
       const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.2');
       const validTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
       const excTool = savedTool === 'triangle' ? 'freedraw' : (validTools.includes(savedTool) ? savedTool : 'freedraw');
-      apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
+      baseStrokeWidthRef.current = savedWidth;
+      const zoom = apiRef.getAppState()?.zoom?.value || 1;
+      lastZoomRef.current = zoom;
+      apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth / zoom, currentItemRoundness: 'sharp' }, commitToHistory: false });
       apiRef.setActiveTool({ type: excTool });
     }
   }, [drawMode]);
@@ -352,7 +358,21 @@ const AssignmentStudyViewer = () => {
 
   /* onChange: 저장 */
   const handleExcalidrawChange = useCallback((elements, appState) => {
-    if (isRestoringRef.current) return;
+    if (isRestoringRef.current || isAdjustingWidthRef.current) return;
+
+    /* 줌-독립 펜 두께 */
+    if (appState && appState.zoom?.value !== lastZoomRef.current) {
+      lastZoomRef.current = appState.zoom.value;
+      const tool = excalidrawAPIRef.current?.getAppState()?.activeTool?.type;
+      if (tool === 'freedraw' && baseStrokeWidthRef.current) {
+        isAdjustingWidthRef.current = true;
+        excalidrawAPIRef.current?.updateScene({
+          appState: { currentItemStrokeWidth: baseStrokeWidthRef.current / appState.zoom.value },
+          commitToHistory: false,
+        });
+        requestAnimationFrame(() => { isAdjustingWidthRef.current = false; });
+      }
+    }
 
     if (appState && screenLockedRef.current) {
       const base = screenLockBaseRef.current;
@@ -429,7 +449,10 @@ const AssignmentStudyViewer = () => {
     const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.4');
     const validTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
     const excTool = savedTool === 'triangle' ? 'freedraw' : (validTools.includes(savedTool) ? savedTool : 'freedraw');
-    apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth, currentItemRoundness: 'sharp' }, commitToHistory: false });
+    baseStrokeWidthRef.current = savedWidth;
+    const zoom = apiRef.getAppState()?.zoom?.value || 1;
+    lastZoomRef.current = zoom;
+    apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth / zoom, currentItemRoundness: 'sharp' }, commitToHistory: false });
     apiRef.setActiveTool({ type: excTool });
 
     const page = currentPageRef.current;
@@ -770,6 +793,7 @@ const AssignmentStudyViewer = () => {
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
           screenLocked={screenLocked}
           onToggleScreenLock={handleToggleScreenLock}
+          onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
         />
       )}
 
