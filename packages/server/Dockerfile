@@ -43,8 +43,5 @@ COPY --from=build-client /app/packages/client/package.json packages/client/
 # Fix shared package.json for production (source .ts → compiled .js)
 RUN sed -i 's|"./src/index.ts"|"./dist/index.js"|g; s|"./src/\*"|"./dist/\*"|g' packages/shared/package.json
 
-RUN useradd -m appuser && chown -R appuser:appuser /app
-USER appuser
-
 EXPOSE ${PORT:-3001}
 CMD ["node", "packages/server/dist/index.js"]
