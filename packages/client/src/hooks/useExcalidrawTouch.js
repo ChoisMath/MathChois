@@ -116,8 +116,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     const handlePointerMove = (e) => {
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
-      // 펜 pointermove도 시각 갱신 (필기 중 연속 추적)
-      if (e.pointerType === 'pen') {
+      // 펜 pointermove: 실제 터치(pressure > 0)일 때만 시각 갱신 (호버 제외)
+      if (e.pointerType === 'pen' && e.pressure > 0) {
         penLastTimeRef.current = Date.now();
       }
       if (e.pointerType === 'touch') {
@@ -187,17 +187,19 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         return;
       }
 
-      // 팜 리젝션 (크기 기반)
-      let isPalm = false;
-      for (let i = 0; i < e.touches.length; i++) {
-        if (e.touches[i].radiusX > 25 || e.touches[i].radiusY > 25) {
-          isPalm = true; break;
+      // 팜 리젝션 (크기 기반, 단일 터치에만 적용 — 2손가락 이상은 핀치줌으로 처리)
+      if (e.touches.length < 2) {
+        let isPalm = false;
+        for (let i = 0; i < e.touches.length; i++) {
+          if (e.touches[i].radiusX > 25 || e.touches[i].radiusY > 25) {
+            isPalm = true; break;
+          }
         }
-      }
-      if (isPalm) {
-        if (e.cancelable) e.preventDefault();
-        if (screenLockedRef.current) e.stopPropagation();
-        return;
+        if (isPalm) {
+          if (e.cancelable) e.preventDefault();
+          if (screenLockedRef.current) e.stopPropagation();
+          return;
+        }
       }
 
       // 화면 고정 모드: 2핑거 이상 차단
@@ -248,17 +250,19 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         return;
       }
 
-      // 팜 리젝션 (크기 기반)
-      let isPalm = false;
-      for (let i = 0; i < e.touches.length; i++) {
-        if (e.touches[i].radiusX > 25 || e.touches[i].radiusY > 25) {
-          isPalm = true; break;
+      // 팜 리젝션 (크기 기반, 단일 터치에만 적용)
+      if (e.touches.length < 2) {
+        let isPalm = false;
+        for (let i = 0; i < e.touches.length; i++) {
+          if (e.touches[i].radiusX > 25 || e.touches[i].radiusY > 25) {
+            isPalm = true; break;
+          }
         }
-      }
-      if (isPalm) {
-        if (e.cancelable) e.preventDefault();
-        if (screenLockedRef.current) e.stopPropagation();
-        return;
+        if (isPalm) {
+          if (e.cancelable) e.preventDefault();
+          if (screenLockedRef.current) e.stopPropagation();
+          return;
+        }
       }
 
       // 화면 고정 모드: 2핑거 이상 차단
