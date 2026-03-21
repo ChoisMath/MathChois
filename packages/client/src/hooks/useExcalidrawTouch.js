@@ -58,8 +58,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         touchPointerIdsRef.current.add(e.pointerId);
       }
 
-      // 펜 활성 중 터치 차단 (포스트펜 50ms 쿨다운 포함)
-      if (e.pointerType === 'touch' && (
+      // 펜 활성 중 단일 터치 차단 (2손가락 핀치줌은 허용)
+      if (e.pointerType === 'touch' && touchPointerIdsRef.current.size < 2 && (
           penActiveRef.current ||
           (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50)
       )) {
@@ -128,9 +128,10 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       }
 
       if (e.pointerType === 'touch') {
-        // 펜 활성 중 터치 차단
-        if (penActiveRef.current ||
-            (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50)) {
+        // 펜 활성 중 단일 터치 차단 (2손가락 핀치줌은 허용)
+        if (touchPointerIdsRef.current.size < 2 && (
+            penActiveRef.current ||
+            (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50))) {
           e.preventDefault();
           e.stopPropagation();
           return;
@@ -184,9 +185,10 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
 
-      // 펜 활성 중 터치 차단
-      if (penActiveRef.current ||
-          (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50)) {
+      // 펜 활성 중 단일 터치 차단 (2손가락 핀치줌은 허용)
+      if (e.touches.length < 2 && (
+          penActiveRef.current ||
+          (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50))) {
         if (e.cancelable) e.preventDefault();
         e.stopPropagation();
         return;
@@ -248,9 +250,10 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
 
-      // 펜 활성 중 터치 차단
-      if (penActiveRef.current ||
-          (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50)) {
+      // 펜 활성 중 단일 터치 차단 (2손가락 핀치줌은 허용)
+      if (e.touches.length < 2 && (
+          penActiveRef.current ||
+          (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50))) {
         if (e.cancelable) e.preventDefault();
         e.stopPropagation();
         return;
