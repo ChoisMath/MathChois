@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Loader, Save, Upload, X } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader, Save, Upload, X, Video } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -18,6 +18,7 @@ import {
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import SortablePageItem from '../../components/common/SortablePageItem';
+import { extractYouTubeId, getYouTubeEmbedUrl } from '../../lib/youtubeUtils';
 
 
 const AssignmentEditor = () => {
@@ -38,6 +39,12 @@ const AssignmentEditor = () => {
   const [deadline, setDeadline]     = useState('');
   const [maxScore, setMaxScore]     = useState(100);
   const [savingMeta, setSavingMeta] = useState(false);
+
+  /* YouTube URL 입력 */
+  const [showYouTubeModal, setShowYouTubeModal] = useState(false);
+  const [youtubeUrl, setYoutubeUrl]             = useState('');
+  const [youtubeError, setYoutubeError]         = useState('');
+  const [addingVideo, setAddingVideo]           = useState(false);
 
   /* 내보내기 */
   const [showExportModal, setShowExportModal]   = useState(false);
@@ -214,11 +221,38 @@ const AssignmentEditor = () => {
     if (lastPage) setSelectedPage(lastPage);
   };
 
+  const handleAddYouTube = async () => {
+    setYoutubeError('');
+    const videoId = extractYouTubeId(youtubeUrl);
+    if (!videoId) {
+      setYoutubeError('올바른 YouTube URL을 입력해주세요.');
+      return;
+    }
+
+    setAddingVideo(true);
+    try {
+      const basePosition = pages.length > 0 ? Math.max(...pages.map((p) => p.position)) + 1 : 0;
+      const newPage = await api.post(`/api/assignments/${assignmentId}/pages`, {
+        videoUrl: youtubeUrl,
+        position: basePosition,
+      });
+
+      await fetchData();
+      if (newPage) setSelectedPage(newPage);
+      setShowYouTubeModal(false);
+      setYoutubeUrl('');
+    } catch (err) {
+      setYoutubeError('YouTube 페이지 추가에 실패했습니다.');
+      console.error('YouTube 페이지 추가 실패:', err.message);
+    }
+    setAddingVideo(false);
+  };
+
   const handleDeletePage = async (page) => {
     if (!confirm('이 페이지를 삭제하시겠습니까?')) return;
     setDeleting(true);
 
-    // Storage 파일 삭제
+    // Storage 파일 삭제 (영상 페이지는 스킵)
     try {
       const imageUrl = page.imageUrl;
       if (imageUrl) {
@@ -309,10 +343,18 @@ const AssignmentEditor = () => {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            title={uploading ? `업로드 중... (${uploadProgress.done}/${uploadProgress.total})` : "페이지 추가"}
+            title={uploading ? `업로드 중... (${uploadProgress.done}/${uploadProgress.total})` : "이미지 페이지 추가"}
             className="inline-flex items-center justify-center p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
           >
             {uploading ? <Loader className="animate-spin h-5 w-5" /> : <Plus className="h-5 w-5" />}
+          </button>
+          <button
+            onClick={() => { setShowYouTubeModal(true); setYoutubeUrl(''); setYoutubeError(''); }}
+            disabled={uploading}
+            title="YouTube 영상 페이지 추가"
+            className="inline-flex items-center justify-center p-2 bg-red-500 text-white rounded-md hover:bg-red-600 disabled:opacity-50 cursor-pointer"
+          >
+            <Video className="h-5 w-5" />
           </button>
         </div>
       </div>
@@ -351,17 +393,67 @@ const AssignmentEditor = () => {
         </div>
 
         {/* 미리보기 */}
-        <div className="flex-1 bg-gray-50 rounded-lg shadow overflow-y-auto p-4 relative">
+        <div className="flex-1 bg-gray-50 rounded-lg shadow overflow-hidden p-4 relative">
           {selectedPage ? (
-            <img src={selectedPage.imageUrl} alt="선택된 페이지" className="w-full h-auto block shadow-sm bg-white" />
+            selectedPage.videoUrl ? (
+              <div className="w-full h-full flex items-center justify-center bg-black rounded">
+                <iframe
+                  src={getYouTubeEmbedUrl(extractYouTubeId(selectedPage.videoUrl))}
+                  className="w-full h-full rounded"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            ) : (
+              <img src={selectedPage.imageUrl} alt="선택된 페이지" className="w-full h-auto block shadow-sm bg-white" />
+            )
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-gray-400">
               <p className="text-lg">페이지를 추가하세요</p>
-              <p className="text-sm mt-1">JPG, PNG 이미지를 업로드할 수 있습니다</p>
+              <p className="text-sm mt-1">이미지 또는 YouTube 영상을 추가할 수 있습니다</p>
             </div>
           )}
         </div>
       </div>
+
+      {/* ── YouTube URL 입력 모달 ── */}
+      {showYouTubeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-bold text-gray-900 mb-3">YouTube 영상 추가</h2>
+            <input
+              autoFocus
+              type="text"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={youtubeUrl}
+              onChange={(e) => setYoutubeUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAddYouTube(); }}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+            {youtubeError && <p className="text-sm text-red-500 mt-1">{youtubeError}</p>}
+            {youtubeUrl && extractYouTubeId(youtubeUrl) && (
+              <div className="mt-3 aspect-video rounded overflow-hidden bg-black">
+                <iframe
+                  src={getYouTubeEmbedUrl(extractYouTubeId(youtubeUrl))}
+                  className="w-full h-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            )}
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setShowYouTubeModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">취소</button>
+              <button
+                onClick={handleAddYouTube}
+                disabled={addingVideo}
+                className="px-4 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 disabled:opacity-50 cursor-pointer"
+              >
+                {addingVideo ? '추가 중...' : '추가'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── 내보내기 모달 ── */}
       {showExportModal && (

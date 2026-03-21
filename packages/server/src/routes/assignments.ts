@@ -180,7 +180,7 @@ export async function assignmentRoutes(app: FastifyInstance) {
 
   app.post<{
     Params: { id: string };
-    Body: { imageUrl: string; position?: number };
+    Body: { imageUrl?: string; videoUrl?: string; position?: number };
   }>('/api/assignments/:id/pages', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
@@ -189,10 +189,16 @@ export async function assignmentRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Not the assignment owner' });
     }
 
+    const { imageUrl, videoUrl, position } = request.body;
+    if (!imageUrl && !videoUrl) {
+      return reply.status(400).send({ error: 'imageUrl or videoUrl is required' });
+    }
+
     const page = await createAssignmentPage({
       assignmentId: request.params.id,
-      imageUrl: request.body.imageUrl,
-      position: request.body.position,
+      imageUrl,
+      videoUrl,
+      position,
     });
     return reply.status(201).send(page);
   });
@@ -268,6 +274,7 @@ export async function assignmentRoutes(app: FastifyInstance) {
         sourcePages.map((pg, idx) => ({
           assignmentId: newAssignment.id,
           imageUrl: pg.imageUrl,
+          videoUrl: pg.videoUrl,
           position: pg.position ?? idx,
         })),
       );

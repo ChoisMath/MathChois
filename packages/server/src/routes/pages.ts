@@ -24,7 +24,7 @@ export async function pageRoutes(app: FastifyInstance) {
 
   app.post<{
     Params: { chapterId: string };
-    Body: { imageUrl: string; position?: number } | { pages: { imageUrl: string; position: number }[] };
+    Body: { imageUrl?: string; videoUrl?: string; position?: number } | { pages: { imageUrl?: string; videoUrl?: string; position: number }[] };
   }>('/api/chapters/:chapterId/pages', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
@@ -33,9 +33,10 @@ export async function pageRoutes(app: FastifyInstance) {
 
     // 배치 삽입
     if (Array.isArray(body.pages)) {
-      const items = (body.pages as { imageUrl: string; position: number }[]).map((pg) => ({
+      const items = (body.pages as { imageUrl?: string; videoUrl?: string; position: number }[]).map((pg) => ({
         chapterId,
-        imageUrl: pg.imageUrl,
+        imageUrl: pg.imageUrl ?? null,
+        videoUrl: pg.videoUrl ?? null,
         position: pg.position,
       }));
       const created = await createPages(items);
@@ -43,11 +44,11 @@ export async function pageRoutes(app: FastifyInstance) {
     }
 
     // 단일 삽입
-    const { imageUrl, position } = body as { imageUrl: string; position?: number };
-    if (!imageUrl) {
-      return reply.status(400).send({ error: 'imageUrl is required' });
+    const { imageUrl, videoUrl, position } = body as { imageUrl?: string; videoUrl?: string; position?: number };
+    if (!imageUrl && !videoUrl) {
+      return reply.status(400).send({ error: 'imageUrl or videoUrl is required' });
     }
-    const page = await createPage({ chapterId, imageUrl, position });
+    const page = await createPage({ chapterId, imageUrl, videoUrl, position });
     return reply.status(201).send(page);
   });
 

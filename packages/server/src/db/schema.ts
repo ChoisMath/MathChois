@@ -58,7 +58,8 @@ export const chapters = pgTable('chapters', {
 export const pages = pgTable('pages', {
   id: uuid('id').defaultRandom().primaryKey(),
   chapterId: uuid('chapter_id').notNull().references(() => chapters.id, { onDelete: 'cascade' }),
-  imageUrl: text('image_url').notNull(),
+  imageUrl: text('image_url'),
+  videoUrl: text('video_url'),
   position: integer('position').notNull().default(0),
 }, (t) => [
   index('idx_pages_chapter').on(t.chapterId),
@@ -159,7 +160,8 @@ export const assignments = pgTable('assignments', {
 export const assignmentPages = pgTable('assignment_pages', {
   id: uuid('id').defaultRandom().primaryKey(),
   assignmentId: uuid('assignment_id').notNull().references(() => assignments.id, { onDelete: 'cascade' }),
-  imageUrl: text('image_url').notNull(),
+  imageUrl: text('image_url'),
+  videoUrl: text('video_url'),
   position: integer('position').default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });

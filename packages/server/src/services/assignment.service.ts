@@ -87,7 +87,7 @@ export async function getAssignmentPageImageUrls(assignmentId: string): Promise<
     .select({ imageUrl: assignmentPages.imageUrl })
     .from(assignmentPages)
     .where(eq(assignmentPages.assignmentId, assignmentId));
-  return rows.map((r) => r.imageUrl);
+  return rows.map((r) => r.imageUrl).filter((url): url is string => url !== null);
 }
 
 /** 과제 소유자 확인 */
@@ -124,7 +124,8 @@ export async function getAssignmentPageById(id: string) {
 /** 과제 페이지 생성 */
 export async function createAssignmentPage(data: {
   assignmentId: string;
-  imageUrl: string;
+  imageUrl?: string | null;
+  videoUrl?: string | null;
   position?: number;
 }) {
   let position = data.position;
@@ -140,7 +141,8 @@ export async function createAssignmentPage(data: {
     .insert(assignmentPages)
     .values({
       assignmentId: data.assignmentId,
-      imageUrl: data.imageUrl,
+      imageUrl: data.imageUrl ?? null,
+      videoUrl: data.videoUrl ?? null,
       position: position ?? 0,
     })
     .returning();
@@ -175,7 +177,8 @@ export async function deleteAssignmentPage(id: string) {
 /** 과제 페이지 일괄 생성 (import용) */
 export async function createAssignmentPages(items: {
   assignmentId: string;
-  imageUrl: string;
+  imageUrl?: string | null;
+  videoUrl?: string | null;
   position: number;
 }[]) {
   if (items.length === 0) return [];
@@ -200,7 +203,7 @@ export async function findSharedAssignmentImageUrls(
         ne(assignmentPages.assignmentId, excludeAssignmentId),
       ),
     );
-  return rows.map((r) => r.imageUrl);
+  return rows.map((r) => r.imageUrl).filter((url): url is string => url !== null);
 }
 
 // ─── Submissions ────────────────────────────────

@@ -24,7 +24,8 @@ export async function getPageById(id: string) {
 /** 페이지 생성 */
 export async function createPage(data: {
   chapterId: string;
-  imageUrl: string;
+  imageUrl?: string | null;
+  videoUrl?: string | null;
   position?: number;
 }) {
   let position = data.position;
@@ -40,7 +41,8 @@ export async function createPage(data: {
     .insert(pages)
     .values({
       chapterId: data.chapterId,
-      imageUrl: data.imageUrl,
+      imageUrl: data.imageUrl ?? null,
+      videoUrl: data.videoUrl ?? null,
       position,
     })
     .returning();
@@ -50,7 +52,8 @@ export async function createPage(data: {
 /** 페이지 일괄 생성 */
 export async function createPages(items: {
   chapterId: string;
-  imageUrl: string;
+  imageUrl?: string | null;
+  videoUrl?: string | null;
   position: number;
 }[]) {
   if (items.length === 0) return [];
@@ -84,13 +87,13 @@ export async function reorderPages(items: { id: string; position: number }[]) {
   );
 }
 
-/** 챕터의 페이지 이미지 URL 목록 */
+/** 챕터의 페이지 이미지 URL 목록 (null 제외) */
 export async function getPageImageUrls(chapterId: string): Promise<string[]> {
   const rows = await db
     .select({ imageUrl: pages.imageUrl })
     .from(pages)
     .where(eq(pages.chapterId, chapterId));
-  return rows.map((r) => r.imageUrl);
+  return rows.map((r) => r.imageUrl).filter((url): url is string => url !== null);
 }
 
 /** 특정 URL이 다른 챕터에서도 사용되는지 확인 (orphan 체크) */
@@ -108,5 +111,5 @@ export async function findSharedImageUrls(
         ne(pages.chapterId, excludeChapterId),
       ),
     );
-  return rows.map((r) => r.imageUrl);
+  return rows.map((r) => r.imageUrl).filter((url): url is string => url !== null);
 }

@@ -26,6 +26,7 @@ import {
 } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
+import { extractYouTubeId, getYouTubeEmbedUrl, getYouTubeThumbnail } from '../../lib/youtubeUtils';
 
 const STUDENT_NOTE_PREFIX = '__sn_';
 
@@ -430,13 +431,13 @@ const StudentWorkViewer = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {commentMode && (
+          {commentMode && !currentPage?.videoUrl && (
             <span className={`text-xs ${saveStatus === 'saved' ? 'text-green-600' : 'text-gray-400'}`}>
               {saveStatus === 'saved' ? '저장됨' : '저장 중...'}
             </span>
           )}
           {/* PDF 다운로드 */}
-          {currentPage && studentEls.current && (
+          {currentPage && studentEls.current && !currentPage?.videoUrl && (
             <PdfDownloadButton
               onClick={() => {
                 const title = `${studentProfile?.name || '학생'}_${chapter?.title || '챕터'}_${currentPage.position + 1}p`;
@@ -538,8 +539,8 @@ const StudentWorkViewer = () => {
         </div>
       </div>
 
-      {/* ── 필기 툴바 (코멘트 모드 + 펼침 상태일 때만) ── */}
-      {commentMode && !toolbarCollapsed && (
+      {/* ── 필기 툴바 (코멘트 모드 + 펼침 상태 + 영상 페이지 아닐 때만) ── */}
+      {commentMode && !toolbarCollapsed && !currentPage?.videoUrl && (
         <DrawingToolbar
           apiRef={excalidrawAPIRef}
           showPanel={showExcalidrawPanel}
@@ -576,7 +577,16 @@ const StudentWorkViewer = () => {
                     idx === currentPageIndex ? 'border-4 border-indigo-500' : 'border-4 border-transparent hover:border-gray-300'
                   }`}
                 >
-                  <img src={pg.imageUrl} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                  {pg.videoUrl ? (
+                    <div className="relative">
+                      <img src={getYouTubeThumbnail(extractYouTubeId(pg.videoUrl))} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover bg-gray-900" loading="lazy" decoding="async" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="bg-red-600 rounded-full p-1"><svg className="h-3 w-3 text-white fill-white" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div>
+                      </div>
+                    </div>
+                  ) : (
+                    <img src={pg.imageUrl} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                  )}
                   <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
                     {idx + 1}
                   </div>
@@ -586,7 +596,17 @@ const StudentWorkViewer = () => {
           </div>
         )}
 
-        {/* 캔버스 */}
+        {/* 캔버스 / YouTube */}
+        {currentPage?.videoUrl ? (
+          <div className="flex-1 flex items-center justify-center bg-black">
+            <iframe
+              src={getYouTubeEmbedUrl(extractYouTubeId(currentPage.videoUrl))}
+              className="w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        ) : (
         <div
           ref={containerRef}
           style={GRID_STYLE}
@@ -619,6 +639,7 @@ const StudentWorkViewer = () => {
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );

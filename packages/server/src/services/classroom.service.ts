@@ -221,8 +221,8 @@ export async function getClassroomImageUrls(classroomId: string): Promise<string
     .where(eq(assignments.classroomId, classroomId));
 
   return [
-    ...chapterRows.map((r) => r.imageUrl),
-    ...assignmentRows.map((r) => r.imageUrl),
+    ...chapterRows.map((r) => r.imageUrl).filter((url): url is string => url !== null),
+    ...assignmentRows.map((r) => r.imageUrl).filter((url): url is string => url !== null),
   ];
 }
 
@@ -254,8 +254,8 @@ export async function findSharedClassroomImageUrls(
     ));
 
   return [
-    ...sharedChapterRows.map((r) => r.imageUrl),
-    ...sharedAssignmentRows.map((r) => r.imageUrl),
+    ...sharedChapterRows.map((r) => r.imageUrl).filter((url): url is string => url !== null),
+    ...sharedAssignmentRows.map((r) => r.imageUrl).filter((url): url is string => url !== null),
   ];
 }
 

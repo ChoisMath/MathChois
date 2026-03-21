@@ -78,7 +78,7 @@ export function buildApp() {
 
   app.register(fastifyMultipart, {
     limits: {
-      fileSize: 10 * 1024 * 1024, // 10MB per file
+      fileSize: 200 * 1024 * 1024, // 200MB per file
     },
   });
 

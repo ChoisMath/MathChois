@@ -86,7 +86,7 @@ export async function storageRoutes(app: FastifyInstance) {
     }
 
     try {
-      const MAX_FILES = 20;
+      const MAX_FILES = 100;
       const parts = request.files();
       const results: { url: string; fileName: string; fileSize: number; mimeType: string }[] = [];
 

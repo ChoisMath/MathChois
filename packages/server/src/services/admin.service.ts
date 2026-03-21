@@ -389,7 +389,7 @@ async function collectUserFileUrls(userId: string): Promise<string[]> {
     .innerJoin(chapters, eq(pages.chapterId, chapters.id))
     .innerJoin(classrooms, eq(chapters.classroomId, classrooms.id))
     .where(eq(classrooms.teacherId, userId));
-  urls.push(...pageRows.map(r => r.imageUrl));
+  urls.push(...pageRows.map(r => r.imageUrl).filter((url): url is string => url !== null));
 
   // Assignment 페이지 이미지
   const asnPageRows = await db
@@ -397,7 +397,7 @@ async function collectUserFileUrls(userId: string): Promise<string[]> {
     .from(assignmentPages)
     .innerJoin(assignments, eq(assignmentPages.assignmentId, assignments.id))
     .where(eq(assignments.teacherId, userId));
-  urls.push(...asnPageRows.map(r => r.imageUrl));
+  urls.push(...asnPageRows.map(r => r.imageUrl).filter((url): url is string => url !== null));
 
   // Post 파일
   const postFileRows = await db

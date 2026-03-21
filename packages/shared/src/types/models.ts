@@ -28,7 +28,8 @@ export interface Chapter {
 export interface Page {
   id: string;
   chapterId: string;
-  imageUrl: string;
+  imageUrl: string | null;
+  videoUrl: string | null;
   position: number;
 }
 
@@ -103,7 +104,8 @@ export interface Assignment {
 export interface AssignmentPage {
   id: string;
   assignmentId: string;
-  imageUrl: string;
+  imageUrl: string | null;
+  videoUrl: string | null;
   position: number;
   createdAt: string;
 }

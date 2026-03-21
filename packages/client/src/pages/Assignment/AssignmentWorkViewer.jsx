@@ -21,6 +21,7 @@ import {
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import FileAttachmentPanel from './components/FileAttachmentPanel';
+import { extractYouTubeId, getYouTubeEmbedUrl, getYouTubeThumbnail } from '../../lib/youtubeUtils';
 
 const TEACHER_COMMENT_PREFIX = '__atc_';
 
@@ -419,7 +420,7 @@ const AssignmentWorkViewer = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {commentMode && (
+          {commentMode && !currentPage?.videoUrl && (
             <span className={`text-xs ${saveStatus === 'saved' ? 'text-green-600' : 'text-gray-400'}`}>
               {saveStatus === 'saved' ? '저장됨' : '저장 중...'}
             </span>
@@ -486,7 +487,7 @@ const AssignmentWorkViewer = () => {
           </button>
 
           {/* PDF 다운로드 */}
-          {currentPage && studentEls.current && (
+          {currentPage && studentEls.current && !currentPage?.videoUrl && (
             <PdfDownloadButton
               onClick={() => {
                 const title = `${studentProfile?.name || '학생'}_${assignment?.title || '과제'}_${currentPage.position + 1}p`;
@@ -548,7 +549,7 @@ const AssignmentWorkViewer = () => {
             <Pencil className="h-4 w-4" />
           </button>
 
-          {commentMode && (
+          {commentMode && !currentPage?.videoUrl && (
             <button onClick={() => setToolbarCollapsed((v) => !v)}
               className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 cursor-pointer">
               {toolbarCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
@@ -577,7 +578,7 @@ const AssignmentWorkViewer = () => {
       </div>
 
       {/* 필기 툴바 */}
-      {commentMode && !toolbarCollapsed && (
+      {commentMode && !toolbarCollapsed && !currentPage?.videoUrl && (
         <DrawingToolbar
           apiRef={excalidrawAPIRef}
           showPanel={showExcalidrawPanel}
@@ -624,7 +625,16 @@ const AssignmentWorkViewer = () => {
                     idx === currentPageIndex ? 'border-4 border-indigo-500' : 'border-4 border-transparent hover:border-gray-300'
                   }`}
                 >
-                  <img src={pg.imageUrl} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                  {pg.videoUrl ? (
+                    <div className="relative">
+                      <img src={getYouTubeThumbnail(extractYouTubeId(pg.videoUrl))} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover bg-gray-900" loading="lazy" decoding="async" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="bg-red-600 rounded-full p-1"><svg className="h-3 w-3 text-white fill-white" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div>
+                      </div>
+                    </div>
+                  ) : (
+                    <img src={pg.imageUrl} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                  )}
                   <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
                     {idx + 1}
                   </div>
@@ -634,6 +644,16 @@ const AssignmentWorkViewer = () => {
           </div>
         )}
 
+        {currentPage?.videoUrl ? (
+          <div className="flex-1 flex items-center justify-center bg-black">
+            <iframe
+              src={getYouTubeEmbedUrl(extractYouTubeId(currentPage.videoUrl))}
+              className="w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        ) : (
         <div ref={containerRef} style={GRID_STYLE} className="flex-1 relative overflow-hidden">
           <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{showExcalidrawPanel ? '' : PANEL_HIDE_CSS}</style>
           {currentPage ? (
@@ -653,6 +673,7 @@ const AssignmentWorkViewer = () => {
             <div className="flex items-center justify-center h-full text-gray-400">페이지가 없습니다.</div>
           )}
         </div>
+        )}
       </div>
 
       {/* 반려 모달 */}

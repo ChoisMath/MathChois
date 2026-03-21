@@ -4,8 +4,8 @@ import { ArrowLeft, Paperclip, X, Loader, Plus, Save, Send } from 'lucide-react'
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 
-const MAX_FILES = 3;
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILES = 100;
+const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
 
 const BoardPostEditor = () => {
   const { postId } = useParams(); // undefined = 신규
@@ -80,7 +80,7 @@ const BoardPostEditor = () => {
     }
     const oversized = added.filter((f) => f.size > MAX_FILE_SIZE);
     if (oversized.length > 0) {
-      setFileError(`파일 크기는 10MB 이하여야 합니다. (${oversized.map((f) => f.name).join(', ')})`);
+      setFileError(`파일 크기는 ${MAX_FILE_SIZE / (1024 * 1024)}MB 이하여야 합니다. (${oversized.map((f) => f.name).join(', ')})`);
       return;
     }
     setNewFiles((prev) => [...prev, ...added]);
@@ -251,7 +251,7 @@ const BoardPostEditor = () => {
         {/* 첨부파일 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            첨부파일 <span className="text-gray-400 font-normal">(최대 3개, 각 10MB 이하)</span>
+            첨부파일 <span className="text-gray-400 font-normal">(최대 {MAX_FILES}개, 각 {MAX_FILE_SIZE / (1024 * 1024)}MB 이하)</span>
           </label>
 
           {/* 기존 파일 (수정 시) */}

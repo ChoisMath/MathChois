@@ -1,7 +1,8 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Trash2, GripVertical } from 'lucide-react';
+import { Trash2, GripVertical, Play } from 'lucide-react';
+import { extractYouTubeId, getYouTubeThumbnail } from '../../lib/youtubeUtils';
 
 const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage, isDeleting }) => {
   const {
@@ -20,6 +21,8 @@ const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage,
     opacity: isDragging ? 0.8 : 1,
   };
 
+  const videoId = page.videoUrl ? extractYouTubeId(page.videoUrl) : null;
+
   return (
     <div
       ref={setNodeRef}
@@ -29,21 +32,39 @@ const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage,
         isSelected ? 'border-4 border-blue-500' : 'border-4 border-transparent hover:border-gray-300'
       }`}
     >
-      <div 
-        {...attributes} 
-        {...listeners} 
+      <div
+        {...attributes}
+        {...listeners}
         className="absolute top-1 left-1 p-1 bg-black/40 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10"
       >
         <GripVertical className="h-3 w-3" />
       </div>
 
-      <img
-        src={page.imageUrl}
-        alt={`페이지 ${index + 1}`}
-        className="w-full h-auto object-contain bg-white"
-        loading="lazy"
-        draggable={false}
-      />
+      {videoId ? (
+        <div className="relative">
+          <img
+            src={getYouTubeThumbnail(videoId)}
+            alt={`영상 ${index + 1}`}
+            className="w-full h-auto object-cover bg-gray-900"
+            loading="lazy"
+            draggable={false}
+            onError={(e) => { e.target.style.display = 'none'; }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="bg-red-600 rounded-full p-1.5">
+              <Play className="h-4 w-4 text-white fill-white" />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <img
+          src={page.imageUrl}
+          alt={`페이지 ${index + 1}`}
+          className="w-full h-auto object-contain bg-white"
+          loading="lazy"
+          draggable={false}
+        />
+      )}
       <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
         {index + 1}
       </div>

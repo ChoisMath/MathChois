@@ -181,6 +181,7 @@ export async function chapterRoutes(app: FastifyInstance) {
         sourcePages.map((pg) => ({
           chapterId: newChapter.id,
           imageUrl: pg.imageUrl,
+          videoUrl: pg.videoUrl,
           position: pg.position,
         })),
       );

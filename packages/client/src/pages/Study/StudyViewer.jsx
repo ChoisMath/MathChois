@@ -16,6 +16,7 @@ import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
+import { extractYouTubeId, getYouTubeEmbedUrl, getYouTubeThumbnail } from '../../lib/youtubeUtils';
 
 /* ── 세션 내 캐시 (컴포넌트 unmount 후에도 유지) ── */
 const _notesCache    = new Map(); // `${userId}_${pageId}` → { elements, bgPosition, files }
@@ -263,7 +264,16 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
                         : 'ring-1 ring-gray-200 hover:ring-gray-400'
                     }`}
                   >
-                    <img src={pg.imageUrl} alt={`p.${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                    {pg.videoUrl ? (
+                      <div className="relative">
+                        <img src={getYouTubeThumbnail(extractYouTubeId(pg.videoUrl))} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover bg-gray-900" loading="lazy" decoding="async" />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="bg-red-600 rounded-full p-1"><svg className="h-3 w-3 text-white fill-white" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div>
+                        </div>
+                      </div>
+                    ) : (
+                      <img src={pg.imageUrl} alt={`p.${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                    )}
                     <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] text-center py-0.5">
                       {idx + 1}
                     </div>
@@ -273,7 +283,17 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
             </div>
           )}
 
-          {/* Excalidraw 영역 */}
+          {/* Excalidraw / YouTube 영역 */}
+          {currentPage?.videoUrl ? (
+            <div className="flex-1 flex items-center justify-center bg-black">
+              <iframe
+                src={getYouTubeEmbedUrl(extractYouTubeId(currentPage.videoUrl))}
+                className="w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          ) : (
           <div ref={containerRef} className="flex-1 relative overflow-hidden bg-gray-50">
             {status === 'loading' && (
               <div className="flex items-center justify-center h-full text-gray-400">불러오는 중...</div>
@@ -295,6 +315,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
               </>
             )}
           </div>
+          )}
         </div>
       </div>
     </div>
@@ -765,8 +786,8 @@ const StudyViewer = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* 저장 상태: 필기 모드일 때만 */}
-          {drawMode && (
+          {/* 저장 상태: 필기 모드 + 영상 아닐 때만 */}
+          {drawMode && !currentPage?.videoUrl && (
             <span className={`text-xs ${saveStatus === 'saved' ? 'text-green-600' : 'text-gray-400'}`}>
               {saveStatus === 'saved'  && '저장됨'}
               {saveStatus === 'saving' && '저장 중...'}
@@ -774,7 +795,7 @@ const StudyViewer = () => {
           )}
 
           {/* PDF 다운로드 */}
-          {currentPage && noteElements && (
+          {currentPage && noteElements && !currentPage?.videoUrl && (
             <PdfDownloadButton
               onClick={() => {
                 const title = `${user?.name || '학생'}_${chapter?.title || '챕터'}_${currentPage.position + 1}p`;
@@ -828,8 +849,8 @@ const StudyViewer = () => {
             <Pencil className="h-4 w-4" />
           </button>
 
-          {/* 툴바 접기/펼치기 (필기 모드에서만) */}
-          {drawMode && (
+          {/* 툴바 접기/펼치기 (필기 모드 + 영상 아닐 때만) */}
+          {drawMode && !currentPage?.videoUrl && (
             <button
               onClick={() => setToolbarCollapsed((v) => !v)}
               title={toolbarCollapsed ? '툴바 펼치기' : '툴바 접기'}
@@ -871,8 +892,8 @@ const StudyViewer = () => {
         </div>
       </div>
 
-      {/* ── 필기 툴바 (필기 모드 + 펼침 상태일 때만) ── */}
-      {drawMode && !toolbarCollapsed && (
+      {/* ── 필기 툴바 (필기 모드 + 펼침 상태 + 영상 아닐 때만) ── */}
+      {drawMode && !toolbarCollapsed && !currentPage?.videoUrl && (
         <DrawingToolbar
           apiRef={excalidrawAPIRef}
           showPanel={showExcalidrawPanel}
@@ -906,7 +927,16 @@ const StudyViewer = () => {
                     pg.id === currentPage?.id ? 'border-4 border-blue-500' : 'border-4 border-transparent hover:border-gray-300'
                   }`}
                 >
-                  <img src={pg.imageUrl} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                  {pg.videoUrl ? (
+                    <div className="relative">
+                      <img src={getYouTubeThumbnail(extractYouTubeId(pg.videoUrl))} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover bg-gray-900" loading="lazy" decoding="async" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="bg-red-600 rounded-full p-1"><svg className="h-3 w-3 text-white fill-white" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div>
+                      </div>
+                    </div>
+                  ) : (
+                    <img src={pg.imageUrl} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                  )}
                   <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
                     {idx + 1}
                   </div>
@@ -916,7 +946,17 @@ const StudyViewer = () => {
           </div>
         )}
 
-        {/* ── Excalidraw (뷰/필기 모드 공통) ── */}
+        {/* ── Excalidraw / YouTube (뷰/필기 모드 공통) ── */}
+        {currentPage?.videoUrl ? (
+          <div className="flex-1 flex items-center justify-center bg-black">
+            <iframe
+              src={getYouTubeEmbedUrl(extractYouTubeId(currentPage.videoUrl))}
+              className="w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        ) : (
         <div
           ref={containerRef}
           style={GRID_STYLE}
@@ -949,6 +989,7 @@ const StudyViewer = () => {
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* ── 교사 필기 모달 ── */}
