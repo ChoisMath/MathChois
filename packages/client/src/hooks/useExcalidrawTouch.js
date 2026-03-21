@@ -19,6 +19,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
   const touchPointerIdsRef   = useRef(new Set()); // pointer ID 기반 즉시 추적
   const isSyntheticUpRef     = useRef(false); // synthetic pointerup 디스패치 시 자체 핸들러 무시용
   const drawModeWarmupRef    = useRef(0);      // 드로우 모드 전환 warmup 시각
+  const penActiveRef         = useRef(false);  // 스타일러스(pen)가 화면에 닿아있는지
+  const penLiftTimeRef       = useRef(0);      // 펜이 떠난 시각 (50ms 쿨다운)
 
   useEffect(() => {
     const container = containerRef.current;
@@ -45,9 +47,25 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
 
+      // 펜 활성 추적
+      if (e.pointerType === 'pen') {
+        penActiveRef.current = true;
+        penLiftTimeRef.current = 0;
+      }
+
       // pointer ID 기반 즉시 추적 (touchstart보다 먼저 발생)
       if (e.pointerType === 'touch') {
         touchPointerIdsRef.current.add(e.pointerId);
+      }
+
+      // 펜 활성 중 터치 차단 (포스트펜 50ms 쿨다운 포함)
+      if (e.pointerType === 'touch' && (
+          penActiveRef.current ||
+          (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50)
+      )) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
       }
 
       // 드로우 모드 warmup: 모드 전환 후 300ms 내 touch 차단
@@ -102,7 +120,21 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     const handlePointerMove = (e) => {
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
+
+      // 펜 활성 추적 (move에서도 갱신)
+      if (e.pointerType === 'pen') {
+        penActiveRef.current = true;
+        penLiftTimeRef.current = 0;
+      }
+
       if (e.pointerType === 'touch') {
+        // 펜 활성 중 터치 차단
+        if (penActiveRef.current ||
+            (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50)) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         // 드로우 모드 warmup
         if (drawModeWarmupRef.current > 0 && Date.now() - drawModeWarmupRef.current < 300) {
           e.preventDefault();
@@ -136,6 +168,10 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     /* ── pointer 해제 추적 ── */
     const handlePointerUp = (e) => {
       if (isSyntheticUpRef.current) return; // synthetic pointerup은 pointer ID 유지
+      if (e.pointerType === 'pen') {
+        penActiveRef.current = false;
+        penLiftTimeRef.current = Date.now();
+      }
       if (e.pointerType === 'touch') {
         touchPointerIdsRef.current.delete(e.pointerId);
       }
@@ -147,6 +183,14 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       isTouchingRef.current = true;
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
+
+      // 펜 활성 중 터치 차단
+      if (penActiveRef.current ||
+          (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50)) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
 
       // 드로우 모드 warmup (단일 터치만 — 2손가락 핀치줌 허용)
       if (drawModeWarmupRef.current > 0 && Date.now() - drawModeWarmupRef.current < 300
@@ -203,6 +247,14 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       activeTouchesRef.current = e.touches.length;
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
+
+      // 펜 활성 중 터치 차단
+      if (penActiveRef.current ||
+          (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50)) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
 
       // 드로우 모드 warmup (단일 터치만)
       if (drawModeWarmupRef.current > 0 && Date.now() - drawModeWarmupRef.current < 300
