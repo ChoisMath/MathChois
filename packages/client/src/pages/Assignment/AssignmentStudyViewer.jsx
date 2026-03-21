@@ -10,6 +10,7 @@ import { api } from '../../lib/api';
 import { subscribeToRoom } from '../../lib/socket';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
+import PageNavOverlay from '../../components/study/PageNavOverlay';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 import {
@@ -183,6 +184,7 @@ const AssignmentStudyViewer = () => {
   const userRef              = useRef(user);
   const drawModeRef          = useRef(false);
   const lastSavedRef         = useRef(null);
+  const pendingSaveDataRef   = useRef(null);
   const activeSidebarItemRef = useRef(null);
   const sidebarScrollRef     = useRef(null);
   const mountedRef           = useRef(true);
@@ -225,10 +227,28 @@ const AssignmentStudyViewer = () => {
       baseStrokeWidthRef.current = savedWidth;
       const zoom = apiRef.getAppState()?.zoom?.value || 1;
       lastZoomRef.current = zoom;
-      apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth / zoom, currentItemRoundness: 'sharp' }, commitToHistory: false });
+      apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
       apiRef.setActiveTool({ type: excTool });
     }
   }, [drawMode]);
+
+  /* ── 페이지 이동 시 pending 저장 flush ── */
+  useEffect(() => {
+    pendingSaveDataRef.current = null;
+    return () => {
+      clearTimeout(saveTimerRef.current);
+      const pending = pendingSaveDataRef.current;
+      if (!pending) return;
+      pendingSaveDataRef.current = null;
+      if (pending.cacheKey && pending.cacheData) {
+        _notesCache.set(pending.cacheKey, pending.cacheData);
+      }
+      api.put(pending.endpoint, pending.payload).catch((err) => {
+        console.error('페이지 이동 시 저장 실패:', err);
+        if (pending.cacheKey) _notesCache.delete(pending.cacheKey);
+      });
+    };
+  }, [pageId]);
 
   /* 데이터 로드 */
   useEffect(() => {
@@ -384,13 +404,13 @@ const AssignmentStudyViewer = () => {
     }
 
     /* 줌-독립 펜 두께 (미세 부동소수점 변동 무시) */
-    if (appState && Math.abs((appState.zoom?.value || 1) - lastZoomRef.current) > 0.001) {
+    if (appState && Math.abs((appState.zoom?.value || 1) - lastZoomRef.current) > 0.01) {
       lastZoomRef.current = appState.zoom.value;
       const tool = excalidrawAPIRef.current?.getAppState()?.activeTool?.type;
       if (tool === 'freedraw' && baseStrokeWidthRef.current) {
         isAdjustingWidthRef.current = true;
         excalidrawAPIRef.current?.updateScene({
-          appState: { currentItemStrokeWidth: baseStrokeWidthRef.current / appState.zoom.value },
+          appState: { currentItemStrokeWidth: Math.max(baseStrokeWidthRef.current / appState.zoom.value, 0.05) },
           commitToHistory: false,
         });
         requestAnimationFrame(() => { isAdjustingWidthRef.current = false; });
@@ -427,6 +447,26 @@ const AssignmentStudyViewer = () => {
     );
     const serialized = JSON.stringify(userEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points, text: el.text, width: el.width, height: el.height, strokeColor: el.strokeColor, strokeWidth: el.strokeWidth })));
     if (serialized === lastSavedRef.current) return;
+
+    /* 페이지 이동 시 flush용 데이터 즉시 캡처 */
+    const allFilesSnap = excalidrawAPIRef.current?.getFiles() ?? {};
+    const teacherFileIdsSnap = new Set(Object.keys(teacherCommentFilesRef.current));
+    const userFilesSnap = Object.fromEntries(
+      Object.entries(allFilesSnap).filter(([id]) => id !== BG_FILE_ID && !teacherFileIdsSnap.has(id))
+    );
+    pendingSaveDataRef.current = {
+      endpoint: `/api/assignment-notes/${assignmentId}/${page.id}`,
+      payload: {
+        excalidrawData: {
+          elements: userEls,
+          bgPosition: bgPositionRef.current,
+          ...(Object.keys(userFilesSnap).length > 0 && { files: userFilesSnap }),
+        },
+      },
+      cacheKey: `${cu.id}_${page.id}`,
+      cacheData: { elements: userEls, bgPosition: bgPositionRef.current, files: userFilesSnap },
+    };
+
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       if (mountedRef.current) setSaveStatus('saving');
@@ -447,6 +487,7 @@ const AssignmentStudyViewer = () => {
           elements: userEls, bgPosition: bgPositionRef.current, files: userFiles,
         });
         lastSavedRef.current = serialized;
+        pendingSaveDataRef.current = null;
       } catch (err) {
         console.error('필기 저장 실패:', err);
       }
@@ -475,7 +516,7 @@ const AssignmentStudyViewer = () => {
     baseStrokeWidthRef.current = savedWidth;
     const zoom = apiRef.getAppState()?.zoom?.value || 1;
     lastZoomRef.current = zoom;
-    apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth / zoom, currentItemRoundness: 'sharp' }, commitToHistory: false });
+    apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
     apiRef.setActiveTool({ type: excTool });
 
     const page = currentPageRef.current;
@@ -872,8 +913,9 @@ const AssignmentStudyViewer = () => {
         )}
 
         {/* Excalidraw / YouTube */}
+        <div className="flex-1 relative overflow-hidden">
         {currentPage?.videoUrl ? (
-          <div className="flex-1 flex items-center justify-center bg-black">
+          <div className="w-full h-full flex items-center justify-center bg-black">
             <iframe
               src={getYouTubeEmbedUrl(extractYouTubeId(currentPage.videoUrl))}
               className="w-full h-full"
@@ -882,7 +924,7 @@ const AssignmentStudyViewer = () => {
             />
           </div>
         ) : (
-        <div ref={containerRef} style={GRID_STYLE} className="flex-1 relative overflow-hidden">
+        <div ref={containerRef} style={GRID_STYLE} className="w-full h-full relative overflow-hidden">
           <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{(drawMode && showExcalidrawPanel) ? '' : PANEL_HIDE_CSS}</style>
           {currentPage ? (
             <ExcalidrawErrorBoundary key={currentPage.id}>
@@ -909,6 +951,13 @@ const AssignmentStudyViewer = () => {
           )}
         </div>
         )}
+        <PageNavOverlay
+          onPrev={() => prevPage && navigate(`/student/assignments/${assignmentId}/page/${prevPage.id}`)}
+          onNext={() => nextPage && navigate(`/student/assignments/${assignmentId}/page/${nextPage.id}`)}
+          hasPrev={!!prevPage}
+          hasNext={!!nextPage}
+        />
+        </div>
       </div>
 
       {/* 교사 필기 모달 */}

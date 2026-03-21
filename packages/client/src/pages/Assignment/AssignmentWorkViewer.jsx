@@ -10,6 +10,7 @@ import { api } from '../../lib/api';
 import { subscribeToRoom } from '../../lib/socket';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
+import PageNavOverlay from '../../components/study/PageNavOverlay';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 import {
@@ -61,6 +62,7 @@ const AssignmentWorkViewer = () => {
   const mountedRef           = useRef(true);
   const commentModeRef       = useRef(false);
   const lastSavedRef         = useRef(null);
+  const pendingSaveDataRef   = useRef(null);
   const savedStudentFilesRef = useRef({});
   const savedTeacherFilesRef = useRef({});
   const activeSidebarItemRef = useRef(null);
@@ -102,7 +104,7 @@ const AssignmentWorkViewer = () => {
       baseStrokeWidthRef.current = savedWidth;
       const zoom = apiRef.getAppState()?.zoom?.value || 1;
       lastZoomRef.current = zoom;
-      apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth / zoom, currentItemRoundness: 'sharp' }, commitToHistory: false });
+      apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
       apiRef.setActiveTool({ type: excTool });
     }
   }, [commentMode]);
@@ -175,6 +177,20 @@ const AssignmentWorkViewer = () => {
       }
     );
   }, [currentPage?.id, studentId, assignmentId]);
+
+  /* ── 페이지 이동 시 pending 저장 flush ── */
+  useEffect(() => {
+    pendingSaveDataRef.current = null;
+    return () => {
+      clearTimeout(saveTimerRef.current);
+      const pending = pendingSaveDataRef.current;
+      if (!pending) return;
+      pendingSaveDataRef.current = null;
+      api.put(pending.endpoint, pending.payload).catch((err) => {
+        console.error('페이지 이동 시 저장 실패:', err);
+      });
+    };
+  }, [currentPage?.id]);
 
   /* 페이지 변경 시 데이터 로드 */
   useEffect(() => {
@@ -256,7 +272,7 @@ const AssignmentWorkViewer = () => {
     baseStrokeWidthRef.current = savedWidth;
     const zoom = apiRef.getAppState()?.zoom?.value || 1;
     lastZoomRef.current = zoom;
-    apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth / zoom, currentItemRoundness: 'sharp' }, commitToHistory: false });
+    apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
     apiRef.setActiveTool({ type: excTool });
     await new Promise((r) => setTimeout(r, 0));
     await rebuildScene();
@@ -271,13 +287,13 @@ const AssignmentWorkViewer = () => {
     }
 
     /* 줌-독립 펜 두께 (미세 부동소수점 변동 무시) */
-    if (appState && Math.abs((appState.zoom?.value || 1) - lastZoomRef.current) > 0.001) {
+    if (appState && Math.abs((appState.zoom?.value || 1) - lastZoomRef.current) > 0.01) {
       lastZoomRef.current = appState.zoom.value;
       const tool = excalidrawAPIRef.current?.getAppState()?.activeTool?.type;
       if (tool === 'freedraw' && baseStrokeWidthRef.current) {
         isAdjustingWidthRef.current = true;
         excalidrawAPIRef.current?.updateScene({
-          appState: { currentItemStrokeWidth: baseStrokeWidthRef.current / appState.zoom.value },
+          appState: { currentItemStrokeWidth: Math.max(baseStrokeWidthRef.current / appState.zoom.value, 0.05) },
           commitToHistory: false,
         });
         requestAnimationFrame(() => { isAdjustingWidthRef.current = false; });
@@ -310,6 +326,22 @@ const AssignmentWorkViewer = () => {
     );
     const serialized = JSON.stringify(filtered.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points, text: el.text, width: el.width, height: el.height, strokeColor: el.strokeColor, strokeWidth: el.strokeWidth })));
     if (serialized === lastSavedRef.current) return;
+
+    /* 페이지 이동 시 flush용 데이터 즉시 캡처 */
+    const allFilesSnap = excalidrawAPIRef.current?.getFiles() ?? {};
+    const teacherFilesSnap = Object.fromEntries(
+      Object.entries(allFilesSnap).filter(([id]) => id !== BG_FILE_ID && !savedStudentFilesRef.current[id])
+    );
+    pendingSaveDataRef.current = {
+      endpoint: `/api/assignment-comments/${page.id}/${studentId}`,
+      payload: {
+        excalidrawData: {
+          elements: filtered,
+          ...(Object.keys(teacherFilesSnap).length > 0 && { files: teacherFilesSnap }),
+        },
+      },
+    };
+
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       if (mountedRef.current) setSaveStatus('saving');
@@ -327,6 +359,7 @@ const AssignmentWorkViewer = () => {
           },
         });
         lastSavedRef.current = serialized;
+        pendingSaveDataRef.current = null;
       } catch (err) {
         console.error('코멘트 저장 실패:', err);
       }
@@ -644,8 +677,9 @@ const AssignmentWorkViewer = () => {
           </div>
         )}
 
+        <div className="flex-1 relative overflow-hidden">
         {currentPage?.videoUrl ? (
-          <div className="flex-1 flex items-center justify-center bg-black">
+          <div className="w-full h-full flex items-center justify-center bg-black">
             <iframe
               src={getYouTubeEmbedUrl(extractYouTubeId(currentPage.videoUrl))}
               className="w-full h-full"
@@ -654,7 +688,7 @@ const AssignmentWorkViewer = () => {
             />
           </div>
         ) : (
-        <div ref={containerRef} style={GRID_STYLE} className="flex-1 relative overflow-hidden">
+        <div ref={containerRef} style={GRID_STYLE} className="w-full h-full relative overflow-hidden">
           <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{showExcalidrawPanel ? '' : PANEL_HIDE_CSS}</style>
           {currentPage ? (
             <ExcalidrawErrorBoundary key={currentPage.id}>
@@ -674,6 +708,13 @@ const AssignmentWorkViewer = () => {
           )}
         </div>
         )}
+        <PageNavOverlay
+          onPrev={() => currentPageIndex > 0 && goPage(currentPageIndex - 1)}
+          onNext={() => currentPageIndex < pages.length - 1 && goPage(currentPageIndex + 1)}
+          hasPrev={currentPageIndex > 0}
+          hasNext={currentPageIndex < pages.length - 1}
+        />
+        </div>
       </div>
 
       {/* 반려 모달 */}

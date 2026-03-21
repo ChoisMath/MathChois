@@ -8,6 +8,7 @@ import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
+import PageNavOverlay from '../../components/study/PageNavOverlay';
 import {
   BG_ELEMENT_ID,
   BG_FILE_ID,
@@ -59,6 +60,7 @@ const TeacherStudyViewer = () => {
   const savedFilesRef         = useRef({}); // 저장된 사용자 삽입 이미지 파일
   const mountedRef            = useRef(true);
   const lastSavedRef          = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
+  const pendingSaveDataRef    = useRef(null);
   const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
 
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
@@ -83,6 +85,24 @@ const TeacherStudyViewer = () => {
     currentPageRef.current  = currentPage;
     noteElementsRef.current = noteElements;
   }, [currentPage, noteElements]);
+
+  /* ── 페이지 이동 시 pending 저장 flush ── */
+  useEffect(() => {
+    pendingSaveDataRef.current = null;
+    return () => {
+      clearTimeout(saveTimerRef.current);
+      const pending = pendingSaveDataRef.current;
+      if (!pending) return;
+      pendingSaveDataRef.current = null;
+      if (pending.cacheKey && pending.cacheData) {
+        _notesCache.set(pending.cacheKey, pending.cacheData);
+      }
+      api.put(pending.endpoint, pending.payload).catch((err) => {
+        console.error('페이지 이동 시 저장 실패:', err);
+        if (pending.cacheKey) _notesCache.delete(pending.cacheKey);
+      });
+    };
+  }, [pageId]);
 
   /* ── 데이터 로드 ── */
   useEffect(() => {
@@ -155,13 +175,13 @@ const TeacherStudyViewer = () => {
     }
 
     /* 줌-독립 펜 두께 (미세 부동소수점 변동 무시) */
-    if (appState && Math.abs((appState.zoom?.value || 1) - lastZoomRef.current) > 0.001) {
+    if (appState && Math.abs((appState.zoom?.value || 1) - lastZoomRef.current) > 0.01) {
       lastZoomRef.current = appState.zoom.value;
       const tool = excalidrawAPIRef.current?.getAppState()?.activeTool?.type;
       if (tool === 'freedraw' && baseStrokeWidthRef.current) {
         isAdjustingWidthRef.current = true;
         excalidrawAPIRef.current?.updateScene({
-          appState: { currentItemStrokeWidth: baseStrokeWidthRef.current / appState.zoom.value },
+          appState: { currentItemStrokeWidth: Math.max(baseStrokeWidthRef.current / appState.zoom.value, 0.05) },
           commitToHistory: false,
         });
         requestAnimationFrame(() => { isAdjustingWidthRef.current = false; });
@@ -199,6 +219,22 @@ const TeacherStudyViewer = () => {
     const serialized = JSON.stringify(teacherEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points, text: el.text, width: el.width, height: el.height, strokeColor: el.strokeColor, strokeWidth: el.strokeWidth })));
     if (serialized === lastSavedRef.current) return;
 
+    /* 페이지 이동 시 flush용 데이터 즉시 캡처 */
+    const allFilesSnap = excalidrawAPIRef.current?.getFiles() ?? {};
+    const { [BG_FILE_ID]: _bgfSnap, ...userFilesSnap } = allFilesSnap;
+    pendingSaveDataRef.current = {
+      endpoint: `/api/notes/teacher/${page.id}`,
+      payload: {
+        excalidrawData: {
+          elements: teacherEls,
+          bgPosition: bgPositionRef.current,
+          ...(Object.keys(userFilesSnap).length > 0 && { files: userFilesSnap }),
+        },
+      },
+      cacheKey: `${user.id}_${page.id}`,
+      cacheData: { elements: teacherEls, bgPosition: bgPositionRef.current, files: userFilesSnap },
+    };
+
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       if (mountedRef.current) setSaveStatus('saving');
@@ -219,6 +255,7 @@ const TeacherStudyViewer = () => {
           files:      userFiles,
         });
         lastSavedRef.current = serialized;
+        pendingSaveDataRef.current = null;
       } catch (err) {
         console.error('교사 필기 저장 실패:', err);
       }
@@ -252,7 +289,7 @@ const TeacherStudyViewer = () => {
       const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
         (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');
 
-      api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: savedWidth / zoom, currentItemRoundness: 'sharp' }, commitToHistory: false });
+      api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
       api.setActiveTool({ type: excalidrawTool });
     }, 0);
 
@@ -474,8 +511,9 @@ const TeacherStudyViewer = () => {
         )}
 
         {/* ── Excalidraw 캔버스 / YouTube ── */}
+        <div className="flex-1 relative overflow-hidden">
         {currentPage?.videoUrl ? (
-          <div className="flex-1 flex items-center justify-center bg-black">
+          <div className="w-full h-full flex items-center justify-center bg-black">
             <iframe
               src={getYouTubeEmbedUrl(extractYouTubeId(currentPage.videoUrl))}
               className="w-full h-full"
@@ -487,7 +525,7 @@ const TeacherStudyViewer = () => {
         <div
           ref={containerRef}
           style={GRID_STYLE}
-          className="flex-1 relative overflow-hidden"
+          className="w-full h-full relative overflow-hidden"
         >
           <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{showExcalidrawPanel ? '' : PANEL_HIDE_CSS}</style>
 
@@ -517,6 +555,13 @@ const TeacherStudyViewer = () => {
           )}
         </div>
         )}
+        <PageNavOverlay
+          onPrev={() => prevPage && navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/study/page/${prevPage.id}`)}
+          onNext={() => nextPage && navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/study/page/${nextPage.id}`)}
+          hasPrev={!!prevPage}
+          hasNext={!!nextPage}
+        />
+        </div>
       </div>
     </div>
   );

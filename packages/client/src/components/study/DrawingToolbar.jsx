@@ -283,7 +283,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
       api?.updateScene({
         appState: {
           activeTool: { type: 'freedraw', locked: false },
-          currentItemStrokeWidth: strokeWidthRef.current / zoom,
+          currentItemStrokeWidth: Math.max(strokeWidthRef.current / zoom, 0.05),
         },
         commitToHistory: false,
       });
@@ -315,7 +315,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
     localStorage.setItem('mc_stroke_width', String(w));
     if (onBaseWidthChange) onBaseWidthChange(w);
     const zoom = apiRef.current?.getAppState()?.zoom?.value || 1;
-    apiRef.current?.updateScene({ appState: { currentItemStrokeWidth: w / zoom }, commitToHistory: false });
+    apiRef.current?.updateScene({ appState: { currentItemStrokeWidth: Math.max(w / zoom, 0.05) }, commitToHistory: false });
   };
 
   const handleToggleImageMove = () => {

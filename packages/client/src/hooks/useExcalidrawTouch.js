@@ -61,7 +61,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       // 팜 리젝션 (크기 기반 — 비 스타일러스 기기용)
       if (e.pointerType === 'touch' && (e.width > 25 || e.height > 25)) {
         e.preventDefault();
-        if (screenLockedRef.current) e.stopPropagation();
+        e.stopPropagation();
+        return;
       }
 
       // 화면 고정 모드: 2핑거 이상 → Excalidraw에 전달 차단
@@ -111,7 +112,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         // 팜 리젝션 (크기 기반)
         if (e.width > 25 || e.height > 25) {
           e.preventDefault();
-          if (screenLockedRef.current) e.stopPropagation();
+          e.stopPropagation();
           return;
         }
 
@@ -165,7 +166,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         }
         if (isPalm) {
           if (e.cancelable) e.preventDefault();
-          if (screenLockedRef.current) e.stopPropagation();
+          e.stopPropagation();
           return;
         }
       }
@@ -221,7 +222,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         }
         if (isPalm) {
           if (e.cancelable) e.preventDefault();
-          if (screenLockedRef.current) e.stopPropagation();
+          e.stopPropagation();
           return;
         }
       }
@@ -266,7 +267,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
             };
             // 줌-독립 펜 두께: 핀치줌 시 자동 보정
             if (baseStrokeWidthRef?.current) {
-              appStateUpdate.currentItemStrokeWidth = baseStrokeWidthRef.current / newZoom;
+              appStateUpdate.currentItemStrokeWidth = Math.max(baseStrokeWidthRef.current / newZoom, 0.05);
             }
             excApi.updateScene({ appState: appStateUpdate, commitToHistory: false });
           }
