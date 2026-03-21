@@ -21,6 +21,9 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
   const drawModeWarmupRef    = useRef(0);      // 드로우 모드 전환 warmup 시각
   const penActiveRef         = useRef(false);  // 스타일러스(pen)가 화면에 닿아있는지
   const penLiftTimeRef       = useRef(0);      // 펜이 떠난 시각 (50ms 쿨다운)
+  const penNearbyRef         = useRef(false);  // 펜 호버 감지 (화면 근처)
+  const penNearbyTimeoutRef  = useRef(null);   // 호버 타임아웃 ID
+  const suspectTouchRef      = useRef(null);   // { pointerId, time } — 의심 터치 (소급 취소용)
 
   useEffect(() => {
     const container = containerRef.current;
@@ -47,10 +50,28 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
 
-      // 펜 활성 추적
+      // 펜 활성 추적 + 의심 터치 소급 취소
       if (e.pointerType === 'pen') {
         penActiveRef.current = true;
         penLiftTimeRef.current = 0;
+        // 의심 터치가 150ms 이내에 있었으면 소급 취소
+        const suspect = suspectTouchRef.current;
+        if (suspect && Date.now() - suspect.time < 150) {
+          const canvas = container.querySelector('.excalidraw canvas');
+          if (canvas) {
+            isSyntheticUpRef.current = true;
+            canvas.dispatchEvent(new PointerEvent('pointerup', {
+              pointerId: suspect.pointerId, pointerType: 'touch',
+              bubbles: true, cancelable: true,
+            }));
+            isSyntheticUpRef.current = false;
+            // 팜 획 undo (Ctrl+Z)
+            document.dispatchEvent(new KeyboardEvent('keydown', {
+              key: 'z', ctrlKey: true, bubbles: true, cancelable: true,
+            }));
+          }
+          suspectTouchRef.current = null;
+        }
       }
 
       // pointer ID 기반 즉시 추적 (touchstart보다 먼저 발생)
@@ -58,9 +79,10 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         touchPointerIdsRef.current.add(e.pointerId);
       }
 
-      // 펜 활성 중 단일 터치 차단 (2손가락 핀치줌은 허용)
+      // 펜 활성/호버 중 단일 터치 차단 (2손가락 핀치줌은 허용)
       if (e.pointerType === 'touch' && touchPointerIdsRef.current.size < 2 && (
           penActiveRef.current ||
+          penNearbyRef.current ||
           (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50)
       )) {
         e.preventDefault();
@@ -115,22 +137,34 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
           }
         }
       }
+
+      // freedraw 모드에서 필터를 통과한 단일 터치: 의심 터치로 기록
+      if (e.pointerType === 'touch' && touchPointerIdsRef.current.size === 1) {
+        const tool = getActiveTool();
+        if (tool === 'freedraw') {
+          suspectTouchRef.current = { pointerId: e.pointerId, time: Date.now() };
+        }
+      }
     };
 
     const handlePointerMove = (e) => {
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
 
-      // 펜 활성 추적 (move에서도 갱신)
+      // 펜 활성 + 호버 추적 (move에서도 갱신)
       if (e.pointerType === 'pen') {
         penActiveRef.current = true;
         penLiftTimeRef.current = 0;
+        penNearbyRef.current = true;
+        clearTimeout(penNearbyTimeoutRef.current);
+        penNearbyTimeoutRef.current = setTimeout(() => { penNearbyRef.current = false; }, 500);
       }
 
       if (e.pointerType === 'touch') {
-        // 펜 활성 중 단일 터치 차단 (2손가락 핀치줌은 허용)
+        // 펜 활성/호버 중 단일 터치 차단 (2손가락 핀치줌은 허용)
         if (touchPointerIdsRef.current.size < 2 && (
             penActiveRef.current ||
+            penNearbyRef.current ||
             (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50))) {
           e.preventDefault();
           e.stopPropagation();
@@ -174,6 +208,9 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         penLiftTimeRef.current = Date.now();
       }
       if (e.pointerType === 'touch') {
+        if (suspectTouchRef.current?.pointerId === e.pointerId) {
+          suspectTouchRef.current = null;
+        }
         touchPointerIdsRef.current.delete(e.pointerId);
       }
     };
@@ -185,9 +222,10 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
 
-      // 펜 활성 중 단일 터치 차단 (2손가락 핀치줌은 허용)
+      // 펜 활성/호버 중 단일 터치 차단 (2손가락 핀치줌은 허용)
       if (e.touches.length < 2 && (
           penActiveRef.current ||
+          penNearbyRef.current ||
           (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50))) {
         if (e.cancelable) e.preventDefault();
         e.stopPropagation();
@@ -250,9 +288,10 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
 
-      // 펜 활성 중 단일 터치 차단 (2손가락 핀치줌은 허용)
+      // 펜 활성/호버 중 단일 터치 차단 (2손가락 핀치줌은 허용)
       if (e.touches.length < 2 && (
           penActiveRef.current ||
+          penNearbyRef.current ||
           (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 50))) {
         if (e.cancelable) e.preventDefault();
         e.stopPropagation();
@@ -347,6 +386,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     container.addEventListener('touchcancel',   handleTouchEnd,     { capture: true, passive: true });
 
     return () => {
+      clearTimeout(penNearbyTimeoutRef.current);
       container.style.touchAction = '';
       container.removeEventListener('gesturestart',  preventGesture);
       container.removeEventListener('gesturechange', preventGesture);
