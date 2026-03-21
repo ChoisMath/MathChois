@@ -1,7 +1,7 @@
 import { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or, inArray } from 'drizzle-orm';
 import { env } from '../config/env.js';
 import { db } from '../config/database.js';
 import { chapters, pages, classrooms, classroomMembers, assignments, assignmentPages } from '../db/schema.js';
@@ -31,17 +31,27 @@ const ROOM_PATTERNS = {
   asnWork:      /^asn-work:([\w-]+):([\w-]+)$/,
 };
 
-/** page → chapter → classroom → teacherId 추적 */
-async function getPageOwnerTeacherId(pageId: string): Promise<string | null> {
+/** page → source chapter + linked chapters → 관련된 모든 classroomId 조회 */
+async function getPageRelatedClassroomIds(pageId: string): Promise<string[]> {
   const page = await db.select({ chapterId: pages.chapterId })
     .from(pages).where(eq(pages.id, pageId)).limit(1);
-  if (!page[0]) return null;
-  const chapter = await db.select({ classroomId: chapters.classroomId })
-    .from(chapters).where(eq(chapters.id, page[0].chapterId)).limit(1);
-  if (!chapter[0]) return null;
-  const cls = await db.select({ teacherId: classrooms.teacherId })
-    .from(classrooms).where(eq(classrooms.id, chapter[0].classroomId)).limit(1);
-  return cls[0]?.teacherId ?? null;
+  if (!page[0]) return [];
+  const sourceChapterId = page[0].chapterId;
+  // source 챕터 자체 + 이 source를 참조하는 linked 챕터들
+  const allChapters = await db.select({ classroomId: chapters.classroomId })
+    .from(chapters)
+    .where(or(eq(chapters.id, sourceChapterId), eq(chapters.sourceChapterId, sourceChapterId)));
+  return allChapters.map((c) => c.classroomId);
+}
+
+/** page → 관련된 모든 교실의 teacherId 배열 조회 */
+async function getPageRelatedTeacherIds(pageId: string): Promise<string[]> {
+  const classroomIds = await getPageRelatedClassroomIds(pageId);
+  if (classroomIds.length === 0) return [];
+  const rows = await db.select({ teacherId: classrooms.teacherId })
+    .from(classrooms)
+    .where(inArray(classrooms.id, classroomIds));
+  return [...new Set(rows.map((r) => r.teacherId))];
 }
 
 /** room 접근 권한 검증 */
@@ -60,22 +70,22 @@ async function validateRoomAccess(user: TokenPayload, room: string): Promise<boo
     return cls[0]?.teacherId === user.sub;
   }
 
-  // work:{pageId}:{studentId} → teacher만 (교실 소유자)
+  // work:{pageId}:{studentId} → teacher만 (교실 소유자 — 공유 챕터 포함)
   m = room.match(ROOM_PATTERNS.work);
   if (m) {
     if (user.role !== 'teacher') return false;
-    const teacherId = await getPageOwnerTeacherId(m[1]);
-    return teacherId === user.sub;
+    const teacherIds = await getPageRelatedTeacherIds(m[1]);
+    return teacherIds.includes(user.sub);
   }
 
-  // comments:{pageId}:{studentId} → teacher (교실 소유자) 또는 본인 학생
+  // comments:{pageId}:{studentId} → teacher (교실 소유자 — 공유 챕터 포함) 또는 본인 학생
   m = room.match(ROOM_PATTERNS.comments);
   if (m) {
     const [, pageId, studentId] = m;
     if (user.role === 'student' && user.sub === studentId) return true;
     if (user.role !== 'teacher') return false;
-    const teacherId = await getPageOwnerTeacherId(pageId);
-    return teacherId === user.sub;
+    const teacherIds = await getPageRelatedTeacherIds(pageId);
+    return teacherIds.includes(user.sub);
   }
 
   // assignment:{assignmentId} → teacher (소유자) 또는 교실 소속 학생
@@ -129,32 +139,27 @@ async function validateRoomAccess(user: TokenPayload, room: string): Promise<boo
     return asn[0]?.teacherId === user.sub;
   }
 
-  // teacher-notes:{pageId} → 교실 소속 학생 또는 교실 소유 교사
+  // teacher-notes:{pageId} → 관련 교실 소속 학생/교사 (공유 챕터 포함)
   m = room.match(ROOM_PATTERNS.teacherNotes);
   if (m) {
     const pageId = m[1];
-    // page → chapter → classroom 추적
-    const page = await db.select({ chapterId: pages.chapterId })
-      .from(pages).where(eq(pages.id, pageId)).limit(1);
-    if (!page[0]) return false;
-    const chapter = await db.select({ classroomId: chapters.classroomId })
-      .from(chapters).where(eq(chapters.id, page[0].chapterId)).limit(1);
-    if (!chapter[0]) return false;
-    const cls = await db.select({ teacherId: classrooms.teacherId })
-      .from(classrooms).where(eq(classrooms.id, chapter[0].classroomId)).limit(1);
-    if (!cls[0]) return false;
+    const relatedClassroomIds = await getPageRelatedClassroomIds(pageId);
+    if (relatedClassroomIds.length === 0) return false;
 
-    // 교사: 교실 소유자만
+    // 교사: 관련 교실 중 하나의 소유자
     if (user.role === 'teacher') {
-      return cls[0].teacherId === user.sub;
+      const cls = await db.select({ teacherId: classrooms.teacherId })
+        .from(classrooms)
+        .where(inArray(classrooms.id, relatedClassroomIds));
+      return cls.some((c) => c.teacherId === user.sub);
     }
 
-    // 학생: 교실 구성원만
+    // 학생: 관련 교실 중 하나의 구성원
     if (user.role === 'student') {
       const member = await db.select({ id: classroomMembers.id })
         .from(classroomMembers)
         .where(and(
-          eq(classroomMembers.classroomId, chapter[0].classroomId),
+          inArray(classroomMembers.classroomId, relatedClassroomIds),
           eq(classroomMembers.studentId, user.sub),
         ))
         .limit(1);

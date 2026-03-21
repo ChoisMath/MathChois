@@ -23,6 +23,7 @@ export interface Chapter {
   title: string;
   description: string | null;
   position: number;
+  sourceChapterId?: string | null;
 }
 
 export interface Page {

@@ -1,14 +1,21 @@
 import { eq, and, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '../config/database.js';
 import { pages } from '../db/schema.js';
+import { resolveSourceChapterId, isLinkedChapter } from './chapter.service.js';
 
-/** 챕터의 페이지 목록 */
+/** 챕터의 페이지 목록 (원본 함수 — chapterId 그대로 사용) */
 export async function getPagesByChapter(chapterId: string) {
   return db
     .select()
     .from(pages)
     .where(eq(pages.chapterId, chapterId))
     .orderBy(pages.position);
+}
+
+/** 챕터의 페이지 목록 (resolve 포함 — linked 챕터는 source의 페이지 반환) */
+export async function getResolvedPagesByChapter(chapterId: string) {
+  const resolved = await resolveSourceChapterId(chapterId);
+  return getPagesByChapter(resolved);
 }
 
 /** 단일 페이지 조회 */
@@ -87,8 +94,10 @@ export async function reorderPages(items: { id: string; position: number }[]) {
   );
 }
 
-/** 챕터의 페이지 이미지 URL 목록 (null 제외) */
+/** 챕터의 페이지 이미지 URL 목록 (null 제외, linked 챕터는 빈 배열) */
 export async function getPageImageUrls(chapterId: string): Promise<string[]> {
+  // linked 챕터는 자체 페이지가 없으므로 이미지 정리 불필요
+  if (await isLinkedChapter(chapterId)) return [];
   const rows = await db
     .select({ imageUrl: pages.imageUrl })
     .from(pages)

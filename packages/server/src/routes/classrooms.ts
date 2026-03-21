@@ -16,6 +16,7 @@ import {
   getClassroomImageUrls,
   findSharedClassroomImageUrls,
 } from '../services/classroom.service.js';
+import { getChaptersByClassroom, getLinkedChapterIds } from '../services/chapter.service.js';
 import { removeFile, urlToStoragePath, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
 
 export async function classroomRoutes(app: FastifyInstance) {
@@ -114,6 +115,25 @@ export async function classroomRoutes(app: FastifyInstance) {
     const isOwner = await isClassroomOwner(request.params.id, request.user.sub);
     if (!isOwner) {
       return reply.status(403).send({ error: 'Not the classroom owner' });
+    }
+
+    // source 챕터가 다른 교실의 linked 챕터에 연결되어 있으면 삭제 차단
+    const chaptersInClassroom = await getChaptersByClassroom(request.params.id);
+    const sourceChaptersWithLinks = chaptersInClassroom.filter(
+      (ch) => !ch.sourceChapterId, // source 챕터만 (linked가 아닌 것)
+    );
+    // 각 source 챕터가 외부 linked를 가지고 있는지 확인 (getChaptersByClassroom은 이미 페이지를 포함)
+    // → linked 챕터는 sourceChapterId가 이 교실의 챕터 중 하나를 가리킴
+    if (sourceChaptersWithLinks.length > 0) {
+      for (const ch of sourceChaptersWithLinks) {
+        const linkedIds = await getLinkedChapterIds(ch.id);
+        if (linkedIds.length > 0) {
+          return reply.status(403).send({
+            error: '이 교실의 챕터를 공유하는 다른 학급이 있어 삭제할 수 없습니다. 공유된 챕터를 먼저 삭제하세요.',
+            linkedChapterIds: linkedIds,
+          });
+        }
+      }
     }
 
     // Storage 파일 정리: orphan 이미지만 삭제 (다른 교실에서 공유되지 않는 것)

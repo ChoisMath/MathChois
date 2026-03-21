@@ -57,15 +57,21 @@ export async function getChapterStudentSummary(classroomId: string, pageIds: str
     .innerJoin(profiles, eq(classroomMembers.studentId, profiles.id))
     .where(eq(classroomMembers.classroomId, classroomId));
 
-  // 해당 페이지들의 학생 필기 존재 여부
-  const notes = await db
-    .select({
-      studentId: studentNotes.studentId,
-      pageId: studentNotes.pageId,
-      updatedAt: studentNotes.updatedAt,
-    })
-    .from(studentNotes)
-    .where(inArray(studentNotes.pageId, pageIds));
+  // 해당 페이지들의 학생 필기 존재 여부 (교실 멤버만 필터링 — 공유 페이지 시 다른 교실 학생 제외)
+  const memberIds = members.map((m) => m.studentId);
+  const notes = memberIds.length > 0
+    ? await db
+        .select({
+          studentId: studentNotes.studentId,
+          pageId: studentNotes.pageId,
+          updatedAt: studentNotes.updatedAt,
+        })
+        .from(studentNotes)
+        .where(and(
+          inArray(studentNotes.pageId, pageIds),
+          inArray(studentNotes.studentId, memberIds),
+        ))
+    : [];
 
   return { members, notes };
 }

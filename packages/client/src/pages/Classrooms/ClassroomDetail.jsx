@@ -63,7 +63,14 @@ function SortableChapterCard({ ch, isTeacher, onDelete, onCardClick, onDownloadP
           </button>
         )}
 
-        <p className="font-semibold text-gray-900 leading-snug flex-1">{ch.title}</p>
+        <p className="font-semibold text-gray-900 leading-snug flex-1">
+          {ch.title}
+          {ch.sourceChapterId && (
+            <span className="ml-1.5 inline-block px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-100 text-purple-700 align-middle">
+              공유
+            </span>
+          )}
+        </p>
 
         {/* 편집/삭제 버튼 (교사 전용) */}
         {isTeacher && (
@@ -345,6 +352,7 @@ const ClassroomDetail = () => {
       setDeleteTarget(null);
       fetchData();
     } catch (err) {
+      window.alert(err.message || '챕터 삭제에 실패했습니다.');
       console.error('[ClassroomDetail] 챕터 삭제 오류:', err);
     }
     setDeleting(false);

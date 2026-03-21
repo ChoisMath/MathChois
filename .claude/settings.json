@@ -1,12 +1,30 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(grep -r import.*supabase /e/Projects/MathChois/packages/client/src)",
+      "Bash(npm list:*)"
+    ]
+  },
   "mcpServers": {
     "playwright": {
       "command": "cmd",
-      "args": ["/c", "npx", "@playwright/mcp@latest"]
+      "args": [
+        "/c",
+        "npx",
+        "@playwright/mcp@latest"
+      ]
     },
     "chrome-devtools": {
       "command": "cmd",
-      "args": ["/c", "npx", "chrome-devtools-mcp@latest"]
+      "args": [
+        "/c",
+        "npx",
+        "chrome-devtools-mcp@latest"
+      ]
     }
+  },
+  "enabledPlugins": {
+    "skill-creator@claude-plugins-official": true
   }
 }

@@ -241,13 +241,60 @@ student_notes.upsert({
 
 ---
 
+## Excalidraw penMode 강제 해제 (Critical — 스타일러스 지원)
+
+### 문제
+Excalidraw 라이브러리는 스타일러스(Apple Pencil, Samsung S Pen)를 처음 감지하는 순간 내부적으로 `appState.penMode = true`를 설정한다. penMode가 활성화되면 freedraw 모드에서 모든 터치(finger) 입력이 차단된다. 이것은 라이브러리 자체 동작이며, 우리 코드가 아닌 곳에서 발생한다.
+
+### 증상
+- 스타일러스로 한 번 필기한 뒤 손가락 터치가 완전히 먹히지 않음
+- 페이지를 새로고침하면 정상 동작 (penMode가 false로 리셋되기 때문)
+
+### Fix (commit 39f1d4c)
+5개 뷰어의 Excalidraw `onChange` 핸들러에 penMode 감지 로직 추가:
+
+```js
+// StudyViewer.jsx, TeacherStudyViewer.jsx, StudentWorkViewer.jsx,
+// AssignmentStudyViewer.jsx, AssignmentWorkViewer.jsx 모두 동일 패턴
+function handleExcalidrawChange(elements, appState) {
+  if (appState.penMode) {
+    excalidrawAPIRef.current?.updateScene({
+      appState: { penMode: false },
+      commitToHistory: false,
+    });
+  }
+  // ... 나머지 저장 로직
+}
+```
+
+**중요**: 이 패턴은 Excalidraw를 스타일러스 환경에서 사용하는 한 반드시 유지해야 한다. 뷰어를 새로 추가하거나 onChange 핸들러를 교체할 때 이 체크를 빠뜨리면 스타일러스 사용 직후 터치가 먹히지 않는 버그가 재현된다.
+
+---
+
+## 터치/팜 리젝션 전략 (useExcalidrawTouch.js)
+
+스타일러스 + 손가락 동시 사용 시 팜(손바닥) 오인식 방지를 위한 3중 방어:
+
+| 레이어 | 구현 | 역할 |
+|--------|------|------|
+| OS 레벨 | iPad / Samsung 기기 자체 | 가장 강력한 팜 리젝션 — 앱이 개입할 필요 없음 |
+| warmup (300ms) | draw 모드 진입 시 터치 억제 | S펜 배럴 버튼 누를 때 즉각적 오인식 방지 |
+| 크기 기반 | `radiusX > 25px` 터치 무시 | 손바닥처럼 넓은 터치 차단 |
+
+**제거된 항목 (commit 6c970d8)**: `penLastTimeRef` — 펜 사용 후 500ms 동안 터치 차단하는 앱 레벨 펜 우선순위. OS 팜 리젝션과 중복이며, 일부 기기에서 터치를 영구 차단하는 부작용이 있어 제거.
+
+**2손가락 핀치줌**: freedraw 모드에서도 2손가락 핀치로 줌/팬 가능. 이 로직은 유지됨.
+
+---
+
 ## 알려진 제약사항
 
 1. **EyeDropper**: Chrome/Edge 95+만 지원, Firefox 미지원
 2. **이미지 이동**: BG element locked 해제로 이동 가능하나, 이동 후 별도 re-lock 필요
-3. **필기→뷰 모드 전환**: debounce 1500ms 중 전환 시 마지막 필기 손실 가능성
+3. **필기→뷰 모드 전환**: debounce 1500ms 중 전환 시 마지막 필기 손실 가능성 (save-on-unmount로 완화됨)
 4. **Excalidraw v0.18 API 주의사항**:
    - `history.undo()` / `history.redo()` 없음 → `document.dispatchEvent(KeyboardEvent)` 사용
    - `history`는 `clear()` 만 있음
    - `updateScene()` 기본값은 `commitToHistory: true` → 프로그래매틱 호출 시 반드시 `commitToHistory: false` 명시
 5. **CORS**: `fetchAsDataUrl`은 Storage 버킷이 public이고 CORS 허용이어야 작동
+6. **penMode 리셋**: Excalidraw에 스타일러스 지원을 추가하거나 onChange 핸들러를 교체할 때마다 penMode 강제 해제 패턴을 포함해야 함 (위 "Excalidraw penMode 강제 해제" 섹션 참고)

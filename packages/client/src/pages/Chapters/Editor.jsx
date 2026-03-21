@@ -32,6 +32,9 @@ const ChapterEditor = () => {
   const [pages, setPages] = useState([]);
   const [selectedPage, setSelectedPage] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // linked 챕터 여부 (공유된 챕터 — 페이지 편집 불가)
+  const isLinked = !!chapter?.sourceChapterId;
   const [uploading, setUploading]       = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
   const [deleting, setDeleting] = useState(false);
@@ -322,39 +325,50 @@ const ChapterEditor = () => {
               {chapter?.title}
             </h1>
           )}
+          {isLinked && (
+            <span className="ml-2 px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
+              공유 챕터
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowExportModal(true)}
-            title="내보내기"
-            className="inline-flex items-center justify-center p-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
-          >
-            <Upload className="h-5 w-5" />
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleUpload}
-            className="hidden"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            title={uploading ? (uploadProgress.total > 1 ? `업로드 중... (${uploadProgress.done}/${uploadProgress.total})` : '업로드 중...') : '이미지 페이지 추가'}
-            className="inline-flex items-center justify-center p-2 border border-transparent rounded-md shadow-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
-          >
-            {uploading ? <Loader className="animate-spin h-5 w-5" /> : <Plus className="h-5 w-5" />}
-          </button>
-          <button
-            onClick={() => { setShowYouTubeModal(true); setYoutubeUrl(''); setYoutubeError(''); }}
-            disabled={uploading}
-            title="YouTube 영상 페이지 추가"
-            className="inline-flex items-center justify-center p-2 border border-transparent rounded-md shadow-sm bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 cursor-pointer"
-          >
-            <Video className="h-5 w-5" />
-          </button>
+          {!isLinked && (
+            <button
+              onClick={() => setShowExportModal(true)}
+              title="내보내기"
+              className="inline-flex items-center justify-center p-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
+            >
+              <Upload className="h-5 w-5" />
+            </button>
+          )}
+          {!isLinked && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleUpload}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                title={uploading ? (uploadProgress.total > 1 ? `업로드 중... (${uploadProgress.done}/${uploadProgress.total})` : '업로드 중...') : '이미지 페이지 추가'}
+                className="inline-flex items-center justify-center p-2 border border-transparent rounded-md shadow-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+              >
+                {uploading ? <Loader className="animate-spin h-5 w-5" /> : <Plus className="h-5 w-5" />}
+              </button>
+              <button
+                onClick={() => { setShowYouTubeModal(true); setYoutubeUrl(''); setYoutubeError(''); }}
+                disabled={uploading}
+                title="YouTube 영상 페이지 추가"
+                className="inline-flex items-center justify-center p-2 border border-transparent rounded-md shadow-sm bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 cursor-pointer"
+              >
+                <Video className="h-5 w-5" />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -386,8 +400,9 @@ const ChapterEditor = () => {
                       index={idx}
                       isSelected={selectedPage?.id === pg.id}
                       onSelectPage={setSelectedPage}
-                      onDeletePage={handleDeletePage}
+                      onDeletePage={isLinked ? null : handleDeletePage}
                       isDeleting={deleting}
+                      disabled={isLinked}
                     />
                   ))}
                 </SortableContext>
@@ -469,7 +484,7 @@ const ChapterEditor = () => {
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
             <h2 className="text-lg font-bold text-gray-900 mb-1">챕터 내보내기</h2>
             <p className="text-sm text-gray-500 mb-4 whitespace-normal break-keep">
-              <span className="font-medium text-gray-700">"{chapter?.title}"</span>을(를) 복사할 클래스를 선택하세요.
+              <span className="font-medium text-gray-700">"{chapter?.title}"</span>을(를) 공유할 클래스를 선택하세요.
             </p>
 
             {exportDone ? (

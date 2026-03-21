@@ -2,7 +2,33 @@ import { eq, desc, and, sql, inArray } from 'drizzle-orm';
 import { db } from '../config/database.js';
 import { chapters, pages } from '../db/schema.js';
 
-/** 교실의 챕터 목록 (페이지 수 포함) — 2쿼리로 N+1 제거 */
+// ─── Source Reference 헬퍼 ──────────────────────────
+
+/** 원본 chapterId 추적 (linked 챕터면 source 반환, 아니면 자기 자신) */
+export async function resolveSourceChapterId(chapterId: string): Promise<string> {
+  const ch = await getChapterById(chapterId);
+  if (!ch) return chapterId;
+  return ch.sourceChapterId ?? chapterId;
+}
+
+/** 이 챕터를 source로 참조하는 linked 챕터 ID 목록 */
+export async function getLinkedChapterIds(sourceChapterId: string): Promise<string[]> {
+  const rows = await db
+    .select({ id: chapters.id })
+    .from(chapters)
+    .where(eq(chapters.sourceChapterId, sourceChapterId));
+  return rows.map((r) => r.id);
+}
+
+/** linked 챕터 여부 (sourceChapterId가 null이 아닌지) */
+export async function isLinkedChapter(chapterId: string): Promise<boolean> {
+  const ch = await getChapterById(chapterId);
+  return ch?.sourceChapterId != null;
+}
+
+// ─── 기존 함수 ──────────────────────────────────────
+
+/** 교실의 챕터 목록 (페이지 수 포함) — linked 챕터는 source 챕터의 페이지 사용 */
 export async function getChaptersByClassroom(classroomId: string) {
   const chapRows = await db
     .select()
@@ -10,12 +36,13 @@ export async function getChaptersByClassroom(classroomId: string) {
     .where(eq(chapters.classroomId, classroomId))
     .orderBy(chapters.position);
 
-  const chapterIds = chapRows.map((c) => c.id);
-  const allPages = chapterIds.length > 0
+  // effectiveId = sourceChapterId ?? id (linked 챕터는 source의 페이지를 사용)
+  const effectiveIds = [...new Set(chapRows.map((c) => c.sourceChapterId ?? c.id))];
+  const allPages = effectiveIds.length > 0
     ? await db
         .select({ id: pages.id, chapterId: pages.chapterId, position: pages.position })
         .from(pages)
-        .where(inArray(pages.chapterId, chapterIds))
+        .where(inArray(pages.chapterId, effectiveIds))
         .orderBy(pages.position)
     : [];
 
@@ -27,7 +54,7 @@ export async function getChaptersByClassroom(classroomId: string) {
 
   return chapRows.map((ch) => ({
     ...ch,
-    pages: pagesByChapter.get(ch.id) ?? [],
+    pages: pagesByChapter.get(ch.sourceChapterId ?? ch.id) ?? [],
   }));
 }
 
@@ -47,6 +74,7 @@ export async function createChapter(data: {
   title: string;
   description?: string | null;
   position?: number;
+  sourceChapterId?: string | null;
 }) {
   // position 자동 계산: 기존 최대값 + 1
   let position = data.position;
@@ -65,6 +93,7 @@ export async function createChapter(data: {
       title: data.title,
       description: data.description ?? null,
       position,
+      sourceChapterId: data.sourceChapterId ?? null,
     })
     .returning();
   return created;

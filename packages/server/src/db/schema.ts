@@ -49,8 +49,10 @@ export const chapters = pgTable('chapters', {
   title: text('title').notNull(),
   description: text('description'),
   position: integer('position').notNull().default(0),
+  sourceChapterId: uuid('source_chapter_id').references((): any => chapters.id, { onDelete: 'set null' }),
 }, (t) => [
   index('idx_chapters_classroom').on(t.classroomId),
+  index('idx_chapters_source').on(t.sourceChapterId),
 ]);
 
 // ─── pages ──────────────────────────────────────────

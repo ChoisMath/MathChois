@@ -19,7 +19,7 @@ import {
   getAssignmentNotesBulk,
   upsertAssignmentNote,
 } from '../services/note.service.js';
-import { getPagesByChapter } from '../services/page.service.js';
+import { getResolvedPagesByChapter } from '../services/page.service.js';
 import { getChapterById } from '../services/chapter.service.js';
 import type { ExcalidrawData } from '@mathchois/shared';
 
@@ -83,7 +83,7 @@ export async function noteRoutes(app: FastifyInstance) {
     if (!chapter) {
       return reply.status(404).send({ error: 'Chapter not found' });
     }
-    const pages = await getPagesByChapter(chapter.id);
+    const pages = await getResolvedPagesByChapter(chapter.id);
     const pageIds = pages.map((p) => p.id);
     return getChapterStudentSummary(chapter.classroomId, pageIds);
   });

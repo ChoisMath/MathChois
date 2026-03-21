@@ -2,22 +2,23 @@ import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import {
-  getPagesByChapter,
+  getResolvedPagesByChapter,
   getPageById,
   createPage,
   createPages,
   deletePage,
   reorderPages,
 } from '../services/page.service.js';
+import { isLinkedChapter } from '../services/chapter.service.js';
 
 export async function pageRoutes(app: FastifyInstance) {
 
-  // ─── GET /api/chapters/:chapterId/pages — 페이지 목록 ──
+  // ─── GET /api/chapters/:chapterId/pages — 페이지 목록 (linked 챕터는 source 페이지 반환) ──
 
   app.get<{ Params: { chapterId: string } }>('/api/chapters/:chapterId/pages', {
     preHandler: [authenticate],
   }, async (request) => {
-    return getPagesByChapter(request.params.chapterId);
+    return getResolvedPagesByChapter(request.params.chapterId);
   });
 
   // ─── POST /api/chapters/:chapterId/pages — 페이지 생성 ──
@@ -29,6 +30,11 @@ export async function pageRoutes(app: FastifyInstance) {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
     const { chapterId } = request.params;
+
+    // linked 챕터에는 페이지 추가 불가 (source 챕터에서만 편집)
+    if (await isLinkedChapter(chapterId)) {
+      return reply.status(403).send({ error: '공유된 챕터에는 페이지를 추가할 수 없습니다. 원본 챕터에서 편집하세요.' });
+    }
     const body = request.body as Record<string, unknown>;
 
     // 배치 삽입

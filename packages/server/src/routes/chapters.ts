@@ -9,8 +9,10 @@ import {
   deleteChapter,
   reorderChapters,
   getChapterClassroomId,
+  getLinkedChapterIds,
+  isLinkedChapter,
 } from '../services/chapter.service.js';
-import { getPagesByChapter, createPages, getPageImageUrls, findSharedImageUrls } from '../services/page.service.js';
+import { getPageImageUrls, findSharedImageUrls } from '../services/page.service.js';
 import { isClassroomOwner } from '../services/classroom.service.js';
 import { removeFile, urlToStoragePath, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
 
@@ -99,7 +101,16 @@ export async function chapterRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Not the classroom owner' });
     }
 
-    // Storage 파일 정리: orphan 이미지만 삭제 (다른 챕터에서 공유되지 않는 것)
+    // source 챕터 삭제 시: linked 챕터가 있으면 차단
+    const linkedIds = await getLinkedChapterIds(request.params.id);
+    if (linkedIds.length > 0) {
+      return reply.status(403).send({
+        error: '이 챕터를 공유하는 다른 학급이 있어 삭제할 수 없습니다. 공유된 챕터를 먼저 삭제하세요.',
+        linkedChapterIds: linkedIds,
+      });
+    }
+
+    // Storage 파일 정리: linked 챕터는 자체 페이지가 없으므로 빈 배열 반환됨
     const imageUrls = await getPageImageUrls(request.params.id);
     const sharedUrls = await findSharedImageUrls(imageUrls, request.params.id);
     const sharedSet = new Set(sharedUrls);
@@ -147,7 +158,7 @@ export async function chapterRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // ─── POST /api/chapters/:id/import — 챕터 복제 (import/export) ──
+  // ─── POST /api/chapters/:id/import — 챕터 공유 (source reference) ──
 
   app.post<{
     Params: { id: string };
@@ -160,32 +171,27 @@ export async function chapterRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Source chapter not found' });
     }
 
-    const isOwner = await isClassroomOwner(request.body.targetClassroomId, request.user.sub);
-    if (!isOwner) {
+    // source 챕터의 교실 소유권 확인
+    const isSourceOwner = await isClassroomOwner(sourceChapter.classroomId, request.user.sub);
+    if (!isSourceOwner) {
+      return reply.status(403).send({ error: 'Not the source classroom owner' });
+    }
+
+    const isTargetOwner = await isClassroomOwner(request.body.targetClassroomId, request.user.sub);
+    if (!isTargetOwner) {
       return reply.status(403).send({ error: 'Not the target classroom owner' });
     }
 
-    // 소스 챕터의 페이지 가져오기
-    const sourcePages = await getPagesByChapter(sourceChapter.id);
+    // 체인 방지: source가 이미 linked이면 원본의 sourceChapterId 사용
+    const effectiveSourceId = sourceChapter.sourceChapterId ?? sourceChapter.id;
 
-    // 새 챕터 생성
+    // 새 챕터 생성 (페이지 복제 없이 source 참조만 설정)
     const newChapter = await createChapter({
       classroomId: request.body.targetClassroomId,
       title: sourceChapter.title,
       description: sourceChapter.description,
+      sourceChapterId: effectiveSourceId,
     });
-
-    // 페이지 복제 (같은 image_url 공유)
-    if (sourcePages.length > 0) {
-      await createPages(
-        sourcePages.map((pg) => ({
-          chapterId: newChapter.id,
-          imageUrl: pg.imageUrl,
-          videoUrl: pg.videoUrl,
-          position: pg.position,
-        })),
-      );
-    }
 
     return reply.status(201).send(newChapter);
   });
