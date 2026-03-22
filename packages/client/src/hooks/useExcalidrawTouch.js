@@ -58,7 +58,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         penLiftTimeRef.current = 0;
 
         // S Pen 배럴 버튼 → 임시 지우개 모드
-        if (e.button === 5 || (e.buttons & 32)) {
+        // button===2: secondary(사이드 버튼), button===5: eraser tip
+        if (e.button === 2 || e.button === 5 || (e.buttons & 2) || (e.buttons & 32)) {
           const api = excalidrawAPIRef.current;
           if (api && !barrelEraserRef.current) {
             prevToolRef.current = api.getAppState()?.activeTool?.type || 'freedraw';

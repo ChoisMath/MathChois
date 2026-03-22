@@ -119,8 +119,8 @@ export function useScribbleErase({ excalidrawAPIRef, containerRef, enabledRef })
       });
     };
 
-    // 버블 단계에서 감지 (Excalidraw가 먼저 처리한 후)
-    container.addEventListener('pointerup', handlePointerUp, { capture: false });
-    return () => container.removeEventListener('pointerup', handlePointerUp, { capture: false });
+    // 캡처 단계에서 감지 + requestAnimationFrame으로 Excalidraw 커밋 후 분석
+    container.addEventListener('pointerup', handlePointerUp, { capture: true, passive: true });
+    return () => container.removeEventListener('pointerup', handlePointerUp, { capture: true });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 }
