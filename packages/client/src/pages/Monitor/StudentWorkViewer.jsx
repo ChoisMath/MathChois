@@ -24,6 +24,7 @@ import {
   EXCALIDRAW_UI_OPTIONS,
   TOUCH_CSS,
   waitForLayout,
+  clearImageCacheForUrl,
 } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
@@ -276,6 +277,28 @@ const StudentWorkViewer = () => {
     } catch (err) {
       console.error('scene 재구성 실패:', err);
       excApi.updateScene({ elements: [...studentEls.current, ...teacherEls.current], commitToHistory: false });
+    }
+  }, []);
+
+  /* ── 이미지 리로드 (원본 비율로 재배치) ── */
+  const handleReloadImage = useCallback(async () => {
+    const excApi = excalidrawAPIRef.current;
+    if (!currentPageRef.current?.imageUrl || !excApi || !containerRef.current) return;
+    bgPositionRef.current = null;
+    clearImageCacheForUrl(currentPageRef.current.imageUrl);
+    try {
+      const { dataUrl, mimeType } = await fetchAsDataUrl(currentPageRef.current.imageUrl);
+      const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
+      const { width: W, height: H } = await waitForLayout(containerRef.current);
+      const pos = calculateBgPosition(W, H, iW, iH);
+      bgPositionRef.current = { x: pos.x, y: pos.y, width: pos.width, height: pos.height };
+      excApi.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);
+      await new Promise(r => requestAnimationFrame(r));
+      const preserved = excApi.getSceneElements().filter(el => el.id !== BG_ELEMENT_ID);
+      const bgEl = createBgElement(pos.x, pos.y, pos.width, pos.height);
+      excApi.updateScene({ elements: [bgEl, ...preserved], commitToHistory: false });
+    } catch (err) {
+      console.error('이미지 리로드 실패:', err);
     }
   }, []);
 
@@ -580,6 +603,7 @@ const StudentWorkViewer = () => {
           screenLocked={screenLocked}
           onToggleScreenLock={handleToggleScreenLock}
           onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
+          onReloadImage={handleReloadImage}
         />
       )}
 

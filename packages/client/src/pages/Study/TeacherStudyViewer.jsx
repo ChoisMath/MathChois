@@ -23,6 +23,7 @@ import {
   EXCALIDRAW_UI_OPTIONS,
   TOUCH_CSS,
   waitForLayout,
+  clearImageCacheForUrl,
 } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
@@ -328,6 +329,29 @@ const TeacherStudyViewer = () => {
     }
   }, []);
 
+  /* ── 이미지 리로드 (원본 비율로 재배치) ── */
+  const handleReloadImage = useCallback(async () => {
+    const page = currentPageRef.current;
+    const excApi = excalidrawAPIRef.current;
+    if (!page?.imageUrl || !excApi || !containerRef.current) return;
+    bgPositionRef.current = null;
+    clearImageCacheForUrl(page.imageUrl);
+    try {
+      const { dataUrl, mimeType } = await fetchAsDataUrl(page.imageUrl);
+      const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
+      const { width: W, height: H } = await waitForLayout(containerRef.current);
+      const pos = calculateBgPosition(W, H, iW, iH);
+      bgPositionRef.current = { x: pos.x, y: pos.y, width: pos.width, height: pos.height };
+      excApi.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);
+      await new Promise(r => requestAnimationFrame(r));
+      const preserved = excApi.getSceneElements().filter(el => el.id !== BG_ELEMENT_ID);
+      const bgEl = createBgElement(pos.x, pos.y, pos.width, pos.height);
+      excApi.updateScene({ elements: [bgEl, ...preserved], commitToHistory: false });
+    } catch (err) {
+      console.error('이미지 리로드 실패:', err);
+    }
+  }, []);
+
   /* ── 파생 값 ── */
   const currentIndex = pages.findIndex((p) => p.id === currentPage?.id);
   const prevPage = currentIndex > 0                ? pages[currentIndex - 1] : null;
@@ -465,6 +489,7 @@ const TeacherStudyViewer = () => {
           screenLocked={screenLocked}
           onToggleScreenLock={handleToggleScreenLock}
           onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
+          onReloadImage={handleReloadImage}
         />
       )}
 

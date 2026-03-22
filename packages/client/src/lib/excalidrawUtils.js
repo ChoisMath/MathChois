@@ -132,6 +132,15 @@ export function getImageNaturalSize(dataUrl) {
   return promise;
 }
 
+/* ─────────── 특정 URL의 이미지 캐시 무효화 ─────────── */
+export function clearImageCacheForUrl(url) {
+  const cached = _imgCache.get(url);
+  _imgCache.delete(url);
+  if (cached) {
+    cached.then(({ dataUrl }) => _sizeCache.delete(dataUrl)).catch(() => {});
+  }
+}
+
 /* ─────────── 인접 페이지 이미지 백그라운드 프리패치 ─────────── */
 export function prefetchImages(urls) {
   urls.forEach((url) => {

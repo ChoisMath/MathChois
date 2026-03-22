@@ -4,7 +4,7 @@ import {
   MousePointer, Pen, Type, Square, Circle, Triangle,
   Eraser, Minus, Trash2, Pipette, Plus, Scissors,
   SlidersHorizontal, Hand, Shapes, ChevronDown, ImagePlus, Dot,
-  Lock, Unlock,
+  Lock, Unlock, RefreshCw,
 } from 'lucide-react';
 import {
   BG_ELEMENT_ID,
@@ -29,7 +29,7 @@ const SHAPE_TOOL_ICONS = {
 const SHAPE_TOOLS    = ['rectangle', 'ellipse', 'triangle'];
 const SAVEABLE_TOOLS = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse', 'triangle'];
 
-function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onToggleScreenLock, onBaseWidthChange }) {
+function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onToggleScreenLock, onBaseWidthChange, onReloadImage }) {
   const [activeTool, setActiveTool]       = useState(() => {
     const saved = localStorage.getItem('mc_active_tool') || 'freedraw';
     return SAVEABLE_TOOLS.includes(saved) ? saved : 'freedraw';
@@ -336,6 +336,22 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
     }
   };
 
+  /* ── 배경 이미지 가로/세로 독립 리사이즈 ── */
+  const handleResizeBg = (axis, delta) => {
+    const api = apiRef.current;
+    if (!api) return;
+    const els = api.getSceneElements();
+    if (!els.find(el => el.id === BG_ELEMENT_ID)) return;
+    const factor = 1 + delta;
+    const updated = els.map(el => {
+      if (el.id !== BG_ELEMENT_ID) return el;
+      return axis === 'width'
+        ? { ...el, width: Math.max(el.width * factor, 50) }
+        : { ...el, height: Math.max(el.height * factor, 50) };
+    });
+    api.updateScene({ elements: updated, commitToHistory: false });
+  };
+
   /* ── 이미지 삽입 ── */
   const handleImageFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -535,6 +551,47 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
         }`}>
         <Hand className="h-4 w-4" />
       </button>
+
+      {/* 이미지 위치 초기화 (리로드) */}
+      {onReloadImage && (
+        <button onClick={onReloadImage}
+          title="이미지 위치 초기화 — 원본 비율로 재배치"
+          className="p-1.5 rounded-md text-gray-600 hover:bg-gray-100 cursor-pointer flex-shrink-0">
+          <RefreshCw className="h-4 w-4" />
+        </button>
+      )}
+
+      {/* 이미지 가로/세로 비율 조정 (이동 모드일 때만) */}
+      {imageMoveMode && (
+        <>
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            <span className="text-[10px] text-gray-400 w-3">W</span>
+            <button onClick={() => handleResizeBg('width', -0.05)}
+              title="너비 축소 (-5%)"
+              className="p-1 rounded text-gray-600 hover:bg-gray-100 cursor-pointer">
+              <Minus className="h-3 w-3" />
+            </button>
+            <button onClick={() => handleResizeBg('width', 0.05)}
+              title="너비 확대 (+5%)"
+              className="p-1 rounded text-gray-600 hover:bg-gray-100 cursor-pointer">
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            <span className="text-[10px] text-gray-400 w-3">H</span>
+            <button onClick={() => handleResizeBg('height', -0.05)}
+              title="높이 축소 (-5%)"
+              className="p-1 rounded text-gray-600 hover:bg-gray-100 cursor-pointer">
+              <Minus className="h-3 w-3" />
+            </button>
+            <button onClick={() => handleResizeBg('height', 0.05)}
+              title="높이 확대 (+5%)"
+              className="p-1 rounded text-gray-600 hover:bg-gray-100 cursor-pointer">
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+        </>
+      )}
 
       {/* 이미지 삽입 */}
       <button onClick={() => imageInputRef.current?.click()} title="이미지 삽입"
