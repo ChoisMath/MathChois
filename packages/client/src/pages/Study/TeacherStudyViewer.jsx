@@ -26,6 +26,7 @@ import {
   clearImageCacheForUrl,
 } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
+import { useScribbleErase } from '../../hooks/useScribbleErase';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
@@ -76,6 +77,8 @@ const TeacherStudyViewer = () => {
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
   useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
+  const alwaysEnabledRef = useRef(true);
+  useScribbleErase({ excalidrawAPIRef, containerRef, enabledRef: alwaysEnabledRef });
 
   useEffect(() => {
     mountedRef.current = true;

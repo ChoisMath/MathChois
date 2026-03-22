@@ -24,6 +24,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
   const penNearbyRef         = useRef(false);  // 펜 호버 감지 (화면 근처)
   const penNearbyTimeoutRef  = useRef(null);   // 호버 타임아웃 ID
   const suspectTouchRef      = useRef(null);   // { pointerId, time } — 의심 터치 (소급 취소용)
+  const barrelEraserRef      = useRef(false);  // S Pen 배럴 버튼 지우개 활성 중
+  const prevToolRef          = useRef('freedraw'); // 배럴 활성 전 도구 저장
 
   useEffect(() => {
     const container = containerRef.current;
@@ -50,10 +52,21 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
 
-      // 펜 활성 추적 + 의심 터치 소급 취소
+      // 펜 활성 추적 + 배럴 버튼 감지 + 의심 터치 소급 취소
       if (e.pointerType === 'pen') {
         penActiveRef.current = true;
         penLiftTimeRef.current = 0;
+
+        // S Pen 배럴 버튼 → 임시 지우개 모드
+        if (e.button === 5 || (e.buttons & 32)) {
+          const api = excalidrawAPIRef.current;
+          if (api && !barrelEraserRef.current) {
+            prevToolRef.current = api.getAppState()?.activeTool?.type || 'freedraw';
+            api.setActiveTool({ type: 'eraser' });
+            barrelEraserRef.current = true;
+          }
+        }
+
         // 의심 터치가 150ms 이내에 있었으면 소급 취소
         const suspect = suspectTouchRef.current;
         if (suspect && Date.now() - suspect.time < 150) {
@@ -206,6 +219,12 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       if (e.pointerType === 'pen') {
         penActiveRef.current = false;
         penLiftTimeRef.current = Date.now();
+        // 배럴 지우개 해제 → 이전 도구 복귀
+        if (barrelEraserRef.current) {
+          barrelEraserRef.current = false;
+          const api = excalidrawAPIRef.current;
+          if (api) api.setActiveTool({ type: prevToolRef.current });
+        }
       }
       if (e.pointerType === 'touch') {
         if (suspectTouchRef.current?.pointerId === e.pointerId) {
@@ -406,5 +425,5 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     drawModeWarmupRef.current = Date.now();
   }, []);
 
-  return { isTouchingRef, triggerPalmRejectionWarmup };
+  return { isTouchingRef, triggerPalmRejectionWarmup, barrelEraserRef };
 }

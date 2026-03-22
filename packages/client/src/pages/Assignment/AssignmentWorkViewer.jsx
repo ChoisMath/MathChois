@@ -21,6 +21,7 @@ import {
   clearImageCacheForUrl,
 } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
+import { useScribbleErase } from '../../hooks/useScribbleErase';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import FileAttachmentPanel from './components/FileAttachmentPanel';
 import { extractYouTubeId, getYouTubeEmbedUrl, getYouTubeThumbnail } from '../../lib/youtubeUtils';
@@ -81,6 +82,7 @@ const AssignmentWorkViewer = () => {
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
   const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
+  useScribbleErase({ excalidrawAPIRef, containerRef, enabledRef: commentModeRef });
 
   useEffect(() => {
     mountedRef.current = true;

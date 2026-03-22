@@ -27,6 +27,7 @@ import {
   clearImageCacheForUrl,
 } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
+import { useScribbleErase } from '../../hooks/useScribbleErase';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { extractYouTubeId, getYouTubeEmbedUrl, getYouTubeThumbnail } from '../../lib/youtubeUtils';
 
@@ -192,6 +193,7 @@ const StudentWorkViewer = () => {
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
   const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
+  useScribbleErase({ excalidrawAPIRef, containerRef, enabledRef: commentModeRef });
 
   /* ── 페이지 변경 시 scene 데이터 로드 ── */
   /* ── 페이지 이동 시 pending 저장 flush ── */

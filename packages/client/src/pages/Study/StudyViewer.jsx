@@ -13,6 +13,7 @@ import DrawingToolbar from '../../components/study/DrawingToolbar';
 import PageNavOverlay from '../../components/study/PageNavOverlay';
 import { BG_ELEMENT_ID, BG_FILE_ID, ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, TOUCH_CSS, GRID_STYLE, EXCALIDRAW_UI_OPTIONS, fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages, calculateBgPosition, waitForLayout, clearImageCacheForUrl } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
+import { useScribbleErase } from '../../hooks/useScribbleErase';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
@@ -370,6 +371,7 @@ const StudyViewer = () => {
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
   const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
+  useScribbleErase({ excalidrawAPIRef, containerRef, enabledRef: drawModeRef });
 
 
   useEffect(() => () => { mountedRef.current = false; }, []);
