@@ -47,27 +47,11 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     container.addEventListener('gesturechange', preventGesture, { passive: false });
     container.addEventListener('gestureend',    preventGesture, { passive: false });
 
-    /* ── 2-1. S Pen 배럴 버튼 — contextmenu 이벤트 대응 ── */
+    /* ── 2-1. Excalidraw 영역 contextmenu 무조건 차단 (S Pen 배럴 버튼 스크롤 방지) ── */
     const handleContextMenu = (e) => {
-      // 최근 100ms 내 pen 이벤트가 있었으면 S Pen 배럴 버튼으로 판단
-      if (penActiveRef.current ||
-          (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 100) ||
-          penNearbyRef.current) {
+      if (e.target.closest('.excalidraw')) {
         e.preventDefault();
         e.stopPropagation();
-        const api = excalidrawAPIRef.current;
-        if (api && !barrelEraserRef.current) {
-          prevToolRef.current = api.getAppState()?.activeTool?.type || 'freedraw';
-          api.setActiveTool({ type: 'eraser' });
-          barrelEraserRef.current = true;
-          // 3초 후 자동 복귀 (pointerup이 오지 않을 수 있으므로)
-          setTimeout(() => {
-            if (barrelEraserRef.current) {
-              barrelEraserRef.current = false;
-              api.setActiveTool({ type: prevToolRef.current });
-            }
-          }, 3000);
-        }
       }
     };
     container.addEventListener('contextmenu', handleContextMenu, { capture: true });
@@ -82,16 +66,11 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         penActiveRef.current = true;
         penLiftTimeRef.current = 0;
 
-        // S Pen 배럴 버튼 → 임시 지우개 모드
-        // button===2: secondary(사이드 버튼), button===5: eraser tip
-        // buttons 비트마스크는 제외 — 일부 브라우저에서 오발동 가능
-        if (e.button === 2 || e.button === 5) {
-          const api = excalidrawAPIRef.current;
-          if (api && !barrelEraserRef.current) {
-            prevToolRef.current = api.getAppState()?.activeTool?.type || 'freedraw';
-            api.setActiveTool({ type: 'eraser' });
-            barrelEraserRef.current = true;
-          }
+        // S Pen 배럴 버튼 등 비주버튼 → Excalidraw에 전달 차단 (스크롤 방지)
+        if (e.button !== 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
         }
 
         // 의심 터치가 150ms 이내에 있었으면 소급 취소
