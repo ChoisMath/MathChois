@@ -13,11 +13,11 @@ const BG_ELEMENT_ID = '__bg_image__';
 
 /* ── 스크리블 패턴 감지 ── */
 function isScribblePattern(points) {
-  if (!points || points.length < 15) return false;
+  if (!points || points.length < 8) return false;
 
-  // 1. 방향 전환(reversal) 횟수 — 연속 벡터 간 각도 변화 >100°
+  // 1. 방향 전환(reversal) 횟수 — 연속 벡터 간 각도 변화 >90°
   let reversals = 0;
-  const step = 2; // 2포인트 간격으로 벡터 계산 (노이즈 감소)
+  const step = 3; // 3포인트 간격으로 벡터 계산 (노이즈 내성 향상)
   for (let i = step * 2; i < points.length; i += step) {
     const prevDx = points[i - step][0] - points[i - step * 2][0];
     const prevDy = points[i - step][1] - points[i - step * 2][1];
@@ -29,7 +29,7 @@ function isScribblePattern(points) {
     const dot = prevDx * currDx + prevDy * currDy;
     const cross = prevDx * currDy - prevDy * currDx;
     const angle = Math.abs(Math.atan2(cross, dot));
-    if (angle > Math.PI * 0.55) reversals++; // >99°
+    if (angle > Math.PI * 0.5) reversals++; // >90°
   }
 
   // 2. 밀도 검사: 경로 길이 / 바운딩박스 대각선
@@ -48,8 +48,11 @@ function isScribblePattern(points) {
   const bboxDiag = Math.hypot(maxX - minX, maxY - minY);
   const density = bboxDiag > 1 ? pathLen / bboxDiag : 0;
 
-  // 방향 전환 3회+ AND 밀도(경로/대각선비) 높음
-  return reversals >= 3 && density > 3;
+  const result = reversals >= 2 && density > 2;
+  if (result) {
+    console.warn('[ScribbleErase] 스크리블 감지!', { reversals, density, pointsLen: points.length });
+  }
+  return result;
 }
 
 /* ── 바운딩 박스 겹침 검사 ── */
@@ -66,8 +69,8 @@ export function useScribbleErase({ excalidrawAPIRef, containerRef, enabledRef })
       if (!enabledRef?.current) return;
       if (e.pointerType !== 'pen' && e.pointerType !== 'touch') return;
 
-      // Excalidraw가 스트로크를 커밋한 후 분석
-      requestAnimationFrame(() => {
+      // Excalidraw가 스트로크를 커밋할 시간을 확보 (rAF보다 안정적)
+      setTimeout(() => {
         const api = excalidrawAPIRef.current;
         if (!api) return;
         const tool = api.getAppState()?.activeTool?.type;
@@ -80,11 +83,11 @@ export function useScribbleErase({ excalidrawAPIRef, containerRef, enabledRef })
         );
         if (freedrawEls.length === 0) return;
         const recent = freedrawEls[freedrawEls.length - 1];
-        if (!recent.points || recent.points.length < 15) return;
+        if (!recent.points || recent.points.length < 8) return;
 
         if (!isScribblePattern(recent.points)) return;
 
-        // 스크리블 바운딩 박스 계산
+        // 스크리블 바운딩 박스 계산 (절대 좌표)
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         for (const [px, py] of recent.points) {
           const ax = recent.x + px, ay = recent.y + py;
@@ -105,9 +108,7 @@ export function useScribbleErase({ excalidrawAPIRef, containerRef, enabledRef })
           }
         }
 
-        if (deleteIds.size <= 1) {
-          // 스크리블만 있고 겹치는 스트로크 없으면 스크리블만 삭제
-        }
+        console.warn('[ScribbleErase] 삭제 대상:', deleteIds.size, '개 스트로크');
 
         // 스크리블 + 겹치는 스트로크 삭제
         api.updateScene({
@@ -116,10 +117,10 @@ export function useScribbleErase({ excalidrawAPIRef, containerRef, enabledRef })
           ),
           commitToHistory: true,
         });
-      });
+      }, 150);
     };
 
-    // 캡처 단계에서 감지 + requestAnimationFrame으로 Excalidraw 커밋 후 분석
+    // 캡처 단계에서 감지
     container.addEventListener('pointerup', handlePointerUp, { capture: true, passive: true });
     return () => container.removeEventListener('pointerup', handlePointerUp, { capture: true });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

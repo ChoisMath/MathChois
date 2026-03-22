@@ -47,6 +47,31 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     container.addEventListener('gesturechange', preventGesture, { passive: false });
     container.addEventListener('gestureend',    preventGesture, { passive: false });
 
+    /* ── 2-1. S Pen 배럴 버튼 — contextmenu 이벤트 대응 ── */
+    const handleContextMenu = (e) => {
+      // 최근 100ms 내 pen 이벤트가 있었으면 S Pen 배럴 버튼으로 판단
+      if (penActiveRef.current ||
+          (penLiftTimeRef.current > 0 && Date.now() - penLiftTimeRef.current < 100) ||
+          penNearbyRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        const api = excalidrawAPIRef.current;
+        if (api && !barrelEraserRef.current) {
+          prevToolRef.current = api.getAppState()?.activeTool?.type || 'freedraw';
+          api.setActiveTool({ type: 'eraser' });
+          barrelEraserRef.current = true;
+          // 3초 후 자동 복귀 (pointerup이 오지 않을 수 있으므로)
+          setTimeout(() => {
+            if (barrelEraserRef.current) {
+              barrelEraserRef.current = false;
+              api.setActiveTool({ type: prevToolRef.current });
+            }
+          }, 3000);
+        }
+      }
+    };
+    container.addEventListener('contextmenu', handleContextMenu, { capture: true });
+
     /* ── 3. 팜 리젝션 + freedraw 2손가락 차단 (pointer 이벤트) ── */
     const handlePointerDown = (e) => {
       const isExcalidraw = e.target.closest('.excalidraw');
@@ -59,7 +84,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
 
         // S Pen 배럴 버튼 → 임시 지우개 모드
         // button===2: secondary(사이드 버튼), button===5: eraser tip
-        if (e.button === 2 || e.button === 5 || (e.buttons & 2) || (e.buttons & 32)) {
+        // buttons 비트마스크는 제외 — 일부 브라우저에서 오발동 가능
+        if (e.button === 2 || e.button === 5) {
           const api = excalidrawAPIRef.current;
           if (api && !barrelEraserRef.current) {
             prevToolRef.current = api.getAppState()?.activeTool?.type || 'freedraw';
@@ -408,6 +434,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     return () => {
       clearTimeout(penNearbyTimeoutRef.current);
       container.style.touchAction = '';
+      container.removeEventListener('contextmenu',   handleContextMenu, { capture: true });
       container.removeEventListener('gesturestart',  preventGesture);
       container.removeEventListener('gesturechange', preventGesture);
       container.removeEventListener('gestureend',    preventGesture);
