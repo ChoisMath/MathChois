@@ -47,7 +47,7 @@ function isScribblePattern(points) {
   const bboxDiag = Math.hypot(maxX - minX, maxY - minY);
   const density = bboxDiag > 1 ? pathLen / bboxDiag : 0;
 
-  return reversals >= 3 && density > 2.5;
+  return reversals >= 4 && density > 2.5;
 }
 
 /* ── 바운딩 박스 겹침 검사 ── */
