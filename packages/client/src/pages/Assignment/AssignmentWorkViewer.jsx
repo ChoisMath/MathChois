@@ -82,7 +82,7 @@ const AssignmentWorkViewer = () => {
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
   const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
-  useScribbleErase({ excalidrawAPIRef, containerRef, enabledRef: commentModeRef });
+  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [STUDENT_NOTE_PREFIX] });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -344,6 +344,10 @@ const AssignmentWorkViewer = () => {
     }
 
     if (!commentModeRef.current) return;
+
+    /* 문지르기 지우개 감지 */
+    checkForScribble(elements, appState);
+
     const page = currentPageRef.current;
     if (!user || !page) return;
     const filtered = elements.filter(

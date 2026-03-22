@@ -201,7 +201,7 @@ const AssignmentStudyViewer = () => {
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
   const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
-  useScribbleErase({ excalidrawAPIRef, containerRef, enabledRef: drawModeRef });
+  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [TEACHER_COMMENT_PREFIX] });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -440,6 +440,10 @@ const AssignmentStudyViewer = () => {
 
     if (!drawModeRef.current) return;
     if (isLocked) return;
+
+    /* 문지르기 지우개 감지 */
+    checkForScribble(elements, appState);
+
     const bgEl = elements.find((el) => el.id === BG_ELEMENT_ID);
     if (bgEl) bgPositionRef.current = { x: bgEl.x, y: bgEl.y, width: bgEl.width, height: bgEl.height };
     const page = currentPageRef.current;

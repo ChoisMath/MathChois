@@ -77,8 +77,7 @@ const TeacherStudyViewer = () => {
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
   useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
-  const alwaysEnabledRef = useRef(true);
-  useScribbleErase({ excalidrawAPIRef, containerRef, enabledRef: alwaysEnabledRef });
+  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -209,6 +208,9 @@ const TeacherStudyViewer = () => {
         return;
       }
     }
+    /* 문지르기 지우개 감지 */
+    checkForScribble(elements, appState);
+
     const bgEl = elements.find((el) => el.id === BG_ELEMENT_ID);
     if (bgEl) {
       bgPositionRef.current = { x: bgEl.x, y: bgEl.y, width: bgEl.width, height: bgEl.height };

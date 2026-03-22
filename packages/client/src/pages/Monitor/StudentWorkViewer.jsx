@@ -193,7 +193,7 @@ const StudentWorkViewer = () => {
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
   const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
-  useScribbleErase({ excalidrawAPIRef, containerRef, enabledRef: commentModeRef });
+  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [STUDENT_NOTE_PREFIX] });
 
   /* ── 페이지 변경 시 scene 데이터 로드 ── */
   /* ── 페이지 이동 시 pending 저장 flush ── */
@@ -379,6 +379,10 @@ const StudentWorkViewer = () => {
     }
 
     if (!commentModeRef.current) return;
+
+    /* 문지르기 지우개 감지 */
+    checkForScribble(elements, appState);
+
     const page = currentPageRef.current;
     if (!user || !page) return;
 
