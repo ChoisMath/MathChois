@@ -24,12 +24,16 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
   const penNearbyRef         = useRef(false);  // 펜 호버 감지 (화면 근처)
   const penNearbyTimeoutRef  = useRef(null);   // 호버 타임아웃 ID
   const suspectTouchRef      = useRef(null);   // { pointerId, time } — 의심 터치 (소급 취소용)
+  const penEverDetectedRef   = useRef(false);  // 펜 감지 이력 (Pen Session Lock)
   const barrelEraserRef      = useRef(false);  // S Pen 배럴 버튼 지우개 활성 중
   const prevToolRef          = useRef('freedraw'); // 배럴 활성 전 도구 저장
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+
+    // Pen Session Lock: localStorage에서 펜 감지 이력 복원
+    try { penEverDetectedRef.current = localStorage.getItem('mathchois_pen_detected') === 'true'; } catch {}
 
     /* ── 헬퍼: 현재 활성 도구 확인 ── */
     const getActiveTool = () =>
@@ -63,6 +67,11 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
 
       // 펜 활성 추적 + 배럴 버튼 감지 + 의심 터치 소급 취소
       if (e.pointerType === 'pen') {
+        // Pen Session Lock: 최초 펜 감지 시 플래그 설정 + localStorage 저장
+        if (!penEverDetectedRef.current) {
+          penEverDetectedRef.current = true;
+          try { localStorage.setItem('mathchois_pen_detected', 'true'); } catch {}
+        }
         penActiveRef.current = true;
         penLiftTimeRef.current = 0;
 
@@ -73,9 +82,9 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
           return;
         }
 
-        // 의심 터치가 150ms 이내에 있었으면 소급 취소
+        // 의심 터치가 500ms 이내에 있었으면 소급 취소 (최초 세션용)
         const suspect = suspectTouchRef.current;
-        if (suspect && Date.now() - suspect.time < 150) {
+        if (suspect && Date.now() - suspect.time < 500) {
           const canvas = container.querySelector('.excalidraw canvas');
           if (canvas) {
             isSyntheticUpRef.current = true;
@@ -96,6 +105,14 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       // pointer ID 기반 즉시 추적 (touchstart보다 먼저 발생)
       if (e.pointerType === 'touch') {
         touchPointerIdsRef.current.add(e.pointerId);
+      }
+
+      // Pen Session Lock: 펜 기기 freedraw에서 단일 터치 차단
+      if (e.pointerType === 'touch' && penEverDetectedRef.current
+          && touchPointerIdsRef.current.size < 2 && getActiveTool() === 'freedraw') {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
       }
 
       // 펜 활성/호버 중 단일 터치 차단 (2손가락 핀치줌은 허용)
@@ -172,11 +189,23 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
 
       // 펜 활성 + 호버 추적 (move에서도 갱신)
       if (e.pointerType === 'pen') {
+        if (!penEverDetectedRef.current) {
+          penEverDetectedRef.current = true;
+          try { localStorage.setItem('mathchois_pen_detected', 'true'); } catch {}
+        }
         penActiveRef.current = true;
         penLiftTimeRef.current = 0;
         penNearbyRef.current = true;
         clearTimeout(penNearbyTimeoutRef.current);
         penNearbyTimeoutRef.current = setTimeout(() => { penNearbyRef.current = false; }, 500);
+      }
+
+      // Pen Session Lock (pointer 이벤트는 touchPointerIdsRef 사용)
+      if (e.pointerType === 'touch' && penEverDetectedRef.current
+          && touchPointerIdsRef.current.size < 2 && getActiveTool() === 'freedraw') {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
       }
 
       if (e.pointerType === 'touch') {
@@ -247,6 +276,13 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
 
+      // Pen Session Lock (touch 이벤트는 e.touches.length 사용)
+      if (e.touches.length < 2 && penEverDetectedRef.current && getActiveTool() === 'freedraw') {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
       // 펜 활성/호버 중 단일 터치 차단 (2손가락 핀치줌은 허용)
       if (e.touches.length < 2 && (
           penActiveRef.current ||
@@ -312,6 +348,13 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       activeTouchesRef.current = e.touches.length;
       const isExcalidraw = e.target.closest('.excalidraw');
       if (!isExcalidraw) return;
+
+      // Pen Session Lock (touch 이벤트는 e.touches.length 사용)
+      if (e.touches.length < 2 && penEverDetectedRef.current && getActiveTool() === 'freedraw') {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
 
       // 펜 활성/호버 중 단일 터치 차단 (2손가락 핀치줌은 허용)
       if (e.touches.length < 2 && (
