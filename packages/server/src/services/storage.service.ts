@@ -124,6 +124,8 @@ function getMimeType(filePath: string): string {
     '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     '.zip': 'application/zip',
     '.txt': 'text/plain',
+    '.html': 'text/html',
+    '.htm': 'text/html',
   };
   return types[ext] ?? 'application/octet-stream';
 }

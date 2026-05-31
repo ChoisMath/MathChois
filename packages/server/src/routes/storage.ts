@@ -6,6 +6,9 @@ import { uploadFile, readFile, removeFile } from '../services/storage.service.js
 // 학생 업로드 허용 버킷
 const STUDENT_ALLOWED_BUCKETS = new Set(['submission-files']);
 
+// HTML 도구 전용 버킷 (text/html 만 허용)
+const HTML_TOOL_BUCKET = 'chapter-tools';
+
 // 학생 업로드 허용 MIME 타입
 const STUDENT_ALLOWED_MIMES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic',
@@ -47,6 +50,11 @@ export async function storageRoutes(app: FastifyInstance) {
       // 학생 업로드 MIME 타입 제한
       if (request.user.role === 'student' && !STUDENT_ALLOWED_MIMES.has(file.mimetype)) {
         return reply.status(400).send({ error: '허용되지 않은 파일 형식입니다.' });
+      }
+
+      // chapter-tools 버킷은 HTML 파일만 허용
+      if (bucket === HTML_TOOL_BUCKET && file.mimetype !== 'text/html') {
+        return reply.status(400).send({ error: 'HTML 도구 버킷에는 .html 파일만 업로드할 수 있습니다.' });
       }
 
       const timestamp = Date.now();
@@ -154,6 +162,15 @@ export async function storageRoutes(app: FastifyInstance) {
     // 파일명에 타임스탬프 포함 → immutable 캐시
     reply.header('Content-Type', result.mimeType);
     reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+
+    // text/html 은 opaque origin 으로 격리 (업로드된 도구의 stored-XSS 방지)
+    if (result.mimeType === 'text/html') {
+      reply.header(
+        'Content-Security-Policy',
+        'sandbox allow-scripts allow-popups allow-forms allow-modals',
+      );
+      reply.header('X-Content-Type-Options', 'nosniff');
+    }
 
     if (download) {
       // 타임스탬프 접두사 제거 (예: 1709712000000_report.pdf → report.pdf)
