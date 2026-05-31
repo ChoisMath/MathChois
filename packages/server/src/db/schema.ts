@@ -62,6 +62,7 @@ export const pages = pgTable('pages', {
   chapterId: uuid('chapter_id').notNull().references(() => chapters.id, { onDelete: 'cascade' }),
   imageUrl: text('image_url'),
   videoUrl: text('video_url'),
+  htmlUrl: text('html_url'),
   position: integer('position').notNull().default(0),
 }, (t) => [
   index('idx_pages_chapter').on(t.chapterId),

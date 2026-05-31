@@ -31,6 +31,7 @@ export interface Page {
   chapterId: string;
   imageUrl: string | null;
   videoUrl: string | null;
+  htmlUrl: string | null;
   position: number;
 }
 
