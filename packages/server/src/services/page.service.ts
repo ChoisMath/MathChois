@@ -33,6 +33,7 @@ export async function createPage(data: {
   chapterId: string;
   imageUrl?: string | null;
   videoUrl?: string | null;
+  htmlUrl?: string | null;
   position?: number;
 }) {
   let position = data.position;
@@ -50,6 +51,7 @@ export async function createPage(data: {
       chapterId: data.chapterId,
       imageUrl: data.imageUrl ?? null,
       videoUrl: data.videoUrl ?? null,
+      htmlUrl: data.htmlUrl ?? null,
       position,
     })
     .returning();
@@ -61,12 +63,19 @@ export async function createPages(items: {
   chapterId: string;
   imageUrl?: string | null;
   videoUrl?: string | null;
+  htmlUrl?: string | null;
   position: number;
 }[]) {
   if (items.length === 0) return [];
   return db
     .insert(pages)
-    .values(items)
+    .values(items.map((it) => ({
+      chapterId: it.chapterId,
+      imageUrl: it.imageUrl ?? null,
+      videoUrl: it.videoUrl ?? null,
+      htmlUrl: it.htmlUrl ?? null,
+      position: it.position,
+    })))
     .returning();
 }
 
