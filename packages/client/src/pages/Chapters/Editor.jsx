@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Loader, Upload, Save, X, Video, Play } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader, Upload, Save, X, Video, Play, FileCode2 } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -27,6 +27,7 @@ const ChapterEditor = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const fileInputRef = useRef(null);
+  const htmlInputRef = useRef(null);
 
   const [chapter, setChapter] = useState(null);
   const [pages, setPages] = useState([]);
@@ -170,6 +171,42 @@ const ChapterEditor = () => {
     invalidatePagesCache(id);
     await fetchData();
     if (lastPage) setSelectedPage(lastPage);
+  };
+
+  const handleUploadHtml = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setUploadProgress({ done: 0, total: 1 });
+
+    const basePosition = pages.length > 0 ? Math.max(...pages.map((p) => p.position)) + 1 : 0;
+    let newPage = null;
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const uploadResult = await api.upload(
+        `/api/files/upload?bucket=chapter-tools&directory=chapters/${id}`,
+        formData
+      );
+
+      newPage = await api.post(`/api/chapters/${id}/pages`, {
+        htmlUrl: uploadResult.url,
+        position: basePosition,
+      });
+    } catch (err) {
+      console.error(`HTML 업로드 실패 (${file.name}):`, err.message);
+    }
+
+    e.target.value = '';
+    setUploading(false);
+    setUploadProgress({ done: 0, total: 0 });
+
+    invalidatePagesCache(id);
+    await fetchData();
+    if (newPage) setSelectedPage(newPage);
   };
 
   /* ── 내보내기: 모달 열릴 때 다른 클래스 목록 로드 ── */
@@ -367,6 +404,21 @@ const ChapterEditor = () => {
               >
                 <Video className="h-5 w-5" />
               </button>
+              <input
+                ref={htmlInputRef}
+                type="file"
+                accept=".html,text/html"
+                onChange={handleUploadHtml}
+                className="hidden"
+              />
+              <button
+                onClick={() => htmlInputRef.current?.click()}
+                disabled={uploading}
+                title="HTML 도구 페이지 추가"
+                className="inline-flex items-center justify-center p-2 border border-transparent rounded-md shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+              >
+                <FileCode2 className="h-5 w-5" />
+              </button>
             </>
           )}
         </div>
@@ -414,7 +466,14 @@ const ChapterEditor = () => {
         {/* Main — 선택된 페이지 미리보기 */}
         <div className="flex-1 bg-gray-50 rounded-lg shadow overflow-hidden p-4 relative">
           {selectedPage ? (
-            selectedPage.videoUrl ? (
+            selectedPage.htmlUrl ? (
+              <iframe
+                src={selectedPage.htmlUrl}
+                sandbox="allow-scripts allow-popups allow-forms allow-modals"
+                className="w-full h-full rounded bg-white"
+                title="HTML 도구 미리보기"
+              />
+            ) : selectedPage.videoUrl ? (
               <div className="w-full h-full flex items-center justify-center bg-black rounded">
                 <iframe
                   src={getYouTubeEmbedUrl(extractYouTubeId(selectedPage.videoUrl))}
@@ -433,7 +492,7 @@ const ChapterEditor = () => {
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-gray-400">
               <p className="text-lg">페이지를 추가하세요</p>
-              <p className="text-sm mt-1">이미지 또는 YouTube 영상을 추가할 수 있습니다</p>
+              <p className="text-sm mt-1">이미지, YouTube 영상, HTML 도구를 추가할 수 있습니다</p>
             </div>
           )}
         </div>
