@@ -174,8 +174,9 @@ export async function storageRoutes(app: FastifyInstance) {
       );
       reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
       reply.header('X-Content-Type-Options', 'nosniff');
-      reply.removeHeader('X-Frame-Options');
-      reply.removeHeader('Origin-Agent-Cluster');
+      // helmet 이 onRequest 에서 raw 응답에 직접 setHeader 하므로 reply.removeHeader 로는 안 지워진다.
+      reply.raw.removeHeader('X-Frame-Options');
+      reply.raw.removeHeader('Origin-Agent-Cluster');
     }
 
     if (download) {
