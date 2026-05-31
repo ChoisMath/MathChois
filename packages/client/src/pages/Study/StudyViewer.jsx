@@ -266,7 +266,9 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
                         : 'ring-1 ring-gray-200 hover:ring-gray-400'
                     }`}
                   >
-                    {pg.videoUrl ? (
+                    {pg.htmlUrl ? (
+                      <div className="w-full aspect-video flex items-center justify-center bg-emerald-50 text-emerald-600 text-xs font-medium">HTML</div>
+                    ) : pg.videoUrl ? (
                       <div className="relative">
                         <img src={getYouTubeThumbnail(extractYouTubeId(pg.videoUrl))} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover bg-gray-900" loading="lazy" decoding="async" />
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -285,8 +287,17 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
             </div>
           )}
 
-          {/* Excalidraw / YouTube 영역 */}
-          {currentPage?.videoUrl ? (
+          {/* Excalidraw / YouTube / HTML 도구 영역 */}
+          {currentPage?.htmlUrl ? (
+            <div className="flex-1 flex items-center justify-center bg-white">
+              <iframe
+                src={currentPage.htmlUrl}
+                sandbox="allow-scripts allow-popups allow-forms allow-modals"
+                className="w-full h-full"
+                title="HTML 도구"
+              />
+            </div>
+          ) : currentPage?.videoUrl ? (
             <div className="flex-1 flex items-center justify-center bg-black">
               <iframe
                 src={getYouTubeEmbedUrl(extractYouTubeId(currentPage.videoUrl))}
@@ -855,8 +866,8 @@ const StudyViewer = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* 저장 상태: 필기 모드 + 영상 아닐 때만 */}
-          {drawMode && !currentPage?.videoUrl && (
+          {/* 저장 상태: 필기 모드 + 영상/HTML 아닐 때만 */}
+          {drawMode && !currentPage?.videoUrl && !currentPage?.htmlUrl && (
             <span className={`text-xs ${saveStatus === 'saved' ? 'text-green-600' : 'text-gray-400'}`}>
               {saveStatus === 'saved'  && '저장됨'}
               {saveStatus === 'saving' && '저장 중...'}
@@ -864,7 +875,7 @@ const StudyViewer = () => {
           )}
 
           {/* PDF 다운로드 */}
-          {currentPage && noteElements && !currentPage?.videoUrl && (
+          {currentPage && noteElements && !currentPage?.videoUrl && !currentPage?.htmlUrl && (
             <PdfDownloadButton
               onClick={() => {
                 const title = `${user?.name || '학생'}_${chapter?.title || '챕터'}_${currentPage.position + 1}p`;
@@ -918,8 +929,8 @@ const StudyViewer = () => {
             <Pencil className="h-4 w-4" />
           </button>
 
-          {/* 툴바 접기/펼치기 (필기 모드 + 영상 아닐 때만) */}
-          {drawMode && !currentPage?.videoUrl && (
+          {/* 툴바 접기/펼치기 (필기 모드 + 영상/HTML 아닐 때만) */}
+          {drawMode && !currentPage?.videoUrl && !currentPage?.htmlUrl && (
             <button
               onClick={() => setToolbarCollapsed((v) => !v)}
               title={toolbarCollapsed ? '툴바 펼치기' : '툴바 접기'}
@@ -961,8 +972,8 @@ const StudyViewer = () => {
         </div>
       </div>
 
-      {/* ── 필기 툴바 (필기 모드 + 펼침 상태 + 영상 아닐 때만) ── */}
-      {drawMode && !toolbarCollapsed && !currentPage?.videoUrl && (
+      {/* ── 필기 툴바 (필기 모드 + 펼침 상태 + 영상/HTML 아닐 때만) ── */}
+      {drawMode && !toolbarCollapsed && !currentPage?.videoUrl && !currentPage?.htmlUrl && (
         <DrawingToolbar
           apiRef={excalidrawAPIRef}
           showPanel={showExcalidrawPanel}
@@ -997,7 +1008,9 @@ const StudyViewer = () => {
                     pg.id === currentPage?.id ? 'border-4 border-blue-500' : 'border-4 border-transparent hover:border-gray-300'
                   }`}
                 >
-                  {pg.videoUrl ? (
+                  {pg.htmlUrl ? (
+                    <div className="w-full aspect-video flex items-center justify-center bg-emerald-50 text-emerald-600 text-xs font-medium">HTML</div>
+                  ) : pg.videoUrl ? (
                     <div className="relative">
                       <img src={getYouTubeThumbnail(extractYouTubeId(pg.videoUrl))} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover bg-gray-900" loading="lazy" decoding="async" />
                       <div className="absolute inset-0 flex items-center justify-center">
@@ -1016,9 +1029,18 @@ const StudyViewer = () => {
           </div>
         )}
 
-        {/* ── Excalidraw / YouTube (뷰/필기 모드 공통) ── */}
+        {/* ── Excalidraw / YouTube / HTML 도구 (뷰/필기 모드 공통) ── */}
         <div className="flex-1 relative overflow-hidden">
-        {currentPage?.videoUrl ? (
+        {currentPage?.htmlUrl ? (
+          <div className="w-full h-full flex items-center justify-center bg-white">
+            <iframe
+              src={currentPage.htmlUrl}
+              sandbox="allow-scripts allow-popups allow-forms allow-modals"
+              className="w-full h-full"
+              title="HTML 도구"
+            />
+          </div>
+        ) : currentPage?.videoUrl ? (
           <div className="w-full h-full flex items-center justify-center bg-black">
             <iframe
               src={getYouTubeEmbedUrl(extractYouTubeId(currentPage.videoUrl))}
