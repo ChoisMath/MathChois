@@ -7,6 +7,7 @@ import {
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
+import { toolUrl } from '../../lib/toolUrl';
 import { subscribeToRoom, getSocket } from '../../lib/socket';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
@@ -291,8 +292,8 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
           {currentPage?.htmlUrl ? (
             <div className="flex-1 flex items-center justify-center bg-white">
               <iframe
-                src={currentPage.htmlUrl}
-                sandbox="allow-scripts allow-popups allow-forms allow-modals"
+                src={toolUrl(currentPage.htmlUrl)}
+                sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
                 className="w-full h-full"
                 title="HTML 도구"
               />
@@ -1034,8 +1035,8 @@ const StudyViewer = () => {
         {currentPage?.htmlUrl ? (
           <div className="w-full h-full flex items-center justify-center bg-white">
             <iframe
-              src={currentPage.htmlUrl}
-              sandbox="allow-scripts allow-popups allow-forms allow-modals"
+              src={toolUrl(currentPage.htmlUrl)}
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
               className="w-full h-full"
               title="HTML 도구"
             />

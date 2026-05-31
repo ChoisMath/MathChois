@@ -18,6 +18,9 @@ RUN npx tsc -b packages/server/tsconfig.json
 
 # ─── Build client ──────────────────────────────────
 FROM deps AS build-client
+# Vite 빌드 타임 env: HTML 도구를 앱과 다른 origin 에서 서빙하기 위한 origin
+ARG VITE_TOOLS_ORIGIN
+ENV VITE_TOOLS_ORIGIN=$VITE_TOOLS_ORIGIN
 COPY tsconfig.base.json ./
 COPY packages/shared/ packages/shared/
 COPY packages/client/ packages/client/

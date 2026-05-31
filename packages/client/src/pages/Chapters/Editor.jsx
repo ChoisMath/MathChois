@@ -16,6 +16,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { api } from '../../lib/api';
+import { toolUrl } from '../../lib/toolUrl';
 import { useAuth } from '../../contexts/AuthContext';
 import { invalidatePagesCache } from '../../lib/dataCache';
 import SortablePageItem from '../../components/common/SortablePageItem';
@@ -468,8 +469,8 @@ const ChapterEditor = () => {
           {selectedPage ? (
             selectedPage.htmlUrl ? (
               <iframe
-                src={selectedPage.htmlUrl}
-                sandbox="allow-scripts allow-popups allow-forms allow-modals"
+                src={toolUrl(selectedPage.htmlUrl)}
+                sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
                 className="w-full h-full rounded bg-white"
                 title="HTML 도구 미리보기"
               />

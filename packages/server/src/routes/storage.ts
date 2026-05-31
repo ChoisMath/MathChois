@@ -163,13 +163,19 @@ export async function storageRoutes(app: FastifyInstance) {
     reply.header('Content-Type', result.mimeType);
     reply.header('Cache-Control', 'public, max-age=31536000, immutable');
 
-    // text/html 은 opaque origin 으로 격리 (업로드된 도구의 stored-XSS 방지)
+    // HTML 도구는 앱과 다른 origin(railway.app)에서 서빙되어 앱 origin과 cross-origin 격리된다.
+    // sandbox 로 opaque origin('null')을 강제하면 도구 내부 postMessage/blob worker 가 깨지므로
+    // 사용하지 않고, 대신 우리 앱에서만 frame 가능하도록 frame-ancestors 로 제한한다.
+    // 또 cross-origin frame 을 막는 helmet 의 X-Frame-Options 를 이 응답에서만 해제한다.
     if (result.mimeType === 'text/html') {
       reply.header(
         'Content-Security-Policy',
-        'sandbox allow-scripts allow-popups allow-forms allow-modals',
+        "frame-ancestors https://class.chois.ai.kr http://localhost:3000",
       );
+      reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
       reply.header('X-Content-Type-Options', 'nosniff');
+      reply.removeHeader('X-Frame-Options');
+      reply.removeHeader('Origin-Agent-Cluster');
     }
 
     if (download) {
