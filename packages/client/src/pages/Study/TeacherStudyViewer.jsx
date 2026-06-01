@@ -29,6 +29,7 @@ import {
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
 import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
+import { useExcalidrawUndo } from '../../hooks/useExcalidrawUndo';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
@@ -81,6 +82,7 @@ const TeacherStudyViewer = () => {
   useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef });
+  const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -214,6 +216,7 @@ const TeacherStudyViewer = () => {
     /* 문지르기 지우개 감지 */
     checkForScribble(elements, appState);
     checkForSmoothing(elements, appState);
+    recordHistory(elements);
 
     const bgEl = elements.find((el) => el.id === BG_ELEMENT_ID);
     if (bgEl) {
@@ -499,6 +502,7 @@ const TeacherStudyViewer = () => {
           onToggleScreenLock={handleToggleScreenLock}
           onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
           onReloadImage={handleReloadImage}
+          onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
         />
       )}
 
