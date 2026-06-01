@@ -15,6 +15,7 @@ import PageNavOverlay from '../../components/study/PageNavOverlay';
 import { BG_ELEMENT_ID, BG_FILE_ID, ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, TOUCH_CSS, GRID_STYLE, EXCALIDRAW_UI_OPTIONS, fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages, calculateBgPosition, waitForLayout, clearImageCacheForUrl } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
+import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
 import PenDiagnosticsOverlay from '../../components/study/PenDiagnosticsOverlay';
 import { setToggle } from '../../lib/penToggles';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
@@ -386,6 +387,7 @@ const StudyViewer = () => {
 
   const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
+  const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
 
 
   useEffect(() => () => { mountedRef.current = false; }, []);
@@ -653,6 +655,7 @@ const StudyViewer = () => {
 
     /* 문지르기 지우개 감지 */
     checkForScribble(elements, appState);
+    checkForSmoothing(elements, appState);
 
     const bgEl = elements.find((el) => el.id === BG_ELEMENT_ID);
     if (bgEl) {

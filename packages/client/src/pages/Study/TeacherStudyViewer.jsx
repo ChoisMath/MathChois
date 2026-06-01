@@ -28,6 +28,7 @@ import {
 } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
+import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
@@ -79,6 +80,7 @@ const TeacherStudyViewer = () => {
 
   useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef });
+  const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -211,6 +213,7 @@ const TeacherStudyViewer = () => {
     }
     /* 문지르기 지우개 감지 */
     checkForScribble(elements, appState);
+    checkForSmoothing(elements, appState);
 
     const bgEl = elements.find((el) => el.id === BG_ELEMENT_ID);
     if (bgEl) {

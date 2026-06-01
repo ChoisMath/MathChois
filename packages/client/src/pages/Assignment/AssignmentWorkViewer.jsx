@@ -22,6 +22,7 @@ import {
 } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
+import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import FileAttachmentPanel from './components/FileAttachmentPanel';
 import { extractYouTubeId, getYouTubeEmbedUrl, getYouTubeThumbnail } from '../../lib/youtubeUtils';
@@ -83,6 +84,7 @@ const AssignmentWorkViewer = () => {
 
   const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [STUDENT_NOTE_PREFIX] });
+  const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [STUDENT_NOTE_PREFIX] });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -347,6 +349,7 @@ const AssignmentWorkViewer = () => {
 
     /* 문지르기 지우개 감지 */
     checkForScribble(elements, appState);
+    checkForSmoothing(elements, appState);
 
     const page = currentPageRef.current;
     if (!user || !page) return;
