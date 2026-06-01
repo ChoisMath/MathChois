@@ -8,7 +8,7 @@ const DEFAULTS = {
 
 function load() {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; }
-  catch { return { ...DEFAULTS }; }
+  catch { /* 파싱 실패 시 기본값 */ return { ...DEFAULTS }; }
 }
 
 let state = load();
@@ -18,7 +18,7 @@ export function getToggles() { return state; }
 
 export function setToggle(key, value) {
   state = { ...state, [key]: value };
-  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* localStorage 불가 무시 */ }
   listeners.forEach((fn) => fn(state));
 }
 

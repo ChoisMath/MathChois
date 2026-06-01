@@ -9,8 +9,7 @@ const MAX = 40;
  * @param {{ containerRef: React.RefObject, enabled: boolean }} opts
  */
 export function usePenDiagnostics({ containerRef, enabled }) {
-  const bufRef = useRef([]);
-  const [, force] = useState(0);
+  const [events, setEvents] = useState([]);
   const lastTsRef = useRef(0);
 
   useEffect(() => {
@@ -24,16 +23,17 @@ export function usePenDiagnostics({ containerRef, enabled }) {
       const dt = lastTsRef.current ? Math.round(now - lastTsRef.current) : 0;
       lastTsRef.current = now;
       let coalesced = 1;
-      try { coalesced = e.getCoalescedEvents?.().length || 1; } catch {}
+      try { coalesced = e.getCoalescedEvents?.().length || 1; } catch { /* 미지원 브라우저 무시 */ }
       const rec = {
         t: e.type, pt: e.pointerType, id: e.pointerId, btn: e.button,
         w: Math.round(e.width || 0), h: Math.round(e.height || 0),
         coalesced, dt,
       };
-      const buf = bufRef.current;
-      buf.push(rec);
-      if (buf.length > MAX) buf.shift();
-      force((n) => n + 1);
+      setEvents((prev) => {
+        const next = prev.length >= MAX ? prev.slice(prev.length - MAX + 1) : prev.slice();
+        next.push(rec);
+        return next;
+      });
     };
 
     const opts = { capture: true, passive: true };
@@ -47,5 +47,5 @@ export function usePenDiagnostics({ containerRef, enabled }) {
     };
   }, [containerRef, enabled]);
 
-  return { events: bufRef.current };
+  return { events };
 }

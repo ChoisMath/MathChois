@@ -32,7 +32,7 @@ export default function PenDiagnosticsOverlay({ containerRef }) {
             onChange={(e) => setToggle('pendingDiscardMs', parseInt(e.target.value, 10) || 0)} /></label>
         <button className="underline" onClick={() => setToggle('diagnostics', false)}>닫기</button>
       </div>
-      <div onClick={(ev) => { try { navigator.clipboard?.writeText(dump); } catch {} ev.stopPropagation(); }}>
+      <div onClick={(ev) => { try { navigator.clipboard?.writeText(dump); } catch { /* clipboard 불가 무시 */ } ev.stopPropagation(); }}>
         {dump || '(이벤트 대기...)'}
       </div>
     </div>

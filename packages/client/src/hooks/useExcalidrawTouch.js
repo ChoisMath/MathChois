@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { createPendingDiscard } from '../lib/excalidrawHistory';
+import { getToggles } from '../lib/penToggles';
+import { BG_ELEMENT_ID } from '../lib/excalidrawUtils';
 
 /**
  * Excalidraw 터치/제스처 제어 훅
@@ -23,7 +26,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
   const penLiftTimeRef       = useRef(0);      // 펜이 떠난 시각 (50ms 쿨다운)
   const penNearbyRef         = useRef(false);  // 펜 호버 감지 (화면 근처)
   const penNearbyTimeoutRef  = useRef(null);   // 호버 타임아웃 ID
-  const suspectTouchRef      = useRef(null);   // { pointerId, time } — 의심 터치 (소급 취소용)
+  const pendingDiscardRef    = useRef(null);   // ①B 보류-폐기 상태머신
   const penEverDetectedRef   = useRef(false);  // 펜 감지 이력 (Pen Session Lock)
   const barrelEraserRef      = useRef(false);  // S Pen 배럴 버튼 지우개 활성 중
   const prevToolRef          = useRef('freedraw'); // 배럴 활성 전 도구 저장
@@ -34,6 +37,9 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
 
     // Pen Session Lock: localStorage에서 펜 감지 이력 복원
     try { penEverDetectedRef.current = localStorage.getItem('mathchois_pen_detected') === 'true'; } catch {}
+
+    // ①B 보류-폐기 상태머신 초기화 (창 ms 는 결정 시점에 토글로 override)
+    pendingDiscardRef.current = createPendingDiscard({ windowMs: getToggles().pendingDiscardMs });
 
     /* ── 헬퍼: 현재 활성 도구 확인 ── */
     const getActiveTool = () =>
@@ -82,23 +88,37 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
           return;
         }
 
-        // 의심 터치가 500ms 이내에 있었으면 소급 취소 (최초 세션용)
-        const suspect = suspectTouchRef.current;
-        if (suspect && Date.now() - suspect.time < 500) {
+        // 펜 도착: 보류 중인 터치(팜) 획이 창 안이면 commit 전에 폐기
+        // (기존 Ctrl+Z 소급취소 대체 → undo 스택 오염 없음)
+        const pd = pendingDiscardRef.current;
+        if (pd && pd.shouldDiscardOnPen({ time: Date.now(), windowMs: getToggles().pendingDiscardMs })) {
+          const palmId = pd.pendingId;
           const canvas = container.querySelector('.excalidraw canvas');
-          if (canvas) {
+          if (canvas && palmId != null) {
+            // 진행 중 팜 획 종료
             isSyntheticUpRef.current = true;
             canvas.dispatchEvent(new PointerEvent('pointerup', {
-              pointerId: suspect.pointerId, pointerType: 'touch',
-              bubbles: true, cancelable: true,
+              pointerId: palmId, pointerType: 'touch', bubbles: true, cancelable: true,
             }));
             isSyntheticUpRef.current = false;
-            // 팜 획 undo (Ctrl+Z)
-            document.dispatchEvent(new KeyboardEvent('keydown', {
-              key: 'z', ctrlKey: true, bubbles: true, cancelable: true,
-            }));
           }
-          suspectTouchRef.current = null;
+          // 가장 최근 freedraw(=팜 획)를 히스토리 커밋 없이 삭제
+          const api = excalidrawAPIRef.current;
+          if (api) {
+            const els = api.getSceneElements();
+            let newest = null;
+            for (const el of els) {
+              if (el.type !== 'freedraw' || el.isDeleted || el.id === BG_ELEMENT_ID) continue;
+              if (!newest || (el.updated || 0) >= (newest.updated || 0)) newest = el;
+            }
+            if (newest) {
+              api.updateScene({
+                elements: els.map((el) => (el.id === newest.id ? { ...el, isDeleted: true } : el)),
+                commitToHistory: false,
+              });
+            }
+          }
+          pd.clear();
         }
       }
 
@@ -174,11 +194,11 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         }
       }
 
-      // freedraw 모드에서 필터를 통과한 단일 터치: 의심 터치로 기록
+      // freedraw 모드에서 필터를 통과한 단일 터치: 보류 획으로 기록(펜이 곧 오면 폐기)
       if (e.pointerType === 'touch' && touchPointerIdsRef.current.size === 1) {
         const tool = getActiveTool();
         if (tool === 'freedraw') {
-          suspectTouchRef.current = { pointerId: e.pointerId, time: Date.now() };
+          pendingDiscardRef.current?.onStrokeStart({ pointerType: 'touch', id: e.pointerId, time: Date.now() });
         }
       }
     };
@@ -262,8 +282,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         }
       }
       if (e.pointerType === 'touch') {
-        if (suspectTouchRef.current?.pointerId === e.pointerId) {
-          suspectTouchRef.current = null;
+        if (pendingDiscardRef.current?.pendingId === e.pointerId) {
+          pendingDiscardRef.current.clear();
         }
         touchPointerIdsRef.current.delete(e.pointerId);
       }

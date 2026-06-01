@@ -12,9 +12,10 @@ export function createPendingDiscard({ windowMs = 150 } = {}) {
     onStrokeStart({ pointerType, id, time }) {
       pending = pointerType === 'touch' ? { id, time } : null;
     },
-    shouldDiscardOnPen({ time }) {
+    shouldDiscardOnPen({ time, windowMs: override } = {}) {
       if (!pending) return false;
-      return time - pending.time <= windowMs;
+      const win = override ?? windowMs;
+      return time - pending.time <= win;
     },
     clear() { pending = null; },
     get pendingId() { return pending?.id ?? null; },
