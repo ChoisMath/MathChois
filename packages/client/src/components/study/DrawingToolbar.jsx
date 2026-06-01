@@ -4,7 +4,7 @@ import {
   MousePointer, Pen, Type, Square, Circle, Triangle,
   Eraser, Minus, Trash2, Pipette, Plus, Scissors,
   SlidersHorizontal, Hand, Shapes, ChevronDown, ImagePlus, Dot,
-  Lock, Unlock, RefreshCw,
+  Lock, Unlock, RefreshCw, Undo2, Redo2,
 } from 'lucide-react';
 import {
   BG_ELEMENT_ID,
@@ -12,6 +12,7 @@ import {
   MAX_CUSTOM_COLORS,
   TOOLS,
 } from '../../lib/excalidrawUtils';
+import { triggerUndo, triggerRedo } from '../../lib/excalidrawHistory';
 
 const TOOL_ICONS = {
   selection: MousePointer,
@@ -465,6 +466,17 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
 
   return (
     <div className="flex items-center gap-1 px-3 h-11 bg-white border-b shadow-sm flex-shrink-0 overflow-x-auto sticky top-14 z-50">
+
+      {/* ⓪ 실행 취소 / 다시 실행 */}
+      <button onClick={triggerUndo} title="실행 취소 (Ctrl+Z)"
+        className="p-1.5 rounded-md text-gray-600 hover:bg-gray-100 cursor-pointer flex-shrink-0 flex items-center justify-center">
+        <Undo2 className="h-4 w-4" />
+      </button>
+      <button onClick={triggerRedo} title="다시 실행 (Ctrl+Shift+Z)"
+        className="p-1.5 rounded-md text-gray-600 hover:bg-gray-100 cursor-pointer flex-shrink-0 flex items-center justify-center">
+        <Redo2 className="h-4 w-4" />
+      </button>
+      <div className="w-px h-6 bg-gray-200 mx-0.5 flex-shrink-0" />
 
       {/* ① 기본 도구 */}
       {TOOLS.map(({ type, label }) => {
