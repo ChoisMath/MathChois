@@ -34,6 +34,7 @@ export async function createPage(data: {
   imageUrl?: string | null;
   videoUrl?: string | null;
   htmlUrl?: string | null;
+  aiProblemId?: string | null;
   position?: number;
 }) {
   let position = data.position;
@@ -52,10 +53,17 @@ export async function createPage(data: {
       imageUrl: data.imageUrl ?? null,
       videoUrl: data.videoUrl ?? null,
       htmlUrl: data.htmlUrl ?? null,
+      aiProblemId: data.aiProblemId ?? null,
       position,
     })
     .returning();
   return created;
+}
+
+/** 페이지 부분 수정 (현재는 aiProblemId 변경용) */
+export async function updatePage(id: string, patch: { aiProblemId?: string | null }) {
+  const [row] = await db.update(pages).set(patch).where(eq(pages.id, id)).returning();
+  return row ?? null;
 }
 
 /** 페이지 일괄 생성 */

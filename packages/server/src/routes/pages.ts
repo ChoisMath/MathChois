@@ -8,6 +8,7 @@ import {
   createPages,
   deletePage,
   reorderPages,
+  updatePage,
 } from '../services/page.service.js';
 import { isLinkedChapter } from '../services/chapter.service.js';
 
@@ -51,11 +52,13 @@ export async function pageRoutes(app: FastifyInstance) {
     }
 
     // 단일 삽입
-    const { imageUrl, videoUrl, htmlUrl, position } = body as { imageUrl?: string; videoUrl?: string; htmlUrl?: string; position?: number };
-    if (!imageUrl && !videoUrl && !htmlUrl) {
-      return reply.status(400).send({ error: 'imageUrl, videoUrl, or htmlUrl is required' });
+    const { imageUrl, videoUrl, htmlUrl, aiProblemId, position } = body as {
+      imageUrl?: string; videoUrl?: string; htmlUrl?: string; aiProblemId?: string; position?: number;
+    };
+    if (!imageUrl && !videoUrl && !htmlUrl && !aiProblemId) {
+      return reply.status(400).send({ error: 'imageUrl, videoUrl, htmlUrl, or aiProblemId is required' });
     }
-    const page = await createPage({ chapterId, imageUrl, videoUrl, htmlUrl, position });
+    const page = await createPage({ chapterId, imageUrl, videoUrl, htmlUrl, aiProblemId, position });
     return reply.status(201).send(page);
   });
 
@@ -70,6 +73,15 @@ export async function pageRoutes(app: FastifyInstance) {
     }
     // 삭제된 페이지 정보 반환 (클라이언트가 Storage 정리에 사용)
     return deleted;
+  });
+
+  // ─── PATCH /api/pages/:id — 페이지 수정 (AI 문항 연결 변경) ──
+  app.patch<{ Params: { id: string }; Body: { aiProblemId?: string | null } }>('/api/pages/:id', {
+    preHandler: [authenticate, requireRole('teacher')],
+  }, async (request, reply) => {
+    const updated = await updatePage(request.params.id, { aiProblemId: request.body.aiProblemId ?? null });
+    if (!updated) return reply.status(404).send({ error: 'Page not found' });
+    return updated;
   });
 
   // ─── PUT /api/pages/reorder — 순서 일괄 변경 ──
