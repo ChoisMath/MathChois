@@ -34,4 +34,27 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
   await pgClient`CREATE INDEX IF NOT EXISTS idx_problems_difficulty ON problems (difficulty)`;
   await pgClient`CREATE INDEX IF NOT EXISTS idx_problems_created_by ON problems (created_by)`;
   log.info('startup migration: problems table ensured');
+
+  await pgClient`ALTER TABLE pages ADD COLUMN IF NOT EXISTS ai_problem_id uuid REFERENCES problems(id) ON DELETE SET NULL`;
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS coaching_attempts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      page_id uuid NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+      problem_id uuid REFERENCES problems(id) ON DELETE SET NULL,
+      student_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+      work_image_url text,
+      solution_latex text,
+      is_correct boolean,
+      error_tags jsonb NOT NULL DEFAULT '[]'::jsonb,
+      concept_tags jsonb NOT NULL DEFAULT '[]'::jsonb,
+      strength_notes text,
+      weakness_notes text,
+      comment_markdown text,
+      ai_model text,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_coaching_attempts_student ON coaching_attempts (student_id, created_at)`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_coaching_attempts_page_student ON coaching_attempts (page_id, student_id)`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_coaching_attempts_problem ON coaching_attempts (problem_id)`;
+  log.info('startup migration: pages.ai_problem_id + coaching_attempts ensured');
 }

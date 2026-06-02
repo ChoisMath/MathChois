@@ -64,6 +64,7 @@ export const pages = pgTable('pages', {
   videoUrl: text('video_url'),
   htmlUrl: text('html_url'),
   position: integer('position').notNull().default(0),
+  aiProblemId: uuid('ai_problem_id').references(() => problems.id, { onDelete: 'set null' }),
 }, (t) => [
   index('idx_pages_chapter').on(t.chapterId),
 ]);
@@ -265,4 +266,28 @@ export const problems = pgTable('problems', {
   index('idx_problems_major_unit').on(t.majorUnit),
   index('idx_problems_difficulty').on(t.difficulty),
   index('idx_problems_created_by').on(t.createdBy),
+]);
+
+// ─── coaching_attempts (AI 코칭 기록) ────────────────
+
+export const coachingAttempts = pgTable('coaching_attempts', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  pageId: uuid('page_id').notNull().references(() => pages.id, { onDelete: 'cascade' }),
+  problemId: uuid('problem_id').references(() => problems.id, { onDelete: 'set null' }),
+  studentId: uuid('student_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+
+  workImageUrl: text('work_image_url'),
+  solutionLatex: text('solution_latex'),
+  isCorrect: boolean('is_correct'),
+  errorTags: jsonb('error_tags').$type<string[]>().default([]).notNull(),
+  conceptTags: jsonb('concept_tags').$type<string[]>().default([]).notNull(),
+  strengthNotes: text('strength_notes'),
+  weaknessNotes: text('weakness_notes'),
+  commentMarkdown: text('comment_markdown'),
+  aiModel: text('ai_model'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  index('idx_coaching_attempts_student').on(t.studentId, t.createdAt),
+  index('idx_coaching_attempts_page_student').on(t.pageId, t.studentId),
+  index('idx_coaching_attempts_problem').on(t.problemId),
 ]);
