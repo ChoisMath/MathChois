@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import {
@@ -79,7 +80,8 @@ export async function pageRoutes(app: FastifyInstance) {
   app.patch<{ Params: { id: string }; Body: { aiProblemId?: string | null } }>('/api/pages/:id', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
-    const updated = await updatePage(request.params.id, { aiProblemId: request.body.aiProblemId ?? null });
+    const { aiProblemId } = z.object({ aiProblemId: z.string().uuid().nullable().optional() }).parse(request.body);
+    const updated = await updatePage(request.params.id, { aiProblemId: aiProblemId ?? null });
     if (!updated) return reply.status(404).send({ error: 'Page not found' });
     return updated;
   });

@@ -39,6 +39,7 @@ export async function coachingRoutes(app: FastifyInstance) {
 
     const page = await getPageById(pageId);
     if (!page?.aiProblemId) return reply.status(400).send({ error: 'AI 코칭 페이지가 아닙니다' });
+    // 정답·해설은 AI 검토에만 서버에서 사용 — 클라이언트로 반환되지 않음(attempt row에 미포함)
     const problem = await getProblem(page.aiProblemId);
     if (!problem) return reply.status(404).send({ error: '연결된 문항을 찾을 수 없습니다' });
 
