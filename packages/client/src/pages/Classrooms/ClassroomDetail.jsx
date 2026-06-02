@@ -644,6 +644,17 @@ const ClassroomDetail = () => {
                       <p className="text-sm font-medium text-gray-900">{m.student?.name}</p>
                       <p className="text-xs text-gray-400 truncate">{m.student?.email}</p>
                     </div>
+                    {isTeacher && (
+                      <button
+                        onClick={() => navigate(
+                          `/teacher/classrooms/${id}/students/${m.studentId}/coaching-history`,
+                          { state: { studentName: m.student?.name } },
+                        )}
+                        className="px-3 min-h-11 border rounded-md text-sm whitespace-nowrap shrink-0 hover:bg-gray-50"
+                      >
+                        코칭 기록
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
