@@ -26,7 +26,12 @@ export default function ProblemView({ latex, figures = [] }) {
         const fig = byIdx.get(seg.idx);
         return fig?.imageUrl
           ? <img key={i} src={fig.imageUrl} alt={fig.alt || `그림 ${seg.idx}`} className="my-2 max-w-full" />
-          : <span key={i} className="inline-block px-2 py-1 my-1 text-xs bg-amber-50 text-amber-700 rounded">[그림 {seg.idx} 미삽입]</span>;
+          : (
+            <div key={i} className="my-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-center text-sm text-gray-500">
+              🖼️ <span className="font-medium text-gray-600">[그림 {seg.idx}]</span>{' '}
+              {fig?.alt || '그림 설명 없음'}
+            </div>
+          );
       })}
     </div>
   );

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Loader, Upload, Wand2 } from 'lucide-react';
+import { Loader, Upload, Wand2, Image as ImageIcon, X } from 'lucide-react';
 import ProblemView from '../../components/common/ProblemView';
 import { validateFigures } from '../../lib/problemContent';
 import {
@@ -19,6 +19,8 @@ export default function ProblemRegister({ initial, onSaved }) {
   const [dir] = useState(() => `drafts/${Date.now()}`);
   const [busy, setBusy] = useState('');   // '' | 'ocr' | 'markscheme' | 'solution' | 'save'
   const [error, setError] = useState('');
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [dragIdx, setDragIdx] = useState(null);
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
 
@@ -41,15 +43,24 @@ export default function ProblemRegister({ initial, onSaved }) {
     setBusy('');
   };
 
-  const handleFigureImage = async (idx, e) => {
-    const file = e.target.files?.[0];
+  const uploadFigure = async (idx, file) => {
     if (!file) return;
+    if (!file.type?.startsWith('image/')) { setError('이미지 파일만 삽입할 수 있습니다.'); return; }
     setBusy(`figure-${idx}`); setError('');
     try {
       const url = await uploadProblemImage(file, `${dir}/figures`);
       setForm((f) => ({ ...f, figures: f.figures.map((fig) => fig.idx === idx ? { ...fig, imageUrl: url } : fig) }));
     } catch (err) { setError(err.message); }
     setBusy('');
+  };
+
+  const clearFigure = (idx) =>
+    setForm((f) => ({ ...f, figures: f.figures.map((fig) => fig.idx === idx ? { ...fig, imageUrl: '' } : fig) }));
+
+  const handleFigureDrop = (idx, e) => {
+    e.preventDefault();
+    setDragIdx(null);
+    uploadFigure(idx, e.dataTransfer.files?.[0]);
   };
 
   const handleMarkscheme = async (e) => {
@@ -116,12 +127,30 @@ export default function ProblemRegister({ initial, onSaved }) {
         {/* 그림 슬롯 */}
         {form.figures.length > 0 && (
           <div className="flex flex-col gap-2">
-            <p className="text-xs text-gray-500">감지된 그림 — 각 슬롯에 이미지를 삽입하세요</p>
+            <p className="text-xs text-gray-500">감지된 그림 — 각 슬롯에 이미지를 삽입하세요 (파일 선택 또는 드래그&드롭)</p>
             {form.figures.map((fig) => (
-              <div key={fig.idx} className="flex items-center gap-2">
-                <span className="text-xs whitespace-nowrap">[그림 {fig.idx}] {fig.alt}</span>
-                <input type="file" accept="image/*" onChange={(e) => handleFigureImage(fig.idx, e)} />
-                {fig.imageUrl && <span className="text-green-600 text-xs">✓</span>}
+              <div key={fig.idx}
+                onDragOver={(e) => { e.preventDefault(); setDragIdx(fig.idx); }}
+                onDragLeave={() => setDragIdx((d) => (d === fig.idx ? null : d))}
+                onDrop={(e) => handleFigureDrop(fig.idx, e)}
+                className={`flex flex-wrap items-center gap-2 rounded-md border p-2 ${dragIdx === fig.idx ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
+                <span className="text-xs whitespace-nowrap font-medium">[그림 {fig.idx}]</span>
+                <span className="text-xs text-gray-500 min-w-0 flex-1 truncate" title={fig.alt}>{fig.alt}</span>
+                {fig.imageUrl && (
+                  <img src={fig.imageUrl} alt={fig.alt} className="max-h-16 w-auto rounded border border-gray-200" />
+                )}
+                <label className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded cursor-pointer text-xs whitespace-nowrap min-h-11">
+                  {busy === `figure-${fig.idx}` ? <Loader className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                  {fig.imageUrl ? '변경' : '그림 삽입'}
+                  <input type="file" accept="image/*" className="hidden" disabled={!!busy}
+                    onChange={(e) => uploadFigure(fig.idx, e.target.files?.[0])} />
+                </label>
+                {fig.imageUrl && (
+                  <button type="button" onClick={() => clearFigure(fig.idx)}
+                    className="flex items-center gap-1 px-2 py-1 border border-gray-200 rounded text-xs text-red-600 whitespace-nowrap min-h-11">
+                    <X className="h-3 w-3" /> 제거
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -167,7 +196,22 @@ export default function ProblemRegister({ initial, onSaved }) {
 
       {/* 우: 미리보기 */}
       <div className="flex-1 min-w-0 border rounded-md p-3 bg-white">
-        <p className="text-xs text-gray-400 mb-2">미리보기</p>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <p className="text-xs text-gray-400">미리보기</p>
+          {form.originalImageUrl && (
+            <button type="button" onClick={() => setShowOriginal((v) => !v)}
+              title="원본 이미지 보기/숨기기" aria-label="원본 이미지 보기"
+              className={`flex items-center justify-center min-h-11 min-w-11 rounded-md border ${showOriginal ? 'bg-blue-50 border-blue-500 text-blue-600' : 'border-gray-200 text-gray-500'}`}>
+              <ImageIcon className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+        {showOriginal && form.originalImageUrl && (
+          <figure className="mb-3 rounded-md border border-gray-200 bg-gray-50 p-2">
+            <figcaption className="mb-1 text-xs text-gray-500">원본 업로드 이미지 (변환 결과와 대조)</figcaption>
+            <img src={form.originalImageUrl} alt="원본 문제 이미지" className="mx-auto max-h-96 w-auto rounded" />
+          </figure>
+        )}
         <ProblemView latex={form.problemLatex} figures={form.figures} />
         {form.solution && (
           <>

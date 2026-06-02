@@ -309,6 +309,7 @@ const ChapterEditor = () => {
       } else {
         await api.post(`/api/chapters/${id}/pages`, { aiProblemId: problem.id });
       }
+      invalidatePagesCache(id);
       await fetchData();
     } catch (err) {
       alert(err.message ?? '문항 연결에 실패했습니다.');
