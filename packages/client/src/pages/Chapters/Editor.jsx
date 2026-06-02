@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Loader, Upload, Save, X, Video, Play, FileCode2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader, Upload, Save, X, Video, Play, FileCode2, Sparkles } from 'lucide-react';
+import ProblemPickerModal from '../../components/problems/ProblemPickerModal';
+import ProblemView from '../../components/common/ProblemView';
+import { getProblemForCoaching } from '../../lib/problems';
 import {
   DndContext,
   closestCenter,
@@ -50,6 +53,11 @@ const ChapterEditor = () => {
   const [youtubeUrl, setYoutubeUrl]             = useState('');
   const [youtubeError, setYoutubeError]         = useState('');
   const [addingVideo, setAddingVideo]           = useState(false);
+
+  /* AI 코칭 문항 */
+  const [showPicker, setShowPicker]   = useState(false);
+  const [pickerMode, setPickerMode]   = useState('add');
+  const [aiPreview, setAiPreview]     = useState(null);
 
   /* 내보내기 */
   const [showExportModal, setShowExportModal]   = useState(false);
@@ -293,6 +301,28 @@ const ChapterEditor = () => {
     setAddingVideo(false);
   };
 
+  const handlePickProblem = async (problem) => {
+    setShowPicker(false);
+    try {
+      if (pickerMode === 'change' && selectedPage) {
+        await api.patch(`/api/pages/${selectedPage.id}`, { aiProblemId: problem.id });
+      } else {
+        await api.post(`/api/chapters/${id}/pages`, { aiProblemId: problem.id });
+      }
+      await fetchData();
+    } catch (err) {
+      alert(err.message ?? '문항 연결에 실패했습니다.');
+    }
+  };
+
+  useEffect(() => {
+    if (selectedPage?.aiProblemId) {
+      getProblemForCoaching(selectedPage.aiProblemId).then(setAiPreview).catch(() => setAiPreview(null));
+    } else {
+      setAiPreview(null);
+    }
+  }, [selectedPage?.id, selectedPage?.aiProblemId]);
+
   const handleDeletePage = async (page) => {
     if (!confirm('이 페이지를 삭제하시겠습니까?')) return;
     setDeleting(true);
@@ -420,6 +450,11 @@ const ChapterEditor = () => {
               >
                 <FileCode2 className="h-5 w-5" />
               </button>
+              <button type="button" onClick={() => { setPickerMode('add'); setShowPicker(true); }}
+                title="AI 코칭 문항 추가"
+                className="flex items-center gap-1 px-3 min-h-11 border rounded-md whitespace-nowrap">
+                <Sparkles size={16} /> AI 코칭
+              </button>
             </>
           )}
         </div>
@@ -483,6 +518,16 @@ const ChapterEditor = () => {
                   allowFullScreen
                 />
               </div>
+            ) : selectedPage.aiProblemId ? (
+              <div className="flex flex-col gap-2 p-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={16} className="text-indigo-500" />
+                  <span className="font-medium whitespace-nowrap">AI 코칭 문항</span>
+                  <button onClick={() => { setPickerMode('change'); setShowPicker(true); }}
+                    className="px-3 min-h-11 border rounded-md text-sm whitespace-nowrap">문제 변경</button>
+                </div>
+                {aiPreview && <ProblemView latex={aiPreview.problemLatex} figures={aiPreview.figures} />}
+              </div>
             ) : (
               <img
                 src={selectedPage.imageUrl}
@@ -536,6 +581,11 @@ const ChapterEditor = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── AI 코칭 문항 선택 모달 ── */}
+      {showPicker && (
+        <ProblemPickerModal onSelect={handlePickProblem} onClose={() => setShowPicker(false)} />
       )}
 
       {/* ── 내보내기 모달 ── */}

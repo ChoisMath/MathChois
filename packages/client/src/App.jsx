@@ -20,7 +20,7 @@ const ChapterMonitor  = lazy(() => import('./pages/Monitor/ChapterMonitor'));
 /* Excalidraw를 사용하는 페이지는 lazy loading으로 분리
    — 대시보드 진입 시 Excalidraw 번들을 로드하지 않아 초기 속도 향상 */
 const ChapterEditor      = lazy(() => import('./pages/Chapters/Editor'));
-const StudyViewer        = lazy(() => import('./pages/Study/StudyViewer'));
+const StudyPageRouter    = lazy(() => import('./pages/Study/StudyPageRouter'));
 const TeacherStudyViewer = lazy(() => import('./pages/Study/TeacherStudyViewer'));
 const StudentWorkViewer  = lazy(() => import('./pages/Monitor/StudentWorkViewer'));
 
@@ -153,7 +153,7 @@ function App() {
               <Route path="/student/classrooms/:id" element={<ClassroomDetail />} />
             </Route>
             {/* StudyViewer: 전체화면 레이아웃, DashboardLayout 제외 */}
-            <Route path="/student/study/:chapterId/page/:pageId" element={<StudyViewer />} />
+            <Route path="/student/study/:chapterId/page/:pageId" element={<StudyPageRouter />} />
             {/* Phase 5 — 학생 과제 필기 (전체화면) */}
             <Route
               path="/student/assignments/:assignmentId/page/:pageId"
