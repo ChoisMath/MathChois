@@ -320,7 +320,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
   };
 
   const handleToggleInputMode = () => {
-    setInputMode(inputMode === 'stylus' ? 'finger' : 'stylus');
+    setInputMode(getInputMode() === 'stylus' ? 'finger' : 'stylus');
   };
 
   const handleToggleImageMove = () => {
