@@ -1,11 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authenticate } from '../middleware/auth.js';
+import { requireRole } from '../middleware/roleGuard.js';
 import { readFile, urlToStoragePath } from '../services/storage.service.js';
 import { convertSolutionToLatex, reviewSolution, AI_MODEL_NAME } from '../services/ai.service.js';
-import { createAttempt, listAttempts } from '../services/coaching.service.js';
+import { createAttempt, listAttempts, listStudentHistory, listClassroomStudentHistory } from '../services/coaching.service.js';
 import { getPageById } from '../services/page.service.js';
 import { getProblem } from '../services/problem.service.js';
+import { isClassroomOwner, isClassroomMember } from '../services/classroom.service.js';
 
 function imageMime(filePath: string): string {
   const ext = filePath.toLowerCase().split('.').pop() ?? '';
@@ -72,4 +74,33 @@ export async function coachingRoutes(app: FastifyInstance) {
   app.get<{ Params: { pageId: string } }>('/api/coaching/pages/:pageId/attempts', auth, async (req) => {
     return listAttempts(req.params.pageId, req.user.sub);
   });
+
+  app.get('/api/coaching/history', auth, async (req) => {
+    const q = req.query as Record<string, string>;
+    return listStudentHistory(req.user.sub, {
+      from: q.from, to: q.to,
+      page: q.page ? parseInt(q.page, 10) : undefined,
+      pageSize: q.pageSize ? parseInt(q.pageSize, 10) : undefined,
+    });
+  });
+
+  app.get<{ Params: { classroomId: string; studentId: string } }>(
+    '/api/coaching/classrooms/:classroomId/students/:studentId/history',
+    { preHandler: [authenticate, requireRole('teacher')] },
+    async (req, reply) => {
+      const { classroomId, studentId } = req.params;
+      if (!(await isClassroomOwner(classroomId, req.user.sub))) {
+        return reply.status(403).send({ error: '이 클래스의 담당 교사가 아닙니다' });
+      }
+      if (!(await isClassroomMember(classroomId, studentId))) {
+        return reply.status(403).send({ error: '이 클래스의 학생이 아닙니다' });
+      }
+      const q = req.query as Record<string, string>;
+      return listClassroomStudentHistory(classroomId, studentId, {
+        from: q.from, to: q.to,
+        page: q.page ? parseInt(q.page, 10) : undefined,
+        pageSize: q.pageSize ? parseInt(q.pageSize, 10) : undefined,
+      });
+    },
+  );
 }
