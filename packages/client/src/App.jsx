@@ -32,6 +32,9 @@ const AssignmentMonitor      = lazy(() => import('./pages/Assignment/AssignmentM
 const AssignmentWorkViewer   = lazy(() => import('./pages/Assignment/AssignmentWorkViewer'));
 const AssignmentStudyViewer  = lazy(() => import('./pages/Assignment/AssignmentStudyViewer'));
 
+/* 문제은행 */
+const ProblemsPage = lazy(() => import('./pages/Problems/ProblemsPage'));
+
 /* 관리자 */
 const AdminPanel = lazy(() => import('./pages/Admin/AdminPanel'));
 
@@ -117,6 +120,8 @@ function App() {
                 path="/teacher/classrooms/:classroomId/assignments/:assignmentId/monitor"
                 element={<AssignmentMonitor />}
               />
+              {/* 문제은행 */}
+              <Route path="/teacher/problems" element={<ProblemsPage />} />
             </Route>
             {/* Fullscreen teacher views — no DashboardLayout */}
             <Route
