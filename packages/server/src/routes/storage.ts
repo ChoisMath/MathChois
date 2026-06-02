@@ -4,7 +4,7 @@ import { requireRole } from '../middleware/roleGuard.js';
 import { uploadFile, readFile, removeFile } from '../services/storage.service.js';
 
 // 학생 업로드 허용 버킷
-const STUDENT_ALLOWED_BUCKETS = new Set(['submission-files']);
+const STUDENT_ALLOWED_BUCKETS = new Set(['submission-files', 'ai-coaching']);
 
 // HTML 도구 전용 버킷 (text/html 만 허용)
 const HTML_TOOL_BUCKET = 'chapter-tools';
