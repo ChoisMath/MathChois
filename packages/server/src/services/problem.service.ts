@@ -54,8 +54,8 @@ function buildWhere(f: ProblemFilters): SQL | undefined {
 }
 
 export async function listProblems(f: ProblemFilters) {
-  const page = Math.max(1, f.page ?? 1);
-  const pageSize = Math.min(100, Math.max(1, f.pageSize ?? 20));
+  const page = Math.max(1, Number.isFinite(f.page) ? Number(f.page) : 1);
+  const pageSize = Math.min(100, Math.max(1, Number.isFinite(f.pageSize) ? Number(f.pageSize) : 20));
   const where = buildWhere(f);
 
   const items = await db.select().from(problems)
