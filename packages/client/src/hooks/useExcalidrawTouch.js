@@ -46,11 +46,12 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     };
     container.addEventListener('contextmenu', handleContextMenu, { capture: true });
 
-    // 백스톱: 차단한 터치가 그래도 freedraw 를 시작했다면 그 획을 히스토리 오염 없이 제거
-    const discardLeakedStroke = () => {
+    // 백스톱: 차단한 터치가 그래도 freedraw 를 시작했다면 그 획을 히스토리 오염 없이 제거.
+    // Excalidraw 의 stroke 커밋은 React 배치 렌더 이후에 settle 되므로(삼각형 변환 코드와 동일),
+    // pointerup 시점에 동기 삭제하면 커밋에 덮인다 → 호출부에서 setTimeout 으로 지연 실행한다.
+    const discardLeakedStroke = (armTime) => {
       const api = excalidrawAPIRef.current;
       if (!api) return;
-      const armTime = discardArmTimeRef.current;
       const els = api.getSceneElements();
       let newest = null;
       for (const el of els) {
@@ -144,7 +145,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       if (e.pointerType === 'touch') {
         if (discardTouchIdRef.current === e.pointerId) {
           discardTouchIdRef.current = null;
-          discardLeakedStroke();
+          const armTime = discardArmTimeRef.current;
+          setTimeout(() => discardLeakedStroke(armTime), 80);
         }
         touchPointerIdsRef.current.delete(e.pointerId);
       }
@@ -229,14 +231,17 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       if (e.touches.length < 2) pinchStateRef.current = null;
     };
 
-    container.addEventListener('pointerdown',   handlePointerDown,  { capture: true, passive: false });
-    container.addEventListener('pointermove',   handlePointerMove,  { capture: true, passive: false });
-    container.addEventListener('pointerup',     handlePointerUp,    { capture: true, passive: true });
-    container.addEventListener('pointercancel', handlePointerUp,    { capture: true, passive: true });
-    container.addEventListener('touchstart',    handleTouchStart,   { capture: true, passive: false });
-    container.addEventListener('touchmove',     handleTouchMove,    { capture: true, passive: false });
-    container.addEventListener('touchend',      handleTouchEnd,     { capture: true, passive: true });
-    container.addEventListener('touchcancel',   handleTouchEnd,     { capture: true, passive: true });
+    // 차단 리스너는 window 캡처에 부착한다. React 19 는 이벤트를 앱 루트(#root)에 위임하는데
+    // #root 가 container 의 상위라, container 캡처는 React 가 Excalidraw 핸들러를 디스패치한 뒤에야
+    // 실행되어 stopPropagation 이 늦는다. window 캡처는 #root 보다 먼저 실행되어 실제로 차단된다.
+    window.addEventListener('pointerdown',   handlePointerDown,  { capture: true, passive: false });
+    window.addEventListener('pointermove',   handlePointerMove,  { capture: true, passive: false });
+    window.addEventListener('pointerup',     handlePointerUp,    { capture: true, passive: true });
+    window.addEventListener('pointercancel', handlePointerUp,    { capture: true, passive: true });
+    window.addEventListener('touchstart',    handleTouchStart,   { capture: true, passive: false });
+    window.addEventListener('touchmove',     handleTouchMove,    { capture: true, passive: false });
+    window.addEventListener('touchend',      handleTouchEnd,     { capture: true, passive: true });
+    window.addEventListener('touchcancel',   handleTouchEnd,     { capture: true, passive: true });
 
     return () => {
       container.style.touchAction = '';
@@ -244,14 +249,14 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       container.removeEventListener('gesturestart',  preventGesture);
       container.removeEventListener('gesturechange', preventGesture);
       container.removeEventListener('gestureend',    preventGesture);
-      container.removeEventListener('pointerdown',   handlePointerDown, { capture: true });
-      container.removeEventListener('pointermove',   handlePointerMove, { capture: true });
-      container.removeEventListener('pointerup',     handlePointerUp,   { capture: true });
-      container.removeEventListener('pointercancel', handlePointerUp,   { capture: true });
-      container.removeEventListener('touchstart',    handleTouchStart,  { capture: true });
-      container.removeEventListener('touchmove',     handleTouchMove,   { capture: true });
-      container.removeEventListener('touchend',      handleTouchEnd,    { capture: true });
-      container.removeEventListener('touchcancel',   handleTouchEnd,    { capture: true });
+      window.removeEventListener('pointerdown',   handlePointerDown, { capture: true });
+      window.removeEventListener('pointermove',   handlePointerMove, { capture: true });
+      window.removeEventListener('pointerup',     handlePointerUp,   { capture: true });
+      window.removeEventListener('pointercancel', handlePointerUp,   { capture: true });
+      window.removeEventListener('touchstart',    handleTouchStart,  { capture: true });
+      window.removeEventListener('touchmove',     handleTouchMove,   { capture: true });
+      window.removeEventListener('touchend',      handleTouchEnd,    { capture: true });
+      window.removeEventListener('touchcancel',   handleTouchEnd,    { capture: true });
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
