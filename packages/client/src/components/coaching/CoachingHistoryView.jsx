@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import ProblemView from '../common/ProblemView';
 import CoachingPanel from '../common/CoachingPanel';
 
@@ -21,11 +21,14 @@ export default function CoachingHistoryView({ fetchHistory, showTeacherNotes = f
   const [openId, setOpenId] = useState(null);
   const [showImageId, setShowImageId] = useState(null);
 
+  const fetchHistoryRef = useRef(fetchHistory);
+  useEffect(() => { fetchHistoryRef.current = fetchHistory; });
+
   const load = useCallback(async (page = 1) => {
     setLoading(true);
-    try { setResult(await fetchHistory({ from, to, page })); }
+    try { setResult(await fetchHistoryRef.current({ from, to, page })); }
     finally { setLoading(false); }
-  }, [fetchHistory, from, to]);
+  }, [from, to]);
 
   useEffect(() => { load(1); }, [load]);
 
