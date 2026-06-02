@@ -33,16 +33,21 @@ function imagePart(mimeType: string, base64: string) {
   return { inlineData: { mimeType, data: base64 } };
 }
 
+// Markdown 은 줄 끝에 공백 2칸이 없으면 개행을 무시한다. 모든 본문 생성 프롬프트에 강제.
+const MD_LINEBREAK_RULE = `- 줄을 바꿀 때는 반드시 줄 끝에 공백 2칸("  ")을 넣은 뒤 개행한다. 공백 2칸이 없으면 Markdown 에서 줄바꿈이 무시되므로 한 줄이 끝날 때마다 빠짐없이 공백 2칸을 붙여라.`;
+
 const SOLUTION_OCR_RULE = `다음 규칙으로 학생이 손으로 쓴 수학 풀이 이미지를 변환하라.
 - 풀이 전체를 Markdown + LaTeX 로 변환한다. 인라인 수식은 $...$, 디스플레이 수식은 $$...$$.
 - 손글씨를 최대한 충실히 옮긴다(맞춤·교정하지 말 것). 한국어가 아닌 텍스트는 한국어로.
-- 학생이 그린 그래프·도형·표는 본문에 자연어 설명으로 보존한다.`;
+- 학생이 그린 그래프·도형·표는 본문에 자연어 설명으로 보존한다.
+${MD_LINEBREAK_RULE}`;
 
 const REVIEW_RULE = `너는 고등 수학 첨삭 선생님이다. 학생 풀이를 검토해 코칭하라.
 이미지에는 손글씨 수식뿐 아니라 학생이 직접 그린 그래프·도형·표 등 시각 요소가 포함될 수 있다. 이를 변환된 LaTeX 풀이와 함께 판독·평가하라.
 코칭 원칙(스캐폴딩): 오답이거나 막혔으면 정답·전체 풀이를 통째로 제시하지 말고, 학생이 스스로 해결하도록 '다음 한 걸음'에 해당하는 디딤돌 힌트만 짚어라. 정답이면 맞혔음을 알리고 칭찬한 뒤 다른 접근법을 짧게 소개하라.
 스타일: 잘한 점 → 오류 위치/이유 → 다음 한 걸음 힌트 → 학습 조언. 존댓말, 이모지 적절히.
-commentMarkdown은 학생용 첨삭(Markdown+LaTeX). errorTags는 [conceptual, computational, logical, notational, strategic, condition] 중에서. conceptTags는 다룬 개념명. strengthNotes/weaknessNotes는 교사용 짧은 메모.`;
+commentMarkdown은 학생용 첨삭(Markdown+LaTeX). errorTags는 [conceptual, computational, logical, notational, strategic, condition] 중에서. conceptTags는 다룬 개념명. strengthNotes/weaknessNotes는 교사용 짧은 메모.
+commentMarkdown 에서 줄을 바꿀 때는 반드시 줄 끝에 공백 2칸("  ")을 넣은 뒤 개행한다(공백 2칸이 없으면 Markdown 줄바꿈이 무시됨).`;
 
 const PROBLEM_RULE = `다음 규칙으로 수학 문제 이미지를 변환하라.
 - 본문을 Markdown + LaTeX 로 변환한다. 인라인 수식은 $...$, 디스플레이 수식은 $$...$$.
@@ -52,16 +57,19 @@ const PROBLEM_RULE = `다음 규칙으로 수학 문제 이미지를 변환하�
   같은 순서로 figureNotes 배열에 각 그림의 한국어 설명을 넣는다.
   본문의 [FIGURE:n] 개수와 figureNotes 길이는 반드시 일치해야 한다.
 - meta 에 과목(subject)·대단원(majorUnit)·소단원(minorUnit)·난이도(difficulty: 상/중/하)
-  ·유형(problemType)·세부유형(detailType)·키워드(keywords[]) 를 추출한다.`;
+  ·유형(problemType)·세부유형(detailType)·키워드(keywords[]) 를 추출한다.
+${MD_LINEBREAK_RULE}`;
 
 const MARKSCHEME_RULE = `다음 규칙으로 교사가 제공한 정답/풀이(마크스킴) 이미지를 변환하라.
 - answer: 간결한 최종 정답.
 - solution: 단계별 풀이를 Markdown + LaTeX 로. 인라인 $...$, 디스플레이 $$...$$.
-- 한국어가 아닌 텍스트는 한국어로 번역한다.`;
+- 한국어가 아닌 텍스트는 한국어로 번역한다.
+${MD_LINEBREAK_RULE}`;
 
 const SOLUTION_RULE = `너는 고등 수학 교사다. 아래 문제(Markdown+LaTeX)의 정답과 단계별 해설을 작성하라.
 - answer: 간결한 최종 정답.
-- solution: 학생이 이해할 단계별 풀이를 Markdown + LaTeX 로. 인라인 $...$, 디스플레이 $$...$$.`;
+- solution: 학생이 이해할 단계별 풀이를 Markdown + LaTeX 로. 인라인 $...$, 디스플레이 $$...$$.
+${MD_LINEBREAK_RULE}`;
 
 const META_SCHEMA = {
   type: Type.OBJECT,

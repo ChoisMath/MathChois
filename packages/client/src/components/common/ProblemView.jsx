@@ -25,7 +25,7 @@ export default function ProblemView({ latex, figures = [] }) {
         if (seg.type === 'text') return <Markdown key={i}>{seg.value}</Markdown>;
         const fig = byIdx.get(seg.idx);
         return fig?.imageUrl
-          ? <img key={i} src={fig.imageUrl} alt={fig.alt || `그림 ${seg.idx}`} className="my-2 max-w-full" />
+          ? <img key={i} src={fig.imageUrl} alt={fig.alt || `그림 ${seg.idx}`} className="my-2 max-w-full mx-auto block" />
           : (
             <div key={i} className="my-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-center text-sm text-gray-500">
               🖼️ <span className="font-medium text-gray-600">[그림 {seg.idx}]</span>{' '}
