@@ -41,6 +41,12 @@ client_secret*.json
 # Artifacts
 nul
 image.png
+*.tsbuildinfo
+
+# Superpowers (brainstorm visual companion / local plan drafts / review scratch)
+.superpowers/
+.plans/
+review.md
 
 # Unused legacy code
 legacy_rails/

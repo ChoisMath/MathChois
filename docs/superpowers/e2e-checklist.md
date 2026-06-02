@@ -1,0 +1,118 @@
+# 라이브 E2E 점검 가이드 — AI 수학 코칭 (#1~#5)
+
+MathCoach 이식 5개 기능(#1 문항등록·#2 문제은행·#3 페이지 코칭·#4 기록 조회·#5 대시보드)을 실제 DB + Gemini 환경에서 수동 확인하는 체크리스트. 단위테스트/타입체크는 통과 상태이고, 여기서는 **AI·DB가 필요한 실제 흐름**만 검증한다.
+
+---
+
+## 0. 사전 준비
+
+### 0.1 서버 env — `packages/server/.env`
+```
+DATABASE_URL=postgres://...            # PostgreSQL (로컬 또는 Railway DATABASE_PUBLIC_URL)
+JWT_SECRET=...                         # >= 16자
+JWT_REFRESH_SECRET=...                 # >= 16자
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+VOLUME_PATH=./local-storage            # 파일 저장 루트
+GEMINI_API_KEY=...                     # ★ 없으면 OCR/코칭이 503. 반드시 설정
+GEMINI_MODEL=gemini-2.0-flash          # 필요시 현행 비전-flash 모델로 조정
+PORT=3001
+NODE_ENV=development
+```
+> `GEMINI_API_KEY`가 없으면 OCR(`/api/problems/ocr`)·코칭(`/api/coaching/*`)이 **503 "AI 기능이 설정되지 않았습니다"** 를 반환한다. #1의 OCR·정답생성, #3의 수식전환·AI검토에 필수.
+
+### 0.2 클라이언트 env (선택)
+- `VITE_TOOLS_ORIGIN` — HTML 도구 페이지 별도 origin (코칭 기능과 무관, 기존 도구용).
+
+### 0.3 DB 스키마 보장
+부팅 시 `db/startupMigrate.ts`가 멱등 DDL로 `problems`, `coaching_attempts`, `pages.ai_problem_id` 를 자동 생성한다. 별도 마이그레이션 불필요.
+- 빈 DB라면 기존 ChoisClass 테이블(profiles/classrooms/chapters/pages…)도 있어야 한다. 필요시 `npm run db:push -w @mathchois/server`.
+
+### 0.4 기동
+```
+npm run dev        # server(3001) + client(3000) 동시
+```
+- 서버 로그에 `startup migration: problems table ensured`, `... coaching_attempts ensured` 가 보이면 스키마 OK.
+- 계정: 교사 1 + 학생 1 (같은 클래스). 학생이 교사 클래스 코드로 가입되어 있어야 #3~#5 확인 가능.
+
+### 0.5 보안 점검 도구
+브라우저 DevTools → Network 탭을 열어두고, 학생 경로 응답에 **`answer`/`solution`/`markschemeImageUrl` 필드가 없는지** 확인(정답 유출 불변식).
+
+---
+
+## 1. #1 문항 등록 (OCR) — 교사
+
+경로: `/teacher/problems` → **문항등록** 탭
+
+- [ ] 수학 문제 이미지 업로드 → **[AI 분석]** 클릭.
+- [ ] 본문 LaTeX, 감지된 그림 목록, 분류(과목/대단원/소단원/난이도/유형/세부유형/키워드)가 채워진다.
+- [ ] **실시간 KaTeX 미리보기**에 수식이 렌더된다. 본문의 `[FIGURE:1]` 번호와 그림 슬롯 수가 일치.
+- [ ] 그림 슬롯에 이미지 파일 삽입 → 미리보기 해당 위치에 표시.
+- [ ] 정답·해설: ⓐ 마크스킴 이미지 업로드 → 자동 채움(`solutionSource=teacher-markscheme`), 또는 ⓑ **[AI 정답·해설 생성]** → 채움(`ai`). 수정 후 저장 시 `teacher-verified`.
+- [ ] **[저장]** → 성공. (그림 번호 ≠ 그림설명 수면 "개수 불일치" 경고로 막힘 확인.)
+- 기대 실패 케이스: GEMINI_API_KEY 미설정 시 [AI 분석]에서 503 에러 메시지.
+
+## 2. #2 문제은행 DB·검색 — 교사
+
+경로: `/teacher/problems` → **등록된 문항** 탭
+
+- [ ] 방금 등록한 문항이 표에 보인다(제목·과목·단원·난이도·유형·키워드·작성일).
+- [ ] 필터 드롭다운(과목/대단원/소단원/난이도/유형) + 키워드 검색 → 결과 좁혀짐.
+- [ ] 행 클릭 → 상세(렌더된 문제+정답·해설, 원본 이미지 토글).
+- [ ] 본인 문항: 수정/삭제 버튼 동작. (다른 교사 문항은 수정·삭제 불가 — `403`.)
+- [ ] 표 가로 스크롤·sticky 헤더/첫열 동작(모바일 폭에서).
+
+## 3. #3 페이지 AI 코칭 — 교사 설정 + 학생 풀이
+
+### 3a. 교사: 페이지에 문항 연결
+경로: `/teacher/chapters/:id/edit`
+- [ ] 페이지 추가 버튼군의 **[AI 코칭]** → 문제 선택 모달에서 검색→선택 → AI 코칭 페이지 생성.
+- [ ] 사이드바에 해당 페이지가 **Sparkles 썸네일**로 표시.
+- [ ] 미리보기에 연결 문항(ProblemView) + **[문제 변경]** 동작.
+
+### 3b. 학생: 풀이 + 코칭
+경로: 학생으로 그 챕터의 AI 페이지 진입 (`/student/study/:chapterId/page/:pageId`)
+- [ ] **CoachingViewer** 렌더: 좌 Excalidraw 캔버스 / 우 패널(문항 LaTeX + 우상단 이미지 아이콘→원본 모달).
+- [ ] 캔버스에 풀이 필기 → 헤더 **[수식전환]** → 변환된 풀이(LaTeX)가 우측 textarea에 채워짐(수정 가능).
+- [ ] **[AI검토요청]** → 코칭 패널 표시: 정답/오답 배지 + 오류태그·개념태그 + 코멘트(Markdown+KaTeX) + "보완".
+- [ ] 페이지 재진입 시 **최신 코칭이 패널에 복원**되고 캔버스 필기가 유지된다(자동저장).
+- [ ] 빈 캔버스로 수식전환/검토 시 "먼저 풀이를 작성하세요" 가드.
+- [ ] **🔒 보안:** Network에서 `/api/problems/:id/for-coaching`·페이지 응답에 `answer`/`solution`/`markscheme` 필드 **없음** 확인. 정답 대조는 서버에서만.
+
+## 4. #4 풀이 기록 조회 — 학생 + 교사
+
+### 4a. 학생 본인
+경로: 사이드바 **내 풀이 기록** (`/student/coaching-history`)
+- [ ] 기본 **최근 7일** 기록 카드 리스트. 프리셋(1주/1개월/전체) + 시작·종료 날짜 지정 → 재조회.
+- [ ] 카드 펼침: 문제·변환된 풀이·코칭·필기 이미지.
+- [ ] 본인 전체(여러 클래스) 기록이 보인다.
+
+### 4b. 교사: 학생별
+경로: 클래스 상세 → **학생** 탭 → 멤버의 **[코칭 기록]**
+- [ ] `…님의 코칭 기록` 헤더 + 동일 카드 리스트(교사는 "강점" 메모도 표시).
+- [ ] **해당 클래스 챕터 범위**만 보인다(다른 클래스 기록 제외).
+- [ ] 기간 필터 동작.
+- [ ] **🔒 권한:** 본인 소유 아닌 classroomId로 API 직접 호출 시 `403`.
+
+## 5. #5 교사 클래스 대시보드 — 교사
+
+경로: 클래스 상세 → **대시보드** 탭(교사 전용)
+- [ ] 요약 카드 4개: 반 평균 정답률 / 총 코칭 시도 / 활동 학생 / 챕터 수.
+- [ ] 학생 카드: 종합 정답률 배지 + 챕터 칩(정답률 색 heatmap + 필기 진도 막대). 시도 0 챕터 = 회색 `–`.
+- [ ] 색 임계값: 초록 ≥70% / 주황 40–69% / 빨강 <40%.
+- [ ] 학생 카드 클릭 → 그 학생 #4 코칭 기록(`/teacher/classrooms/:classroomId/students/:studentId/coaching-history`)으로 이동.
+- [ ] 칩 많은 클래스에서 카드 내부 가로 스크롤(줄바꿈 폭증 없음).
+- [ ] **학생 계정**으로 같은 클래스 상세 진입 시 **대시보드 탭 미노출**.
+- [ ] **🔒 권한:** 비소유 클래스 `/api/dashboard/classrooms/:id` 직접 호출 시 `403`.
+- [ ] 알려진 한계: linked(공유) 챕터 코칭은 원본 클래스로 집계되어 여기 안 잡힐 수 있음.
+
+---
+
+## 6. 회귀 점검 (기존 기능)
+- [ ] 일반(비-AI) 페이지의 학생 필기/교사 코멘트/과제 흐름이 그대로 동작(StudyViewer 등) — `StudyPageRouter` 분기가 일반 페이지를 건드리지 않는지.
+- [ ] 펜 입력(S-Pen)·자동저장 등 기존 동작 유지.
+
+## 7. 문제 발생 시
+- OCR/코칭 503 → `GEMINI_API_KEY` 확인.
+- 표/대시보드 빈 값 → 해당 학생이 클래스 멤버인지, AI 페이지에 코칭 시도가 있는지 확인.
+- 스키마 오류 → 서버 부팅 로그의 startup migration 라인 확인, 필요시 `db:push`.
