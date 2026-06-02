@@ -53,21 +53,14 @@ export async function getClassroomDashboard(classroomId: string): Promise<Classr
       cells: {},
     });
   }
-  const ensure = (studentId: string): DashboardStudent => {
-    let s = studentMap.get(studentId);
-    if (!s) {
-      s = { studentId, name: null, overall: { attempts: 0, correct: 0 }, cells: {} };
-      studentMap.set(studentId, s);
-    }
-    return s;
-  };
   const cell = (s: DashboardStudent, chapterId: string) => {
     if (!s.cells[chapterId]) s.cells[chapterId] = { attempts: 0, correct: 0, notedPages: 0 };
     return s.cells[chapterId];
   };
 
   for (const r of coachRows) {
-    const s = ensure(r.studentId);
+    const s = studentMap.get(r.studentId);
+    if (!s) continue;
     const c = cell(s, r.chapterId);
     c.attempts += r.attempts;
     c.correct += r.correct;
@@ -75,7 +68,8 @@ export async function getClassroomDashboard(classroomId: string): Promise<Classr
     s.overall.correct += r.correct;
   }
   for (const r of noteRows) {
-    const s = ensure(r.studentId);
+    const s = studentMap.get(r.studentId);
+    if (!s) continue;
     cell(s, r.chapterId).notedPages += r.notedPages;
   }
 

@@ -8,7 +8,7 @@ import {
 
 const BoardTab      = lazy(() => import('../../components/board/BoardTab'));
 const AssignmentTab = lazy(() => import('../../components/assignment/AssignmentTab'));
-import ClassroomDashboard from '../../components/dashboard/ClassroomDashboard';
+const ClassroomDashboard = lazy(() => import('../../components/dashboard/ClassroomDashboard'));
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors,
@@ -666,7 +666,9 @@ const ClassroomDetail = () => {
 
         {/* ── 대시보드 탭 (교사 전용) ── */}
         {activeTab === 'dashboard' && isTeacher && (
-          <ClassroomDashboard classroomId={id} />
+          <Suspense fallback={<p className="text-gray-400 text-sm">로딩 중...</p>}>
+            <ClassroomDashboard classroomId={id} />
+          </Suspense>
         )}
       </div>
 
