@@ -225,7 +225,7 @@ export default function CoachingViewer({ chapterId, pages, currentPage }) {
           <div className="h-[55dvh] shrink-0 border-b">
             <Excalidraw excalidrawAPI={handleMount} onChange={handleChange} />
           </div>
-          <div className="p-3">{rightPanel}</div>
+          <div className="p-2 sm:p-3">{rightPanel}</div>
         </div>
       )}
 

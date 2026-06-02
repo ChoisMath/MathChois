@@ -29,19 +29,19 @@ export default function ProblemPickerModal({ onSelect, onClose }) {
       <div className="bg-white rounded-lg w-full max-w-3xl max-h-[90dvh] flex flex-col p-3" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-bold whitespace-nowrap">문항 선택</h3>
-          <button onClick={onClose} className="min-h-11 min-w-11 flex items-center justify-center">✕</button>
+          <button onClick={onClose} className="min-h-11 min-w-11 shrink-0 flex items-center justify-center">✕</button>
         </div>
 
         <div className="flex flex-wrap gap-2 mb-2">
           {FILTER_FIELDS.map(([key, label]) => (
-            <select key={key} className="border rounded px-2 py-1 text-sm"
+            <select key={key} className="border rounded px-2 min-h-11 text-sm"
               value={filters[key] ?? ''}
               onChange={(e) => setFilters((f) => ({ ...f, [key]: e.target.value || undefined }))}>
               <option value="">{label} 전체</option>
               {(facets[key] || []).map((v) => <option key={v} value={v}>{v}</option>)}
             </select>
           ))}
-          <input className="border rounded px-2 py-1 text-sm flex-1 min-w-40" placeholder="키워드 검색"
+          <input className="border rounded px-2 min-h-11 text-sm flex-1 min-w-40" placeholder="키워드 검색"
             value={q} onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && fetchList(1)} />
         </div>
