@@ -79,6 +79,14 @@ export async function problemRoutes(app: FastifyInstance) {
     return row;
   });
 
+  app.get<{ Params: { id: string } }>('/api/problems/:id/for-coaching', {
+    preHandler: [authenticate],
+  }, async (req, reply) => {
+    const row = await svc.getProblemForCoaching(req.params.id);
+    if (!row) return reply.status(404).send({ error: '문항을 찾을 수 없습니다' });
+    return row;
+  });
+
   app.post('/api/problems', teacher, async (req) => {
     const body = problemBody.parse(req.body);
     return svc.createProblem({ ...body, aiModel: AI_MODEL_NAME, createdBy: req.user.sub });

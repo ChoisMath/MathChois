@@ -69,6 +69,30 @@ export async function listProblems(f: ProblemFilters) {
   return { items, total: count, page, pageSize };
 }
 
+/** 학생용: 표시 필드만 (answer/solution/markscheme 제외) */
+export async function getProblemForCoaching(id: string) {
+  const rows = await db
+    .select({
+      id: problems.id,
+      title: problems.title,
+      problemLatex: problems.problemLatex,
+      figureNotes: problems.figureNotes,
+      figures: problems.figures,
+      originalImageUrl: problems.originalImageUrl,
+      subject: problems.subject,
+      majorUnit: problems.majorUnit,
+      minorUnit: problems.minorUnit,
+      difficulty: problems.difficulty,
+      problemType: problems.problemType,
+      detailType: problems.detailType,
+      keywords: problems.keywords,
+    })
+    .from(problems)
+    .where(eq(problems.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function getFacets() {
   const toSortedStrings = (rows: { v: string | null }[]) =>
     rows.map((r) => r.v).filter((v): v is string => !!v).sort();
