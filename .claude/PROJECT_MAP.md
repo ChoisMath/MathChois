@@ -29,12 +29,16 @@ packages/
 │   └── src/
 │       ├── App.jsx             # 라우팅 정의
 │       ├── contexts/AuthContext.jsx
-│       ├── components/         # ProtectedRoute, Navbar, study/, assignment/, board/, common/
+│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/
+│       │   └── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay
 │       ├── layouts/            # MainLayout(public), DashboardLayout(인증)
 │       ├── pages/              # Home, Login, Classrooms, Chapters, Study, Monitor,
 │       │                       #   Assignment, Board, Admin 등
-│       ├── hooks/              # useExcalidrawTouch, useScribbleErase (S Pen/문지르기 지우개)
-│       └── lib/                # api.ts, socket.ts, toolUrl.js, excalidrawUtils, pdfDownloader 등
+│       ├── hooks/              # useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
+│       │                       #   useScribbleErase(문지르기 지우개), useFreedrawSmoothing, usePenDiagnostics
+│       └── lib/                # api.ts, socket.ts, toolUrl.js, excalidrawUtils, pdfDownloader,
+│                               #   inputMode.js, penToggles.js, excalidrawHistory.js,
+│                               #   freedrawResample.js, scribbleDetect.js (*.test.js = Vitest)
 └── shared/src/types/       # api, auth, excalidraw, models, socket
 ```
 (제외: `node_modules/`, `dist/`, `.next/`, `drizzle/` 마이그레이션 SQL, `legacy_rails/`)
@@ -50,6 +54,11 @@ packages/
 | ③ | 학생에 대한 교사 코멘트 필기 | `pages/Monitor/StudentWorkViewer.jsx` (학생 열람은 StudyViewer) | `PUT/GET /api/comments/:pageId/:studentId`, `GET /api/comments/:pageId/for-student` | `teacher_student_comments` |
 | ④ | 학생 과제 필기 (assignment notes) | `pages/Assignment/AssignmentStudyViewer.jsx` | `PUT/GET /api/assignment-notes/:assignmentId/:pageId`, `GET /api/assignment-notes/:assignmentId/bulk` | `assignment_notes` |
 | ⑤ | 교사 과제 코멘트 필기 | `pages/Assignment/AssignmentWorkViewer.jsx` (학생 열람은 AssignmentStudyViewer) | `PUT/GET /api/assignment-comments/:pageId/:studentId` | `assignment_teacher_comments` |
+
+5개 뷰어 공통 펜/UI 동작(`feat/pen-input-quality`):
+- 진입 시 기본 도구는 **freedraw(펜) + 검정(`#000000`)** 으로 강제(마지막 도구/빨강 복원 폐기). `DrawingToolbar`가 `pageId` prop으로 페이지 전환 시 펜+검정 리셋.
+- 입력 모드 게이트(`hooks/useExcalidrawTouch.js` + `lib/inputMode.js`)로 손바닥 연결선(phantom line) 차단. 자체 undo/redo(`hooks/useExcalidrawUndo.js` + `lib/excalidrawHistory.js`). 5개 뷰어 모두 사용.
+- 진단 오버레이(`PenDiagnosticsOverlay` + `usePenDiagnostics`)는 `?penlog=1` 진입 시 활성화, 현재 **StudyViewer 에만** 마운트.
 
 부가 매핑:
 - 서버 핸들러: 필기/과제필기 → `routes/notes.ts`, 코멘트(③⑤) → `routes/comments.ts`. 실제 DB 로직은 `services/note.service.ts`에 집중.
@@ -122,6 +131,7 @@ packages/
 - **SMTP(선택)** — `SMTP_HOST/PORT/USER/PASS/FROM`(비밀번호 초기화 메일). `APP_URL`(메일 링크).
 - **PORT**(기본 3001), **NODE_ENV**.
 - **클라이언트 env** — `VITE_TOOLS_ORIGIN`(HTML 도구를 서빙할 별도 origin), Vite `VITE_*` 빌드타임 주입.
+- **클라이언트 테스트** — Vitest(jsdom 환경), `vitest.config.js`, scripts `test`(vitest run)/`test:watch`. 단위 테스트는 `src/lib/*.test.js`(inputMode, excalidrawHistory, freedrawResample 등). E2E는 Playwright.
 
 ## 주의사항 / 특이 패턴
 - **루트 `CLAUDE.md`는 신뢰 금지(outdated/Supabase 기준).** 현 스택은 이 문서 기준.
@@ -129,7 +139,15 @@ packages/
   - iframe에 `sandbox`+same-origin이면 opaque origin(`'null'`)이 되어 도구 내부 postMessage / blob worker(수식 입력 등)가 깨진다. 그래서 same-origin sandbox 대신 **별도 origin**(`VITE_TOOLS_ORIGIN`, `lib/toolUrl.js`)으로 띄운다.
   - 서버는 `text/html` 응답에 `Content-Security-Policy: frame-ancestors`(앱 origin만 허용)를 설정하고, helmet이 raw 응답에 직접 박은 `X-Frame-Options`/`Origin-Agent-Cluster`를 `reply.raw.removeHeader`로 제거한다(일반 `reply.removeHeader`로는 안 지워짐). `storage.ts` `GET /api/files/*` 참조.
 - **전체화면 뷰어**(StudyViewer/TeacherStudyViewer/StudentWorkViewer/Assignment* )는 의도적으로 `DashboardLayout` 밖에 둔다(필기 몰입 + S Pen).
-- **펜/지우개 입력** 커스텀 처리: `hooks/useExcalidrawTouch.js`, `hooks/useScribbleErase.js` (S Pen 배럴 버튼, 문지르기 지우개, 팜 리젝션). 민감도 변경 시 이 두 파일.
+- **펜/지우개 입력** 커스텀 처리: `hooks/useExcalidrawTouch.js`(입력 모드 게이트 + 핀치줌/팬), `hooks/useScribbleErase.js`(문지르기 지우개), S Pen 배럴버튼 지우개. 아래 입력 모드/리스너 항목 참조.
+- **입력 모드(스타일러스 ↔ 손가락)** 로 손바닥 연결선(phantom line)을 원천 차단(`lib/inputMode.js`). 기존 휴리스틱 팜 리젝션(크기 임계값·pen-session-lock·warmup)은 전부 제거됨. 비자명한 설계 결정:
+  - 입력 모드는 **전역 localStorage(`mc_input_mode`, 기본 `'stylus'`)로 모든 뷰어가 공유**한다. 한 뷰어에서 토글하면 다른 뷰어에도 즉시 반영. `DrawingToolbar`의 손가락 토글(lucide `Pointer`)이 이 스토어를 구독.
+  - 차단 리스너는 **`window` 캡처**에 부착한다. React 19가 이벤트를 앱 루트(`#root`)에 위임하는데, `#root`가 container 상위라 container 캡처는 React가 Excalidraw 핸들러를 디스패치한 뒤에 실행되어 `stopPropagation`이 늦다. `window` 캡처는 `#root`보다 먼저 실행되어 실제로 차단된다.
+  - `useExcalidrawTouch`의 `window` 리스너는 container 마운트와 무관하게 **즉시** 부착하고, container 의존 설정(`touchAction`/gesture/contextmenu)만 **`requestAnimationFrame`으로 container 마운트까지 대기**한다. 뷰어가 로딩 스피너를 먼저 렌더하는 동안 마운트되면 `containerRef.current`가 null이라, 과거처럼 container 기준으로 부착하면 영영 등록되지 않던 버그를 피한다.
+  - 스타일러스 모드에서 새어든 획은 pointerup 후 **~80ms 지연 백스톱**으로 히스토리 오염 없이 제거(`commitToHistory: false`).
+- **자체 undo/redo**(`hooks/useExcalidrawUndo.js` + `lib/excalidrawHistory.js`): Excalidraw 0.18이 undo/redo API/키보드를 노출하지 않아 씬 스냅샷 스택으로 구현. onChange 끝에서 350ms debounce 후 확정 상태 기록, Ctrl+Z / Ctrl+Shift+Z(또는 Ctrl+Y) 키바인딩. DrawingToolbar의 `onUndo/onRedo/canUndo/canRedo` prop.
+- **실험 펜 토글**(`lib/penToggles.js`, localStorage `mc_pen_toggles`): freedraw 리샘플링/스무딩(`useFreedrawSmoothing`, `lib/freedrawResample.js`)·진단 등을 토글 게이트로 켠다(기본 off). 진단 오버레이는 `?penlog=1`로도 활성화.
+- **DrawingToolbar 에서 영역 삭제(가위, `eraser_area`, `Scissors`) 및 `handleDeleteSelected` 제거됨.** 지우개는 획 단위(`eraser`)와 전체 지우기(`Trash2`)만 남음.
 - **PWA**: `public/manifest.webmanifest` + 최소 Service Worker(fetch 핸들러 없음), 프로덕션 빌드에서만 등록.
 - **legacy_rails/** — 구버전 Ruby on Rails 앱. **사용하지 않음. 탐색·수정 금지.**
 - 프로덕션에서 server가 `client/dist` 정적 서빙 + SPA fallback(`/api/*` 외 → index.html, 민감 경로 차단).
