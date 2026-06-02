@@ -103,16 +103,12 @@ const AssignmentWorkViewer = () => {
     if (commentMode) triggerPalmRejectionWarmup();
     if (commentMode && excalidrawAPIRef.current) {
       const apiRef = excalidrawAPIRef.current;
-      const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
-      const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
       const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.2');
-      const validTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
-      const excTool = savedTool === 'triangle' ? 'freedraw' : (validTools.includes(savedTool) ? savedTool : 'freedraw');
       baseStrokeWidthRef.current = savedWidth;
       const zoom = apiRef.getAppState()?.zoom?.value || 1;
       lastZoomRef.current = zoom;
-      apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
-      apiRef.setActiveTool({ type: excTool });
+      apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+      apiRef.setActiveTool({ type: 'freedraw' });
     }
   }, [commentMode]);
 
@@ -293,16 +289,12 @@ const AssignmentWorkViewer = () => {
 
   const handleExcalidrawMount = useCallback(async (apiRef) => {
     excalidrawAPIRef.current = apiRef;
-    const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
-    const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
     const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.4');
-    const validTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
-    const excTool = savedTool === 'triangle' ? 'freedraw' : (validTools.includes(savedTool) ? savedTool : 'freedraw');
     baseStrokeWidthRef.current = savedWidth;
     const zoom = apiRef.getAppState()?.zoom?.value || 1;
     lastZoomRef.current = zoom;
-    apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
-    apiRef.setActiveTool({ type: excTool });
+    apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+    apiRef.setActiveTool({ type: 'freedraw' });
     await new Promise((r) => setTimeout(r, 0));
     await rebuildScene();
   }, [rebuildScene]);
@@ -649,6 +641,7 @@ const AssignmentWorkViewer = () => {
       {commentMode && !toolbarCollapsed && !currentPage?.videoUrl && (
         <DrawingToolbar
           apiRef={excalidrawAPIRef}
+          pageId={currentPage?.id}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
           screenLocked={screenLocked}
@@ -734,7 +727,7 @@ const AssignmentWorkViewer = () => {
               viewModeEnabled={false}
               initialData={{
                 elements: [],
-                appState: { viewBackgroundColor: 'transparent', currentItemStrokeColor: '#e03131', currentItemStrokeWidth: 2, scrollX: 0, scrollY: 0 },
+                appState: { viewBackgroundColor: 'transparent', currentItemStrokeColor: '#000000', currentItemStrokeWidth: 2, scrollX: 0, scrollY: 0 },
               }}
               onChange={handleExcalidrawChange}
               UIOptions={EXCALIDRAW_UI_OPTIONS}

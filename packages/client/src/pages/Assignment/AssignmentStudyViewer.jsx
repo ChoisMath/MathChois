@@ -226,16 +226,12 @@ const AssignmentStudyViewer = () => {
     if (drawMode) triggerPalmRejectionWarmup();
     if (drawMode && excalidrawAPIRef.current) {
       const apiRef = excalidrawAPIRef.current;
-      const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
-      const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
       const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.2');
-      const validTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
-      const excTool = savedTool === 'triangle' ? 'freedraw' : (validTools.includes(savedTool) ? savedTool : 'freedraw');
       baseStrokeWidthRef.current = savedWidth;
       const zoom = apiRef.getAppState()?.zoom?.value || 1;
       lastZoomRef.current = zoom;
-      apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
-      apiRef.setActiveTool({ type: excTool });
+      apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+      apiRef.setActiveTool({ type: 'freedraw' });
     }
   }, [drawMode]);
 
@@ -521,16 +517,12 @@ const AssignmentStudyViewer = () => {
   /* Excalidraw 마운트 */
   const handleExcalidrawMount = useCallback(async (apiRef) => {
     excalidrawAPIRef.current = apiRef;
-    const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
-    const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
     const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.4');
-    const validTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
-    const excTool = savedTool === 'triangle' ? 'freedraw' : (validTools.includes(savedTool) ? savedTool : 'freedraw');
     baseStrokeWidthRef.current = savedWidth;
     const zoom = apiRef.getAppState()?.zoom?.value || 1;
     lastZoomRef.current = zoom;
-    apiRef.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
-    apiRef.setActiveTool({ type: excTool });
+    apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+    apiRef.setActiveTool({ type: 'freedraw' });
 
     const page = currentPageRef.current;
     if (!page?.imageUrl || !containerRef.current) return;
@@ -888,6 +880,7 @@ const AssignmentStudyViewer = () => {
       {drawMode && !toolbarCollapsed && !isLocked && !currentPage?.videoUrl && (
         <DrawingToolbar
           apiRef={excalidrawAPIRef}
+          pageId={currentPage?.id}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
           screenLocked={screenLocked}
@@ -973,7 +966,7 @@ const AssignmentStudyViewer = () => {
                 elements: noteElements,
                 appState: {
                   viewBackgroundColor:    'transparent',
-                  currentItemStrokeColor: '#1e1e1e',
+                  currentItemStrokeColor: '#000000',
                   currentItemStrokeWidth: 2,
                   scrollX: 0, scrollY: 0,
                 },

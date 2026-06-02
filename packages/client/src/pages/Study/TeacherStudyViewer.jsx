@@ -290,20 +290,15 @@ const TeacherStudyViewer = () => {
   const handleExcalidrawMount = useCallback(async (api) => {
     excalidrawAPIRef.current = api;
 
-    /* 저장된 도구 설정 복원 (React 렌더 사이클 충돌을 피하기 위해 setTimeout으로 지연) */
+    /* 펜+검정으로 초기화 (React 렌더 사이클 충돌 방지) */
     setTimeout(() => {
-      const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
-      const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
       const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.2');
       baseStrokeWidthRef.current = savedWidth;
       const zoom = api.getAppState()?.zoom?.value || 1;
       lastZoomRef.current = zoom;
-      const validExcalidrawTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
-      const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
-        (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');
 
-      api.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
-      api.setActiveTool({ type: excalidrawTool });
+      api.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+      api.setActiveTool({ type: 'freedraw' });
     }, 0);
 
     const page = currentPageRef.current;
@@ -496,6 +491,7 @@ const TeacherStudyViewer = () => {
       {!toolbarCollapsed && !currentPage?.videoUrl && !currentPage?.htmlUrl && (
         <DrawingToolbar
           apiRef={excalidrawAPIRef}
+          pageId={currentPage?.id}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
           screenLocked={screenLocked}
@@ -587,7 +583,7 @@ const TeacherStudyViewer = () => {
                 elements: noteElements,
                 appState: {
                   viewBackgroundColor:    'transparent',
-                  currentItemStrokeColor: '#e03131',
+                  currentItemStrokeColor: '#000000',
                   currentItemStrokeWidth: 2,
                   scrollX:                0,
                   scrollY:                0,

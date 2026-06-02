@@ -86,22 +86,17 @@ const StudentWorkViewer = () => {
     commentModeRef.current = commentMode;
   }, [currentPage, commentMode]);
 
-  /* 코멘트 모드 전환 시 저장된 도구/색상/굵기 복원 */
+  /* 코멘트 모드 전환 시 펜+검정으로 초기화 */
   useEffect(() => {
     if (commentMode) triggerPalmRejectionWarmup();
     if (commentMode && excalidrawAPIRef.current) {
       const excApi = excalidrawAPIRef.current;
-      const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
-      const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
       const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.2');
-      const validExcalidrawTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
-      const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
-        (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');
       baseStrokeWidthRef.current = savedWidth;
       const zoom = excApi.getAppState()?.zoom?.value || 1;
       lastZoomRef.current = zoom;
-      excApi.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
-      excApi.setActiveTool({ type: excalidrawTool });
+      excApi.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+      excApi.setActiveTool({ type: 'freedraw' });
     }
   }, [commentMode]);
 
@@ -323,18 +318,13 @@ const StudentWorkViewer = () => {
   const handleExcalidrawMount = useCallback(async (excApi) => {
     excalidrawAPIRef.current = excApi;
 
-    /* 저장된 도구 설정 복원 */
-    const savedTool  = localStorage.getItem('mc_active_tool') || 'freedraw';
-    const savedColor = localStorage.getItem('mc_tool_color')  || '#e03131';
+    /* 펜+검정으로 초기화 */
     const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.4');
     baseStrokeWidthRef.current = savedWidth;
     const zoom = excApi.getAppState()?.zoom?.value || 1;
     lastZoomRef.current = zoom;
-    const validExcalidrawTools = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse'];
-    const excalidrawTool = savedTool === 'triangle' ? 'freedraw' :
-      (validExcalidrawTools.includes(savedTool) ? savedTool : 'freedraw');
-    excApi.updateScene({ appState: { currentItemStrokeColor: savedColor, currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
-    excApi.setActiveTool({ type: excalidrawTool });
+    excApi.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+    excApi.setActiveTool({ type: 'freedraw' });
 
     /* 캐시된 DataURL은 즉시 반환되어 Excalidraw 초기 렌더 전에 addFiles가 호출될 수 있음.
        한 이벤트 루프 후에 실행하여 Excalidraw가 렌더링 준비를 완료하도록 보장 */
@@ -611,6 +601,7 @@ const StudentWorkViewer = () => {
       {commentMode && !toolbarCollapsed && !currentPage?.videoUrl && !currentPage?.htmlUrl && (
         <DrawingToolbar
           apiRef={excalidrawAPIRef}
+          pageId={currentPage?.id}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
           screenLocked={screenLocked}
@@ -705,7 +696,7 @@ const StudentWorkViewer = () => {
                 elements: [],
                 appState: {
                   viewBackgroundColor:    'transparent',
-                  currentItemStrokeColor: '#e03131',
+                  currentItemStrokeColor: '#000000',
                   currentItemStrokeWidth: 2,
                   scrollX:                0,
                   scrollY:                0,

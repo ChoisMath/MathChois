@@ -30,14 +30,9 @@ const SHAPE_TOOL_ICONS = {
 const SHAPE_TOOLS    = ['rectangle', 'ellipse', 'triangle'];
 const SAVEABLE_TOOLS = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse', 'triangle'];
 
-function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onToggleScreenLock, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true }) {
-  const [activeTool, setActiveTool]       = useState(() => {
-    const saved = localStorage.getItem('mc_active_tool') || 'freedraw';
-    return SAVEABLE_TOOLS.includes(saved) ? saved : 'freedraw';
-  });
-  const [color, setColor]                 = useState(() =>
-    localStorage.getItem('mc_tool_color') || '#000000'
-  );
+function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked, onToggleScreenLock, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true }) {
+  const [activeTool, setActiveTool]       = useState('freedraw');
+  const [color, setColor]                 = useState('#000000');
   const [strokeWidth, setStrokeWidth]     = useState(() =>
     parseFloat(localStorage.getItem('mc_stroke_width') || '0.2')
   );
@@ -310,6 +305,13 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
       apiRef.current?.setActiveTool({ type: 'freedraw' });
     }
   };
+
+  /* 페이지 진입 시 항상 펜+검정으로 초기화 */
+  useEffect(() => {
+    applyTool('freedraw');
+    applyColor('#000000');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageId]);
 
   const applyWidth = (w) => {
     setStrokeWidth(w);
