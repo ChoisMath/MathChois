@@ -12,6 +12,13 @@ import { BG_ELEMENT_ID } from '../lib/excalidrawUtils';
  * - S Pen 배럴버튼: 그리기 전달 차단
  * - baseStrokeWidthRef: 줌-독립 펜 두께 (핀치줌 시 자동 보정)
  *
+ * 차단 리스너는 window 캡처에 부착한다. React 19 는 이벤트를 앱 루트(#root)에 위임하는데
+ * #root 가 container 의 상위라, container 캡처는 React 가 Excalidraw 핸들러를 디스패치한 뒤에야
+ * 실행되어 stopPropagation 이 늦는다. window 캡처는 #root 보다 먼저 실행되어 실제로 차단된다.
+ * 또한 window 리스너는 container 마운트 여부와 무관하게 즉시 부착해야 한다 — 뷰어가 로딩 중
+ * 스피너만 렌더하는 동안 마운트되면 containerRef.current 가 null 이라, 과거처럼 container 기준으로
+ * 부착하면 영영 등록되지 않는다. container 의존 설정만 rAF 로 container 마운트까지 기다린다.
+ *
  * @param {{ excalidrawAPIRef: React.RefObject, containerRef: React.RefObject, screenLockedRef: React.RefObject, baseStrokeWidthRef?: React.RefObject }} opts
  */
 export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef }) {
@@ -25,26 +32,17 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
   const discardArmTimeRef    = useRef(0);      // 백스톱 무장 시각
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
     const getActiveTool = () =>
       excalidrawAPIRef.current?.getAppState()?.activeTool?.type;
 
-    container.style.touchAction = 'none';
-
     const preventGesture = (e) => { e.preventDefault(); };
-    container.addEventListener('gesturestart',  preventGesture, { passive: false });
-    container.addEventListener('gesturechange', preventGesture, { passive: false });
-    container.addEventListener('gestureend',    preventGesture, { passive: false });
 
     const handleContextMenu = (e) => {
-      if (e.target.closest('.excalidraw')) {
+      if (e.target.closest?.('.excalidraw')) {
         e.preventDefault();
         e.stopPropagation();
       }
     };
-    container.addEventListener('contextmenu', handleContextMenu, { capture: true });
 
     // 백스톱: 차단한 터치가 그래도 freedraw 를 시작했다면 그 획을 히스토리 오염 없이 제거.
     // Excalidraw 의 stroke 커밋은 React 배치 렌더 이후에 settle 되므로(삼각형 변환 코드와 동일),
@@ -68,7 +66,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     };
 
     const handlePointerDown = (e) => {
-      if (!e.target.closest('.excalidraw')) return;
+      if (!e.target.closest?.('.excalidraw')) return;
 
       // S Pen 배럴버튼 등 비주버튼 → 그리기 전달 차단(스크롤 방지)
       if (e.pointerType === 'pen' && e.button !== 0) {
@@ -102,7 +100,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
           e.preventDefault();
           const firstPointerId = [...touchPointerIdsRef.current].find((id) => id !== e.pointerId);
           if (firstPointerId !== undefined) {
-            const canvas = container.querySelector('.excalidraw canvas');
+            const canvas = containerRef.current?.querySelector('.excalidraw canvas');
             if (canvas) {
               isSyntheticUpRef.current = true;
               canvas.dispatchEvent(new PointerEvent('pointerup', {
@@ -116,7 +114,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     };
 
     const handlePointerMove = (e) => {
-      if (!e.target.closest('.excalidraw')) return;
+      if (!e.target.closest?.('.excalidraw')) return;
       if (e.pointerType !== 'touch') return;
       const count = touchPointerIdsRef.current.size;
 
@@ -154,7 +152,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
 
     const handleTouchStart = (e) => {
       isTouchingRef.current = true;
-      if (!e.target.closest('.excalidraw')) return;
+      if (!e.target.closest?.('.excalidraw')) return;
 
       if (shouldBlockTouchDraw(getInputMode(), getActiveTool(), e.touches.length)) {
         if (e.cancelable) e.preventDefault();
@@ -184,7 +182,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     };
 
     const handleTouchMove = (e) => {
-      if (!e.target.closest('.excalidraw')) return;
+      if (!e.target.closest?.('.excalidraw')) return;
 
       if (shouldBlockTouchDraw(getInputMode(), getActiveTool(), e.touches.length)) {
         if (e.cancelable) e.preventDefault();
@@ -231,9 +229,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       if (e.touches.length < 2) pinchStateRef.current = null;
     };
 
-    // 차단 리스너는 window 캡처에 부착한다. React 19 는 이벤트를 앱 루트(#root)에 위임하는데
-    // #root 가 container 의 상위라, container 캡처는 React 가 Excalidraw 핸들러를 디스패치한 뒤에야
-    // 실행되어 stopPropagation 이 늦는다. window 캡처는 #root 보다 먼저 실행되어 실제로 차단된다.
+    // window 캡처 리스너 — container 마운트 여부와 무관하게 즉시 부착
     window.addEventListener('pointerdown',   handlePointerDown,  { capture: true, passive: false });
     window.addEventListener('pointermove',   handlePointerMove,  { capture: true, passive: false });
     window.addEventListener('pointerup',     handlePointerUp,    { capture: true, passive: true });
@@ -243,12 +239,23 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     window.addEventListener('touchend',      handleTouchEnd,     { capture: true, passive: true });
     window.addEventListener('touchcancel',   handleTouchEnd,     { capture: true, passive: true });
 
+    // container 의존 설정 — 뷰어가 로딩 스피너를 먼저 렌더하므로 container 가 마운트될 때까지 rAF 로 대기
+    let rafId = 0;
+    let boundContainer = null;
+    const setupContainer = () => {
+      const container = containerRef.current;
+      if (!container) { rafId = requestAnimationFrame(setupContainer); return; }
+      boundContainer = container;
+      container.style.touchAction = 'none';
+      container.addEventListener('gesturestart',  preventGesture, { passive: false });
+      container.addEventListener('gesturechange', preventGesture, { passive: false });
+      container.addEventListener('gestureend',    preventGesture, { passive: false });
+      container.addEventListener('contextmenu',   handleContextMenu, { capture: true });
+    };
+    setupContainer();
+
     return () => {
-      container.style.touchAction = '';
-      container.removeEventListener('contextmenu',   handleContextMenu, { capture: true });
-      container.removeEventListener('gesturestart',  preventGesture);
-      container.removeEventListener('gesturechange', preventGesture);
-      container.removeEventListener('gestureend',    preventGesture);
+      cancelAnimationFrame(rafId);
       window.removeEventListener('pointerdown',   handlePointerDown, { capture: true });
       window.removeEventListener('pointermove',   handlePointerMove, { capture: true });
       window.removeEventListener('pointerup',     handlePointerUp,   { capture: true });
@@ -257,6 +264,13 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       window.removeEventListener('touchmove',     handleTouchMove,   { capture: true });
       window.removeEventListener('touchend',      handleTouchEnd,    { capture: true });
       window.removeEventListener('touchcancel',   handleTouchEnd,    { capture: true });
+      if (boundContainer) {
+        boundContainer.style.touchAction = '';
+        boundContainer.removeEventListener('contextmenu',   handleContextMenu, { capture: true });
+        boundContainer.removeEventListener('gesturestart',  preventGesture);
+        boundContainer.removeEventListener('gesturechange', preventGesture);
+        boundContainer.removeEventListener('gestureend',    preventGesture);
+      }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
