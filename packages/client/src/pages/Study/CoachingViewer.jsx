@@ -31,7 +31,14 @@ export default function CoachingViewer({ chapterId, pages, currentPage }) {
   const [error, setError] = useState('');
   const [saveStatus, setSaveStatus] = useState('saved');
 
-  const isWide = typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
+  const [isWide, setIsWide] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const handler = (e) => setIsWide(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
   const [rightWidth, setRightWidth] = useState(() => {
     const saved = Number(localStorage.getItem(PANEL_KEY));
     return saved >= MIN_W ? saved : 400;
@@ -53,6 +60,7 @@ export default function CoachingViewer({ chapterId, pages, currentPage }) {
         if (alive && attempts?.length) {
           setCoaching(attempts[0]);
           setSolutionLatex(attempts[0].solutionLatex || '');
+          if (attempts[0].workImageUrl) setWorkImageUrl(attempts[0].workImageUrl);
         }
       } catch (err) { if (alive) setError(err.message); }
     })();
@@ -84,6 +92,20 @@ export default function CoachingViewer({ chapterId, pages, currentPage }) {
       lastSavedRef.current = JSON.stringify(els.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points })));
     } catch { /* 빈 캔버스 */ }
   }, [pageId]);
+
+  // 언마운트/페이지 이동 시 디바운스 대기 중인 필기를 즉시 저장 (StudyViewer 패턴)
+  useEffect(() => {
+    return () => {
+      clearTimeout(saveTimerRef.current);
+      const excApi = excalidrawAPIRef.current;
+      if (!excApi) return;
+      const userEls = excApi.getSceneElements().filter((el) => !el.isDeleted);
+      const serialized = JSON.stringify(userEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points })));
+      if (serialized === lastSavedRef.current) return;
+      const files = excApi.getFiles?.() ?? {};
+      api.put(`/api/notes/student/${pageId}`, { excalidrawData: { elements: userEls, files }, chapterId }).catch(() => {});
+    };
+  }, [pageId, chapterId]);
 
   const startResize = useCallback((e) => {
     e.preventDefault();

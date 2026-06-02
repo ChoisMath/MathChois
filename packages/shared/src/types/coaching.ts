@@ -11,8 +11,8 @@ export interface CoachingResult {
   isCorrect: boolean;
   errorTags: ErrorTag[];
   conceptTags: string[];
-  strengthNotes: string;
-  weaknessNotes: string;
+  strengthNotes: string | null;
+  weaknessNotes: string | null;
 }
 
 export interface CoachingAttempt {

@@ -83,7 +83,7 @@ const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage,
         className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer disabled:opacity-50 z-10"
         onClick={(e) => {
           e.stopPropagation();
-          onDeletePage(page);
+          onDeletePage?.(page);
         }}
         disabled={isDeleting}
       >
