@@ -517,12 +517,16 @@ const AssignmentStudyViewer = () => {
   /* Excalidraw 마운트 */
   const handleExcalidrawMount = useCallback(async (apiRef) => {
     excalidrawAPIRef.current = apiRef;
-    const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.4');
-    baseStrokeWidthRef.current = savedWidth;
-    const zoom = apiRef.getAppState()?.zoom?.value || 1;
-    lastZoomRef.current = zoom;
-    apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
-    apiRef.setActiveTool({ type: 'freedraw' });
+
+    /* 펜+검정으로 초기화 (React 렌더 사이클 충돌 방지 — 동기 설정 시 초기 렌더가 selection 으로 덮음) */
+    setTimeout(() => {
+      const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.4');
+      baseStrokeWidthRef.current = savedWidth;
+      const zoom = apiRef.getAppState()?.zoom?.value || 1;
+      lastZoomRef.current = zoom;
+      apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+      apiRef.setActiveTool({ type: 'freedraw' });
+    }, 0);
 
     const page = currentPageRef.current;
     if (!page?.imageUrl || !containerRef.current) return;

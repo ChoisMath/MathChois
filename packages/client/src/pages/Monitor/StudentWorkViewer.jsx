@@ -318,18 +318,21 @@ const StudentWorkViewer = () => {
   const handleExcalidrawMount = useCallback(async (excApi) => {
     excalidrawAPIRef.current = excApi;
 
-    /* 펜+검정으로 초기화 */
     const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.4');
     baseStrokeWidthRef.current = savedWidth;
     const zoom = excApi.getAppState()?.zoom?.value || 1;
     lastZoomRef.current = zoom;
-    excApi.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
-    excApi.setActiveTool({ type: 'freedraw' });
 
     /* 캐시된 DataURL은 즉시 반환되어 Excalidraw 초기 렌더 전에 addFiles가 호출될 수 있음.
        한 이벤트 루프 후에 실행하여 Excalidraw가 렌더링 준비를 완료하도록 보장 */
     await new Promise((r) => setTimeout(r, 0));
     await rebuildScene();
+
+    /* 펜+검정으로 초기화 — rebuildScene 이후 + 렌더 사이클 충돌 방지 (도구가 selection 으로 덮이지 않도록) */
+    setTimeout(() => {
+      excApi.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+      excApi.setActiveTool({ type: 'freedraw' });
+    }, 0);
   }, [rebuildScene]);
 
   /* ── onChange: 코멘트 모드 + 실제 변경 시에만 저장 ── */
