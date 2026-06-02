@@ -22,14 +22,14 @@ packages/
 │       ├── db/                 # schema.ts(Drizzle), startupMigrate.ts(기동 시 idempotent DDL)
 │       ├── middleware/         # auth.ts(JWT), roleGuard.ts(requireRole)
 │       ├── routes/             # auth, classrooms, chapters, pages, storage, posts,
-│       │                       #   assignments, notes, comments, admin, problems
-│       ├── services/           # *.service.ts (DB 접근 로직) + ai.service.ts(Gemini), problem.service.ts
+│       │                       #   assignments, notes, comments, admin, problems, coaching
+│       ├── services/           # *.service.ts (DB 접근 로직) + ai.service.ts(Gemini), problem.service.ts, coaching.service.ts
 │       └── socket/             # index.ts + handlers/(notes, comments, assignments, presence)
 ├── client/                 # @mathchois/client (React SPA)
 │   └── src/
 │       ├── App.jsx             # 라우팅 정의
 │       ├── contexts/AuthContext.jsx
-│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView)
+│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem), problems/(ProblemPickerModal)
 │       │   └── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay
 │       ├── layouts/            # MainLayout(public), DashboardLayout(인증)
 │       ├── pages/              # Home, Login, Classrooms, Chapters, Study, Monitor,
@@ -39,8 +39,9 @@ packages/
 │       └── lib/                # api.ts, socket.ts, toolUrl.js, excalidrawUtils, pdfDownloader,
 │                               #   inputMode.js, penToggles.js, excalidrawHistory.js,
 │                               #   freedrawResample.js, scribbleDetect.js,
-│                               #   problemContent.js([FIGURE:n] 파서), problems.js(API) (*.test.js = Vitest)
-└── shared/src/types/       # api, auth, excalidraw, models, socket, problem
+│                               #   problemContent.js([FIGURE:n] 파서), problems.js(API),
+│                               #   coaching.js(convert/review/attempts/uploadWorkImage) (*.test.js = Vitest)
+└── shared/src/types/       # api, auth, excalidraw, models, socket, problem, coaching
 ```
 (제외: `node_modules/`, `dist/`, `.next/`, `drizzle/` 마이그레이션 SQL, `legacy_rails/`)
 
@@ -67,6 +68,17 @@ packages/
 - 교사 모니터링 진입점: `pages/Monitor/ChapterMonitor.jsx`(챕터별 학생 진도 → StudentWorkViewer로), `pages/Assignment/AssignmentMonitor.jsx`(과제별 제출 → AssignmentWorkViewer로).
 - 페이지 배경은 이미지/영상/**HTML 도구** 중 하나 (`pages.html_url`). HTML 도구는 iframe으로 렌더되고 그 위에 필기가 얹힌다.
 
+## AI 수학 코칭 페이지 (#3, `feat/ai-coaching-page`)
+
+`pages.aiProblemId`(→`problems`, set null)가 설정된 페이지는 이미지/영상/HTML 배경이 없는 **AI 코칭 페이지**다.
+
+- 학생 study 라우트(`/student/study/:chapterId/page/:pageId`)의 element는 **`pages/Study/StudyPageRouter.jsx`**(StudyViewer 대체). 페이지가 `aiProblemId`면 `CoachingViewer`, 아니면 `StudyViewer`를 렌더한다.
+- **`pages/Study/CoachingViewer.jsx`** — 좌: Excalidraw 풀이(① `student_notes`로 자동저장), 우: 문제·코칭 패널. 2단계 흐름(① 필기→LaTeX 수식 전환 → ② AI 검토), attempt 누적.
+- 패널 UI: **`components/common/CoachingPanel.jsx`**(정답 여부/오류태그/개념태그 + 코멘트 Markdown+KaTeX). 교사 에디터의 문제 선택은 **`components/problems/ProblemPickerModal.jsx`**(문제은행 선택 모달).
+- 교사: `Chapters/Editor.jsx`에서 [AI 코칭] 페이지 추가 + 문제 선택/변경 + AI 미리보기. `components/common/SortablePageItem.jsx`가 AI 페이지를 Sparkles 썸네일로 표시.
+- **보안 패턴: 정답·해설은 학생 클라이언트에 절대 전송하지 않는다.** 학생은 `GET /api/problems/:id/for-coaching`로 표시 필드만 받고, 정답 대조는 **서버 `reviewSolution`에서만** 수행한다. 코칭 시도는 `coaching_attempts`에 불변 누적된다.
+- 서버: 라우트 `routes/coaching.ts`, 서비스 `services/coaching.service.ts`(createAttempt/listAttempts), `services/ai.service.ts`(`convertSolutionToLatex` 필기→LaTeX, `reviewSolution` 정답·해설 대조 코칭), `services/problem.service.ts`(`getProblemForCoaching` 표시 필드만), `services/page.service.ts`(createPage가 `aiProblemId` 허용, `updatePage` 추가). 필기 스냅샷은 `ai-coaching` 버킷에 저장.
+
 ## 주요 엔드포인트 / 라우트
 
 ### 클라이언트 라우트 (App.jsx)
@@ -86,7 +98,7 @@ packages/
 | `/teacher/.../assignments/:assignmentId/monitor/:studentId` | **AssignmentWorkViewer** (⑤) | 전체화면 |
 | `/admin` | AdminPanel | requireAdmin |
 | `/student/classrooms`, `/student/classrooms/:id` | ClassroomList, ClassroomDetail | DashboardLayout |
-| `/student/study/:chapterId/page/:pageId` | **StudyViewer** (①, ③열람) | 전체화면 |
+| `/student/study/:chapterId/page/:pageId` | **StudyPageRouter** → StudyViewer(①, ③열람) 또는 CoachingViewer(AI 코칭) | 전체화면 |
 | `/student/assignments/:assignmentId/page/:pageId` | **AssignmentStudyViewer** (④, ⑤열람) | 전체화면 |
 
 ### 서버 API (Fastify, 모두 `/api/*`)
@@ -95,14 +107,15 @@ packages/
 | auth | routes/auth.ts | `GET /auth/google`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`, `GET /profiles/:id` |
 | classrooms | routes/classrooms.ts | `GET/POST /classrooms`, `GET /classrooms/:id`, `/:id/members`, 클래스코드 가입 |
 | chapters | routes/chapters.ts | `GET /classrooms/:cid/chapters`, `GET/PATCH/DELETE /chapters/:id` |
-| pages | routes/pages.ts | `GET /chapters/:chapterId/pages`, `POST` 생성(`htmlUrl` 허용), `DELETE /pages/:id` |
+| pages | routes/pages.ts | `GET /chapters/:chapterId/pages`, `POST` 생성(`htmlUrl`/`aiProblemId` 허용), `PATCH /pages/:id`, `DELETE /pages/:id` |
 | storage | routes/storage.ts | `POST /files/upload`(+multiple), `GET /files/*`, `DELETE /files/*` |
 | posts | routes/posts.ts | `GET /posts`, `GET /classrooms/:cid/posts`, `GET/DELETE /posts/:id` (+파일) |
 | assignments | routes/assignments.ts | `GET /classrooms/:cid/assignments`, `GET/DELETE /assignments/:id`, `/:id/pages`, `/:id/submissions` |
 | notes | routes/notes.ts | ①② 및 ④ 필기 (위 표 참조) + `student-summary`, `student-notes-for/:studentId` |
 | comments | routes/comments.ts | ③⑤ 코멘트 필기 (위 표 참조) |
 | admin | routes/admin.ts | `GET /admin/users`, `/teachers-with-students`, `/stats`, 비번 초기화 등 |
-| problems | routes/problems.ts | `POST /problems/ocr`, `/problems/markscheme-ocr`, `/problems/generate-solution`(Gemini), `GET /problems`(검색·필터·페이지네이션), `GET /problems/facets`, `GET/POST/PATCH/DELETE /problems/:id`. 모두 teacher, 수정·삭제는 작성자/admin |
+| problems | routes/problems.ts | `POST /problems/ocr`, `/problems/markscheme-ocr`, `/problems/generate-solution`(Gemini), `GET /problems`(검색·필터·페이지네이션), `GET /problems/facets`, `GET/POST/PATCH/DELETE /problems/:id`(teacher). `GET /problems/:id/for-coaching`(authenticate, 학생용 — 정답·해설 제외 표시필드만) |
+| coaching | routes/coaching.ts | `POST /coaching/convert`(필기→LaTeX), `POST /coaching/review`(서버에서만 정답 대조 후 attempt 생성), `GET /coaching/pages/:pageId/attempts`. 모두 authenticate, studentId=req.user.sub |
 | health | app.ts | `GET /api/health` (DB ping) |
 
 ## 데이터 모델 (Drizzle 스키마: `packages/server/src/db/schema.ts`)
@@ -112,7 +125,7 @@ packages/
 | `classrooms` | teacherId→profiles | classCode unique |
 | `classroom_members` | classroomId, studentId | (classroom, student) unique |
 | `chapters` | classroomId, sourceChapterId(self) | position, sourceChapterId(복제 출처) |
-| `pages` | chapterId | imageUrl / videoUrl / **htmlUrl**(HTML 도구) / position |
+| `pages` | chapterId, aiProblemId→problems(set null) | imageUrl / videoUrl / **htmlUrl**(HTML 도구) / position. `aiProblemId` 설정 시 배경 없는 AI 코칭 페이지 |
 | `student_notes` ① | studentId, pageId | (student, page) unique, excalidrawData |
 | `teacher_notes` ② | teacherId, pageId | (teacher, page) unique |
 | `teacher_student_comments` ③ | teacherId, studentId, pageId | (teacher, student, page) unique |
@@ -124,14 +137,15 @@ packages/
 | `assignment_notes` ④ | assignmentId, pageId(→assignment_pages), studentId | (assignment, page, student) unique |
 | `assignment_teacher_comments` ⑤ | teacherId, studentId, pageId(→assignment_pages) | (teacher, student, page) unique |
 | `problems` | createdBy→profiles | 문제은행. title, problemLatex, figureNotes/figures/keywords(jsonb), originalImageUrl, subject/majorUnit/minorUnit/difficulty/problemType/detailType, answer, solution, solutionSource(teacher-markscheme\|ai\|ai-regenerated\|teacher-verified), markschemeImageUrl, aiModel, status, createdAt/updatedAt. 인덱스 5개 |
+| `coaching_attempts` | pageId→pages(cascade), problemId→problems(set null), studentId→profiles(cascade) | AI 코칭 시도 **불변 누적**. workImageUrl, solutionLatex, isCorrect, errorTags/conceptTags(jsonb), strengthNotes, weaknessNotes, commentMarkdown, aiModel, createdAt. 인덱스 (studentId,createdAt)/(pageId,studentId)/(problemId) |
 
-> 마이그레이션은 Drizzle Kit(`db:push`/`db:generate`). 추가로 `db/startupMigrate.ts`가 기동 시 멱등 DDL을 실행(예: `pages.html_url` 컬럼, `problems` 테이블 보장).
+> 마이그레이션은 Drizzle Kit(`db:push`/`db:generate`). 추가로 `db/startupMigrate.ts`가 기동 시 멱등 DDL을 실행(예: `pages.html_url`·`pages.ai_problem_id` 컬럼, `problems`·`coaching_attempts` 테이블 보장).
 
 ## 외부 의존성
 - **PostgreSQL** (Railway) — `DATABASE_URL`.
 - **Google OAuth** — `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
 - **JWT** — `JWT_SECRET`, `JWT_REFRESH_SECRET`.
-- **파일 스토리지(Volume)** — `VOLUME_PATH`(기본 `./local-storage`). 버킷: `chapter-pages`, `chapter-tools`(HTML 전용), `submission-files`, `problem-bank`(문제은행 이미지), post 첨부 등. `/api/files/*`로 서빙.
+- **파일 스토리지(Volume)** — `VOLUME_PATH`(기본 `./local-storage`). 버킷: `chapter-pages`, `chapter-tools`(HTML 전용), `submission-files`, `problem-bank`(문제은행 이미지), `ai-coaching`(코칭 필기 스냅샷, 학생 업로드 허용), post 첨부 등. `/api/files/*`로 서빙.
 - **Google Gemini(선택)** — `GEMINI_API_KEY`(@google/genai), `GEMINI_MODEL`(기본 `gemini-2.0-flash`). `services/ai.service.ts`의 OCR(문제/마크스킴)·해설 생성. 구조화 출력은 `responseJsonSchema`.
 - **SMTP(선택)** — `SMTP_HOST/PORT/USER/PASS/FROM`(비밀번호 초기화 메일). `APP_URL`(메일 링크).
 - **PORT**(기본 3001), **NODE_ENV**.
@@ -157,6 +171,8 @@ packages/
   - 클라 흐름: `ProblemsPage`(탭) → `ProblemRegister`(업로드→OCR→그림슬롯→정답·해설→저장, 편집에도 재사용) / `RegisteredProblems`(필터·표·상세·수정/삭제). 검색·페이지네이션·facet은 **서버사이드**(`problem.service.ts`의 `listProblems`/`getFacets`).
   - 렌더: `components/common/ProblemView.jsx`(Markdown+KaTeX+그림). `[FIGURE:n]` 파싱은 `lib/problemContent.js`(+test). #3~#5 뷰어 재사용 예정.
   - 공유 타입: `shared/src/types/problem.ts`(Problem, ProblemFigure, OcrProblemResult, SolutionResult, ProblemListResult, ProblemFacets, SolutionSource).
+- **AI 수학 코칭(`feat/ai-coaching-page`)**: 위 "AI 수학 코칭 페이지" 섹션 참조. **정답·해설을 학생 클라이언트로 절대 보내지 않는 것**이 핵심 불변식 — 학생은 `GET /api/problems/:id/for-coaching`(표시필드만)만 받고, 정답 대조는 서버 `reviewSolution`에서만 수행한다. 코칭 시도는 `coaching_attempts`에 불변 누적.
+  - 공유 타입: `shared/src/types/coaching.ts`(CoachingAttempt, CoachingResult, ConvertResult, CoachingProblemView, ErrorTag), `models.ts`에 `Page.aiProblemId`.
 - **PWA**: `public/manifest.webmanifest` + 최소 Service Worker(fetch 핸들러 없음), 프로덕션 빌드에서만 등록.
 - **legacy_rails/** — 구버전 Ruby on Rails 앱. **사용하지 않음. 탐색·수정 금지.**
 - 프로덕션에서 server가 `client/dist` 정적 서빙 + SPA fallback(`/api/*` 외 → index.html, 민감 경로 차단).
