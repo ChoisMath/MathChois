@@ -28,4 +28,14 @@ describe('validateFigures', () => {
     expect(r.ok).toBe(false);
     expect(r.message).toContain('일치');
   });
+
+  it('fails when figure numbers are not contiguous from 1', () => {
+    const r = validateFigures('[FIGURE:1] [FIGURE:3]', ['a', 'b']);
+    expect(r.ok).toBe(false);
+    expect(r.message).toContain('연속');
+  });
+
+  it('passes when numbers are 1..n in any order', () => {
+    expect(validateFigures('[FIGURE:2] [FIGURE:1]', ['a', 'b']).ok).toBe(true);
+  });
 });

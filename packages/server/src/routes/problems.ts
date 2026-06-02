@@ -14,6 +14,9 @@ function imageMime(filePath: string): string {
 async function loadImage(imageUrl: string) {
   const parsed = urlToStoragePath(imageUrl);
   if (!parsed) throw Object.assign(new Error('잘못된 이미지 URL'), { statusCode: 400 });
+  if (parsed.bucket !== 'problem-bank') {
+    throw Object.assign(new Error('이 버킷의 파일은 AI 분석에 사용할 수 없습니다'), { statusCode: 403 });
+  }
   const file = await readFile(parsed.bucket, parsed.path);
   if (!file) throw Object.assign(new Error('이미지를 찾을 수 없습니다'), { statusCode: 404 });
   return { base64: file.data.toString('base64'), mimeType: imageMime(parsed.path) };

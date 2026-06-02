@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { env } from '../config/env.js';
 import type { OcrProblemResult, SolutionResult } from '@mathchois/shared';
 
@@ -11,13 +11,13 @@ function client(): GoogleGenAI {
   return _client;
 }
 
-async function generateJson<T>(parts: object[], responseJsonSchema: object): Promise<T> {
+async function generateJson<T>(parts: object[], responseSchema: object): Promise<T> {
   const ai = client();
   for (let attempt = 0; attempt < 2; attempt++) {
     const res = await ai.models.generateContent({
       model: env.GEMINI_MODEL,
       contents: [{ role: 'user', parts }],
-      config: { responseMimeType: 'application/json', responseJsonSchema },
+      config: { responseMimeType: 'application/json', responseSchema },
     });
     const text = res.text ?? '';
     try {
@@ -53,12 +53,12 @@ const SOLUTION_RULE = `너는 고등 수학 교사다. 아래 문제(Markdown+La
 - solution: 학생이 이해할 단계별 풀이를 Markdown + LaTeX 로. 인라인 $...$, 디스플레이 $$...$$.`;
 
 const META_SCHEMA = {
-  type: 'OBJECT',
+  type: Type.OBJECT,
   properties: {
-    subject: { type: 'STRING' }, majorUnit: { type: 'STRING' },
-    minorUnit: { type: 'STRING' }, difficulty: { type: 'STRING' },
-    problemType: { type: 'STRING' }, detailType: { type: 'STRING' },
-    keywords: { type: 'ARRAY', items: { type: 'STRING' } },
+    subject: { type: Type.STRING }, majorUnit: { type: Type.STRING },
+    minorUnit: { type: Type.STRING }, difficulty: { type: Type.STRING },
+    problemType: { type: Type.STRING }, detailType: { type: Type.STRING },
+    keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
   },
 };
 
@@ -66,10 +66,10 @@ export async function ocrProblem(mimeType: string, base64: string): Promise<OcrP
   return generateJson<OcrProblemResult>(
     [imagePart(mimeType, base64), { text: `${PROBLEM_RULE}\n위 문제 이미지를 변환하라.` }],
     {
-      type: 'OBJECT',
+      type: Type.OBJECT,
       properties: {
-        latex: { type: 'STRING' },
-        figureNotes: { type: 'ARRAY', items: { type: 'STRING' } },
+        latex: { type: Type.STRING },
+        figureNotes: { type: Type.ARRAY, items: { type: Type.STRING } },
         meta: META_SCHEMA,
       },
     },
@@ -79,14 +79,14 @@ export async function ocrProblem(mimeType: string, base64: string): Promise<OcrP
 export async function ocrMarkscheme(mimeType: string, base64: string): Promise<SolutionResult> {
   return generateJson<SolutionResult>(
     [imagePart(mimeType, base64), { text: `${MARKSCHEME_RULE}\n위 이미지를 변환하라.` }],
-    { type: 'OBJECT', properties: { answer: { type: 'STRING' }, solution: { type: 'STRING' } } },
+    { type: Type.OBJECT, properties: { answer: { type: Type.STRING }, solution: { type: Type.STRING } } },
   );
 }
 
 export async function generateSolution(problemLatex: string): Promise<SolutionResult> {
   return generateJson<SolutionResult>(
     [{ text: `${SOLUTION_RULE}\n\n문제:\n${problemLatex}` }],
-    { type: 'OBJECT', properties: { answer: { type: 'STRING' }, solution: { type: 'STRING' } } },
+    { type: Type.OBJECT, properties: { answer: { type: Type.STRING }, solution: { type: Type.STRING } } },
   );
 }
 

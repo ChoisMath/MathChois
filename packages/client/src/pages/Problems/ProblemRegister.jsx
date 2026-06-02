@@ -44,8 +44,12 @@ export default function ProblemRegister({ initial, onSaved }) {
   const handleFigureImage = async (idx, e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = await uploadProblemImage(file, `${dir}/figures`);
-    setForm((f) => ({ ...f, figures: f.figures.map((fig) => fig.idx === idx ? { ...fig, imageUrl: url } : fig) }));
+    setBusy(`figure-${idx}`); setError('');
+    try {
+      const url = await uploadProblemImage(file, `${dir}/figures`);
+      setForm((f) => ({ ...f, figures: f.figures.map((fig) => fig.idx === idx ? { ...fig, imageUrl: url } : fig) }));
+    } catch (err) { setError(err.message); }
+    setBusy('');
   };
 
   const handleMarkscheme = async (e) => {

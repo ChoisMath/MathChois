@@ -19,12 +19,20 @@ export function splitFigureSegments(latex) {
   return segments.length ? segments : [{ type: 'text', value: latex }];
 }
 
-/** 본문 [FIGURE:n] 개수와 figureNotes 길이 정합성 검증 */
+/** 본문 [FIGURE:n] 개수와 figureNotes 길이 + 번호가 1..n 연속인지 검증 */
 export function validateFigures(latex, figureNotes) {
   FIGURE_RE.lastIndex = 0;
-  const count = (latex.match(FIGURE_RE) || []).length;
-  if (count !== figureNotes.length) {
-    return { ok: false, message: `본문의 그림 표시(${count}개)와 그림 설명(${figureNotes.length}개) 개수가 일치하지 않습니다.` };
+  const nums = [];
+  let m;
+  while ((m = FIGURE_RE.exec(latex)) !== null) nums.push(parseInt(m[1], 10));
+  if (nums.length !== figureNotes.length) {
+    return { ok: false, message: `본문의 그림 표시(${nums.length}개)와 그림 설명(${figureNotes.length}개) 개수가 일치하지 않습니다.` };
+  }
+  const sorted = nums.slice().sort((a, b) => a - b);
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i] !== i + 1) {
+      return { ok: false, message: `그림 번호가 1부터 연속이어야 합니다. (감지된 번호: ${nums.join(', ')})` };
+    }
   }
   return { ok: true };
 }

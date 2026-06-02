@@ -33,8 +33,12 @@ export default function RegisteredProblems() {
 
   const handleDelete = async (p) => {
     if (!confirm('이 문항을 삭제할까요?')) return;
-    await deleteProblem(p.id);
-    fetchList(result.page);
+    try {
+      await deleteProblem(p.id);
+      fetchList(result.page);
+    } catch (err) {
+      alert(err.message ?? '삭제에 실패했습니다.');
+    }
   };
 
   if (editing) {
