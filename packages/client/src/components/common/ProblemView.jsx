@@ -20,7 +20,7 @@ export default function ProblemView({ latex, figures = [] }) {
   const segments = splitFigureSegments(latex || '');
 
   return (
-    <div className="prose prose-sm max-w-none break-normal">
+    <div className="prose prose-sm max-w-none break-normal overflow-x-auto">
       {segments.map((seg, i) => {
         if (seg.type === 'text') return <Markdown key={i}>{seg.value}</Markdown>;
         const fig = byIdx.get(seg.idx);

@@ -49,10 +49,10 @@ export default function CoachingHistoryView({ fetchHistory, showTeacherNotes = f
         <button onClick={() => preset('all')} className="px-3 min-h-11 border rounded-md text-sm whitespace-nowrap">전체</button>
         <span className="text-gray-300">|</span>
         <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-          className="border rounded px-2 min-h-11 text-sm" />
+          className="border rounded px-2 min-h-11 text-sm w-[7.5rem] shrink-0" />
         <span className="text-gray-400">~</span>
         <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
-          className="border rounded px-2 min-h-11 text-sm" />
+          className="border rounded px-2 min-h-11 text-sm w-[7.5rem] shrink-0" />
         <button onClick={() => load(1)} className="px-3 min-h-11 bg-blue-600 text-white rounded-md text-sm whitespace-nowrap">조회</button>
       </div>
 
@@ -72,9 +72,9 @@ export default function CoachingHistoryView({ fetchHistory, showTeacherNotes = f
                 <button onClick={() => setOpenId(open ? null : a.id)}
                   className="w-full flex flex-wrap items-center gap-2 p-3 text-left">
                   <span className="text-xs text-gray-500 whitespace-nowrap">{(a.createdAt || '').slice(0, 10)}</span>
-                  <span className="font-medium whitespace-nowrap truncate max-w-60">{a.problemTitle || '(제목 없음)'}</span>
+                  <span title={a.problemTitle || ''} className="font-medium whitespace-nowrap truncate max-w-40 sm:max-w-60">{a.problemTitle || '(제목 없음)'}</span>
                   {a.subject && <span className="text-xs text-gray-500 whitespace-nowrap">{a.subject}{a.difficulty ? ` · ${a.difficulty}` : ''}</span>}
-                  {a.chapterTitle && <span className="text-xs text-gray-400 whitespace-nowrap truncate max-w-40">{a.chapterTitle}</span>}
+                  {a.chapterTitle && <span title={a.chapterTitle || ''} className="text-xs text-gray-400 whitespace-nowrap truncate max-w-28 sm:max-w-40">{a.chapterTitle}</span>}
                   <span className={`ml-auto rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${
                     a.isCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
                     {a.isCorrect ? '정답' : '오답'}
