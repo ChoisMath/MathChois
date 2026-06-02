@@ -18,6 +18,8 @@ export function listProblems(filters = {}) {
   return api.get(`/api/problems${qs ? `?${qs}` : ''}`);
 }
 
+export const getProblemForCoaching = (id) => api.get(`/api/problems/${id}/for-coaching`);
+
 /** problem-bank 버킷에 이미지 업로드 → URL 반환 */
 export async function uploadProblemImage(file, directory) {
   const fd = new FormData();
