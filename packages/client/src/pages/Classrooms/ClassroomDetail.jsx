@@ -3,11 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Users, BookOpen, Copy, Check, Trash2, FileText,
   Plus, Hash, ChevronDown, ChevronUp, Edit2, GripVertical,
-  Newspaper, ClipboardList, LogOut, Loader, X, Save, Download
+  Newspaper, ClipboardList, LogOut, Loader, X, Save, Download, BarChart3
 } from 'lucide-react';
 
 const BoardTab      = lazy(() => import('../../components/board/BoardTab'));
 const AssignmentTab = lazy(() => import('../../components/assignment/AssignmentTab'));
+import ClassroomDashboard from '../../components/dashboard/ClassroomDashboard';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors,
@@ -522,6 +523,7 @@ const ClassroomDetail = () => {
             { key: 'board',       label: '게시판', Icon: Newspaper },
             { key: 'assignments', label: '과제',  Icon: ClipboardList },
             { key: 'students',    label: '학생',  Icon: Users },
+            ...(isTeacher ? [{ key: 'dashboard', label: '대시보드', Icon: BarChart3 }] : []),
           ].map((item) => {
             const TabIcon = item.Icon;
             return (
@@ -660,6 +662,11 @@ const ClassroomDetail = () => {
               </div>
             )}
           </div>
+        )}
+
+        {/* ── 대시보드 탭 (교사 전용) ── */}
+        {activeTab === 'dashboard' && isTeacher && (
+          <ClassroomDashboard classroomId={id} />
         )}
       </div>
 
