@@ -65,28 +65,28 @@ export default function ClassroomDashboard({ classroomId }) {
             const overallPct = acc(s.overall.correct, s.overall.attempts);
             return (
               <button key={s.studentId} onClick={() => goStudent(s)}
-                className="w-full text-left border rounded-xl bg-white p-3 hover:bg-blue-50 transition-colors">
+                className="w-full text-left border rounded-xl bg-white p-3 min-h-11 hover:bg-blue-50 transition-colors">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium whitespace-nowrap truncate">{s.name || '(이름 없음)'}</span>
                   <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap ${accColor(overallPct)}`}>
                     종합 {overallPct == null ? '–' : `${overallPct}%`}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-1.5 mt-2">
+                <div className="flex gap-1.5 mt-2 overflow-x-auto -mx-1 px-1">
                   {chapters.map((ch) => {
                     const c = s.cells[ch.id];
                     const pct = c ? acc(c.correct, c.attempts) : null;
                     const noted = c?.notedPages ?? 0;
                     const progPct = ch.totalPages > 0 ? Math.round((noted / ch.totalPages) * 100) : 0;
                     return (
-                      <div key={ch.id} className="rounded-lg overflow-hidden w-16 text-center">
+                      <div key={ch.id} className="rounded-lg overflow-hidden w-16 shrink-0 text-center">
                         <div className={`px-1 py-1 text-xs font-bold whitespace-nowrap ${accColor(pct)}`}>
                           {pct == null ? '–' : `${pct}%`}
                         </div>
                         <div className="text-[10px] text-gray-500 whitespace-nowrap truncate px-0.5" title={ch.title}>
                           {ch.title}
                         </div>
-                        <div className="h-1 bg-gray-200">
+                        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden" title={`진도 ${progPct}%`}>
                           <div className="h-full bg-blue-500" style={{ width: `${progPct}%` }} />
                         </div>
                       </div>

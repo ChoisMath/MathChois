@@ -517,7 +517,7 @@ const ClassroomDetail = () => {
         </div>
 
         {/* ── 탭 네비게이션 ── */}
-        <div className="flex border-b border-gray-200 mb-5">
+        <div className="flex border-b border-gray-200 mb-5 overflow-x-auto whitespace-nowrap">
           {[
             { key: 'chapters',    label: '챕터',  Icon: BookOpen },
             { key: 'board',       label: '게시판', Icon: Newspaper },
@@ -530,7 +530,7 @@ const ClassroomDetail = () => {
               <button
                 key={item.key}
                 onClick={() => setActiveTab(item.key)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-4 py-2.5 min-h-11 shrink-0 text-sm font-medium -mb-px border-b-2 transition-colors cursor-pointer ${
                   activeTab === item.key
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
