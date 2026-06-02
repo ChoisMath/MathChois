@@ -29,18 +29,18 @@ packages/
 │   └── src/
 │       ├── App.jsx             # 라우팅 정의
 │       ├── contexts/AuthContext.jsx
-│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem), problems/(ProblemPickerModal)
+│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem), problems/(ProblemPickerModal), coaching/(CoachingHistoryView)
 │       │   └── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay
 │       ├── layouts/            # MainLayout(public), DashboardLayout(인증)
 │       ├── pages/              # Home, Login, Classrooms, Chapters, Study, Monitor,
-│       │                       #   Assignment, Board, Admin, Problems(문제은행) 등
+│       │                       #   Assignment, Board, Admin, Problems(문제은행), History(코칭기록) 등
 │       ├── hooks/              # useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
 │       │                       #   useScribbleErase(문지르기 지우개), useFreedrawSmoothing, usePenDiagnostics
 │       └── lib/                # api.ts, socket.ts, toolUrl.js, excalidrawUtils, pdfDownloader,
 │                               #   inputMode.js, penToggles.js, excalidrawHistory.js,
 │                               #   freedrawResample.js, scribbleDetect.js,
 │                               #   problemContent.js([FIGURE:n] 파서), problems.js(API),
-│                               #   coaching.js(convert/review/attempts/uploadWorkImage) (*.test.js = Vitest)
+│                               #   coaching.js(convert/review/attempts/uploadWorkImage/getMyHistory/getStudentHistory) (*.test.js = Vitest)
 └── shared/src/types/       # api, auth, excalidraw, models, socket, problem, coaching
 ```
 (제외: `node_modules/`, `dist/`, `.next/`, `drizzle/` 마이그레이션 SQL, `legacy_rails/`)
@@ -77,7 +77,16 @@ packages/
 - 패널 UI: **`components/common/CoachingPanel.jsx`**(정답 여부/오류태그/개념태그 + 코멘트 Markdown+KaTeX). 교사 에디터의 문제 선택은 **`components/problems/ProblemPickerModal.jsx`**(문제은행 선택 모달).
 - 교사: `Chapters/Editor.jsx`에서 [AI 코칭] 페이지 추가 + 문제 선택/변경 + AI 미리보기. `components/common/SortablePageItem.jsx`가 AI 페이지를 Sparkles 썸네일로 표시.
 - **보안 패턴: 정답·해설은 학생 클라이언트에 절대 전송하지 않는다.** 학생은 `GET /api/problems/:id/for-coaching`로 표시 필드만 받고, 정답 대조는 **서버 `reviewSolution`에서만** 수행한다. 코칭 시도는 `coaching_attempts`에 불변 누적된다.
-- 서버: 라우트 `routes/coaching.ts`, 서비스 `services/coaching.service.ts`(createAttempt/listAttempts), `services/ai.service.ts`(`convertSolutionToLatex` 필기→LaTeX, `reviewSolution` 정답·해설 대조 코칭), `services/problem.service.ts`(`getProblemForCoaching` 표시 필드만), `services/page.service.ts`(createPage가 `aiProblemId` 허용, `updatePage` 추가). 필기 스냅샷은 `ai-coaching` 버킷에 저장.
+- 서버: 라우트 `routes/coaching.ts`, 서비스 `services/coaching.service.ts`(createAttempt/listAttempts + 기록조회 `listStudentHistory`/`listClassroomStudentHistory`), `services/ai.service.ts`(`convertSolutionToLatex` 필기→LaTeX, `reviewSolution` 정답·해설 대조 코칭), `services/problem.service.ts`(`getProblemForCoaching` 표시 필드만), `services/page.service.ts`(createPage가 `aiProblemId` 허용, `updatePage` 추가). 필기 스냅샷은 `ai-coaching` 버킷에 저장.
+
+### AI 코칭 풀이 기록 조회 (#4, `feat/coaching-history`)
+
+읽기 전용 — 스키마 변경 없음. `coaching_attempts`를 `problems`(표시필드만)+`pages`→`chapters` 조인해 기간(from/to) 필터·페이지네이션으로 조회한다. **정답·해설은 select 제외(보안 불변식 유지).**
+
+- 서버: `coaching.service.ts`의 `listStudentHistory(studentId, q)`(본인), `listClassroomStudentHistory(classroomId, studentId, q)`(교사, 해당 클래스 챕터 범위 한정). 라우트는 위 coaching 그룹 표의 history 2개.
+- 클라이언트 공용 뷰: `components/coaching/CoachingHistoryView.jsx` — 기간 필터(프리셋 1주/1개월/전체 + 시작·종료 직접지정, 기본 최근 7일) + 카드 리스트 + 인라인 펼침(`ProblemView` 문제·풀이 + `CoachingPanel` + 필기 이미지) + 페이지네이션. `fetchHistory` prop 주입(ref 안정화).
+- 학생: `pages/History/MyCoachingHistory.jsx`(`/student/coaching-history`), StudentSidebar "내 풀이 기록"(History 아이콘). 교사: `pages/Monitor/StudentCoachingHistory.jsx`(`/teacher/classrooms/:classroomId/students/:studentId/coaching-history`), `ClassroomDetail.jsx` '학생' 탭 멤버 카드의 [코칭 기록] 버튼으로 진입.
+- `components/common/CoachingPanel.jsx`에 `showTeacherNotes` prop(강점 메모 표시) 추가. `lib/coaching.js`에 `getMyHistory`/`getStudentHistory` 추가.
 
 ## 주요 엔드포인트 / 라우트
 
@@ -96,10 +105,12 @@ packages/
 | `/teacher/problems` | Problems/ProblemsPage | 문제은행 (탭: 문항등록/등록된 문항), DashboardLayout |
 | `/teacher/.../assignments/:assignmentId/edit` · `/monitor` | AssignmentEditor, AssignmentMonitor | 과제 |
 | `/teacher/.../assignments/:assignmentId/monitor/:studentId` | **AssignmentWorkViewer** (⑤) | 전체화면 |
+| `/teacher/classrooms/:classroomId/students/:studentId/coaching-history` | Monitor/StudentCoachingHistory | DashboardLayout, 교사가 학생 AI 코칭 풀이 기록 조회 |
 | `/admin` | AdminPanel | requireAdmin |
 | `/student/classrooms`, `/student/classrooms/:id` | ClassroomList, ClassroomDetail | DashboardLayout |
 | `/student/study/:chapterId/page/:pageId` | **StudyPageRouter** → StudyViewer(①, ③열람) 또는 CoachingViewer(AI 코칭) | 전체화면 |
 | `/student/assignments/:assignmentId/page/:pageId` | **AssignmentStudyViewer** (④, ⑤열람) | 전체화면 |
+| `/student/coaching-history` | History/MyCoachingHistory | DashboardLayout, 본인 AI 코칭 풀이 기록 (StudentSidebar "내 풀이 기록") |
 
 ### 서버 API (Fastify, 모두 `/api/*`)
 | 그룹 | 파일 | 주요 엔드포인트 |
@@ -115,7 +126,7 @@ packages/
 | comments | routes/comments.ts | ③⑤ 코멘트 필기 (위 표 참조) |
 | admin | routes/admin.ts | `GET /admin/users`, `/teachers-with-students`, `/stats`, 비번 초기화 등 |
 | problems | routes/problems.ts | `POST /problems/ocr`, `/problems/markscheme-ocr`, `/problems/generate-solution`(Gemini), `GET /problems`(검색·필터·페이지네이션), `GET /problems/facets`, `GET/POST/PATCH/DELETE /problems/:id`(teacher). `GET /problems/:id/for-coaching`(authenticate, 학생용 — 정답·해설 제외 표시필드만) |
-| coaching | routes/coaching.ts | `POST /coaching/convert`(필기→LaTeX), `POST /coaching/review`(서버에서만 정답 대조 후 attempt 생성), `GET /coaching/pages/:pageId/attempts`. 모두 authenticate, studentId=req.user.sub |
+| coaching | routes/coaching.ts | `POST /coaching/convert`(필기→LaTeX), `POST /coaching/review`(서버에서만 정답 대조 후 attempt 생성), `GET /coaching/pages/:pageId/attempts`(authenticate, studentId=req.user.sub). 기록 조회: `GET /coaching/history`(본인, authenticate), `GET /coaching/classrooms/:classroomId/students/:studentId/history`(교사 — requireRole+isClassroomOwner+isClassroomMember, 해당 클래스 챕터 범위 한정). 모두 정답·해설 select 제외 |
 | health | app.ts | `GET /api/health` (DB ping) |
 
 ## 데이터 모델 (Drizzle 스키마: `packages/server/src/db/schema.ts`)
@@ -172,7 +183,7 @@ packages/
   - 렌더: `components/common/ProblemView.jsx`(Markdown+KaTeX+그림). `[FIGURE:n]` 파싱은 `lib/problemContent.js`(+test). #3~#5 뷰어 재사용 예정.
   - 공유 타입: `shared/src/types/problem.ts`(Problem, ProblemFigure, OcrProblemResult, SolutionResult, ProblemListResult, ProblemFacets, SolutionSource).
 - **AI 수학 코칭(`feat/ai-coaching-page`)**: 위 "AI 수학 코칭 페이지" 섹션 참조. **정답·해설을 학생 클라이언트로 절대 보내지 않는 것**이 핵심 불변식 — 학생은 `GET /api/problems/:id/for-coaching`(표시필드만)만 받고, 정답 대조는 서버 `reviewSolution`에서만 수행한다. 코칭 시도는 `coaching_attempts`에 불변 누적.
-  - 공유 타입: `shared/src/types/coaching.ts`(CoachingAttempt, CoachingResult, ConvertResult, CoachingProblemView, ErrorTag), `models.ts`에 `Page.aiProblemId`.
+  - 공유 타입: `shared/src/types/coaching.ts`(CoachingAttempt, CoachingResult, ConvertResult, CoachingProblemView, ErrorTag, + 기록조회 CoachingAttemptView/CoachingHistoryResult/CoachingHistoryFilters), `models.ts`에 `Page.aiProblemId`.
 - **PWA**: `public/manifest.webmanifest` + 최소 Service Worker(fetch 핸들러 없음), 프로덕션 빌드에서만 등록.
 - **legacy_rails/** — 구버전 Ruby on Rails 앱. **사용하지 않음. 탐색·수정 금지.**
 - 프로덕션에서 server가 `client/dist` 정적 서빙 + SPA fallback(`/api/*` 외 → index.html, 민감 경로 차단).
