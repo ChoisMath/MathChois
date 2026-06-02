@@ -87,14 +87,15 @@ export default function CoachingViewer({ chapterId, pages, currentPage }) {
 
   const startResize = useCallback((e) => {
     e.preventDefault();
+    let current = rightWidth;
     const onMove = (ev) => {
-      const w = Math.min(window.innerWidth * 0.6, Math.max(MIN_W, window.innerWidth - ev.clientX));
-      setRightWidth(w);
+      current = Math.min(window.innerWidth * 0.6, Math.max(MIN_W, window.innerWidth - ev.clientX));
+      setRightWidth(current);
     };
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      localStorage.setItem(PANEL_KEY, String(rightWidth));
+      localStorage.setItem(PANEL_KEY, String(current));
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
