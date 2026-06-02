@@ -20,6 +20,7 @@ import { assignmentRoutes } from './routes/assignments.js';
 import { noteRoutes } from './routes/notes.js';
 import { commentRoutes } from './routes/comments.js';
 import { adminRoutes } from './routes/admin.js';
+import { problemRoutes } from './routes/problems.js';
 
 export function buildApp() {
   const app = Fastify({
@@ -94,6 +95,7 @@ export function buildApp() {
   app.register(noteRoutes);
   app.register(commentRoutes);
   app.register(adminRoutes);
+  app.register(problemRoutes);
 
   // ─── Global Error Handler ──────────────────────────
 
