@@ -76,8 +76,10 @@ export default function CoachingHistoryView({ fetchHistory, showTeacherNotes = f
                   {a.subject && <span className="text-xs text-gray-500 whitespace-nowrap">{a.subject}{a.difficulty ? ` · ${a.difficulty}` : ''}</span>}
                   {a.chapterTitle && <span title={a.chapterTitle || ''} className="text-xs text-gray-400 whitespace-nowrap truncate max-w-28 sm:max-w-40">{a.chapterTitle}</span>}
                   <span className={`ml-auto rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${
-                    a.isCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                    {a.isCorrect ? '정답' : '오답'}
+                    a.isCorrect === true ? 'bg-emerald-100 text-emerald-700'
+                      : a.isCorrect === false ? 'bg-rose-100 text-rose-700'
+                      : 'bg-gray-100 text-gray-500'}`}>
+                    {a.isCorrect === true ? '정답' : a.isCorrect === false ? '오답' : '미채점'}
                   </span>
                 </button>
 
