@@ -33,6 +33,7 @@ export interface Page {
   videoUrl: string | null;
   htmlUrl: string | null;
   position: number;
+  aiProblemId: string | null;
 }
 
 // ─── Notes & Comments ───────────────────────────────
