@@ -21,6 +21,12 @@ describe('inputMode store', () => {
     expect(localStorage.getItem('mc_input_mode')).toBe('finger');
   });
 
+  it('무효한 값은 무시', () => {
+    setInputMode('finger');
+    setInputMode('garbage');
+    expect(getInputMode()).toBe('finger');
+  });
+
   it('subscribeInputMode 콜백 호출 및 해제', () => {
     const fn = vi.fn();
     const unsub = subscribeInputMode(fn);

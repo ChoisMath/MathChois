@@ -1,5 +1,6 @@
 const KEY = 'mc_input_mode';
 const VALID = new Set(['stylus', 'finger']);
+// 'arrow'는 이 툴바에 노출되지 않으므로 제외
 const DRAW_TOOLS = new Set(['freedraw', 'line', 'rectangle', 'ellipse', 'triangle']);
 
 function load() {
@@ -16,6 +17,7 @@ export function getInputMode() { return mode; }
 
 export function setInputMode(next) {
   if (!VALID.has(next)) return;
+  if (mode === next) return;
   mode = next;
   try { localStorage.setItem(KEY, next); } catch { /* localStorage 불가 무시 */ }
   listeners.forEach((fn) => fn(mode));
