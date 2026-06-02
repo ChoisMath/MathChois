@@ -9,7 +9,7 @@
 - 배포: **Railway** (Dockerfile 빌드, `packages/server/Dockerfile`, healthcheck `/api/health`). 프로덕션에서 server가 `client/dist`를 정적 서빙 + SPA fallback.
 - 인증: Google OAuth + 이메일/비밀번호(bcrypt). JWT access/refresh, 역할 `teacher` | `student`(+ `isAdmin`).
 
-> 루트 `CLAUDE.md`는 **outdated**. "React+Vite+Supabase 단일 앱"이라고 적혀 있으나 실제는 위 모노레포 + 자체 Fastify/Drizzle 백엔드다. Supabase는 더 이상 사용하지 않는다(Storage·RPC·RLS 개념은 자체 구현으로 대체됨). 아래 내용을 신뢰할 것.
+> 루트 `CLAUDE.md`는 현재 위 모노레포(Fastify/Drizzle) 기준으로 최신화되어 이 맵과 일치한다. (과거엔 "React+Vite+Supabase 단일 앱"으로 적혀 있었으나 갱신됨. Supabase는 미사용 — Storage·RPC·RLS는 자체 구현으로 대체.) 구조 상세는 이 PROJECT_MAP을 기준으로 본다.
 
 ## 폴더 구조
 ```
@@ -167,14 +167,14 @@ packages/
 - **Google OAuth** — `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
 - **JWT** — `JWT_SECRET`, `JWT_REFRESH_SECRET`.
 - **파일 스토리지(Volume)** — `VOLUME_PATH`(기본 `./local-storage`). 버킷: `chapter-pages`, `chapter-tools`(HTML 전용), `submission-files`, `problem-bank`(문제은행 이미지), `ai-coaching`(코칭 필기 스냅샷, 학생 업로드 허용), post 첨부 등. `/api/files/*`로 서빙.
-- **Google Gemini(선택)** — `GEMINI_API_KEY`(@google/genai), `GEMINI_MODEL`(기본 `gemini-2.0-flash`). `services/ai.service.ts`의 OCR(문제/마크스킴)·해설 생성. 구조화 출력은 `responseJsonSchema`.
+- **Google Gemini(선택)** — `GEMINI_API_KEY`(@google/genai), `GEMINI_MODEL`(기본 `gemini-3.5-flash`; 구 `gemini-2.0-flash`는 Google에서 퇴역되어 404 발생 → 변경됨. Railway 환경변수에도 `gemini-3.5-flash` 설정). `services/ai.service.ts`의 OCR(문제/마크스킴)·해설 생성·필기→LaTeX 전환·풀이 검토. 구조화 출력은 `responseJsonSchema`.
 - **SMTP(선택)** — `SMTP_HOST/PORT/USER/PASS/FROM`(비밀번호 초기화 메일). `APP_URL`(메일 링크).
 - **PORT**(기본 3001), **NODE_ENV**.
 - **클라이언트 env** — `VITE_TOOLS_ORIGIN`(HTML 도구를 서빙할 별도 origin), Vite `VITE_*` 빌드타임 주입.
 - **클라이언트 테스트** — Vitest(jsdom 환경), `vitest.config.js`, scripts `test`(vitest run)/`test:watch`. 단위 테스트는 `src/lib/*.test.js`(inputMode, excalidrawHistory, freedrawResample 등). E2E는 Playwright.
 
 ## 주의사항 / 특이 패턴
-- **루트 `CLAUDE.md`는 신뢰 금지(outdated/Supabase 기준).** 현 스택은 이 문서 기준.
+- **루트 `CLAUDE.md`는 현재 스택 기준으로 최신**(모노레포/Fastify/Drizzle). 구조 상세는 이 PROJECT_MAP 참조.
 - **HTML 도구 페이지는 앱과 다른 origin에서 서빙**해야 함:
   - iframe에 `sandbox`+same-origin이면 opaque origin(`'null'`)이 되어 도구 내부 postMessage / blob worker(수식 입력 등)가 깨진다. 그래서 same-origin sandbox 대신 **별도 origin**(`VITE_TOOLS_ORIGIN`, `lib/toolUrl.js`)으로 띄운다.
   - 서버는 `text/html` 응답에 `Content-Security-Policy: frame-ancestors`(앱 origin만 허용)를 설정하고, helmet이 raw 응답에 직접 박은 `X-Frame-Options`/`Origin-Agent-Cluster`를 `reply.raw.removeHeader`로 제거한다(일반 `reply.removeHeader`로는 안 지워짐). `storage.ts` `GET /api/files/*` 참조.
@@ -198,5 +198,9 @@ packages/
 - **legacy_rails/** — 구버전 Ruby on Rails 앱. **사용하지 않음. 탐색·수정 금지.**
 - 프로덕션에서 server가 `client/dist` 정적 서빙 + SPA fallback(`/api/*` 외 → index.html, 민감 경로 차단).
 
+## 문서 / 상세 참조
+- **`docs/superpowers/e2e-checklist.md`** — 라이브 E2E 점검 가이드(#1 문항등록·#2 문제은행·#3 페이지 코칭·#4 기록 조회·#5 대시보드). 실제 DB + Gemini 환경에서의 수동 검증 절차(사전 env 포함).
+- **`.gitignore`** — `*.tsbuildinfo`·`.superpowers/`·`.plans/`·`review.md` 무시(빌드 산출물·작업 노트는 읽지 않음).
+
 ---
-마지막 업데이트: 2026-06-02
+마지막 업데이트: 2026-06-03
