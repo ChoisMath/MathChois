@@ -45,7 +45,7 @@ export default function ProblemRegister({ initial, onSaved }) {
     const file = e.target.files?.[0];
     if (!file) return;
     const url = await uploadProblemImage(file, `${dir}/figures`);
-    set({ figures: form.figures.map((fig) => fig.idx === idx ? { ...fig, imageUrl: url } : fig) });
+    setForm((f) => ({ ...f, figures: f.figures.map((fig) => fig.idx === idx ? { ...fig, imageUrl: url } : fig) }));
   };
 
   const handleMarkscheme = async (e) => {
