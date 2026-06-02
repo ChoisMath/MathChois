@@ -1,7 +1,7 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Trash2, GripVertical, Play, FileCode2 } from 'lucide-react';
+import { Trash2, GripVertical, Play, FileCode2, Sparkles } from 'lucide-react';
 import { extractYouTubeId, getYouTubeThumbnail } from '../../lib/youtubeUtils';
 
 const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage, isDeleting }) => {
@@ -60,6 +60,11 @@ const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage,
               <Play className="h-4 w-4 text-white fill-white" />
             </div>
           </div>
+        </div>
+      ) : page.aiProblemId ? (
+        <div className="relative flex items-center justify-center bg-emerald-50 aspect-video">
+          <Sparkles className="h-8 w-8 text-emerald-600" />
+          <span className="absolute bottom-1 inset-x-0 text-center text-[10px] text-emerald-700 font-medium">AI 코칭</span>
         </div>
       ) : (
         <img
