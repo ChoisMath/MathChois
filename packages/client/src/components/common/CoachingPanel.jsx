@@ -8,7 +8,7 @@ const ERROR_LABELS = {
 };
 
 /** AI 코칭 결과 표시. attempt: coaching_attempts row (또는 review 반환값) */
-export default function CoachingPanel({ attempt }) {
+export default function CoachingPanel({ attempt, showTeacherNotes = false }) {
   if (!attempt) return null;
   return (
     <div className="rounded-xl border bg-white p-3 shadow-sm">
@@ -33,6 +33,9 @@ export default function CoachingPanel({ attempt }) {
           {attempt.commentMarkdown || ''}
         </ReactMarkdown>
       </div>
+      {showTeacherNotes && attempt.strengthNotes && (
+        <p className="mt-2 text-sm text-emerald-700">강점: {attempt.strengthNotes}</p>
+      )}
       {attempt.weaknessNotes && (
         <p className="mt-2 text-sm text-gray-500">보완: {attempt.weaknessNotes}</p>
       )}

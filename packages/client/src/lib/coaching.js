@@ -15,3 +15,16 @@ export async function uploadWorkImage(blob, directory) {
   );
   return res.url;
 }
+
+function qs(params = {}) {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v != null && v !== '') sp.set(k, String(v));
+  }
+  const s = sp.toString();
+  return s ? `?${s}` : '';
+}
+
+export const getMyHistory = (params) => api.get(`/api/coaching/history${qs(params)}`);
+export const getStudentHistory = (classroomId, studentId, params) =>
+  api.get(`/api/coaching/classrooms/${classroomId}/students/${studentId}/history${qs(params)}`);
