@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Users, LogIn, LayoutList, Loader, BookMarked } from 'lucide-react';
+import { Users, LogIn, LayoutList, Loader, BookMarked, History } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../lib/api';
@@ -101,6 +101,17 @@ function StudentSidebar() {
         >
           <Users className={`mr-2 h-4 w-4 ${location.pathname === '/student/classrooms' ? 'text-blue-500' : 'text-gray-400'}`} />
           내 클래스룸
+        </Link>
+        <Link
+          to="/student/coaching-history"
+          className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors mb-2 ${
+            location.pathname.startsWith('/student/coaching-history')
+              ? 'bg-blue-50 text-blue-700'
+              : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+          }`}
+        >
+          <History className={`mr-2 h-4 w-4 ${location.pathname.startsWith('/student/coaching-history') ? 'text-blue-500' : 'text-gray-400'}`} />
+          내 풀이 기록
         </Link>
 
         {classrooms.length === 0 ? (

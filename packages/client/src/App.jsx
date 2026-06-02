@@ -35,6 +35,10 @@ const AssignmentStudyViewer  = lazy(() => import('./pages/Assignment/AssignmentS
 /* 문제은행 */
 const ProblemsPage = lazy(() => import('./pages/Problems/ProblemsPage'));
 
+/* 코칭 기록 */
+const MyCoachingHistory     = lazy(() => import('./pages/History/MyCoachingHistory'));
+const StudentCoachingHistory = lazy(() => import('./pages/Monitor/StudentCoachingHistory'));
+
 /* 관리자 */
 const AdminPanel = lazy(() => import('./pages/Admin/AdminPanel'));
 
@@ -122,6 +126,11 @@ function App() {
               />
               {/* 문제은행 */}
               <Route path="/teacher/problems" element={<ProblemsPage />} />
+              {/* 학생 코칭 기록 */}
+              <Route
+                path="/teacher/classrooms/:classroomId/students/:studentId/coaching-history"
+                element={<StudentCoachingHistory />}
+              />
             </Route>
             {/* Fullscreen teacher views — no DashboardLayout */}
             <Route
@@ -151,6 +160,7 @@ function App() {
             <Route element={<DashboardLayout />}>
               <Route path="/student/classrooms" element={<ClassroomList />} />
               <Route path="/student/classrooms/:id" element={<ClassroomDetail />} />
+              <Route path="/student/coaching-history" element={<MyCoachingHistory />} />
             </Route>
             {/* StudyViewer: 전체화면 레이아웃, DashboardLayout 제외 */}
             <Route path="/student/study/:chapterId/page/:pageId" element={<StudyPageRouter />} />
