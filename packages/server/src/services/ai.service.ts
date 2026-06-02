@@ -33,6 +33,17 @@ function imagePart(mimeType: string, base64: string) {
   return { inlineData: { mimeType, data: base64 } };
 }
 
+const SOLUTION_OCR_RULE = `다음 규칙으로 학생이 손으로 쓴 수학 풀이 이미지를 변환하라.
+- 풀이 전체를 Markdown + LaTeX 로 변환한다. 인라인 수식은 $...$, 디스플레이 수식은 $$...$$.
+- 손글씨를 최대한 충실히 옮긴다(맞춤·교정하지 말 것). 한국어가 아닌 텍스트는 한국어로.
+- 학생이 그린 그래프·도형·표는 본문에 자연어 설명으로 보존한다.`;
+
+const REVIEW_RULE = `너는 고등 수학 첨삭 선생님이다. 학생 풀이를 검토해 코칭하라.
+이미지에는 손글씨 수식뿐 아니라 학생이 직접 그린 그래프·도형·표 등 시각 요소가 포함될 수 있다. 이를 변환된 LaTeX 풀이와 함께 판독·평가하라.
+코칭 원칙(스캐폴딩): 오답이거나 막혔으면 정답·전체 풀이를 통째로 제시하지 말고, 학생이 스스로 해결하도록 '다음 한 걸음'에 해당하는 디딤돌 힌트만 짚어라. 정답이면 맞혔음을 알리고 칭찬한 뒤 다른 접근법을 짧게 소개하라.
+스타일: 잘한 점 → 오류 위치/이유 → 다음 한 걸음 힌트 → 학습 조언. 존댓말, 이모지 적절히.
+commentMarkdown은 학생용 첨삭(Markdown+LaTeX). errorTags는 [conceptual, computational, logical, notational, strategic, condition] 중에서. conceptTags는 다룬 개념명. strengthNotes/weaknessNotes는 교사용 짧은 메모.`;
+
 const PROBLEM_RULE = `다음 규칙으로 수학 문제 이미지를 변환하라.
 - 본문을 Markdown + LaTeX 로 변환한다. 인라인 수식은 $...$, 디스플레이 수식은 $$...$$.
 - 한국어가 아닌 텍스트는 한국어로 번역하되 수학 표기는 유지한다.
@@ -87,6 +98,51 @@ export async function generateSolution(problemLatex: string): Promise<SolutionRe
   return generateJson<SolutionResult>(
     [{ text: `${SOLUTION_RULE}\n\n문제:\n${problemLatex}` }],
     { type: Type.OBJECT, properties: { answer: { type: Type.STRING }, solution: { type: Type.STRING } } },
+  );
+}
+
+export async function convertSolutionToLatex(mimeType: string, base64: string): Promise<{ latex: string }> {
+  return generateJson<{ latex: string }>(
+    [imagePart(mimeType, base64), { text: `${SOLUTION_OCR_RULE}\n위 풀이 이미지를 변환하라.` }],
+    { type: Type.OBJECT, properties: { latex: { type: Type.STRING } } },
+  );
+}
+
+export async function reviewSolution(args: {
+  problemLatex: string;
+  answer: string | null;
+  solution: string | null;
+  studentLatex: string;
+  workMimeType: string;
+  workBase64: string;
+}): Promise<{
+  commentMarkdown: string;
+  isCorrect: boolean;
+  errorTags: string[];
+  conceptTags: string[];
+  strengthNotes: string;
+  weaknessNotes: string;
+}> {
+  const text =
+    `${REVIEW_RULE}\n\n` +
+    `문제(LaTeX): ${args.problemLatex}\n` +
+    `정답: ${args.answer ?? '(없음)'}\n` +
+    `해설: ${args.solution ?? '(없음)'}\n` +
+    `학생 풀이(LaTeX): ${args.studentLatex}\n` +
+    `위 캔버스 이미지는 학생의 원본 손글씨 풀이(수식·그래프·도형 포함)다.`;
+  return generateJson(
+    [imagePart(args.workMimeType, args.workBase64), { text }],
+    {
+      type: Type.OBJECT,
+      properties: {
+        commentMarkdown: { type: Type.STRING },
+        isCorrect: { type: Type.BOOLEAN },
+        errorTags: { type: Type.ARRAY, items: { type: Type.STRING } },
+        conceptTags: { type: Type.ARRAY, items: { type: Type.STRING } },
+        strengthNotes: { type: Type.STRING },
+        weaknessNotes: { type: Type.STRING },
+      },
+    },
   );
 }
 
