@@ -2,9 +2,9 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   MousePointer, Pen, Type, Square, Circle, Triangle,
-  Eraser, Minus, Trash2, Pipette, Plus, Scissors,
+  Eraser, Minus, Trash2, Pipette, Plus,
   SlidersHorizontal, Hand, Shapes, ChevronDown, ImagePlus, Dot,
-  Lock, Unlock, RefreshCw,
+  Lock, Unlock, RefreshCw, Undo2, Redo2, Pointer,
 } from 'lucide-react';
 import {
   BG_ELEMENT_ID,
@@ -12,6 +12,7 @@ import {
   MAX_CUSTOM_COLORS,
   TOOLS,
 } from '../../lib/excalidrawUtils';
+import { getInputMode, setInputMode, subscribeInputMode } from '../../lib/inputMode';
 
 const TOOL_ICONS = {
   selection: MousePointer,
@@ -29,7 +30,7 @@ const SHAPE_TOOL_ICONS = {
 const SHAPE_TOOLS    = ['rectangle', 'ellipse', 'triangle'];
 const SAVEABLE_TOOLS = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse', 'triangle'];
 
-function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onToggleScreenLock, onBaseWidthChange, onReloadImage }) {
+function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onToggleScreenLock, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true }) {
   const [activeTool, setActiveTool]       = useState(() => {
     const saved = localStorage.getItem('mc_active_tool') || 'freedraw';
     return SAVEABLE_TOOLS.includes(saved) ? saved : 'freedraw';
@@ -41,6 +42,8 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
     parseFloat(localStorage.getItem('mc_stroke_width') || '0.2')
   );
   const [imageMoveMode, setImageMoveMode] = useState(false);
+  const [inputMode, setInputModeState] = useState(() => getInputMode());
+  useEffect(() => subscribeInputMode(setInputModeState), []);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
   const [customColors, setCustomColors]   = useState(() => {
     try { return JSON.parse(localStorage.getItem('mc_custom_colors') || '[]'); }
@@ -292,8 +295,6 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
 
     if (type === 'laser_pointer') {
       api?.setActiveTool({ type: 'selection' });
-    } else if (type === 'eraser_area') {
-      api?.setActiveTool({ type: 'selection' });
     } else {
       api?.setActiveTool({ type });
     }
@@ -303,7 +304,7 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
     setColor(hex);
     localStorage.setItem('mc_tool_color', hex);
     apiRef.current?.updateScene({ appState: { currentItemStrokeColor: hex } });
-    if (['eraser', 'eraser_area', 'selection', 'image_move'].includes(activeTool)) {
+    if (['eraser', 'selection', 'image_move'].includes(activeTool)) {
       setActiveTool('freedraw');
       localStorage.setItem('mc_active_tool', 'freedraw');
       apiRef.current?.setActiveTool({ type: 'freedraw' });
@@ -316,6 +317,10 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
     if (onBaseWidthChange) onBaseWidthChange(w);
     const zoom = apiRef.current?.getAppState()?.zoom?.value || 1;
     apiRef.current?.updateScene({ appState: { currentItemStrokeWidth: Math.max(w / zoom, 0.05) }, commitToHistory: false });
+  };
+
+  const handleToggleInputMode = () => {
+    setInputMode(getInputMode() === 'stylus' ? 'finger' : 'stylus');
   };
 
   const handleToggleImageMove = () => {
@@ -424,19 +429,6 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
     api.updateScene({ elements: bgEl ? [bgEl] : [] });
   };
 
-  const handleDeleteSelected = () => {
-    const api = apiRef.current;
-    if (!api) return;
-    const selectedIds = api.getAppState()?.selectedElementIds ?? {};
-    if (Object.keys(selectedIds).length === 0) return;
-    const next = api.getSceneElements().map((el) =>
-      selectedIds[el.id] && el.id !== BG_ELEMENT_ID
-        ? { ...el, isDeleted: true }
-        : el
-    );
-    api.updateScene({ elements: next });
-  };
-
   const handleEyeDropper = async () => {
     if (!window.EyeDropper) {
       alert('스포이드 기능은 Chrome 95 이상에서만 지원됩니다.');
@@ -465,6 +457,21 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
 
   return (
     <div className="flex items-center gap-1 px-3 h-11 bg-white border-b shadow-sm flex-shrink-0 overflow-x-auto sticky top-14 z-50">
+
+      {/* ⓪ 실행 취소 / 다시 실행 */}
+      <button onClick={onUndo} disabled={!canUndo} title="실행 취소 (Ctrl+Z)"
+        className={`p-1.5 rounded-md flex-shrink-0 flex items-center justify-center ${
+          canUndo ? 'text-gray-600 hover:bg-gray-100 cursor-pointer' : 'text-gray-300 cursor-not-allowed'
+        }`}>
+        <Undo2 className="h-4 w-4" />
+      </button>
+      <button onClick={onRedo} disabled={!canRedo} title="다시 실행 (Ctrl+Shift+Z)"
+        className={`p-1.5 rounded-md flex-shrink-0 flex items-center justify-center ${
+          canRedo ? 'text-gray-600 hover:bg-gray-100 cursor-pointer' : 'text-gray-300 cursor-not-allowed'
+        }`}>
+        <Redo2 className="h-4 w-4" />
+      </button>
+      <div className="w-px h-6 bg-gray-200 mx-0.5 flex-shrink-0" />
 
       {/* ① 기본 도구 */}
       {TOOLS.map(({ type, label }) => {
@@ -528,20 +535,16 @@ function DrawingToolbar({ apiRef, showPanel, onTogglePanel, screenLocked, onTogg
         <Eraser className="h-4 w-4" />
       </button>
 
-      {/* 영역 삭제 */}
-      <button onClick={() => applyTool('eraser_area')} title="영역 삭제 — 드래그 선택 후 삭제"
-        className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-          activeTool === 'eraser_area' ? 'bg-orange-100 text-orange-600' : 'text-gray-600 hover:bg-gray-100'
+      {/* 손가락 필기 모드 토글 */}
+      <button onClick={handleToggleInputMode}
+        title={inputMode === 'finger'
+          ? '손가락 필기 끄기 (현재: 손가락 허용)'
+          : '손가락 필기 켜기 (현재: 스타일러스 전용)'}
+        className={`p-1.5 rounded-md transition-colors cursor-pointer flex-shrink-0 ${
+          inputMode === 'finger' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
         }`}>
-        <Scissors className="h-4 w-4" />
+        <Pointer className="h-4 w-4" />
       </button>
-
-      {activeTool === 'eraser_area' && (
-        <button onClick={handleDeleteSelected} title="선택 삭제"
-          className="p-1.5 rounded-md bg-orange-500 text-white hover:bg-orange-600 cursor-pointer flex-shrink-0 flex items-center justify-center">
-          <Trash2 className="h-4 w-4" />
-        </button>
-      )}
 
       {/* 이미지 이동 */}
       <button onClick={handleToggleImageMove}

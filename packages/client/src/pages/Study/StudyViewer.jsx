@@ -15,6 +15,10 @@ import PageNavOverlay from '../../components/study/PageNavOverlay';
 import { BG_ELEMENT_ID, BG_FILE_ID, ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, TOUCH_CSS, GRID_STYLE, EXCALIDRAW_UI_OPTIONS, fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages, calculateBgPosition, waitForLayout, clearImageCacheForUrl } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
+import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
+import { useExcalidrawUndo } from '../../hooks/useExcalidrawUndo';
+import PenDiagnosticsOverlay from '../../components/study/PenDiagnosticsOverlay';
+import { setToggle } from '../../lib/penToggles';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
@@ -384,9 +388,16 @@ const StudyViewer = () => {
 
   const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
+  const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
+  const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
 
 
   useEffect(() => () => { mountedRef.current = false; }, []);
+
+  /* 펜 진단 오버레이: ?penlog=1 진입 시 활성화 */
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('penlog') === '1') setToggle('diagnostics', true);
+  }, []);
 
   /* ── ref 동기화 (통합) ── */
   useEffect(() => {
@@ -646,6 +657,8 @@ const StudyViewer = () => {
 
     /* 문지르기 지우개 감지 */
     checkForScribble(elements, appState);
+    checkForSmoothing(elements, appState);
+    recordHistory(elements);
 
     const bgEl = elements.find((el) => el.id === BG_ELEMENT_ID);
     if (bgEl) {
@@ -983,6 +996,7 @@ const StudyViewer = () => {
           onToggleScreenLock={handleToggleScreenLock}
           onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
           onReloadImage={handleReloadImage}
+          onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
         />
       )}
 
@@ -1057,6 +1071,7 @@ const StudyViewer = () => {
           className="w-full h-full relative overflow-hidden"
         >
           <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{(drawMode && showExcalidrawPanel) ? '' : PANEL_HIDE_CSS}</style>
+          <PenDiagnosticsOverlay containerRef={containerRef} />
 
           {currentPage ? (
             <ExcalidrawErrorBoundary key={currentPage.id}>

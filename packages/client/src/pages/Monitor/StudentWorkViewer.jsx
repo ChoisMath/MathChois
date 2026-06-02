@@ -29,6 +29,8 @@ import {
 } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
+import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
+import { useExcalidrawUndo } from '../../hooks/useExcalidrawUndo';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { extractYouTubeId, getYouTubeEmbedUrl, getYouTubeThumbnail } from '../../lib/youtubeUtils';
 
@@ -195,6 +197,8 @@ const StudentWorkViewer = () => {
 
   const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [STUDENT_NOTE_PREFIX] });
+  const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [STUDENT_NOTE_PREFIX] });
+  const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
 
   /* ── 페이지 변경 시 scene 데이터 로드 ── */
   /* ── 페이지 이동 시 pending 저장 flush ── */
@@ -383,6 +387,8 @@ const StudentWorkViewer = () => {
 
     /* 문지르기 지우개 감지 */
     checkForScribble(elements, appState);
+    checkForSmoothing(elements, appState);
+    recordHistory(elements);
 
     const page = currentPageRef.current;
     if (!user || !page) return;
@@ -611,6 +617,7 @@ const StudentWorkViewer = () => {
           onToggleScreenLock={handleToggleScreenLock}
           onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
           onReloadImage={handleReloadImage}
+          onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
         />
       )}
 
