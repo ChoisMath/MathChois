@@ -128,6 +128,11 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         e.stopPropagation();
         return;
       }
+      // 핀치 진행 중 freedraw 로 새지 않도록 pointermove 전파 차단 (커스텀 핀치는 touchmove 가 처리)
+      if (!screenLockedRef.current && count >= 2 && getActiveTool() === 'freedraw') {
+        e.stopPropagation();
+        e.preventDefault();
+      }
     };
 
     const handlePointerUp = (e) => {
