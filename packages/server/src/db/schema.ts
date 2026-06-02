@@ -1,7 +1,7 @@
 import {
   pgTable, uuid, text, timestamp, integer, jsonb, unique, boolean, index, primaryKey,
 } from 'drizzle-orm/pg-core';
-import type { ExcalidrawData } from '@mathchois/shared';
+import type { ExcalidrawData, ProblemFigure } from '@mathchois/shared';
 
 // ─── profiles ───────────────────────────────────────
 
@@ -228,4 +228,41 @@ export const assignmentTeacherComments = pgTable('assignment_teacher_comments', 
 }, (t) => [
   unique().on(t.teacherId, t.studentId, t.pageId),
   index('idx_atc_page_student').on(t.pageId, t.studentId),
+]);
+
+// ─── problems (문제은행) ─────────────────────────────
+
+export const problems = pgTable('problems', {
+  id: uuid('id').defaultRandom().primaryKey(),
+
+  title: text('title'),
+  problemLatex: text('problem_latex').notNull(),
+  figureNotes: jsonb('figure_notes').$type<string[]>().default([]).notNull(),
+  originalImageUrl: text('original_image_url'),
+  figures: jsonb('figures').$type<ProblemFigure[]>().default([]).notNull(),
+
+  subject: text('subject'),
+  majorUnit: text('major_unit'),
+  minorUnit: text('minor_unit'),
+  difficulty: text('difficulty'),
+  problemType: text('problem_type'),
+  detailType: text('detail_type'),
+  keywords: jsonb('keywords').$type<string[]>().default([]).notNull(),
+
+  answer: text('answer'),
+  solution: text('solution'),
+  solutionSource: text('solution_source'),
+  markschemeImageUrl: text('markscheme_image_url'),
+
+  aiModel: text('ai_model'),
+  status: text('status').default('ready').notNull(),
+  createdBy: uuid('created_by').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  index('idx_problems_created_at').on(t.createdAt),
+  index('idx_problems_subject').on(t.subject),
+  index('idx_problems_major_unit').on(t.majorUnit),
+  index('idx_problems_difficulty').on(t.difficulty),
+  index('idx_problems_created_by').on(t.createdBy),
 ]);
