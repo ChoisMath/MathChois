@@ -22,14 +22,14 @@ packages/
 │       ├── db/                 # schema.ts(Drizzle), startupMigrate.ts(기동 시 idempotent DDL)
 │       ├── middleware/         # auth.ts(JWT), roleGuard.ts(requireRole)
 │       ├── routes/             # auth, classrooms, chapters, pages, storage, posts,
-│       │                       #   assignments, notes, comments, admin, problems, coaching
-│       ├── services/           # *.service.ts (DB 접근 로직) + ai.service.ts(Gemini), problem.service.ts, coaching.service.ts
+│       │                       #   assignments, notes, comments, admin, problems, coaching, dashboard
+│       ├── services/           # *.service.ts (DB 접근 로직) + ai.service.ts(Gemini), problem.service.ts, coaching.service.ts, dashboard.service.ts
 │       └── socket/             # index.ts + handlers/(notes, comments, assignments, presence)
 ├── client/                 # @mathchois/client (React SPA)
 │   └── src/
 │       ├── App.jsx             # 라우팅 정의
 │       ├── contexts/AuthContext.jsx
-│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem), problems/(ProblemPickerModal), coaching/(CoachingHistoryView)
+│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem), problems/(ProblemPickerModal), coaching/(CoachingHistoryView), dashboard/(ClassroomDashboard)
 │       │   └── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay
 │       ├── layouts/            # MainLayout(public), DashboardLayout(인증)
 │       ├── pages/              # Home, Login, Classrooms, Chapters, Study, Monitor,
@@ -40,8 +40,9 @@ packages/
 │                               #   inputMode.js, penToggles.js, excalidrawHistory.js,
 │                               #   freedrawResample.js, scribbleDetect.js,
 │                               #   problemContent.js([FIGURE:n] 파서), problems.js(API),
-│                               #   coaching.js(convert/review/attempts/uploadWorkImage/getMyHistory/getStudentHistory) (*.test.js = Vitest)
-└── shared/src/types/       # api, auth, excalidraw, models, socket, problem, coaching
+│                               #   coaching.js(convert/review/attempts/uploadWorkImage/getMyHistory/getStudentHistory),
+│                               #   dashboard.js(getClassroomDashboard) (*.test.js = Vitest)
+└── shared/src/types/       # api, auth, excalidraw, models, socket, problem, coaching, dashboard
 ```
 (제외: `node_modules/`, `dist/`, `.next/`, `drizzle/` 마이그레이션 SQL, `legacy_rails/`)
 
@@ -88,6 +89,14 @@ packages/
 - 학생: `pages/History/MyCoachingHistory.jsx`(`/student/coaching-history`), StudentSidebar "내 풀이 기록"(History 아이콘). 교사: `pages/Monitor/StudentCoachingHistory.jsx`(`/teacher/classrooms/:classroomId/students/:studentId/coaching-history`), `ClassroomDetail.jsx` '학생' 탭 멤버 카드의 [코칭 기록] 버튼으로 진입.
 - `components/common/CoachingPanel.jsx`에 `showTeacherNotes` prop(강점 메모 표시) 추가. `lib/coaching.js`에 `getMyHistory`/`getStudentHistory` 추가.
 
+### #5 교사 대시보드 (`feat/teacher-class-dashboard`)
+
+집계 전용 — 스키마 변경 없음. `coaching_attempts`/`student_notes`/`pages`/`chapters`를 group-by로 집계해 클래스 단위 학습 현황을 한 화면에 보여준다. **정답·해설 미포함(카운트만)** — 보안 불변식 유지.
+
+- 서버: `services/dashboard.service.ts`의 `getClassroomDashboard(classroomId)` — 학생×챕터별 코칭 정답률(attempts/correct) + 필기 진도(notedPages, 챕터 totalPages)를 group-by 집계하고 `getClassroomMembers`와 병합, summary(반평균 정답률/총시도/활동 학생/챕터 수) 산출. 라우트 `routes/dashboard.ts`의 `GET /api/dashboard/classrooms/:classroomId`(authenticate + requireRole('teacher') + isClassroomOwner 403 가드). `app.ts`에 등록.
+- 클라이언트: `components/dashboard/ClassroomDashboard.jsx` — 요약 카드 4개 + 학생 카드(종합 정답률 배지) + 챕터 칩(정답률 색 heatmap + 필기 진도 막대), 차트 라이브러리 없이 CSS. 학생 카드 클릭 시 #4 교사 풀이 기록(`/teacher/classrooms/:classroomId/students/:studentId/coaching-history`)으로 이동. `pages/Classrooms/ClassroomDetail.jsx`에 교사 전용 '대시보드' 탭(activeTab `'dashboard'`, isTeacher 게이트). `lib/dashboard.js`에 `getClassroomDashboard`.
+- 공유 타입: `shared/src/types/dashboard.ts`(ClassroomDashboard, DashboardStudent, DashboardCell, DashboardChapter).
+
 ## 주요 엔드포인트 / 라우트
 
 ### 클라이언트 라우트 (App.jsx)
@@ -96,7 +105,7 @@ packages/
 | `/auth/callback` | OAuthCallback | 레이아웃 없음 |
 | `/`, `/login`(→`/`), `/choose-role`, `/privacy`, `/terms` | Home 등 | MainLayout (public) |
 | `/reset-password/:token`, `/verify-email/:token` | ResetPassword, VerifyEmail | public, 레이아웃 없음 |
-| `/teacher/classrooms`, `/teacher/classrooms/:id` | ClassroomList, ClassroomDetail | DashboardLayout |
+| `/teacher/classrooms`, `/teacher/classrooms/:id` | ClassroomList, ClassroomDetail | DashboardLayout. 교사 ClassroomDetail에 '대시보드' 탭(별도 라우트 아님 → `ClassroomDashboard` 렌더) |
 | `/teacher/chapters/:id/edit` | Chapters/Editor | 이미지/영상/HTML 도구 업로드 |
 | `/teacher/.../chapters/:chapterId/monitor` | ChapterMonitor | 학생 진도 요약 |
 | `/teacher/.../chapters/:chapterId/monitor/:studentId` | **StudentWorkViewer** (③) | 전체화면 |
@@ -127,6 +136,7 @@ packages/
 | admin | routes/admin.ts | `GET /admin/users`, `/teachers-with-students`, `/stats`, 비번 초기화 등 |
 | problems | routes/problems.ts | `POST /problems/ocr`, `/problems/markscheme-ocr`, `/problems/generate-solution`(Gemini), `GET /problems`(검색·필터·페이지네이션), `GET /problems/facets`, `GET/POST/PATCH/DELETE /problems/:id`(teacher). `GET /problems/:id/for-coaching`(authenticate, 학생용 — 정답·해설 제외 표시필드만) |
 | coaching | routes/coaching.ts | `POST /coaching/convert`(필기→LaTeX), `POST /coaching/review`(서버에서만 정답 대조 후 attempt 생성), `GET /coaching/pages/:pageId/attempts`(authenticate, studentId=req.user.sub). 기록 조회: `GET /coaching/history`(본인, authenticate), `GET /coaching/classrooms/:classroomId/students/:studentId/history`(교사 — requireRole+isClassroomOwner+isClassroomMember, 해당 클래스 챕터 범위 한정). 모두 정답·해설 select 제외 |
+| dashboard | routes/dashboard.ts | `GET /dashboard/classrooms/:classroomId`(authenticate + requireRole('teacher') + isClassroomOwner 403). 집계 전용 — 학생×챕터 코칭 정답률·필기 진도 + 반 요약. 정답·해설 select 제외(카운트만) |
 | health | app.ts | `GET /api/health` (DB ping) |
 
 ## 데이터 모델 (Drizzle 스키마: `packages/server/src/db/schema.ts`)
