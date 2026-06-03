@@ -59,4 +59,19 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
   await pgClient`CREATE INDEX IF NOT EXISTS idx_coaching_attempts_page_student ON coaching_attempts (page_id, student_id)`;
   await pgClient`CREATE INDEX IF NOT EXISTS idx_coaching_attempts_problem ON coaching_attempts (problem_id)`;
   log.info('startup migration: pages.ai_problem_id + coaching_attempts ensured');
+
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS visualizations (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      created_by uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+      title text NOT NULL,
+      subject text, major_unit text, minor_unit text,
+      description text,
+      html_url text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_visualizations_created_by ON visualizations (created_by)`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_visualizations_subject ON visualizations (subject, major_unit, minor_unit)`;
+  log.info('startup migration: visualizations table ensured');
 }

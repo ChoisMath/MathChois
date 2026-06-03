@@ -293,3 +293,21 @@ export const coachingAttempts = pgTable('coaching_attempts', {
   index('idx_coaching_attempts_page_student').on(t.pageId, t.studentId),
   index('idx_coaching_attempts_problem').on(t.problemId),
 ]);
+
+// ─── visualizations (시각화자료 라이브러리) ──────────
+
+export const visualizations = pgTable('visualizations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  createdBy: uuid('created_by').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  subject: text('subject'),
+  majorUnit: text('major_unit'),
+  minorUnit: text('minor_unit'),
+  description: text('description'),
+  htmlUrl: text('html_url').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  index('idx_visualizations_created_by').on(t.createdBy),
+  index('idx_visualizations_subject').on(t.subject, t.majorUnit, t.minorUnit),
+]);
