@@ -10,7 +10,8 @@
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "seed:test": "tsx --env-file=.env scripts/seed-test-accounts.ts"
   },
   "dependencies": {
     "@fastify/compress": "^8.3.1",
