@@ -2,6 +2,8 @@ import { eq, and, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '../config/database.js';
 import { pages } from '../db/schema.js';
 import { resolveSourceChapterId, isLinkedChapter } from './chapter.service.js';
+import { getVisualizationById } from './visualization.service.js';
+import { copyHtmlToChapterTools } from './storage.service.js';
 
 /** 챕터의 페이지 목록 (원본 함수 — chapterId 그대로 사용) */
 export async function getPagesByChapter(chapterId: string) {
@@ -35,8 +37,20 @@ export async function createPage(data: {
   videoUrl?: string | null;
   htmlUrl?: string | null;
   aiProblemId?: string | null;
+  fromVisualizationId?: string | null;
   position?: number;
 }) {
+  let htmlUrl = data.htmlUrl ?? null;
+
+  // 시각화자료에서 삽입: 원본 HTML을 페이지 전용 복사본으로 복제(독립)
+  if (data.fromVisualizationId) {
+    const vis = await getVisualizationById(data.fromVisualizationId);
+    if (!vis) {
+      throw Object.assign(new Error('시각화자료를 찾을 수 없습니다'), { statusCode: 404 });
+    }
+    htmlUrl = await copyHtmlToChapterTools(vis.htmlUrl, data.chapterId);
+  }
+
   let position = data.position;
   if (position === undefined) {
     const maxRows = await db
@@ -52,7 +66,7 @@ export async function createPage(data: {
       chapterId: data.chapterId,
       imageUrl: data.imageUrl ?? null,
       videoUrl: data.videoUrl ?? null,
-      htmlUrl: data.htmlUrl ?? null,
+      htmlUrl: htmlUrl ?? null,
       aiProblemId: data.aiProblemId ?? null,
       position,
     })

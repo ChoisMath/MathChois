@@ -53,13 +53,14 @@ export async function pageRoutes(app: FastifyInstance) {
     }
 
     // 단일 삽입
-    const { imageUrl, videoUrl, htmlUrl, aiProblemId, position } = body as {
-      imageUrl?: string; videoUrl?: string; htmlUrl?: string; aiProblemId?: string; position?: number;
+    const { imageUrl, videoUrl, htmlUrl, aiProblemId, fromVisualizationId, position } = body as {
+      imageUrl?: string; videoUrl?: string; htmlUrl?: string; aiProblemId?: string;
+      fromVisualizationId?: string; position?: number;
     };
-    if (!imageUrl && !videoUrl && !htmlUrl && !aiProblemId) {
-      return reply.status(400).send({ error: 'imageUrl, videoUrl, htmlUrl, or aiProblemId is required' });
+    if (!imageUrl && !videoUrl && !htmlUrl && !aiProblemId && !fromVisualizationId) {
+      return reply.status(400).send({ error: 'imageUrl, videoUrl, htmlUrl, aiProblemId, or fromVisualizationId is required' });
     }
-    const page = await createPage({ chapterId, imageUrl, videoUrl, htmlUrl, aiProblemId, position });
+    const page = await createPage({ chapterId, imageUrl, videoUrl, htmlUrl, aiProblemId, fromVisualizationId, position });
     return reply.status(201).send(page);
   });
 
