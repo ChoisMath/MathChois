@@ -6,8 +6,8 @@ import { uploadFile, readFile, removeFile } from '../services/storage.service.js
 // 학생 업로드 허용 버킷
 const STUDENT_ALLOWED_BUCKETS = new Set(['submission-files', 'ai-coaching']);
 
-// HTML 도구 전용 버킷 (text/html 만 허용)
-const HTML_TOOL_BUCKET = 'chapter-tools';
+// HTML 전용 버킷 (text/html 만 허용)
+const HTML_ONLY_BUCKETS = new Set(['chapter-tools', 'visualizations']);
 
 // 학생 업로드 허용 MIME 타입
 const STUDENT_ALLOWED_MIMES = new Set([
@@ -53,7 +53,7 @@ export async function storageRoutes(app: FastifyInstance) {
       }
 
       // chapter-tools 버킷은 HTML 파일만 허용
-      if (bucket === HTML_TOOL_BUCKET && file.mimetype !== 'text/html') {
+      if (HTML_ONLY_BUCKETS.has(bucket) && file.mimetype !== 'text/html') {
         return reply.status(400).send({ error: 'HTML 도구 버킷에는 .html 파일만 업로드할 수 있습니다.' });
       }
 
