@@ -59,17 +59,17 @@ export default function VisualizationsPage() {
 
       <div className="flex flex-wrap gap-2">
         {FILTER_FIELDS.map(([key, label]) => (
-          <select key={key} className="border rounded px-2 py-1 text-sm"
+          <select key={key} className="border rounded px-2 min-h-11 text-sm"
             value={filters[key] ?? ''}
             onChange={(e) => setFilters((f) => ({ ...f, [key]: e.target.value || undefined }))}>
             <option value="">{label} 전체</option>
             {(facets[key] || []).map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
         ))}
-        <input className="border rounded px-2 py-1 text-sm flex-1 min-w-40" placeholder="제목·설명 검색"
+        <input className="border rounded px-2 min-h-11 text-sm flex-1 min-w-40" placeholder="제목·설명 검색"
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && fetchList(1)} />
-        <button onClick={() => fetchList(1)} className="px-3 py-1 bg-blue-600 text-white rounded text-sm whitespace-nowrap">검색</button>
+        <button onClick={() => fetchList(1)} className="px-3 min-h-11 bg-blue-600 text-white rounded text-sm whitespace-nowrap">검색</button>
       </div>
 
       <p className="text-xs text-gray-500">{loading ? '불러오는 중…' : `총 ${result.total}개`}</p>
