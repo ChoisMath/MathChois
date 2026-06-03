@@ -11,9 +11,13 @@ node_modules
 dist
 dist-ssr
 *.local
+
+# Environment / secrets (never commit real values)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.*.example
+!.env.sample
 
 # Editor directories and files
 .vscode/*
@@ -37,6 +41,19 @@ dist-ssr
 .claude.json
 client_secret*.json
 *.apps.googleusercontent.com.json
+# backups (may contain secrets copied from .env)
+*.bak
+*.backup
+# private keys / certs
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+id_rsa
+id_rsa.*
+*service-account*.json
+*serviceAccount*.json
 
 # Artifacts
 nul
