@@ -75,6 +75,22 @@ export async function coachingRoutes(app: FastifyInstance) {
     return listAttempts(req.params.pageId, req.user.sub);
   });
 
+  // 교사가 특정 학생의 페이지별 코칭 시도를 조회 (읽기 전용) — 클래스 소유·소속 검증
+  app.get<{ Params: { classroomId: string; studentId: string; pageId: string } }>(
+    '/api/coaching/classrooms/:classroomId/students/:studentId/pages/:pageId/attempts',
+    { preHandler: [authenticate, requireRole('teacher')] },
+    async (req, reply) => {
+      const { classroomId, studentId, pageId } = req.params;
+      if (!(await isClassroomOwner(classroomId, req.user.sub))) {
+        return reply.status(403).send({ error: '이 클래스의 담당 교사가 아닙니다' });
+      }
+      if (!(await isClassroomMember(classroomId, studentId))) {
+        return reply.status(403).send({ error: '이 클래스의 학생이 아닙니다' });
+      }
+      return listAttempts(pageId, studentId);
+    },
+  );
+
   app.get('/api/coaching/history', auth, async (req) => {
     const q = req.query as Record<string, string>;
     return listStudentHistory(req.user.sub, {

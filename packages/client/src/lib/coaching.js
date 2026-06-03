@@ -5,6 +5,10 @@ export const reviewSolution = (pageId, workImageUrl, solutionLatex) =>
   api.post('/api/coaching/review', { pageId, workImageUrl, solutionLatex });
 export const listAttempts = (pageId) => api.get(`/api/coaching/pages/${pageId}/attempts`);
 
+/** 교사가 특정 학생의 페이지 코칭 시도 조회 (읽기 전용) */
+export const getStudentPageAttempts = (classroomId, studentId, pageId) =>
+  api.get(`/api/coaching/classrooms/${classroomId}/students/${studentId}/pages/${pageId}/attempts`);
+
 /** Excalidraw 필기 blob을 ai-coaching 버킷에 업로드 → URL */
 export async function uploadWorkImage(blob, directory) {
   const fd = new FormData();

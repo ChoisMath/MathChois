@@ -21,7 +21,7 @@ const ChapterMonitor  = lazy(() => import('./pages/Monitor/ChapterMonitor'));
    — 대시보드 진입 시 Excalidraw 번들을 로드하지 않아 초기 속도 향상 */
 const ChapterEditor      = lazy(() => import('./pages/Chapters/Editor'));
 const StudyPageRouter    = lazy(() => import('./pages/Study/StudyPageRouter'));
-const TeacherStudyViewer = lazy(() => import('./pages/Study/TeacherStudyViewer'));
+const TeacherStudyPageRouter = lazy(() => import('./pages/Study/TeacherStudyPageRouter'));
 const StudentWorkViewer  = lazy(() => import('./pages/Monitor/StudentWorkViewer'));
 
 /* Phase 5 — 게시판 & 과제 */
@@ -139,7 +139,7 @@ function App() {
             />
             <Route
               path="/teacher/classrooms/:classroomId/chapters/:chapterId/study/page/:pageId"
-              element={<TeacherStudyViewer />}
+              element={<TeacherStudyPageRouter />}
             />
             {/* Phase 5 — 학생 과제 필기 확인 (전체화면) */}
             <Route

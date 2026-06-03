@@ -33,6 +33,7 @@ import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
 import { useExcalidrawUndo } from '../../hooks/useExcalidrawUndo';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { extractYouTubeId, getYouTubeEmbedUrl, getYouTubeThumbnail } from '../../lib/youtubeUtils';
+import CoachingViewer from '../Study/CoachingViewer';
 
 const STUDENT_NOTE_PREFIX = '__sn_';
 
@@ -472,6 +473,22 @@ const StudentWorkViewer = () => {
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <p className="text-gray-500">로딩 중...</p>
       </div>
+    );
+  }
+
+  // AI 코칭 페이지: 빈 Excalidraw 대신 학생이 받은 코칭 화면을 읽기 전용으로 표시
+  if (currentPage?.aiProblemId) {
+    return (
+      <CoachingViewer
+        readOnly
+        chapterId={chapterId}
+        pages={pages}
+        currentPage={currentPage}
+        viewStudentId={studentId}
+        classroomId={classroomId}
+        onNavigate={(p) => goPage(pages.findIndex((x) => x.id === p.id))}
+        onExit={() => navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor`)}
+      />
     );
   }
 
