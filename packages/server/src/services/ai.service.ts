@@ -11,13 +11,13 @@ function client(): GoogleGenAI {
   return _client;
 }
 
-async function generateJson<T>(parts: object[], responseSchema: object): Promise<T> {
+async function generateJson<T>(parts: object[], responseSchema: object, extraConfig?: Record<string, unknown>): Promise<T> {
   const ai = client();
   for (let attempt = 0; attempt < 2; attempt++) {
     const res = await ai.models.generateContent({
       model: env.GEMINI_MODEL,
       contents: [{ role: 'user', parts }],
-      config: { responseMimeType: 'application/json', responseSchema },
+      config: { responseMimeType: 'application/json', responseSchema, ...extraConfig },
     });
     const text = res.text ?? '';
     try {
@@ -58,6 +58,7 @@ coachingSvg: 그래프·도형·좌표평면·수직선 등 그림으로 설명�
 [SVG 형식 규칙]
 - 반드시 "<svg ...>"로 시작해 "</svg>"로 끝나고 viewBox 속성을 포함하며, 모든 태그를 올바르게 닫는다.
 - 외부 리소스·<script>·이벤트핸들러(on*)·foreignObject 는 절대 쓰지 말 것(이미지로만 렌더됨).
+- 표준 SVG 요소(line·path·circle·rect·text·polyline·g·defs·marker 등)만 사용한다. <grid> 같은 비표준 태그는 금지하며, 격자가 필요하면 <line> 으로 그린다.
 - 좌표평면: 세로축(y)은 위로 갈수록 값이 커지도록 그린다(SVG 의 y 픽셀은 아래로 갈수록 커지므로, y값이 큰 점일수록 화면 위쪽에 오도록 좌표를 변환). 가로축(x)은 오른쪽이 큰 값. 원점·축·눈금·화살표·라벨을 명확히.
 - 글자는 한국어, 색상은 1~2가지로 간결하게. 라벨이 서로 겹치지 않게 배치.
 [SVG 정확도 검증 — 출력 전 아래 순서로 내부적으로 점검하고, 어긋나면 수정한 뒤 최종본만 내보낸다]
@@ -175,6 +176,8 @@ export async function reviewSolution(args: {
         coachingSvg: { type: Type.STRING },
       },
     },
+    // 코멘트+SVG 가 한 응답을 공유하므로 SVG 가 잘리지 않도록 출력 토큰 여유 확보
+    { maxOutputTokens: 8192 },
   );
 }
 
