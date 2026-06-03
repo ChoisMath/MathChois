@@ -3,7 +3,7 @@ import { db } from '../config/database.js';
 import { pages } from '../db/schema.js';
 import { resolveSourceChapterId, isLinkedChapter } from './chapter.service.js';
 import { getVisualizationById } from './visualization.service.js';
-import { copyHtmlToChapterTools } from './storage.service.js';
+import { copyHtmlToChapterTools, removeFile, urlToStoragePath } from './storage.service.js';
 
 /** 챕터의 페이지 목록 (원본 함수 — chapterId 그대로 사용) */
 export async function getPagesByChapter(chapterId: string) {
@@ -41,6 +41,7 @@ export async function createPage(data: {
   position?: number;
 }) {
   let htmlUrl = data.htmlUrl ?? null;
+  let copiedHtmlUrl: string | null = null;
 
   // 시각화자료에서 삽입: 원본 HTML을 페이지 전용 복사본으로 복제(독립)
   if (data.fromVisualizationId) {
@@ -48,30 +49,40 @@ export async function createPage(data: {
     if (!vis) {
       throw Object.assign(new Error('시각화자료를 찾을 수 없습니다'), { statusCode: 404 });
     }
-    htmlUrl = await copyHtmlToChapterTools(vis.htmlUrl, data.chapterId);
+    copiedHtmlUrl = await copyHtmlToChapterTools(vis.htmlUrl, data.chapterId);
+    htmlUrl = copiedHtmlUrl;
   }
 
-  let position = data.position;
-  if (position === undefined) {
-    const maxRows = await db
-      .select({ maxPos: sql<number>`COALESCE(MAX(${pages.position}), -1)` })
-      .from(pages)
-      .where(eq(pages.chapterId, data.chapterId));
-    position = (maxRows[0]?.maxPos ?? -1) + 1;
-  }
+  try {
+    let position = data.position;
+    if (position === undefined) {
+      const maxRows = await db
+        .select({ maxPos: sql<number>`COALESCE(MAX(${pages.position}), -1)` })
+        .from(pages)
+        .where(eq(pages.chapterId, data.chapterId));
+      position = (maxRows[0]?.maxPos ?? -1) + 1;
+    }
 
-  const [created] = await db
-    .insert(pages)
-    .values({
-      chapterId: data.chapterId,
-      imageUrl: data.imageUrl ?? null,
-      videoUrl: data.videoUrl ?? null,
-      htmlUrl: htmlUrl ?? null,
-      aiProblemId: data.aiProblemId ?? null,
-      position,
-    })
-    .returning();
-  return created;
+    const [created] = await db
+      .insert(pages)
+      .values({
+        chapterId: data.chapterId,
+        imageUrl: data.imageUrl ?? null,
+        videoUrl: data.videoUrl ?? null,
+        htmlUrl: htmlUrl ?? null,
+        aiProblemId: data.aiProblemId ?? null,
+        position,
+      })
+      .returning();
+    return created;
+  } catch (err) {
+    // 복제 파일이 DB 반영에 실패하면 고아 파일을 정리
+    if (copiedHtmlUrl) {
+      const parsed = urlToStoragePath(copiedHtmlUrl);
+      if (parsed) await removeFile(parsed.bucket, parsed.path).catch(() => {});
+    }
+    throw err;
+  }
 }
 
 /** 페이지 부분 수정 (현재는 aiProblemId 변경용) */

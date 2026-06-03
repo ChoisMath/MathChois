@@ -118,6 +118,9 @@ export async function copyHtmlToChapterTools(
   if (!parsed) {
     throw Object.assign(new Error('잘못된 HTML URL'), { statusCode: 400 });
   }
+  if (parsed.bucket !== 'visualizations') {
+    throw Object.assign(new Error('시각화자료 버킷의 HTML만 복제할 수 있습니다'), { statusCode: 400 });
+  }
   const file = await readFile(parsed.bucket, parsed.path);
   if (!file) {
     throw Object.assign(new Error('원본 HTML 파일을 찾을 수 없습니다'), { statusCode: 400 });

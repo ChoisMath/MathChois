@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import * as svc from '../services/visualization.service.js';
+import { removeFile, urlToStoragePath } from '../services/storage.service.js';
 
 const visBody = z.object({
   title: z.string().min(1),
@@ -35,8 +36,12 @@ export async function visualizationRoutes(app: FastifyInstance) {
     return row;
   });
 
-  app.post('/api/visualizations', teacher, async (req) => {
+  app.post('/api/visualizations', teacher, async (req, reply) => {
     const body = visBody.parse(req.body);
+    const parsed = urlToStoragePath(body.htmlUrl);
+    if (!parsed || parsed.bucket !== 'visualizations') {
+      return reply.status(400).send({ error: '잘못된 htmlUrl입니다' });
+    }
     return svc.createVisualization({ ...body, createdBy: req.user.sub });
   });
 
@@ -47,7 +52,19 @@ export async function visualizationRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: '수정 권한이 없습니다' });
     }
     const body = visBody.partial().parse(req.body);
-    return svc.updateVisualization(req.params.id, body);
+    if (body.htmlUrl) {
+      const parsed = urlToStoragePath(body.htmlUrl);
+      if (!parsed || parsed.bucket !== 'visualizations') {
+        return reply.status(400).send({ error: '잘못된 htmlUrl입니다' });
+      }
+    }
+    const updated = await svc.updateVisualization(req.params.id, body);
+    // htmlUrl 교체 시 이전 원본 파일 정리(스토리지 누수 방지)
+    if (body.htmlUrl && body.htmlUrl !== existing.htmlUrl) {
+      const old = urlToStoragePath(existing.htmlUrl);
+      if (old) await removeFile(old.bucket, old.path).catch(() => {});
+    }
+    return updated;
   });
 
   app.delete<{ Params: { id: string } }>('/api/visualizations/:id', teacher, async (req, reply) => {

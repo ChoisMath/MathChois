@@ -35,9 +35,9 @@ export async function updateVisualization(id: string, patch: Partial<Visualizati
 export async function removeVisualization(id: string) {
   const row = await getVisualizationById(id);
   if (!row) return null;
+  await db.delete(visualizations).where(eq(visualizations.id, id));
   const parsed = urlToStoragePath(row.htmlUrl);
   if (parsed) await removeFile(parsed.bucket, parsed.path);
-  await db.delete(visualizations).where(eq(visualizations.id, id));
   return row;
 }
 
