@@ -34,6 +34,7 @@ const AssignmentStudyViewer  = lazy(() => import('./pages/Assignment/AssignmentS
 
 /* 문제은행 */
 const ProblemsPage = lazy(() => import('./pages/Problems/ProblemsPage'));
+const VisualizationsPage = lazy(() => import('./pages/Visualizations/VisualizationsPage'));
 
 /* 코칭 기록 */
 const MyCoachingHistory     = lazy(() => import('./pages/History/MyCoachingHistory'));
@@ -126,6 +127,7 @@ function App() {
               />
               {/* 문제은행 */}
               <Route path="/teacher/problems" element={<ProblemsPage />} />
+              <Route path="/teacher/visualizations" element={<VisualizationsPage />} />
               {/* 학생 코칭 기록 */}
               <Route
                 path="/teacher/classrooms/:classroomId/students/:studentId/coaching-history"
