@@ -1,15 +1,5 @@
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
+import Markdown from './Markdown';
 import { splitFigureSegments } from '../../lib/problemContent';
-
-function Markdown({ children }) {
-  return (
-    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-      {children}
-    </ReactMarkdown>
-  );
-}
 
 /**
  * 문제/해설 본문 렌더: Markdown+LaTeX, [FIGURE:n] 자리에 figures[idx] 이미지 삽입

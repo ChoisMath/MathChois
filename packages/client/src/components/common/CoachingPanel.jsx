@@ -1,6 +1,4 @@
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
+import Markdown from './Markdown';
 
 const ERROR_LABELS = {
   conceptual: '개념', computational: '계산', logical: '논리',
@@ -29,9 +27,7 @@ export default function CoachingPanel({ attempt, showTeacherNotes = false }) {
         ))}
       </div>
       <div className="prose prose-sm max-w-none leading-7">
-        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-          {attempt.commentMarkdown || ''}
-        </ReactMarkdown>
+        <Markdown>{attempt.commentMarkdown || ''}</Markdown>
       </div>
       {attempt.coachingSvg && (
         // data: URI 로 로드된 SVG 는 스크립트가 실행되지 않아 안전(XSS 방지)
