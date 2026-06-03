@@ -7,6 +7,13 @@ import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
 import ProblemView from '../../components/common/ProblemView';
 import CoachingPanel from '../../components/common/CoachingPanel';
+import DrawingToolbar from '../../components/study/DrawingToolbar';
+import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
+import { ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, TOUCH_CSS, GRID_STYLE, EXCALIDRAW_UI_OPTIONS } from '../../lib/excalidrawUtils';
+import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
+import { useScribbleErase } from '../../hooks/useScribbleErase';
+import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
+import { useExcalidrawUndo } from '../../hooks/useExcalidrawUndo';
 import { getProblemForCoaching } from '../../lib/problems';
 import { convertSolution, reviewSolution, listAttempts, getStudentPageAttempts, uploadWorkImage } from '../../lib/coaching';
 
@@ -34,6 +41,23 @@ export default function CoachingViewer({
   const excalidrawAPIRef = useRef(null);
   const saveTimerRef = useRef(null);
   const lastSavedRef = useRef(null);
+
+  /* ── 펜 입력 인프라 (다른 필기 페이지와 동일) ── */
+  const containerRef        = useRef(null);
+  const [screenLocked, setScreenLocked] = useState(false);
+  const screenLockedRef     = useRef(false);
+  const screenLockBaseRef   = useRef({ zoom: 1, scrollX: 0, scrollY: 0 });
+  const baseStrokeWidthRef  = useRef(parseFloat(localStorage.getItem('mc_stroke_width') || '0.2'));
+  const lastZoomRef         = useRef(1);
+  const isAdjustingWidthRef = useRef(false);
+  const isRestoringRef      = useRef(false);
+  const [showExcalidrawPanel, setShowExcalidrawPanel] = useState(false);
+  useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
+
+  const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
+  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef });
+  const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef });
+  const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
 
   const [problem, setProblem] = useState(null);
   const [solutionLatex, setSolutionLatex] = useState('');
@@ -85,8 +109,46 @@ export default function CoachingViewer({
     return () => { alive = false; };
   }, [pageId, currentPage.aiProblemId, readOnly, viewStudentId, classroomId]);
 
-  const handleChange = useCallback((elements) => {
+  const handleChange = useCallback((elements, appState) => {
     if (readOnly) return;
+    if (isRestoringRef.current || isAdjustingWidthRef.current) return;
+
+    /* Excalidraw 내부 penMode 비활성화 — OS 레벨 팜 리젝션에 위임 */
+    if (appState?.penMode) {
+      excalidrawAPIRef.current?.updateScene({ appState: { penMode: false }, commitToHistory: false });
+      return;
+    }
+
+    /* 줌-독립 펜 두께 보정 */
+    if (appState && Math.abs((appState.zoom?.value || 1) - lastZoomRef.current) > 0.01) {
+      lastZoomRef.current = appState.zoom.value;
+      const tool = excalidrawAPIRef.current?.getAppState()?.activeTool?.type;
+      if (tool === 'freedraw' && baseStrokeWidthRef.current) {
+        isAdjustingWidthRef.current = true;
+        excalidrawAPIRef.current?.updateScene({
+          appState: { currentItemStrokeWidth: Math.max(baseStrokeWidthRef.current / appState.zoom.value, 0.05) },
+          commitToHistory: false,
+        });
+        requestAnimationFrame(() => { isAdjustingWidthRef.current = false; });
+      }
+    }
+
+    /* 화면 고정: 확대/축소·이동 차단 */
+    if (appState && screenLockedRef.current) {
+      const base = screenLockBaseRef.current;
+      if (appState.zoom.value !== base.zoom || appState.scrollX !== base.scrollX || appState.scrollY !== base.scrollY) {
+        isRestoringRef.current = true;
+        excalidrawAPIRef.current?.updateScene({ appState: { zoom: { value: base.zoom }, scrollX: base.scrollX, scrollY: base.scrollY } });
+        requestAnimationFrame(() => { isRestoringRef.current = false; });
+        return;
+      }
+    }
+
+    /* 문지르기 지우개 / freedraw 스무딩 / 자체 undo 히스토리 */
+    checkForScribble(elements, appState);
+    checkForSmoothing(elements, appState);
+    recordHistory(elements);
+
     const userEls = elements.filter((el) => !el.isDeleted);
     const serialized = JSON.stringify(userEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points })));
     if (serialized === lastSavedRef.current) return;
@@ -98,7 +160,19 @@ export default function CoachingViewer({
         .then(() => { lastSavedRef.current = serialized; setSaveStatus('saved'); })
         .catch(() => setSaveStatus('saved'));
     }, 1500);
-  }, [pageId, chapterId, readOnly]);
+  }, [pageId, chapterId, readOnly, checkForScribble, checkForSmoothing, recordHistory]);
+
+  const handleToggleScreenLock = useCallback(() => {
+    const excApi = excalidrawAPIRef.current;
+    setScreenLocked((prev) => {
+      const next = !prev;
+      if (next && excApi) {
+        const st = excApi.getAppState();
+        screenLockBaseRef.current = { zoom: st.zoom.value, scrollX: st.scrollX, scrollY: st.scrollY };
+      }
+      return next;
+    });
+  }, []);
 
   const handleMount = useCallback(async (api2) => {
     excalidrawAPIRef.current = api2;
@@ -119,9 +193,11 @@ export default function CoachingViewer({
       api2.updateScene({ elements: els });
       if (!readOnly) {
         lastSavedRef.current = JSON.stringify(els.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points })));
+        recordHistory(els);
+        triggerPalmRejectionWarmup?.();
       }
     } catch { /* 빈 캔버스 */ }
-  }, [pageId, readOnly, viewStudentId]);
+  }, [pageId, readOnly, viewStudentId, recordHistory, triggerPalmRejectionWarmup]);
 
   // 언마운트/페이지 이동 시 디바운스 대기 중인 필기를 즉시 저장 (StudyViewer 패턴)
   useEffect(() => {
@@ -287,13 +363,52 @@ export default function CoachingViewer({
     </header>
   );
 
+  /* 좌측 필기 영역 — 다른 필기 페이지(StudyViewer)와 동일한 펜 인프라 */
+  const toolbar = !readOnly && (
+    <DrawingToolbar
+      apiRef={excalidrawAPIRef}
+      pageId={pageId}
+      showPanel={showExcalidrawPanel}
+      onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
+      screenLocked={screenLocked}
+      onToggleScreenLock={handleToggleScreenLock}
+      onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
+      onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
+    />
+  );
+
+  const canvas = (
+    <div ref={containerRef} style={GRID_STYLE} className="w-full h-full relative overflow-hidden">
+      <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{(!readOnly && showExcalidrawPanel) ? '' : PANEL_HIDE_CSS}</style>
+      <ExcalidrawErrorBoundary key={pageId}>
+        <Excalidraw
+          excalidrawAPI={handleMount}
+          viewModeEnabled={readOnly}
+          initialData={{
+            elements: [],
+            appState: {
+              viewBackgroundColor: 'transparent',
+              currentItemStrokeColor: '#000000',
+              currentItemStrokeWidth: 2,
+              scrollX: 0,
+              scrollY: 0,
+            },
+          }}
+          onChange={handleChange}
+          UIOptions={EXCALIDRAW_UI_OPTIONS}
+        />
+      </ExcalidrawErrorBoundary>
+    </div>
+  );
+
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-gray-50" style={{ height: '100dvh' }}>
       {header}
       {isWide ? (
         <div className="flex min-h-0 flex-1">
-          <div className="min-w-0 flex-1 border-r">
-            <Excalidraw excalidrawAPI={handleMount} onChange={handleChange} viewModeEnabled={readOnly} />
+          <div className="flex min-w-0 flex-1 flex-col border-r">
+            {toolbar}
+            <div className="relative min-h-0 flex-1">{canvas}</div>
           </div>
           <div onPointerDown={startResize} role="separator"
             className="w-1.5 shrink-0 cursor-col-resize bg-gray-200 hover:bg-blue-400" />
@@ -301,8 +416,9 @@ export default function CoachingViewer({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          <div className="h-[55dvh] shrink-0 border-b">
-            <Excalidraw excalidrawAPI={handleMount} onChange={handleChange} viewModeEnabled={readOnly} />
+          <div className="flex shrink-0 flex-col border-b" style={{ height: '55dvh' }}>
+            {toolbar}
+            <div className="relative min-h-0 flex-1">{canvas}</div>
           </div>
           <div className="p-2 sm:p-3">{rightPanel}</div>
         </div>
