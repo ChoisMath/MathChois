@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, Loader, Upload, Save, X, Video, Play, FileCode2, Sparkles } from 'lucide-react';
 import ProblemPickerModal from '../../components/problems/ProblemPickerModal';
+import VisualizationPickerModal from '../../components/visualizations/VisualizationPickerModal';
 import ProblemView from '../../components/common/ProblemView';
 import { getProblemForCoaching } from '../../lib/problems';
 import {
@@ -31,7 +32,6 @@ const ChapterEditor = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const fileInputRef = useRef(null);
-  const htmlInputRef = useRef(null);
 
   const [chapter, setChapter] = useState(null);
   const [pages, setPages] = useState([]);
@@ -56,6 +56,7 @@ const ChapterEditor = () => {
 
   /* AI 코칭 문항 */
   const [showPicker, setShowPicker]   = useState(false);
+  const [showVisPicker, setShowVisPicker] = useState(false);
   const [pickerMode, setPickerMode]   = useState('add');
   const [aiPreview, setAiPreview]     = useState(null);
 
@@ -182,40 +183,20 @@ const ChapterEditor = () => {
     if (lastPage) setSelectedPage(lastPage);
   };
 
-  const handleUploadHtml = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    setUploadProgress({ done: 0, total: 1 });
-
+  const handleInsertVisualization = async (vis) => {
+    setShowVisPicker(false);
     const basePosition = pages.length > 0 ? Math.max(...pages.map((p) => p.position)) + 1 : 0;
-    let newPage = null;
-
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const uploadResult = await api.upload(
-        `/api/files/upload?bucket=chapter-tools&directory=chapters/${id}`,
-        formData
-      );
-
-      newPage = await api.post(`/api/chapters/${id}/pages`, {
-        htmlUrl: uploadResult.url,
+      const newPage = await api.post(`/api/chapters/${id}/pages`, {
+        fromVisualizationId: vis.id,
         position: basePosition,
       });
+      invalidatePagesCache(id);
+      await fetchData();
+      if (newPage) setSelectedPage(newPage);
     } catch (err) {
-      console.error(`HTML 업로드 실패 (${file.name}):`, err.message);
+      alert(err.message ?? '시각화자료 삽입에 실패했습니다.');
     }
-
-    e.target.value = '';
-    setUploading(false);
-    setUploadProgress({ done: 0, total: 0 });
-
-    invalidatePagesCache(id);
-    await fetchData();
-    if (newPage) setSelectedPage(newPage);
   };
 
   /* ── 내보내기: 모달 열릴 때 다른 클래스 목록 로드 ── */
@@ -436,17 +417,10 @@ const ChapterEditor = () => {
               >
                 <Video className="h-5 w-5" />
               </button>
-              <input
-                ref={htmlInputRef}
-                type="file"
-                accept=".html,text/html"
-                onChange={handleUploadHtml}
-                className="hidden"
-              />
               <button
-                onClick={() => htmlInputRef.current?.click()}
+                onClick={() => setShowVisPicker(true)}
                 disabled={uploading}
-                title="HTML 도구 페이지 추가"
+                title="HTML 시각화자료 추가"
                 className="inline-flex items-center justify-center p-2 border border-transparent rounded-md shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
               >
                 <FileCode2 className="h-5 w-5" />
@@ -587,6 +561,14 @@ const ChapterEditor = () => {
       {/* ── AI 코칭 문항 선택 모달 ── */}
       {showPicker && (
         <ProblemPickerModal onSelect={handlePickProblem} onClose={() => setShowPicker(false)} />
+      )}
+
+      {/* ── 시각화자료 선택/등록 모달 ── */}
+      {showVisPicker && (
+        <VisualizationPickerModal
+          onSelect={handleInsertVisualization}
+          onClose={() => setShowVisPicker(false)}
+        />
       )}
 
       {/* ── 내보내기 모달 ── */}
