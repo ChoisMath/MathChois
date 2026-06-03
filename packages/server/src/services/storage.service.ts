@@ -106,6 +106,27 @@ export function urlToStoragePath(url: string): { bucket: string; path: string } 
   };
 }
 
+/**
+ * 시각화자료 원본 HTML을 chapter-tools 버킷으로 복제한다.
+ * 페이지는 이 복사본을 참조하므로 원본 수정/삭제와 독립적이다.
+ */
+export async function copyHtmlToChapterTools(
+  sourceHtmlUrl: string,
+  chapterId: string,
+): Promise<string> {
+  const parsed = urlToStoragePath(sourceHtmlUrl);
+  if (!parsed) {
+    throw Object.assign(new Error('잘못된 HTML URL'), { statusCode: 400 });
+  }
+  const file = await readFile(parsed.bucket, parsed.path);
+  if (!file) {
+    throw Object.assign(new Error('원본 HTML 파일을 찾을 수 없습니다'), { statusCode: 400 });
+  }
+  const baseName = parsed.path.split('/').pop() ?? 'tool.html';
+  const fileName = `${Date.now()}_${baseName}`;
+  return uploadFile('chapter-tools', `chapters/${chapterId}`, fileName, file.data);
+}
+
 function getMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   const types: Record<string, string> = {
