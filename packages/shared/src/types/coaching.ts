@@ -15,6 +15,7 @@ export interface CoachingResult {
   conceptTags: string[];
   strengthNotes: string | null;
   weaknessNotes: string | null;
+  coachingSvg: string | null;
 }
 
 export interface CoachingAttempt {
@@ -30,6 +31,7 @@ export interface CoachingAttempt {
   strengthNotes: string | null;
   weaknessNotes: string | null;
   commentMarkdown: string | null;
+  coachingSvg: string | null;
   aiModel: string | null;
   createdAt: string;
 }
@@ -63,6 +65,7 @@ export interface CoachingAttemptView {
   strengthNotes: string | null;
   weaknessNotes: string | null;
   commentMarkdown: string | null;
+  coachingSvg: string | null;
   aiModel: string | null;
   createdAt: string;
   problemTitle: string | null;

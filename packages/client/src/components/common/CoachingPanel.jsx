@@ -33,6 +33,14 @@ export default function CoachingPanel({ attempt, showTeacherNotes = false }) {
           {attempt.commentMarkdown || ''}
         </ReactMarkdown>
       </div>
+      {attempt.coachingSvg && (
+        // data: URI 로 로드된 SVG 는 스크립트가 실행되지 않아 안전(XSS 방지)
+        <img
+          src={`data:image/svg+xml;utf8,${encodeURIComponent(attempt.coachingSvg)}`}
+          alt="코칭 그림"
+          className="mx-auto mt-2 max-h-72 w-auto rounded border bg-white"
+        />
+      )}
       {showTeacherNotes && attempt.strengthNotes && (
         <p className="mt-2 text-sm text-emerald-700">강점: {attempt.strengthNotes}</p>
       )}

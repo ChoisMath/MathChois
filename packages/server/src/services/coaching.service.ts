@@ -33,6 +33,7 @@ const VIEW_COLUMNS = {
   strengthNotes: coachingAttempts.strengthNotes,
   weaknessNotes: coachingAttempts.weaknessNotes,
   commentMarkdown: coachingAttempts.commentMarkdown,
+  coachingSvg: coachingAttempts.coachingSvg,
   aiModel: coachingAttempts.aiModel,
   createdAt: coachingAttempts.createdAt,
   problemTitle: problems.title,

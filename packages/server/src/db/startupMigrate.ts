@@ -53,6 +53,7 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
       ai_model text,
       created_at timestamptz NOT NULL DEFAULT now()
     )`;
+  await pgClient`ALTER TABLE coaching_attempts ADD COLUMN IF NOT EXISTS coaching_svg text`;
   await pgClient`CREATE INDEX IF NOT EXISTS idx_coaching_attempts_student ON coaching_attempts (student_id, created_at)`;
   await pgClient`CREATE INDEX IF NOT EXISTS idx_coaching_attempts_page_student ON coaching_attempts (page_id, student_id)`;
   await pgClient`CREATE INDEX IF NOT EXISTS idx_coaching_attempts_problem ON coaching_attempts (problem_id)`;

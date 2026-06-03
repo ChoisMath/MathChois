@@ -14,6 +14,16 @@ function imageMime(filePath: string): string {
   return ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' } as Record<string, string>)[ext] ?? 'image/png';
 }
 
+/** 코칭 SVG 검증: 자기완결적 <svg>만 허용, 스크립트·외부참조 차단(이미지로만 렌더). */
+function sanitizeSvg(svg: string | null | undefined): string | null {
+  if (!svg) return null;
+  const s = svg.trim();
+  if (!s.startsWith('<svg') || !s.includes('</svg>')) return null;
+  if (/<script|on\w+\s*=|foreignObject|javascript:|<!ENTITY|xlink:href\s*=\s*["']?\s*http/i.test(s)) return null;
+  if (s.length > 20000) return null;
+  return s;
+}
+
 /** ai-coaching 버킷 이미지만 로드 */
 async function loadWorkImage(imageUrl: string) {
   const parsed = urlToStoragePath(imageUrl);
@@ -67,6 +77,7 @@ export async function coachingRoutes(app: FastifyInstance) {
       strengthNotes: analysis.strengthNotes,
       weaknessNotes: analysis.weaknessNotes,
       commentMarkdown: analysis.commentMarkdown,
+      coachingSvg: sanitizeSvg(analysis.coachingSvg),
       aiModel: AI_MODEL_NAME,
     });
   });

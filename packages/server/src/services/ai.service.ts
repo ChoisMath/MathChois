@@ -36,18 +36,28 @@ function imagePart(mimeType: string, base64: string) {
 // Markdown 은 줄 끝에 공백 2칸이 없으면 개행을 무시한다. 모든 본문 생성 프롬프트에 강제.
 const MD_LINEBREAK_RULE = `- 줄을 바꿀 때는 반드시 줄 끝에 공백 2칸("  ")을 넣은 뒤 개행한다. 공백 2칸이 없으면 Markdown 에서 줄바꿈이 무시되므로 한 줄이 끝날 때마다 빠짐없이 공백 2칸을 붙여라.`;
 
+// 그래프 좌표축은 이미지 픽셀 행과 위아래가 반대다(상하 반전 오독 방지). 그래프를 읽는 프롬프트에 강제.
+const GRAPH_ORIENTATION_RULE = `- 그래프·좌표평면을 해석할 때 세로축(y)은 위로 갈수록 값이 커지고 아래로 갈수록 값이 작아진다. 이미지의 위쪽 픽셀일수록 y값이 크고, 아래쪽 픽셀일수록 y값이 작다(이미지의 행 순서와 반대). 위아래를 뒤집어 읽지 말 것.
+- 점의 좌표, 증가·감소, 최댓값·최솟값, 볼록·오목, 교점, 부호(양수=x축 위, 음수=x축 아래)를 판단할 때 반드시 이 방향을 지켜라. 가로축(x)은 오른쪽이 큰 값이다.`;
+
 const SOLUTION_OCR_RULE = `다음 규칙으로 학생이 손으로 쓴 수학 풀이 이미지를 변환하라.
 - 풀이 전체를 Markdown + LaTeX 로 변환한다. 인라인 수식은 $...$, 디스플레이 수식은 $$...$$.
 - 손글씨를 최대한 충실히 옮긴다(맞춤·교정하지 말 것). 한국어가 아닌 텍스트는 한국어로.
 - 학생이 그린 그래프·도형·표는 본문에 자연어 설명으로 보존한다.
+${GRAPH_ORIENTATION_RULE}
 ${MD_LINEBREAK_RULE}`;
 
 const REVIEW_RULE = `너는 고등 수학 첨삭 선생님이다. 학생 풀이를 검토해 코칭하라.
 이미지에는 손글씨 수식뿐 아니라 학생이 직접 그린 그래프·도형·표 등 시각 요소가 포함될 수 있다. 이를 변환된 LaTeX 풀이와 함께 판독·평가하라.
+${GRAPH_ORIENTATION_RULE}
 코칭 원칙(스캐폴딩): 오답이거나 막혔으면 정답·전체 풀이를 통째로 제시하지 말고, 학생이 스스로 해결하도록 '다음 한 걸음'에 해당하는 디딤돌 힌트만 짚어라. 정답이면 맞혔음을 알리고 칭찬한 뒤 다른 접근법을 짧게 소개하라.
 스타일: 잘한 점 → 오류 위치/이유 → 다음 한 걸음 힌트 → 학습 조언. 존댓말, 이모지 적절히.
 commentMarkdown은 학생용 첨삭(Markdown+LaTeX). errorTags는 [conceptual, computational, logical, notational, strategic, condition] 중에서. conceptTags는 다룬 개념명. strengthNotes/weaknessNotes는 교사용 짧은 메모.
-commentMarkdown 에서 줄을 바꿀 때는 반드시 줄 끝에 공백 2칸("  ")을 넣은 뒤 개행한다(공백 2칸이 없으면 Markdown 줄바꿈이 무시됨).`;
+commentMarkdown 에서 줄을 바꿀 때는 반드시 줄 끝에 공백 2칸("  ")을 넣은 뒤 개행한다(공백 2칸이 없으면 Markdown 줄바꿈이 무시됨).
+coachingSvg: 그래프·도형·좌표평면·수직선 등 그림으로 설명하면 학생이 더 잘 이해할 경우에만, 핵심을 짚는 간단한 그림을 자기완결적 SVG 문자열로 생성하라(필요 없으면 빈 문자열 "").
+- 반드시 "<svg ...>"로 시작해 "</svg>"로 끝나고 viewBox 속성을 포함한다. 외부 리소스·<script>·이벤트핸들러(on*)·foreignObject 는 절대 쓰지 말 것(이미지로만 렌더됨).
+- 좌표평면을 그릴 때 ${''}세로축(y)은 위로 갈수록 값이 커지도록 그린다(SVG 의 y 픽셀은 아래로 갈수록 커지므로, y축 값이 큰 점일수록 화면 위쪽에 오도록 좌표를 변환해 그려라). 가로축(x)은 오른쪽이 큰 값.
+- 글자는 한국어, 선·축은 명확하게. 색상은 1~2가지로 간결하게.`;
 
 const PROBLEM_RULE = `다음 규칙으로 수학 문제 이미지를 변환하라.
 - 본문을 Markdown + LaTeX 로 변환한다. 인라인 수식은 $...$, 디스플레이 수식은 $$...$$.
@@ -58,6 +68,7 @@ const PROBLEM_RULE = `다음 규칙으로 수학 문제 이미지를 변환하�
   본문의 [FIGURE:n] 개수와 figureNotes 길이는 반드시 일치해야 한다.
 - meta 에 과목(subject)·대단원(majorUnit)·소단원(minorUnit)·난이도(difficulty: 상/중/하)
   ·유형(problemType)·세부유형(detailType)·키워드(keywords[]) 를 추출한다.
+${GRAPH_ORIENTATION_RULE}
 ${MD_LINEBREAK_RULE}`;
 
 const MARKSCHEME_RULE = `다음 규칙으로 교사가 제공한 정답/풀이(마크스킴) 이미지를 변환하라.
@@ -130,6 +141,7 @@ export async function reviewSolution(args: {
   conceptTags: string[];
   strengthNotes: string;
   weaknessNotes: string;
+  coachingSvg: string;
 }> {
   const text =
     `${REVIEW_RULE}\n\n` +
@@ -149,6 +161,7 @@ export async function reviewSolution(args: {
         conceptTags: { type: Type.ARRAY, items: { type: Type.STRING } },
         strengthNotes: { type: Type.STRING },
         weaknessNotes: { type: Type.STRING },
+        coachingSvg: { type: Type.STRING },
       },
     },
   );

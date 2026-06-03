@@ -284,6 +284,7 @@ export const coachingAttempts = pgTable('coaching_attempts', {
   strengthNotes: text('strength_notes'),
   weaknessNotes: text('weakness_notes'),
   commentMarkdown: text('comment_markdown'),
+  coachingSvg: text('coaching_svg'),
   aiModel: text('ai_model'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
