@@ -54,10 +54,19 @@ ${GRAPH_ORIENTATION_RULE}
 스타일: 잘한 점 → 오류 위치/이유 → 다음 한 걸음 힌트 → 학습 조언. 존댓말, 이모지 적절히.
 commentMarkdown은 학생용 첨삭(Markdown+LaTeX). errorTags는 [conceptual, computational, logical, notational, strategic, condition] 중에서. conceptTags는 다룬 개념명. strengthNotes/weaknessNotes는 교사용 짧은 메모.
 commentMarkdown 에서 줄을 바꿀 때는 반드시 줄 끝에 공백 2칸("  ")을 넣은 뒤 개행한다(공백 2칸이 없으면 Markdown 줄바꿈이 무시됨).
-coachingSvg: 그래프·도형·좌표평면·수직선 등 그림으로 설명하면 학생이 더 잘 이해할 경우에만, 핵심을 짚는 간단한 그림을 자기완결적 SVG 문자열로 생성하라(필요 없으면 빈 문자열 "").
-- 반드시 "<svg ...>"로 시작해 "</svg>"로 끝나고 viewBox 속성을 포함한다. 외부 리소스·<script>·이벤트핸들러(on*)·foreignObject 는 절대 쓰지 말 것(이미지로만 렌더됨).
-- 좌표평면을 그릴 때 ${''}세로축(y)은 위로 갈수록 값이 커지도록 그린다(SVG 의 y 픽셀은 아래로 갈수록 커지므로, y축 값이 큰 점일수록 화면 위쪽에 오도록 좌표를 변환해 그려라). 가로축(x)은 오른쪽이 큰 값.
-- 글자는 한국어, 선·축은 명확하게. 색상은 1~2가지로 간결하게.`;
+coachingSvg: 그래프·도형·좌표평면·수직선 등 그림으로 설명하면 학생이 더 잘 이해할 경우에만, 핵심을 짚는 정확한 그림을 자기완결적 SVG 문자열로 생성하라(불필요하면 빈 문자열 ""). 이 그림은 문제마다 한 번만 생성되어 이후 같은 문제를 푸는 모든 학생에게 그대로 재사용되므로, 반드시 정확해야 한다.
+[SVG 형식 규칙]
+- 반드시 "<svg ...>"로 시작해 "</svg>"로 끝나고 viewBox 속성을 포함하며, 모든 태그를 올바르게 닫는다.
+- 외부 리소스·<script>·이벤트핸들러(on*)·foreignObject 는 절대 쓰지 말 것(이미지로만 렌더됨).
+- 좌표평면: 세로축(y)은 위로 갈수록 값이 커지도록 그린다(SVG 의 y 픽셀은 아래로 갈수록 커지므로, y값이 큰 점일수록 화면 위쪽에 오도록 좌표를 변환). 가로축(x)은 오른쪽이 큰 값. 원점·축·눈금·화살표·라벨을 명확히.
+- 글자는 한국어, 색상은 1~2가지로 간결하게. 라벨이 서로 겹치지 않게 배치.
+[SVG 정확도 검증 — 출력 전 아래 순서로 내부적으로 점검하고, 어긋나면 수정한 뒤 최종본만 내보낸다]
+1) 문제·정답·해설로부터 그려야 할 핵심 요소(x·y절편, 꼭짓점, 점근선, 교점, 기울기, 정의역·치역, 도형의 변·각 등)를 수식으로 먼저 계산한다.
+2) 계산한 각 좌표를 viewBox 픽셀 좌표로 변환할 때 y축 방향(위=큰 값)이 올바른지 확인한다.
+3) SVG 에 실제로 찍은 점·선·라벨의 좌표가 1)의 계산값과 하나씩 일치하는지 대조한다.
+4) 곡선의 증가·감소·볼록성·대칭·주기가 문제의 함수와 일치하는지 확인한다.
+5) 모든 요소가 viewBox 안에 들어오고 비율이 자연스러운지, 모든 태그가 닫혔는지 확인한다.
+6) 위 점검에서 하나라도 정확히 그릴 수 없으면, 틀린 그림 대신 빈 문자열 "" 을 출력한다.`;
 
 const PROBLEM_RULE = `다음 규칙으로 수학 문제 이미지를 변환하라.
 - 본문을 Markdown + LaTeX 로 변환한다. 인라인 수식은 $...$, 디스플레이 수식은 $$...$$.
@@ -134,6 +143,7 @@ export async function reviewSolution(args: {
   studentLatex: string;
   workMimeType: string;
   workBase64: string;
+  skipSvg?: boolean;   // 이 문제의 보조 그림이 이미 있으면 SVG 재생성 생략(토큰 절약)
 }): Promise<{
   commentMarkdown: string;
   isCorrect: boolean;
@@ -149,7 +159,8 @@ export async function reviewSolution(args: {
     `정답: ${args.answer ?? '(없음)'}\n` +
     `해설: ${args.solution ?? '(없음)'}\n` +
     `학생 풀이(LaTeX): ${args.studentLatex}\n` +
-    `위 캔버스 이미지는 학생의 원본 손글씨 풀이(수식·그래프·도형 포함)다.`;
+    `위 캔버스 이미지는 학생의 원본 손글씨 풀이(수식·그래프·도형 포함)다.` +
+    (args.skipSvg ? `\n이 문제의 보조 그림은 이미 준비되어 있으니 coachingSvg 는 빈 문자열 ""로 둔다(새로 그리지 말 것).` : '');
   return generateJson(
     [imagePart(args.workMimeType, args.workBase64), { text }],
     {

@@ -254,6 +254,7 @@ export const problems = pgTable('problems', {
   solution: text('solution'),
   solutionSource: text('solution_source'),
   markschemeImageUrl: text('markscheme_image_url'),
+  coachingSvg: text('coaching_svg'),  // 코칭 중 생성된 보조 그림 캐시(문제 단위 재사용)
 
   aiModel: text('ai_model'),
   status: text('status').default('ready').notNull(),

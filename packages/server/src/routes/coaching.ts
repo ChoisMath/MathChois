@@ -6,7 +6,7 @@ import { readFile, urlToStoragePath } from '../services/storage.service.js';
 import { convertSolutionToLatex, reviewSolution, AI_MODEL_NAME } from '../services/ai.service.js';
 import { createAttempt, listAttempts, listStudentHistory, listClassroomStudentHistory } from '../services/coaching.service.js';
 import { getPageById } from '../services/page.service.js';
-import { getProblem } from '../services/problem.service.js';
+import { getProblem, updateProblem } from '../services/problem.service.js';
 import { isClassroomOwner, isClassroomMember } from '../services/classroom.service.js';
 
 function imageMime(filePath: string): string {
@@ -55,6 +55,9 @@ export async function coachingRoutes(app: FastifyInstance) {
     const problem = await getProblem(page.aiProblemId);
     if (!problem) return reply.status(404).send({ error: '연결된 문항을 찾을 수 없습니다' });
 
+    // 문제 단위 보조 그림 캐시: 있으면 재사용(AI 재생성 생략), 없고 새로 생성되면 문제에 저장
+    const existingSvg = sanitizeSvg(problem.coachingSvg);
+
     const { base64, mimeType } = await loadWorkImage(workImageUrl);
     const analysis = await reviewSolution({
       problemLatex: problem.problemLatex,
@@ -63,7 +66,13 @@ export async function coachingRoutes(app: FastifyInstance) {
       studentLatex: solutionLatex,
       workMimeType: mimeType,
       workBase64: base64,
+      skipSvg: !!existingSvg,
     });
+
+    const newSvg = existingSvg ?? sanitizeSvg(analysis.coachingSvg);
+    if (!existingSvg && newSvg) {
+      await updateProblem(page.aiProblemId, { coachingSvg: newSvg });
+    }
 
     return createAttempt({
       pageId,
@@ -77,7 +86,7 @@ export async function coachingRoutes(app: FastifyInstance) {
       strengthNotes: analysis.strengthNotes,
       weaknessNotes: analysis.weaknessNotes,
       commentMarkdown: analysis.commentMarkdown,
-      coachingSvg: sanitizeSvg(analysis.coachingSvg),
+      coachingSvg: newSvg,
       aiModel: AI_MODEL_NAME,
     });
   });

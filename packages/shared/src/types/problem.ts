@@ -28,6 +28,7 @@ export interface Problem {
   solution: string | null;
   solutionSource: SolutionSource | null;
   markschemeImageUrl: string | null;
+  coachingSvg: string | null;
   aiModel: string | null;
   status: 'draft' | 'ready';
   createdBy: string;
