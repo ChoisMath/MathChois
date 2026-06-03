@@ -71,5 +71,5 @@ legacy_rails/
 # Local storage (dev file uploads)
 local-storage/
 
-# Drizzle
-drizzle/meta/
+# Drizzle (drizzle-kit generated output; schema.ts is source of truth, applied via db:push + startupMigrate)
+drizzle/
