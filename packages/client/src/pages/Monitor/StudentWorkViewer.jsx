@@ -32,6 +32,7 @@ import { HTML_OVERLAY_LOCK_BASE } from '../../lib/htmlOverlay';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
 import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
 import { useExcalidrawUndo } from '../../hooks/useExcalidrawUndo';
+import { useIntervalRefresh } from '../../hooks/useIntervalRefresh';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { extractYouTubeId, getYouTubeEmbedUrl, getYouTubeThumbnail } from '../../lib/youtubeUtils';
 import CoachingViewer from '../Study/CoachingViewer';
@@ -77,6 +78,7 @@ const StudentWorkViewer = () => {
   const studentEls = useRef([]);
   const teacherEls = useRef([]);
   const noteDebounceRef      = useRef(null);
+  const lastStudentSyncRef   = useRef(null); // 마지막으로 반영한 학생 필기 — 동일하면 updateScene 생략(깜빡임 방지)
 
   useEffect(() => {
     mountedRef.current = true;
@@ -138,54 +140,60 @@ const StudentWorkViewer = () => {
     fetchData();
   }, [chapterId, studentId]);
 
-  /* ── 학생 필기 Socket.IO 구독 ── */
+  /* ── 학생 필기 최신화 (소켓 이벤트 + 주기 폴링 공용) ── */
+  const refreshStudentNotes = useCallback(async () => {
+    const excApi = excalidrawAPIRef.current;
+    const page = currentPageRef.current;
+    if (!excApi || !page) return;
+    try {
+      const note = await api.get(`/api/notes/student-notes-for/${studentId}?pageIds=${page.id}`);
+      const noteData = Array.isArray(note) ? note[0] : note;
+
+      const newStudentEls = (noteData?.excalidrawData?.elements || []).map((el) => ({
+        ...el, id: STUDENT_NOTE_PREFIX + el.id, locked: true, opacity: 60,
+      }));
+
+      /* 직전 반영분과 동일하면 화면 갱신 생략 (폴링 깜빡임·불필요 렌더 방지) */
+      const sig = JSON.stringify(newStudentEls.map((el) => ({ id: el.id, x: el.x, y: el.y, n: el.points?.length })));
+      if (sig === lastStudentSyncRef.current) return;
+      lastStudentSyncRef.current = sig;
+
+      if (noteData?.excalidrawData?.bgPosition) {
+        bgPositionRef.current = noteData.excalidrawData.bgPosition;
+      }
+      studentEls.current = newStudentEls;
+
+      const newStudentFiles = noteData?.excalidrawData?.files ?? {};
+      if (Object.keys(newStudentFiles).length > 0) {
+        excApi.addFiles(Object.values(newStudentFiles));
+        savedStudentFilesRef.current = { ...savedStudentFilesRef.current, ...newStudentFiles };
+      }
+
+      /* BG + 교사 코멘트(진행 중 획 포함)는 유지, 학생 필기 레이어만 교체 */
+      const preserved = excApi.getSceneElements().filter(
+        (el) => !el.id.startsWith(STUDENT_NOTE_PREFIX)
+      );
+      excApi.updateScene({ elements: [...preserved, ...newStudentEls], commitToHistory: false });
+    } catch (err) {
+      console.error('학생 필기 갱신 실패:', err);
+    }
+  }, [studentId]);
+
+  /* 소켓: 학생 필기 변경 즉시 반영 */
   useEffect(() => {
     if (!currentPage) return;
-
     return subscribeToRoom(
       `work:${currentPage.id}:${studentId}`,
       'student-note:updated',
-      (data) => {
+      () => {
         clearTimeout(noteDebounceRef.current);
-        noteDebounceRef.current = setTimeout(async () => {
-          // 학생 필기가 업데이트됨 → 최신 데이터를 API에서 다시 가져옴
-          const excApi = excalidrawAPIRef.current;
-          if (!excApi) return;
-
-          try {
-            const note = await api.get(`/api/notes/student-notes-for/${studentId}?pageIds=${currentPage.id}`);
-            const noteData = Array.isArray(note) ? note[0] : note;
-
-            /* bgPosition 업데이트 */
-            if (noteData?.excalidrawData?.bgPosition) {
-              bgPositionRef.current = noteData.excalidrawData.bgPosition;
-            }
-
-            /* 새 학생 필기 elements 적용 */
-            const newStudentEls = (noteData?.excalidrawData?.elements || []).map((el) => ({
-              ...el, id: STUDENT_NOTE_PREFIX + el.id, locked: true, opacity: 60,
-            }));
-            studentEls.current = newStudentEls;
-
-            /* 학생 이미지 파일 업데이트 */
-            const newStudentFiles = noteData?.excalidrawData?.files ?? {};
-            if (Object.keys(newStudentFiles).length > 0) {
-              excApi.addFiles(Object.values(newStudentFiles));
-              savedStudentFilesRef.current = { ...savedStudentFilesRef.current, ...newStudentFiles };
-            }
-
-            /* BG + 교사 코멘트는 유지, 학생 필기만 교체 */
-            const preserved = excApi.getSceneElements().filter(
-              (el) => !el.id.startsWith(STUDENT_NOTE_PREFIX)
-            );
-            excApi.updateScene({ elements: [...preserved, ...newStudentEls], commitToHistory: false });
-          } catch (err) {
-            console.error('학생 필기 실시간 갱신 실패:', err);
-          }
-        }, 300);
+        noteDebounceRef.current = setTimeout(() => { refreshStudentNotes(); }, 300);
       }
     );
-  }, [currentPage, studentId]);
+  }, [currentPage, studentId, refreshStudentNotes]);
+
+  /* 폴링 백스톱: 소켓이 놓친 변경을 4초마다 보충 (탭 절전·네트워크 단절 대비) */
+  useIntervalRefresh(refreshStudentNotes, 4000, !!currentPage);
 
   const [screenLocked, setScreenLocked] = useState(false);
   const screenLockedRef   = useRef(false);
@@ -236,6 +244,7 @@ const StudentWorkViewer = () => {
       studentEls.current  = [];
       teacherEls.current  = [];
       lastSavedRef.current  = null; // 페이지 변경 시 저장 기준점 초기화
+      lastStudentSyncRef.current = null; // 페이지 변경 시 학생 필기 동기화 기준점 초기화
 
       try {
         /* 학생 필기 + 이 학생에 대한 교사 코멘트 */

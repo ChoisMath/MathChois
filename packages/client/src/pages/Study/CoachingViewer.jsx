@@ -15,6 +15,7 @@ import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
 import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
 import { useExcalidrawUndo } from '../../hooks/useExcalidrawUndo';
+import { useIntervalRefresh } from '../../hooks/useIntervalRefresh';
 import { getProblemForCoaching } from '../../lib/problems';
 import { convertSolution, reviewSolution, listAttempts, getStudentPageAttempts, uploadWorkImage } from '../../lib/coaching';
 
@@ -43,6 +44,9 @@ export default function CoachingViewer({
   const saveTimerRef = useRef(null);
   const lastSavedRef = useRef(null);
   const noteLoadedRef = useRef(false); // 필기 로드 완료 전 빈 캔버스 onChange가 기존 필기를 덮어쓰는 것을 차단
+  const pendingSaveRef = useRef(null);  // 실제 사용자 편집분만 담는다 — 로드 전/편집 없음이면 cleanup이 빈 배열로 덮어쓰는 것을 방지
+  const lastRoNoteSigRef   = useRef(null); // readOnly 폴링: 마지막 반영한 학생 캔버스 서명 (동일하면 갱신 생략)
+  const lastRoAttemptIdRef = useRef(null); // readOnly 폴링: 마지막 반영한 코칭 시도 id
 
   /* ── 펜 입력 인프라 (다른 필기 페이지와 동일) ── */
   const containerRef        = useRef(null);
@@ -94,6 +98,10 @@ export default function CoachingViewer({
   useEffect(() => {
     let alive = true;
     noteLoadedRef.current = false;
+    pendingSaveRef.current = null;
+    lastSavedRef.current = null;
+    lastRoNoteSigRef.current = null;
+    lastRoAttemptIdRef.current = null;
     setProblem(null); setSolutionLatex(''); setWorkImageUrl(null); setCoaching(null); setError('');
     (async () => {
       try {
@@ -159,13 +167,24 @@ export default function CoachingViewer({
 
     const userEls = elements.filter((el) => !el.isDeleted);
     const serialized = JSON.stringify(userEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points })));
-    if (serialized === lastSavedRef.current) return;
+    if (serialized === lastSavedRef.current) {
+      pendingSaveRef.current = null;
+      clearTimeout(saveTimerRef.current);
+      setSaveStatus('saved');
+      return;
+    }
+
+    /* 변경분을 즉시 캡처 — 페이지 이동/언마운트 시 cleanup이 이 데이터만 flush한다 */
+    const files = excalidrawAPIRef.current?.getFiles?.() ?? {};
+    pendingSaveRef.current = { serialized, payload: { excalidrawData: { elements: userEls, files }, chapterId } };
+
     clearTimeout(saveTimerRef.current);
     setSaveStatus('saving');
     saveTimerRef.current = setTimeout(() => {
-      const files = excalidrawAPIRef.current?.getFiles?.() ?? {};
-      api.put(`/api/notes/student/${pageId}`, { excalidrawData: { elements: userEls, files }, chapterId })
-        .then(() => { lastSavedRef.current = serialized; setSaveStatus('saved'); })
+      const pending = pendingSaveRef.current;
+      if (!pending) { setSaveStatus('saved'); return; }
+      api.put(`/api/notes/student/${pageId}`, pending.payload)
+        .then(() => { lastSavedRef.current = pending.serialized; pendingSaveRef.current = null; setSaveStatus('saved'); })
         .catch(() => setSaveStatus('saved'));
     }, 1500);
   }, [pageId, chapterId, readOnly, checkForScribble, checkForSmoothing, recordHistory]);
@@ -209,35 +228,77 @@ export default function CoachingViewer({
     finally { noteLoadedRef.current = true; }
   }, [pageId, readOnly, viewStudentId, recordHistory, triggerPalmRejectionWarmup]);
 
-  // 언마운트/페이지 이동 시 디바운스 대기 중인 필기를 즉시 저장 (StudyViewer 패턴)
+  // 언마운트/페이지 이동 시 디바운스 대기 중인 "사용자 편집분"만 즉시 저장 (StudyViewer 패턴).
+  // pendingSaveRef 는 필기 로드 완료(noteLoadedRef) 후 실제 변경이 있을 때만 채워지므로,
+  // 로드 전 빈 캔버스나 GET 실패 상태에서 기존 필기를 빈 배열로 덮어쓰는 일이 없다.
   useEffect(() => {
     if (readOnly) return undefined;
     return () => {
       clearTimeout(saveTimerRef.current);
-      const excApi = excalidrawAPIRef.current;
-      if (!excApi) return;
-      const userEls = excApi.getSceneElements().filter((el) => !el.isDeleted);
-      const serialized = JSON.stringify(userEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points })));
-      if (serialized === lastSavedRef.current) return;
-      const files = excApi.getFiles?.() ?? {};
-      api.put(`/api/notes/student/${pageId}`, { excalidrawData: { elements: userEls, files }, chapterId }).catch(() => {});
+      const pending = pendingSaveRef.current;
+      if (!pending) return;
+      pendingSaveRef.current = null;
+      api.put(`/api/notes/student/${pageId}`, pending.payload).catch(() => {});
     };
   }, [pageId, chapterId, readOnly]);
 
+  /* ── 교사 readOnly 열람: 학생 풀이·코칭을 주기적으로 보충 (소켓 미사용 화면이라 폴링이 유일한 실시간 경로) ── */
+  const refreshReadOnly = useCallback(async () => {
+    if (!readOnly || !viewStudentId) return;
+
+    /* 학생 풀이 캔버스 */
+    const excApi = excalidrawAPIRef.current;
+    if (excApi) {
+      try {
+        const bulk = await api.get(`/api/notes/student-notes-for/${viewStudentId}?pageIds=${pageId}`);
+        const note = (bulk || []).find((n) => n.pageId === pageId);
+        const els = note?.excalidrawData?.elements ?? [];
+        const sig = JSON.stringify(els.map((el) => ({ id: el.id, x: el.x, y: el.y, n: el.points?.length })));
+        if (sig !== lastRoNoteSigRef.current) {
+          lastRoNoteSigRef.current = sig;
+          const files = note?.excalidrawData?.files ?? {};
+          if (files && Object.keys(files).length) excApi.addFiles(Object.values(files));
+          excApi.updateScene({ elements: els });
+        }
+      } catch { /* 빈 캔버스/일시 오류 무시 */ }
+    }
+
+    /* 코칭 시도(새 attempt) */
+    try {
+      const attempts = await getStudentPageAttempts(classroomId, viewStudentId, pageId);
+      const latest = attempts?.[0];
+      if (latest && latest.id !== lastRoAttemptIdRef.current) {
+        lastRoAttemptIdRef.current = latest.id;
+        setCoaching(latest);
+        setSolutionLatex(latest.solutionLatex || '');
+        if (latest.workImageUrl) setWorkImageUrl(latest.workImageUrl);
+      }
+    } catch { /* 무시 */ }
+  }, [readOnly, viewStudentId, classroomId, pageId]);
+
+  useIntervalRefresh(refreshReadOnly, 4000, readOnly && !!viewStudentId);
+
   const startResize = useCallback((e) => {
     e.preventDefault();
+    // 핸들에 pointer capture — 터치/스타일러스에서 브라우저가 드래그를 스크롤로 가로채지 않게 하고
+    // (touch-action:none 와 함께) 이후 move/up 이벤트를 핸들로 고정해 마우스·펜·손가락 모두 안정적으로 추적
+    const el = e.currentTarget;
+    try { el.setPointerCapture?.(e.pointerId); } catch { /* 일부 환경 미지원 */ }
     let current = rightWidth;
     const onMove = (ev) => {
       current = Math.min(window.innerWidth * 0.6, Math.max(MIN_W, window.innerWidth - ev.clientX));
       setRightWidth(current);
     };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
+    const onUp = (ev) => {
+      try { el.releasePointerCapture?.(ev.pointerId); } catch { /* noop */ }
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
       localStorage.setItem(PANEL_KEY, String(current));
     };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
   }, [rightWidth]);
 
   async function exportWorkBlob() {
@@ -462,8 +523,10 @@ export default function CoachingViewer({
             {toolbar}
             <div className="relative min-h-0 flex-1">{canvas}</div>
           </div>
-          <div onPointerDown={startResize} role="separator"
-            className="w-1.5 shrink-0 cursor-col-resize bg-gray-200 hover:bg-blue-400" />
+          <div onPointerDown={startResize} role="separator" aria-orientation="vertical"
+            className="group flex w-4 shrink-0 cursor-col-resize touch-none items-center justify-center bg-gray-200 hover:bg-blue-400 active:bg-blue-400">
+            <div className="h-10 w-1 rounded-full bg-gray-400 group-hover:bg-white group-active:bg-white" />
+          </div>
           <div className="shrink-0 overflow-y-auto p-3" style={{ width: rightWidth }}>{rightPanel}</div>
         </div>
       ) : (

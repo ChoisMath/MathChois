@@ -17,6 +17,7 @@ import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
 import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
 import { useExcalidrawUndo } from '../../hooks/useExcalidrawUndo';
+import { useIntervalRefresh } from '../../hooks/useIntervalRefresh';
 import PenDiagnosticsOverlay from '../../components/study/PenDiagnosticsOverlay';
 import { setToggle } from '../../lib/penToggles';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
@@ -380,6 +381,7 @@ const StudyViewer = () => {
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
   const mountedRef            = useRef(true);
   const commentDebounceRef    = useRef(null);
+  const lastTeacherSyncRef    = useRef(null); // 마지막으로 반영한 교사 코멘트 — 동일하면 updateScene 생략(깜빡임 방지)
 
   const [screenLocked, setScreenLocked] = useState(false);
   const screenLockedRef      = useRef(false);
@@ -465,6 +467,7 @@ const StudyViewer = () => {
       setLoading(true);
       bgPositionRef.current = null;
       lastSavedRef.current  = null;
+      lastTeacherSyncRef.current = null;
       setShowTeacherNotesModal(false);
 
       /* 챕터·페이지 목록: 캐시 우선 → 없으면 병렬 fetch */
@@ -579,52 +582,62 @@ const StudyViewer = () => {
     };
   }, [chapterId, user]);
 
-  /* ── 교사 코멘트 Socket.IO 구독 ── */
+  /* ── 교사 코멘트 최신화 (소켓 + 주기 폴링 공용) ── */
+  const refreshTeacherComments = useCallback(async () => {
+    if (!mountedRef.current) return;
+    const excApi = excalidrawAPIRef.current;
+    const page = currentPageRef.current;
+    const cu = userRef.current;
+    if (!excApi || !page || !cu) return;
+    try {
+      const comments = await api.get(`/api/comments/${page.id}/for-student`);
+
+      const newCommentEls = (comments || []).flatMap((n) =>
+        (n.excalidrawData?.elements || []).map((el) => ({
+          ...el, id: TEACHER_NOTE_PREFIX + el.id, locked: true, opacity: 60,
+        }))
+      );
+
+      /* 직전 반영분과 동일하면 화면 갱신 생략 (폴링 깜빡임·불필요 렌더 방지) */
+      const sig = JSON.stringify(newCommentEls.map((el) => ({ id: el.id, x: el.x, y: el.y, n: el.points?.length })));
+      if (sig === lastTeacherSyncRef.current) return;
+      lastTeacherSyncRef.current = sig;
+
+      const newCommentFiles = Object.assign({}, ...(comments || []).map((n) => n.excalidrawData?.files ?? {}));
+      if (Object.keys(newCommentFiles).length > 0) {
+        excApi.addFiles(Object.values(newCommentFiles));
+        teacherCommentFilesRef.current = { ...teacherCommentFilesRef.current, ...newCommentFiles };
+      }
+      /* 코멘트 캐시 갱신 — 다음 방문 시 최신 데이터 즉시 표시 */
+      _commentsCache.set(`${cu.id}_${page.id}`, {
+        elements: newCommentEls, files: teacherCommentFilesRef.current,
+      });
+      teacherCommentsRef.current = newCommentEls;
+      /* 학생 본인 필기(진행 중 획 포함)는 유지, 교사 코멘트 레이어만 교체 */
+      const preserved = excApi.getSceneElements().filter(
+        (el) => !el.id.startsWith(TEACHER_NOTE_PREFIX)
+      );
+      excApi.updateScene({ elements: [...preserved, ...newCommentEls], commitToHistory: false });
+    } catch (err) {
+      console.error('교사 코멘트 갱신 실패:', err);
+    }
+  }, []);
+
+  /* 소켓: 교사 코멘트 변경 즉시 반영 */
   useEffect(() => {
     if (!currentPage || !user) return;
-
     return subscribeToRoom(
       `comments:${currentPage.id}:${user.id}`,
       'teacher-comment:updated',
-      (data) => {
+      () => {
         clearTimeout(commentDebounceRef.current);
-        commentDebounceRef.current = setTimeout(async () => {
-          if (!mountedRef.current) return;
-          // 교사 코멘트가 업데이트됨 → 최신 데이터를 API에서 다시 가져옴
-          const excApi = excalidrawAPIRef.current;
-          if (!excApi) return;
-
-          try {
-            const comments = await api.get(`/api/comments/${currentPage.id}/for-student`);
-
-            const newCommentEls = (comments || []).flatMap((n) =>
-              (n.excalidrawData?.elements || []).map((el) => ({
-                ...el, id: TEACHER_NOTE_PREFIX + el.id, locked: true, opacity: 60,
-              }))
-            );
-            const newCommentFiles = Object.assign({}, ...(comments || []).map((n) => n.excalidrawData?.files ?? {}));
-
-            /* 교사 코멘트 이미지 파일 — Excalidraw에 즉시 등록 */
-            if (Object.keys(newCommentFiles).length > 0) {
-              excApi.addFiles(Object.values(newCommentFiles));
-              teacherCommentFilesRef.current = { ...teacherCommentFilesRef.current, ...newCommentFiles };
-            }
-            /* 코멘트 캐시 갱신 — 다음 방문 시 최신 데이터 즉시 표시 */
-            _commentsCache.set(`${user.id}_${currentPage.id}`, {
-              elements: newCommentEls, files: teacherCommentFilesRef.current,
-            });
-            teacherCommentsRef.current = newCommentEls;
-            const preserved = excApi.getSceneElements().filter(
-              (el) => !el.id.startsWith(TEACHER_NOTE_PREFIX)
-            );
-            excApi.updateScene({ elements: [...preserved, ...newCommentEls], commitToHistory: false });
-          } catch (err) {
-            console.error('교사 코멘트 실시간 갱신 실패:', err);
-          }
-        }, 300);
+        commentDebounceRef.current = setTimeout(() => { refreshTeacherComments(); }, 300);
       }
     );
-  }, [currentPage, user]);
+  }, [currentPage, user, refreshTeacherComments]);
+
+  /* 폴링 백스톱: 소켓이 놓친 교사 코멘트를 4초마다 보충 (탭 절전·네트워크 단절 대비) */
+  useIntervalRefresh(refreshTeacherComments, 4000, !!currentPage && !!user);
 
   /* ── Excalidraw onChange & 화면 고정 ── */
   const handleExcalidrawChange = useCallback((elements, appState) => {
