@@ -70,7 +70,7 @@ packages/
 - 서버 핸들러: 필기/과제필기 → `routes/notes.ts`, 코멘트(③⑤) → `routes/comments.ts`. 실제 DB 로직은 `services/note.service.ts`에 집중.
 - Socket emit: `socket/handlers/notes.ts`(①②), `comments.ts`(③), `assignments.ts`(④⑤).
 - 교사 모니터링 진입점: `pages/Monitor/ChapterMonitor.jsx`(챕터별 학생 진도 → StudentWorkViewer로), `pages/Assignment/AssignmentMonitor.jsx`(과제별 제출 → AssignmentWorkViewer로).
-- 페이지 배경은 이미지/영상/**HTML 도구** 중 하나 (`pages.html_url`). HTML 도구는 iframe으로 렌더되고 그 위에 필기가 얹힌다.
+- 페이지 배경은 이미지/영상/**HTML 도구** 중 하나 (`pages.html_url`). HTML 도구는 iframe으로 렌더되고, 그 위에 **투명 Excalidraw 오버레이**(`components/study/HtmlToolOverlay.jsx` + `lib/htmlOverlay.js`)로 필기를 얹는다(①②③ 뷰어). 자세한 동작은 아래 "주의사항"의 HTML 필기 오버레이 항목 참조.
 
 ## AI 수학 코칭 페이지 (#3, `feat/ai-coaching-page`)
 
@@ -181,6 +181,7 @@ packages/
 
 ## 주의사항 / 특이 패턴
 - **루트 `CLAUDE.md`는 현재 스택 기준으로 최신**(모노레포/Fastify/Drizzle). 구조 상세는 이 PROJECT_MAP 참조.
+- **HTML 도구 위 펜 필기 오버레이**(`feat/html-page-annotation`): iframe 위에 투명 Excalidraw를 겹쳐 그 위에 필기한다. 공통 컴포넌트 `components/study/HtmlToolOverlay.jsx`(+ `lib/htmlOverlay.js`: pointer-events 라우팅 + `HTML_OVERLAY_LOCK_BASE`). `drawing` 플래그로 **도구 조작↔필기** 전환(OFF=오버레이 click-through로 iframe 조작, ON=오버레이가 입력 장악·iframe 정지·`viewModeEnabled=false`). iframe은 DOM 고정이라 캔버스 pan/zoom 시 필기만 어긋나므로 **뷰포트를 zoom1/scroll0로 상시 고정**(각 뷰어가 `lockActiveRef = screenLocked || htmlUrl`를 `useExcalidrawTouch`의 `screenLockedRef` 자리로 전달 + onChange 복원). 배경 element 없음(`bgPosition` 미사용). 저장·실시간·교사코멘트는 기존 notes/comments 그대로. 적용 뷰어: ① StudyViewer(`drawMode`), ② TeacherStudyViewer(HTML 전용 `htmlDrawMode` 토글 신설), ③ StudentWorkViewer(`commentMode` 재사용). **PDF 내보내기는 HTML에서 비활성**(live iframe 래스터화 불가). ④⑤(과제)는 `assignment_pages`에 `html_url`이 없어 미지원. `DrawingToolbar`는 `htmlMode` prop로 이미지 전용(이미지 이동) 버튼을 숨김.
 - **HTML 도구 페이지는 앱과 다른 origin에서 서빙**해야 함:
   - iframe에 `sandbox`+same-origin이면 opaque origin(`'null'`)이 되어 도구 내부 postMessage / blob worker(수식 입력 등)가 깨진다. 그래서 same-origin sandbox 대신 **별도 origin**(`VITE_TOOLS_ORIGIN`, `lib/toolUrl.js`)으로 띄운다.
   - 서버는 `text/html` 응답에 `Content-Security-Policy: frame-ancestors`(앱 origin만 허용)를 설정하고, helmet이 raw 응답에 직접 박은 `X-Frame-Options`/`Origin-Agent-Cluster`를 `reply.raw.removeHeader`로 제거한다(일반 `reply.removeHeader`로는 안 지워짐). `storage.ts` `GET /api/files/*` 참조.
@@ -212,4 +213,4 @@ packages/
 - **`.gitignore`** — `*.tsbuildinfo`·`.superpowers/`·`.plans/`·`review.md` 무시(빌드 산출물·작업 노트는 읽지 않음).
 
 ---
-마지막 업데이트: 2026-06-05
+마지막 업데이트: 2026-06-05 (HTML 페이지 펜 필기 오버레이 추가)
