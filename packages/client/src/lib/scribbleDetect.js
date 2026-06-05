@@ -23,7 +23,7 @@ export function isScribblePattern(points) {
     const dot = prevDx * currDx + prevDy * currDy;
     const cross = prevDx * currDy - prevDy * currDx;
     const angle = Math.abs(Math.atan2(cross, dot));
-    if (angle > Math.PI * 0.55) reversals++; // >100°
+    if (angle > Math.PI * 0.6) reversals++; // >108°
   }
 
   // 2. 밀도 검사: 경로 길이 / 바운딩박스 대각선
@@ -40,5 +40,5 @@ export function isScribblePattern(points) {
   const bboxDiag = Math.hypot(maxX - minX, maxY - minY);
   const density = bboxDiag > 1 ? pathLen / bboxDiag : 0;
 
-  return reversals >= 4 && density > 2.5;
+  return reversals >= 6 && density > 3.5;
 }

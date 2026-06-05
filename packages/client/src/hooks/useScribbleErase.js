@@ -53,7 +53,7 @@ export function useScribbleErase({ excalidrawAPIRef, excludePrefixes = [] }) {
 
         const finalElements = api.getSceneElements();
         const finalEl = finalElements.find((el) => el.id === latest.id);
-        if (!finalEl || finalEl.isDeleted || !finalEl.points || finalEl.points.length < 8) return;
+        if (!finalEl || finalEl.isDeleted || !finalEl.points || finalEl.points.length < 12) return;
 
         if (!isScribblePattern(finalEl.points)) return;
 
