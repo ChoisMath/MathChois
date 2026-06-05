@@ -121,7 +121,7 @@ export default function ProblemRegister({ initial, onSaved }) {
         <input className="border rounded px-3 py-2" placeholder="제목(선택)"
           value={form.title} onChange={(e) => set({ title: e.target.value })} />
 
-        <textarea className="border rounded px-3 py-2 font-mono text-sm h-40" placeholder="문제 본문 (Markdown + LaTeX)"
+        <textarea className="border rounded px-3 py-2 font-mono text-sm min-h-40 resize-y overflow-y-auto" placeholder="문제 본문 (Markdown + LaTeX)"
           value={form.problemLatex} onChange={(e) => set({ problemLatex: e.target.value })} />
 
         {/* 그림 슬롯 */}
@@ -183,7 +183,7 @@ export default function ProblemRegister({ initial, onSaved }) {
         </div>
         <input className="border rounded px-3 py-2" placeholder="정답"
           value={form.answer ?? ''} onChange={(e) => set({ answer: e.target.value })} />
-        <textarea className="border rounded px-3 py-2 font-mono text-sm h-32" placeholder="해설 (Markdown + LaTeX)"
+        <textarea className="border rounded px-3 py-2 font-mono text-sm min-h-32 resize-y overflow-y-auto" placeholder="해설 (Markdown + LaTeX)"
           value={form.solution ?? ''} onChange={(e) => set({ solution: e.target.value })} />
 
         {error && <p className="text-sm text-red-600">{error}</p>}
