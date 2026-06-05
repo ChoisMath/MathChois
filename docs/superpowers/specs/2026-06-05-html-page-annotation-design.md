@@ -1,7 +1,8 @@
 # HTML 페이지 위 펜 필기 (HTML Page Annotation Overlay) — 설계
 
 - 날짜: 2026-06-05
-- 범위: 5개 필기 뷰어 전부(① 학생필기, ② 교사필기, ③ 교사 학생코멘트, ④ 학생 과제필기, ⑤ 교사 과제코멘트)
+- 범위: **HTML 페이지가 실제 존재하는 3개 뷰어** — ① 학생필기(StudyViewer), ② 교사필기(TeacherStudyViewer), ③ 교사 학생코멘트(StudentWorkViewer). 모두 챕터 `pages.htmlUrl` 위에서 동작.
+- **④⑤(과제 뷰어)는 범위 외**: `assignment_pages` 스키마에 `html_url` 컬럼이 없어 과제 페이지는 HTML 도구를 가질 수 없다(`schema.ts:164-171`, 두 뷰어에 HTML 분기 자체가 없음). 과제 HTML 지원(스키마+편집기+서버)은 별도 후속 프로젝트로 분리.
 - 접근법: **A — Excalidraw 투명 오버레이** (iframe 스냅샷/전용 캔버스 대안은 기각)
 
 ## 1. 문제
@@ -105,18 +106,17 @@ HTML 도구는 별도 origin의 live iframe이라 래스터화가 불가하다. 
 
 ## 8. 영향 받는 파일
 
-클라이언트(5개 뷰어 + 공유):
-- `pages/Study/StudyViewer.jsx` (①) — HTML 분기 오버레이화, 저장/툴바 조건 완화. (모달 내 교사필기 HTML은 뷰 전용 유지)
-- `pages/Study/TeacherStudyViewer.jsx` (②)
-- `pages/Monitor/StudentWorkViewer.jsx` (③)
-- `pages/Assignment/AssignmentStudyViewer.jsx` (④)
-- `pages/Assignment/AssignmentWorkViewer.jsx` (⑤)
-- `components/study/DrawingToolbar.jsx` — `htmlMode` prop로 이미지 전용 컨트롤(리로드·화면고정) 숨김
-- `hooks/useExcalidrawTouch.js` — HTML 오버레이일 때 핀치줌/팬 게이트, 뷰포트 고정
-- `lib/excalidrawUtils.js` — 필요 시 HTML 오버레이용 헬퍼(배경 없는 마운트 분기)
+신규(공유):
+- `lib/htmlOverlay.js` — pointer-events 결정 + 뷰포트 고정 상수(`HTML_OVERLAY_LOCK_BASE`). 단위 테스트 대상.
+- `components/study/HtmlToolOverlay.jsx` — iframe + 투명 Excalidraw 오버레이 공통 컴포넌트(3개 뷰어가 재사용).
 
-5개 뷰어의 HTML 오버레이/뷰포트고정 로직은 **중복을 피해 공통 훅 또는 헬퍼로 추출**하는 것을 우선 검토한다
-(이미 펜 처리·undo·터치가 훅으로 공유되는 패턴과 일치).
+수정:
+- `pages/Study/StudyViewer.jsx` (①) — HTML 분기를 `HtmlToolOverlay`로 교체, 저장상태/툴바 조건 완화, `handleHtmlOverlayMount` 추가, 뷰포트 고정(`lockActiveRef`). (모달 내 교사필기 HTML은 뷰 전용 유지)
+- `pages/Study/TeacherStudyViewer.jsx` (②) — 위 + HTML 전용 `htmlDrawMode` 토글 신설(이 뷰어는 view/draw 토글이 없음).
+- `pages/Monitor/StudentWorkViewer.jsx` (③) — 위 + 기존 `commentMode`를 draw 플래그로 재사용.
+- `components/study/DrawingToolbar.jsx` — `htmlMode` prop로 이미지 전용 컨트롤(이미지 이동 Hand) 숨김. 리로드·화면고정은 해당 prop 미전달로 자연히 숨김.
+
+**`useExcalidrawTouch.js`는 변경 없음**: HTML일 때 `lockActiveRef`(=screenLocked||html)를 `screenLockedRef` 자리에 전달하면 기존 window 리스너의 `screenLocked && count>=2` 분기가 2손가락 핀치/팬을 그대로 차단한다(별도 게이트 불필요).
 
 서버: **변경 없음**(기존 notes/comments 라우트·소켓 재사용).
 
