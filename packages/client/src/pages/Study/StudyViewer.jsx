@@ -372,6 +372,7 @@ const StudyViewer = () => {
   const teacherCommentFilesRef  = useRef({}); // 교사 코멘트 이미지 파일
   const userRef               = useRef(user);
   const drawModeRef           = useRef(false);
+  const autoEnabledRef        = useRef(false); // 펜 입력으로 자동 ON 된 경우 — 모드 effect 펜 리셋 생략
   const lastSavedRef          = useRef(null); // 마지막 저장 내용 (JSON) — 변경 감지용
   const activeSidebarItemRef  = useRef(null); // 사이드바 현재 페이지 요소
   const sidebarScrollRef      = useRef(null); // 사이드바 스크롤 컨테이너
@@ -388,7 +389,15 @@ const StudyViewer = () => {
   const pendingSaveDataRef   = useRef(null);
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
-  const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
+  /* 펜으로 그리기 시작 → 필기모드 자동 ON (게이트를 즉시 통과시켜 그 획부터 저장) */
+  const handleUserDrawStart = useCallback(() => {
+    if (drawModeRef.current) return;
+    autoEnabledRef.current = true;
+    drawModeRef.current = true;
+    setDrawMode(true);
+  }, []);
+
+  const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef, onUserDrawStart: handleUserDrawStart });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
@@ -409,18 +418,21 @@ const StudyViewer = () => {
     drawModeRef.current     = drawMode;
   }, [currentPage, noteElements, user, drawMode]);
 
-  /* 필기 모드 전환 시 펜+검정으로 초기화 */
+  /* 필기 모드 전환 시 펜+검정으로 초기화 (자동 ON은 그리는 도중이라 도구 리셋 생략) */
   useEffect(() => {
-    if (drawMode) triggerPalmRejectionWarmup();
-    if (drawMode && excalidrawAPIRef.current) {
-      const excApi = excalidrawAPIRef.current;
-      const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.2');
-      baseStrokeWidthRef.current = savedWidth;
-      const zoom = excApi.getAppState()?.zoom?.value || 1;
-      lastZoomRef.current = zoom;
-      excApi.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
-      excApi.setActiveTool({ type: 'freedraw' });
+    if (drawMode && !autoEnabledRef.current) {
+      triggerPalmRejectionWarmup();
+      if (excalidrawAPIRef.current) {
+        const excApi = excalidrawAPIRef.current;
+        const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.2');
+        baseStrokeWidthRef.current = savedWidth;
+        const zoom = excApi.getAppState()?.zoom?.value || 1;
+        lastZoomRef.current = zoom;
+        excApi.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+        excApi.setActiveTool({ type: 'freedraw' });
+      }
     }
+    autoEnabledRef.current = false;
   }, [drawMode]);
 
   /* ── 페이지 이동 시 pending 저장 flush ── */

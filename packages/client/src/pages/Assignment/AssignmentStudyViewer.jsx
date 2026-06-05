@@ -187,6 +187,7 @@ const AssignmentStudyViewer = () => {
   const teacherCommentFilesRef = useRef({});
   const userRef              = useRef(user);
   const drawModeRef          = useRef(false);
+  const autoEnabledRef       = useRef(false); // 펜 입력으로 자동 ON 된 경우 — 모드 effect 펜 리셋 생략
   const lastSavedRef         = useRef(null);
   const pendingSaveDataRef   = useRef(null);
   const activeSidebarItemRef = useRef(null);
@@ -202,7 +203,18 @@ const AssignmentStudyViewer = () => {
   const isAdjustingWidthRef  = useRef(false);
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
-  const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
+  /* 잠금 여부: submitted/graded이면 편집 불가 */
+  const isLocked = ['submitted', 'late_submitted', 'graded'].includes(submission?.status);
+
+  /* 펜으로 그리기 시작 → 필기모드 자동 ON (잠긴 과제는 제외, 게이트 즉시 통과로 그 획부터 저장) */
+  const handleUserDrawStart = useCallback(() => {
+    if (drawModeRef.current || isLocked) return;
+    autoEnabledRef.current = true;
+    drawModeRef.current = true;
+    setDrawMode(true);
+  }, [isLocked]);
+
+  const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef, onUserDrawStart: handleUserDrawStart });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [TEACHER_COMMENT_PREFIX] });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [TEACHER_COMMENT_PREFIX] });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
@@ -219,20 +231,21 @@ const AssignmentStudyViewer = () => {
     drawModeRef.current     = drawMode;
   }, [currentPage, noteElements, user, drawMode]);
 
-  /* 잠금 여부: submitted/graded이면 편집 불가 */
-  const isLocked = ['submitted', 'late_submitted', 'graded'].includes(submission?.status);
-
+  /* 필기 모드 전환 시 펜+검정으로 초기화 (자동 ON은 그리는 도중이라 도구 리셋 생략) */
   useEffect(() => {
-    if (drawMode) triggerPalmRejectionWarmup();
-    if (drawMode && excalidrawAPIRef.current) {
-      const apiRef = excalidrawAPIRef.current;
-      const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.2');
-      baseStrokeWidthRef.current = savedWidth;
-      const zoom = apiRef.getAppState()?.zoom?.value || 1;
-      lastZoomRef.current = zoom;
-      apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
-      apiRef.setActiveTool({ type: 'freedraw' });
+    if (drawMode && !autoEnabledRef.current) {
+      triggerPalmRejectionWarmup();
+      if (excalidrawAPIRef.current) {
+        const apiRef = excalidrawAPIRef.current;
+        const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.2');
+        baseStrokeWidthRef.current = savedWidth;
+        const zoom = apiRef.getAppState()?.zoom?.value || 1;
+        lastZoomRef.current = zoom;
+        apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+        apiRef.setActiveTool({ type: 'freedraw' });
+      }
     }
+    autoEnabledRef.current = false;
   }, [drawMode]);
 
   /* ── 페이지 이동 시 pending 저장 flush ── */

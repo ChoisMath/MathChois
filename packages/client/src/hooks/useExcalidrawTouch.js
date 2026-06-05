@@ -19,9 +19,13 @@ import { BG_ELEMENT_ID } from '../lib/excalidrawUtils';
  * 스피너만 렌더하는 동안 마운트되면 containerRef.current 가 null 이라, 과거처럼 container 기준으로
  * 부착하면 영영 등록되지 않는다. container 의존 설정만 rAF 로 container 마운트까지 기다린다.
  *
- * @param {{ excalidrawAPIRef: React.RefObject, containerRef: React.RefObject, screenLockedRef: React.RefObject, baseStrokeWidthRef?: React.RefObject }} opts
+ * @param {{ excalidrawAPIRef: React.RefObject, containerRef: React.RefObject, screenLockedRef: React.RefObject, baseStrokeWidthRef?: React.RefObject, onUserDrawStart?: () => void }} opts
+ *   onUserDrawStart: 실제 그리기 입력(차단되지 않은 펜/마우스/1손가락 + 그리기 도구)의 첫 다운에 호출.
+ *   프로그램적 씬 로드(updateScene/initialData)와 무관해 필기모드 자동 ON 트리거에 안전하다.
  */
-export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef }) {
+export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef, onUserDrawStart }) {
+  const onUserDrawStartRef = useRef(onUserDrawStart);
+  useEffect(() => { onUserDrawStartRef.current = onUserDrawStart; }, [onUserDrawStart]);
   const isTouchingRef        = useRef(false);
   const pinchStateRef        = useRef(null); // { startDist, startZoom, lastCenterX, lastCenterY }
   const touchPointerIdsRef   = useRef(new Set());
@@ -34,6 +38,10 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
   useEffect(() => {
     const getActiveTool = () =>
       excalidrawAPIRef.current?.getAppState()?.activeTool?.type;
+
+    // selection/hand/laser/frame 이 아닌 도구 = 캔버스에 무언가 그리는 도구
+    const isDrawingTool = (t) => !!t && t !== 'selection' && t !== 'hand' && t !== 'laser' && t !== 'frame';
+    const notifyDrawStart = () => { if (isDrawingTool(getActiveTool())) onUserDrawStartRef.current?.(); };
 
     const preventGesture = (e) => { e.preventDefault(); };
 
@@ -109,8 +117,16 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
               isSyntheticUpRef.current = false;
             }
           }
+          return;
         }
+
+        // 차단되지 않은 1손가락 그리기 → 필기모드 자동 ON 후보
+        if (count === 1) notifyDrawStart();
+        return;
       }
+
+      // 펜(주버튼)·마우스(주버튼) 그리기 → 필기모드 자동 ON 후보
+      if (e.button === 0) notifyDrawStart();
     };
 
     const handlePointerMove = (e) => {
