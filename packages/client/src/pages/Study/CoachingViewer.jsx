@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Excalidraw, exportToBlob } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
-import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Loader, Wand2, Sparkles } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Loader, Wand2, Sparkles, Menu } from 'lucide-react';
+import { extractYouTubeId, getYouTubeThumbnail } from '../../lib/youtubeUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
 import ProblemView from '../../components/common/ProblemView';
@@ -41,6 +42,7 @@ export default function CoachingViewer({
   const excalidrawAPIRef = useRef(null);
   const saveTimerRef = useRef(null);
   const lastSavedRef = useRef(null);
+  const noteLoadedRef = useRef(false); // 필기 로드 완료 전 빈 캔버스 onChange가 기존 필기를 덮어쓰는 것을 차단
 
   /* ── 펜 입력 인프라 (다른 필기 페이지와 동일) ── */
   const containerRef        = useRef(null);
@@ -70,6 +72,8 @@ export default function CoachingViewer({
 
   const [isWide, setIsWide] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1024px)');
     const handler = (e) => setIsWide(e.matches);
@@ -89,6 +93,7 @@ export default function CoachingViewer({
 
   useEffect(() => {
     let alive = true;
+    noteLoadedRef.current = false;
     setProblem(null); setSolutionLatex(''); setWorkImageUrl(null); setCoaching(null); setError('');
     (async () => {
       try {
@@ -149,6 +154,9 @@ export default function CoachingViewer({
     checkForSmoothing(elements, appState);
     recordHistory(elements);
 
+    /* 필기 로드 완료 전에는 저장 금지 (마운트 직후 빈 캔버스 onChange로 인한 덮어쓰기 방지) */
+    if (!noteLoadedRef.current) return;
+
     const userEls = elements.filter((el) => !el.isDeleted);
     const serialized = JSON.stringify(userEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points })));
     if (serialized === lastSavedRef.current) return;
@@ -176,6 +184,7 @@ export default function CoachingViewer({
 
   const handleMount = useCallback(async (api2) => {
     excalidrawAPIRef.current = api2;
+    noteLoadedRef.current = false;
     try {
       let note;
       if (readOnly) {
@@ -197,6 +206,7 @@ export default function CoachingViewer({
         triggerPalmRejectionWarmup?.();
       }
     } catch { /* 빈 캔버스 */ }
+    finally { noteLoadedRef.current = true; }
   }, [pageId, readOnly, viewStudentId, recordHistory, triggerPalmRejectionWarmup]);
 
   // 언마운트/페이지 이동 시 디바운스 대기 중인 필기를 즉시 저장 (StudyViewer 패턴)
@@ -340,10 +350,6 @@ export default function CoachingViewer({
           학생별 AI 코칭 · 읽기 전용
         </span>
       )}
-      <button onClick={() => go(prevPage)} disabled={!prevPage} aria-label="이전"
-        className="min-h-11 min-w-11 flex items-center justify-center border rounded-md disabled:opacity-40"><ChevronLeft size={18} /></button>
-      <button onClick={() => go(nextPage)} disabled={!nextPage} aria-label="다음"
-        className="min-h-11 min-w-11 flex items-center justify-center border rounded-md disabled:opacity-40"><ChevronRight size={18} /></button>
       <div className="ml-auto flex shrink-0 items-center gap-2">
         {error && <span className="text-sm text-rose-600 whitespace-nowrap">{error}</span>}
         {!readOnly && (
@@ -359,8 +365,53 @@ export default function CoachingViewer({
             </button>
           </>
         )}
+        {/* 페이지 넘김 — 다른 필기 페이지와 동일하게 우측 배치 */}
+        <button onClick={() => go(prevPage)} disabled={!prevPage} aria-label="이전 페이지"
+          className="min-h-11 min-w-11 flex items-center justify-center border rounded-md disabled:opacity-40"><ChevronLeft size={18} /></button>
+        {pages.length > 0 && (
+          <span className="text-sm text-gray-400 min-w-[3rem] text-center whitespace-nowrap">{idx + 1} / {pages.length}</span>
+        )}
+        <button onClick={() => go(nextPage)} disabled={!nextPage} aria-label="다음 페이지"
+          className="min-h-11 min-w-11 flex items-center justify-center border rounded-md disabled:opacity-40"><ChevronRight size={18} /></button>
+        {/* 페이지 목록 토글 */}
+        <button onClick={() => setSidebarOpen((v) => !v)} title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+          className="min-h-11 min-w-11 flex items-center justify-center border rounded-md"><Menu size={18} /></button>
       </div>
     </header>
+  );
+
+  const pageListSidebar = sidebarOpen && (
+    <div className="w-44 shrink-0 overflow-y-auto border-r bg-white">
+      <div className="flex items-center justify-between border-b px-3 py-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">페이지</span>
+        <button onClick={() => setSidebarOpen(false)} title="목록 숨기기"
+          className="cursor-pointer text-gray-400 hover:text-gray-600"><ChevronRight className="h-4 w-4" /></button>
+      </div>
+      <div className="space-y-2 p-2">
+        {pages.map((pg, i) => (
+          <button key={pg.id} onClick={() => pg.id !== pageId && go(pg)}
+            className={`relative block w-full overflow-hidden rounded-md text-left transition-colors ${
+              pg.id === pageId ? 'border-4 border-indigo-500' : 'border-4 border-transparent hover:border-gray-300'
+            }`}>
+            {pg.aiProblemId ? (
+              <div className="flex aspect-video w-full items-center justify-center bg-indigo-50 text-xs font-medium text-indigo-600">AI 코칭</div>
+            ) : pg.htmlUrl ? (
+              <div className="flex aspect-video w-full items-center justify-center bg-emerald-50 text-xs font-medium text-emerald-600">HTML</div>
+            ) : pg.videoUrl ? (
+              <div className="relative">
+                <img src={getYouTubeThumbnail(extractYouTubeId(pg.videoUrl))} alt={`영상 ${i + 1}`} className="h-auto w-full bg-gray-900 object-cover" loading="lazy" decoding="async" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="rounded-full bg-red-600 p-1"><svg className="h-3 w-3 fill-white text-white" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21" /></svg></div>
+                </div>
+              </div>
+            ) : (
+              <img src={pg.imageUrl} alt={`페이지 ${i + 1}`} className="h-auto w-full bg-white object-contain" loading="lazy" decoding="async" />
+            )}
+            <div className="absolute bottom-0 inset-x-0 bg-black/50 py-0.5 text-center text-xs text-white">{i + 1}</div>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 
   /* 좌측 필기 영역 — 다른 필기 페이지(StudyViewer)와 동일한 펜 인프라 */
@@ -406,6 +457,7 @@ export default function CoachingViewer({
       {header}
       {isWide ? (
         <div className="flex min-h-0 flex-1">
+          {pageListSidebar}
           <div className="flex min-w-0 flex-1 flex-col border-r">
             {toolbar}
             <div className="relative min-h-0 flex-1">{canvas}</div>
@@ -416,9 +468,12 @@ export default function CoachingViewer({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          <div className="flex shrink-0 flex-col border-b" style={{ height: '55dvh' }}>
-            {toolbar}
-            <div className="relative min-h-0 flex-1">{canvas}</div>
+          <div className="flex shrink-0" style={{ height: '55dvh' }}>
+            {pageListSidebar}
+            <div className="flex min-w-0 flex-1 flex-col border-b">
+              {toolbar}
+              <div className="relative min-h-0 flex-1">{canvas}</div>
+            </div>
           </div>
           <div className="p-2 sm:p-3">{rightPanel}</div>
         </div>

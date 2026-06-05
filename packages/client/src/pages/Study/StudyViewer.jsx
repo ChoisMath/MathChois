@@ -271,7 +271,9 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
                         : 'ring-1 ring-gray-200 hover:ring-gray-400'
                     }`}
                   >
-                    {pg.htmlUrl ? (
+                    {pg.aiProblemId ? (
+                      <div className="w-full aspect-video flex items-center justify-center bg-indigo-50 text-indigo-600 text-xs font-medium">AI 코칭</div>
+                    ) : pg.htmlUrl ? (
                       <div className="w-full aspect-video flex items-center justify-center bg-emerald-50 text-emerald-600 text-xs font-medium">HTML</div>
                     ) : pg.videoUrl ? (
                       <div className="relative">
@@ -1014,7 +1016,9 @@ const StudyViewer = () => {
                     pg.id === currentPage?.id ? 'border-4 border-blue-500' : 'border-4 border-transparent hover:border-gray-300'
                   }`}
                 >
-                  {pg.htmlUrl ? (
+                  {pg.aiProblemId ? (
+                    <div className="w-full aspect-video flex items-center justify-center bg-indigo-50 text-indigo-600 text-xs font-medium">AI 코칭</div>
+                  ) : pg.htmlUrl ? (
                     <div className="w-full aspect-video flex items-center justify-center bg-emerald-50 text-emerald-600 text-xs font-medium">HTML</div>
                   ) : pg.videoUrl ? (
                     <div className="relative">

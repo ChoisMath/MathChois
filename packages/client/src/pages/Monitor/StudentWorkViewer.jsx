@@ -658,7 +658,9 @@ const StudentWorkViewer = () => {
                     idx === currentPageIndex ? 'border-4 border-indigo-500' : 'border-4 border-transparent hover:border-gray-300'
                   }`}
                 >
-                  {pg.htmlUrl ? (
+                  {pg.aiProblemId ? (
+                    <div className="w-full aspect-video flex items-center justify-center bg-indigo-50 text-indigo-600 text-xs font-medium">AI 코칭</div>
+                  ) : pg.htmlUrl ? (
                     <div className="w-full aspect-video flex items-center justify-center bg-emerald-50 text-emerald-600 text-xs font-medium">HTML</div>
                   ) : pg.videoUrl ? (
                     <div className="relative">
