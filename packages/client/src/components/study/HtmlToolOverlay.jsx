@@ -31,7 +31,7 @@ function HtmlToolOverlay({
       <div
         ref={containerRef}
         className="absolute inset-0"
-        style={{ pointerEvents: overlayPointerEvents(drawing), background: 'transparent' }}
+        style={{ pointerEvents: overlayPointerEvents(drawing), background: 'transparent', touchAction: 'none' }}
       >
         <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{(drawing && showPanel) ? '' : PANEL_HIDE_CSS}</style>
         <ExcalidrawErrorBoundary key={htmlUrl}>
