@@ -36,6 +36,7 @@ dist-ssr
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+.playwright-mcp/
 
 # Sensitive / local config
 .claude.json
@@ -59,6 +60,9 @@ id_rsa.*
 nul
 image.png
 *.tsbuildinfo
+
+# Reference docs kept locally (curriculum PDFs etc.)
+*.pdf
 
 # Superpowers (brainstorm visual companion / local plan drafts / review scratch)
 .superpowers/
