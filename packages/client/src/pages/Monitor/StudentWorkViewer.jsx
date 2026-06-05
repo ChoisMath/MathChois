@@ -362,15 +362,18 @@ const StudentWorkViewer = () => {
     lastZoomRef.current = zoom;
 
     await new Promise((r) => setTimeout(r, 0));
+    if (!mountedRef.current) return;
     const studentFilesList = Object.values(savedStudentFilesRef.current);
     const teacherFilesList = Object.values(savedTeacherFilesRef.current);
     if (studentFilesList.length > 0 || teacherFilesList.length > 0) {
       excApi.addFiles([...studentFilesList, ...teacherFilesList]);
     }
     await new Promise((r) => requestAnimationFrame(r));
+    if (!mountedRef.current) return;
     excApi.updateScene({ elements: [...studentEls.current, ...teacherEls.current], commitToHistory: false });
 
     setTimeout(() => {
+      if (!mountedRef.current) return;
       excApi.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
       excApi.setActiveTool({ type: 'freedraw' });
     }, 0);
