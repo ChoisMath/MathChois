@@ -25,10 +25,34 @@ const sanitizeSchema = {
 const REMARK_PLUGINS = [remarkMath];
 const REHYPE_PLUGINS = [rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeKatex];
 
+const NBSP = String.fromCharCode(160);
+const FENCE_RE = /^(```|~~~)/;
+const LEADING_INDENT_RE = /^([ \t]+)/;
+const TAB_RE = /\t/g;
+
+// Markdown 은 줄 앞 공백 4칸(또는 탭)을 코드 블록으로 해석해 본문·수식이 <pre> 로 깨진다.
+// 펜스 코드 블록(``` ~~~)은 그대로 두고, 그 밖의 줄 앞 들여쓰기는 nbsp 로 바꿔 코드 블록 변환만 막는다(들여쓰기 모양은 유지).
+function neutralizeIndentedCode(text) {
+  if (!text || (!text.includes('\t') && !text.includes('    '))) return text;
+  let inFence = false;
+  return text
+    .split('\n')
+    .map((line) => {
+      if (FENCE_RE.test(line.trimStart())) {
+        inFence = !inFence;
+        return line;
+      }
+      if (inFence) return line;
+      return line.replace(LEADING_INDENT_RE, (m) => NBSP.repeat(m.replace(TAB_RE, '    ').length));
+    })
+    .join('\n');
+}
+
 export default function Markdown({ children }) {
+  const source = typeof children === 'string' ? neutralizeIndentedCode(children) : children;
   return (
     <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS}>
-      {children}
+      {source}
     </ReactMarkdown>
   );
 }

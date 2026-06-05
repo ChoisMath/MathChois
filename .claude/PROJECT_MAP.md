@@ -43,7 +43,9 @@ packages/
 │                               #   coaching.js(convert/review/attempts/uploadWorkImage/getMyHistory/getStudentHistory),
 │                               #   dashboard.js(getClassroomDashboard),
 │                               #   visualizations.js(list/facets/CRUD/upload + buildVisualizationQuery) (*.test.js = Vitest)
-└── shared/src/types/       # api, auth, excalidraw, models, socket, problem, coaching, dashboard, visualization
+└── shared/src/
+    ├── types/             # api, auth, excalidraw, models, socket, problem, coaching, dashboard, visualization
+    └── curriculum/        # math2022.ts — 2022 개정 수학과 교육과정 MAP(과목→대단원→소단원+성취기준) + buildCurriculumPromptBlock()
 ```
 (제외: `node_modules/`, `dist/`, `.next/`, `drizzle/` 마이그레이션 SQL, `legacy_rails/`)
 
@@ -171,7 +173,7 @@ packages/
 - **Google OAuth** — `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
 - **JWT** — `JWT_SECRET`, `JWT_REFRESH_SECRET`.
 - **파일 스토리지(Volume)** — `VOLUME_PATH`(기본 `./local-storage`). 버킷: `chapter-pages`, `chapter-tools`(HTML 전용), `visualizations`(시각화자료 원본 HTML, HTML 전용), `submission-files`, `problem-bank`(문제은행 이미지), `ai-coaching`(코칭 필기 스냅샷, 학생 업로드 허용), post 첨부 등. `/api/files/*`로 서빙. HTML 전용 버킷(`chapter-tools`/`visualizations`)은 `text/html`만 허용.
-- **Google Gemini(선택)** — `GEMINI_API_KEY`(@google/genai), `GEMINI_MODEL`(기본 `gemini-3.5-flash`; 구 `gemini-2.0-flash`는 Google에서 퇴역되어 404 발생 → 변경됨. Railway 환경변수에도 `gemini-3.5-flash` 설정). `services/ai.service.ts`의 OCR(문제/마크스킴)·해설 생성·필기→LaTeX 전환·풀이 검토. 구조화 출력은 `responseJsonSchema`.
+- **Google Gemini(선택)** — `GEMINI_API_KEY`(@google/genai), `GEMINI_MODEL`(기본 `gemini-3.5-flash`; 구 `gemini-2.0-flash`는 Google에서 퇴역되어 404 발생 → 변경됨. Railway 환경변수에도 `gemini-3.5-flash` 설정). `services/ai.service.ts`의 OCR(문제/마크스킴)·해설 생성·필기→LaTeX 전환·풀이 검토. 구조화 출력은 `responseJsonSchema`. 문항 OCR meta(과목·대단원·소단원)는 **2022 개정 교육과정 MAP**(`@mathchois/shared`의 `buildCurriculumPromptBlock`)을 프롬프트에 주입해 **MAP 항목에서만 강제 선택**(subject는 enum). 본문 줄바꿈은 `<br>` 태그 + 함수식만 있는 줄은 `\qquad` 들여쓰기(`MD_LINEBREAK_RULE`). 기준 문서: `docs/curriculum/2022-math-curriculum.md`.
 - **SMTP(선택)** — `SMTP_HOST/PORT/USER/PASS/FROM`(비밀번호 초기화 메일). `APP_URL`(메일 링크).
 - **PORT**(기본 3001), **NODE_ENV**.
 - **클라이언트 env** — `VITE_TOOLS_ORIGIN`(HTML 도구를 서빙할 별도 origin), Vite `VITE_*` 빌드타임 주입.
@@ -200,6 +202,7 @@ packages/
   - 공유 타입: `shared/src/types/coaching.ts`(CoachingAttempt, CoachingResult, ConvertResult, CoachingProblemView, ErrorTag, + 기록조회 CoachingAttemptView/CoachingHistoryResult/CoachingHistoryFilters), `models.ts`에 `Page.aiProblemId`.
 - **시각화자료 라이브러리(`feat/visualization-library`)**: 교사가 등록한 standalone HTML을 메타(제목/과목/대단원/소단원/설명)와 함께 저장·검색·**교사 간 공유**. 챕터 편집기 HTML 버튼(`FileCode2`)이 `VisualizationPickerModal`(검색 리스트 + 우상단 [새html등록])을 연다. **삽입은 복사본(독립)** — 서버 `copyHtmlToChapterTools`가 원본을 `chapter-tools`로 복제해 페이지가 자체 복사본을 참조하므로, 원본 교체/삭제가 이미 삽입된 페이지에 영향 없음(새로 삽입하는 페이지부터 교체본 적용). 관리(`/teacher/visualizations`)는 본인 자료만(`mine=1`) — 수정은 **파일 통째 교체 / 단원 / 제목·설명**만(HTML 내부 편집 없음), 삭제는 레코드+원본 파일 제거. 등록+즉시 삽입 흐름은 모달 `onSaved→onSelect`로 처리.
   - 공유 타입: `shared/src/types/visualization.ts`(Visualization, VisualizationListResult, VisualizationFacets, VisualizationFilters). 서버: `routes/visualizations.ts`, `services/visualization.service.ts`, `services/page.service.ts`(`createPage`의 `fromVisualizationId`), `services/storage.service.ts`(`copyHtmlToChapterTools`). 클라: `lib/visualizations.js`(+test).
+- **Markdown 렌더(`components/common/Markdown.jsx`)**: `rehypeRaw`로 교사 작성 HTML(`<br>`,`<center>`)을 허용하되 `rehypeSanitize`로 XSS 차단(플러그인 순서: raw→sanitize→katex). `neutralizeIndentedCode`가 **줄 앞 4칸 이상 들여쓰기를 nbsp로 치환**해 Markdown이 코드 블록으로 오인해 수식이 깨지는 문제를 막는다(펜스 ``` 블록은 보존).
 - **PWA**: `public/manifest.webmanifest` + 최소 Service Worker(fetch 핸들러 없음), 프로덕션 빌드에서만 등록.
 - **legacy_rails/** — 구버전 Ruby on Rails 앱. **사용하지 않음. 탐색·수정 금지.**
 - 프로덕션에서 server가 `client/dist` 정적 서빙 + SPA fallback(`/api/*` 외 → index.html, 민감 경로 차단).
@@ -209,4 +212,4 @@ packages/
 - **`.gitignore`** — `*.tsbuildinfo`·`.superpowers/`·`.plans/`·`review.md` 무시(빌드 산출물·작업 노트는 읽지 않음).
 
 ---
-마지막 업데이트: 2026-06-03
+마지막 업데이트: 2026-06-05

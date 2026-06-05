@@ -105,11 +105,12 @@ export function buildApp() {
 
   // ─── Global Error Handler ──────────────────────────
 
-  app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
+  app.setErrorHandler((error: Error & { statusCode?: number; publicMessage?: string }, request, reply) => {
     const statusCode = error.statusCode ?? 500;
     request.log.error({ err: error, url: request.url, method: request.method }, 'Request error');
     reply.status(statusCode).send({
-      error: statusCode >= 500 ? 'Internal Server Error' : error.message,
+      // publicMessage 가 있으면 5xx 라도 사용자용 메시지를 노출(내부 세부정보는 로그에만)
+      error: error.publicMessage ?? (statusCode >= 500 ? 'Internal Server Error' : error.message),
       statusCode,
     });
   });

@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { env } from '../config/env.js';
 import type { OcrProblemResult, SolutionResult } from '@mathchois/shared';
+import { buildCurriculumPromptBlock, CURRICULUM_SUBJECTS } from '@mathchois/shared';
 
 let _client: GoogleGenAI | null = null;
 function client(): GoogleGenAI {
@@ -11,19 +12,52 @@ function client(): GoogleGenAI {
   return _client;
 }
 
+type AiError = Error & { statusCode: number; publicMessage: string };
+
+/** Gemini SDK 가 던지는 ApiError(상태코드 포함)를 사용자용 메시지로 변환한다. */
+function toAiError(err: unknown): AiError {
+  const status = (err as { status?: number })?.status;
+  let statusCode = 502;
+  let publicMessage = 'AI 호출에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+  if (status === 429) {
+    statusCode = 429;
+    publicMessage = 'AI 사용량 한도 또는 크레딧이 소진되어 지금은 AI 기능을 사용할 수 없습니다. 관리자에게 문의해 주세요.';
+  } else if (status === 400 || status === 404) {
+    publicMessage = 'AI 요청이 거부되었습니다. (모델 설정 또는 요청 형식 확인 필요)';
+  } else if (typeof status === 'number' && status >= 500) {
+    statusCode = 503;
+    publicMessage = 'AI 서비스가 일시적으로 불안정합니다. 잠시 후 다시 시도해 주세요.';
+  }
+  const wrapped = new Error(publicMessage) as AiError;
+  wrapped.statusCode = statusCode;
+  wrapped.publicMessage = publicMessage;
+  wrapped.cause = err;
+  return wrapped;
+}
+
 async function generateJson<T>(parts: object[], responseSchema: object, extraConfig?: Record<string, unknown>): Promise<T> {
   const ai = client();
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await ai.models.generateContent({
-      model: env.GEMINI_MODEL,
-      contents: [{ role: 'user', parts }],
-      config: { responseMimeType: 'application/json', responseSchema, ...extraConfig },
-    });
+    let res;
+    try {
+      res = await ai.models.generateContent({
+        model: env.GEMINI_MODEL,
+        contents: [{ role: 'user', parts }],
+        config: { responseMimeType: 'application/json', responseSchema, ...extraConfig },
+      });
+    } catch (err) {
+      throw toAiError(err);  // 크레딧 소진(429) 등은 재시도 없이 즉시 사용자 메시지로 변환
+    }
     const text = res.text ?? '';
     try {
       return JSON.parse(text) as T;
     } catch {
-      if (attempt === 1) throw new Error('AI 응답 파싱 실패');
+      if (attempt === 1) {
+        const e = new Error('AI 응답을 해석하지 못했습니다. 다시 시도해 주세요.') as AiError;
+        e.statusCode = 502;
+        e.publicMessage = e.message;
+        throw e;
+      }
     }
   }
   throw new Error('unreachable');
@@ -33,8 +67,20 @@ function imagePart(mimeType: string, base64: string) {
   return { inlineData: { mimeType, data: base64 } };
 }
 
-// Markdown 은 줄 끝에 공백 2칸이 없으면 개행을 무시한다. 모든 본문 생성 프롬프트에 강제.
-const MD_LINEBREAK_RULE = `- 줄을 바꿀 때는 반드시 줄 끝에 공백 2칸("  ")을 넣은 뒤 개행한다. 공백 2칸이 없으면 Markdown 에서 줄바꿈이 무시되므로 한 줄이 끝날 때마다 빠짐없이 공백 2칸을 붙여라.`;
+// 본문은 <br> 태그로 줄바꿈한다(렌더러가 HTML 태그를 허용). "\n"·줄 끝 공백·줄 앞 들여쓰기는 금지.
+const MD_LINEBREAK_RULE = `- 줄을 바꿀 때는 "\\n"(개행 문자)이나 줄 끝 공백이 아니라 반드시 <br> 태그를 사용한다. 한 줄이 끝날 때마다 <br> 를 붙여 다음 줄로 넘어가라.
+- 줄바꿈 뒤에 함수식(수식)만 단독으로 오는 줄은 그 수식 앞에 \\qquad 를 붙여 들여쓴다. 예: ...이 성립한다.<br>$\\qquad f(x) = x^2 + 1$
+- 들여쓰기를 위해 줄 앞에 공백 4칸 이상을 절대 넣지 마라(Markdown 이 코드 블록으로 잘못 변환해 수식이 깨진다). 들여쓰기는 \\qquad 로만 표현한다.`;
+
+// 문항 OCR meta(과목·대단원·소단원)는 2022 개정 교육과정 MAP 안에서만 고르도록 강제.
+const CURRICULUM_RULE = `meta 의 과목(subject)·대단원(majorUnit)·소단원(minorUnit) 은 아래 "2022 개정 수학과 교육과정 MAP" 에 실제로 존재하는 항목만 사용한다(임의로 새 이름을 만들지 말 것).
+- subject 는 MAP 의 과목명 중 하나를 그대로 쓴다.
+- majorUnit 은 그 과목의 대단원명 중, minorUnit 은 그 대단원의 소단원명 중 가장 적합한 하나를 그대로 쓴다.
+- 각 단원의 성취기준 목록을 근거로 분류하라. 문제의 개념·요구사항과 가장 일치하는 성취기준을 찾아 그 성취기준이 속한 과목/대단원/소단원으로 분류한다.
+- subject 는 반드시 MAP 의 과목 중 가장 가까운 하나를 고른다(빈 값 불가). majorUnit·minorUnit 은 판단이 어려우면 빈 문자열로 둘 수 있다.
+
+[2022 개정 수학과 교육과정 MAP]
+${buildCurriculumPromptBlock()}`;
 
 // 그래프 좌표축은 이미지 픽셀 행과 위아래가 반대다(상하 반전 오독 방지). 그래프를 읽는 프롬프트에 강제.
 const GRAPH_ORIENTATION_RULE = `- 그래프·좌표평면을 해석할 때 세로축(y)은 위로 갈수록 값이 커지고 아래로 갈수록 값이 작아진다. 이미지의 위쪽 픽셀일수록 y값이 크고, 아래쪽 픽셀일수록 y값이 작다(이미지의 행 순서와 반대). 위아래를 뒤집어 읽지 말 것.
@@ -79,7 +125,9 @@ const PROBLEM_RULE = `다음 규칙으로 수학 문제 이미지를 변환하�
 - meta 에 과목(subject)·대단원(majorUnit)·소단원(minorUnit)·난이도(difficulty: 상/중/하)
   ·유형(problemType)·세부유형(detailType)·키워드(keywords[]) 를 추출한다.
 ${GRAPH_ORIENTATION_RULE}
-${MD_LINEBREAK_RULE}`;
+${MD_LINEBREAK_RULE}
+
+${CURRICULUM_RULE}`;
 
 const MARKSCHEME_RULE = `다음 규칙으로 교사가 제공한 정답/풀이(마크스킴) 이미지를 변환하라.
 - answer: 간결한 최종 정답.
@@ -95,7 +143,7 @@ ${MD_LINEBREAK_RULE}`;
 const META_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    subject: { type: Type.STRING }, majorUnit: { type: Type.STRING },
+    subject: { type: Type.STRING, enum: CURRICULUM_SUBJECTS }, majorUnit: { type: Type.STRING },
     minorUnit: { type: Type.STRING }, difficulty: { type: Type.STRING },
     problemType: { type: Type.STRING }, detailType: { type: Type.STRING },
     keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
