@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
-  ChevronLeft, ChevronRight, Menu, ChevronUp, ChevronDown,
+  ChevronLeft, ChevronRight, Menu, ChevronUp, ChevronDown, Pencil,
 } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
-import { toolUrl } from '../../lib/toolUrl';
 import { useAuth } from '../../contexts/AuthContext';
+import HtmlToolOverlay from '../../components/study/HtmlToolOverlay';
+import { HTML_OVERLAY_LOCK_BASE } from '../../lib/htmlOverlay';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
 import PageNavOverlay from '../../components/study/PageNavOverlay';
 import {
@@ -54,6 +55,7 @@ const TeacherStudyViewer = () => {
   const [noteElements, setNoteElements] = useState([]);
   const [saveStatus, setSaveStatus]   = useState('saved');
   const [showExcalidrawPanel, setShowExcalidrawPanel] = useState(false);
+  const [htmlDrawMode, setHtmlDrawMode] = useState(false); // HTML 페이지 전용: 도구조작(false)↔필기(true)
   const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
 
   const containerRef          = useRef(null);
@@ -77,9 +79,13 @@ const TeacherStudyViewer = () => {
   const baseStrokeWidthRef   = useRef(parseFloat(localStorage.getItem('mc_stroke_width') || '0.2'));
   const lastZoomRef          = useRef(1);
   const isAdjustingWidthRef  = useRef(false);
-  useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
+  const lockActiveRef = useRef(false);
+  useEffect(() => {
+    screenLockedRef.current = screenLocked;
+    lockActiveRef.current = screenLocked || !!currentPage?.htmlUrl;
+  }, [screenLocked, currentPage?.htmlUrl]);
 
-  useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
+  useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef: lockActiveRef, baseStrokeWidthRef });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
@@ -93,6 +99,9 @@ const TeacherStudyViewer = () => {
     currentPageRef.current  = currentPage;
     noteElementsRef.current = noteElements;
   }, [currentPage, noteElements]);
+
+  /* HTML 페이지로 이동하면 항상 도구 조작(뷰) 모드로 시작 */
+  useEffect(() => { setHtmlDrawMode(false); }, [currentPage?.id]);
 
   /* ── 페이지 이동 시 pending 저장 flush ── */
   useEffect(() => {
@@ -196,8 +205,8 @@ const TeacherStudyViewer = () => {
       }
     }
 
-    if (appState && screenLockedRef.current) {
-      const base = screenLockBaseRef.current;
+    if (appState && lockActiveRef.current) {
+      const base = currentPageRef.current?.htmlUrl ? HTML_OVERLAY_LOCK_BASE : screenLockBaseRef.current;
       if (appState.zoom.value !== base.zoom ||
           appState.scrollX !== base.scrollX ||
           appState.scrollY !== base.scrollY) {
@@ -336,6 +345,25 @@ const TeacherStudyViewer = () => {
     }
   }, []);
 
+  /* ── HTML 오버레이 마운트: 배경 없이 교사 필기만 ── */
+  const handleHtmlOverlayMount = useCallback(async (api) => {
+    excalidrawAPIRef.current = api;
+    setTimeout(() => {
+      const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.2');
+      baseStrokeWidthRef.current = savedWidth;
+      const zoom = api.getAppState()?.zoom?.value || 1;
+      lastZoomRef.current = zoom;
+      api.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+      api.setActiveTool({ type: 'freedraw' });
+    }, 0);
+
+    await new Promise((r) => setTimeout(r, 0));
+    const userFilesList = Object.values(savedFilesRef.current);
+    if (userFilesList.length > 0) api.addFiles(userFilesList);
+    await new Promise((r) => requestAnimationFrame(r));
+    api.updateScene({ elements: [...noteElementsRef.current], commitToHistory: false });
+  }, []);
+
   /* ── 이미지 리로드 (원본 비율로 재배치) ── */
   const handleReloadImage = useCallback(async () => {
     const page = currentPageRef.current;
@@ -409,7 +437,7 @@ const TeacherStudyViewer = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          {!currentPage?.videoUrl && !currentPage?.htmlUrl && (
+          {((currentPage?.htmlUrl && htmlDrawMode) || (!currentPage?.videoUrl && !currentPage?.htmlUrl)) && (
           <span className={`text-xs ${saveStatus === 'saved' ? 'text-green-600' : 'text-gray-400'}`}>
             {saveStatus === 'saved'  && '저장됨'}
             {saveStatus === 'saving' && '저장 중...'}
@@ -443,6 +471,19 @@ const TeacherStudyViewer = () => {
               isDownloading={isDownloading}
               className="py-1 px-2 text-xs"
             />
+          )}
+
+          {/* HTML 필기 모드 토글 (HTML 페이지 전용) */}
+          {currentPage?.htmlUrl && (
+            <button
+              onClick={() => setHtmlDrawMode((v) => !v)}
+              title={htmlDrawMode ? '도구 조작 모드로 전환' : '필기 모드로 전환'}
+              className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                htmlDrawMode ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
           )}
 
           {/* 툴바 접기/펼치기 */}
@@ -488,18 +529,32 @@ const TeacherStudyViewer = () => {
       </div>
 
       {/* ── 필기 툴바 (접힘 상태이면 숨김, 영상/HTML 페이지면 숨김) ── */}
-      {!toolbarCollapsed && !currentPage?.videoUrl && !currentPage?.htmlUrl && (
-        <DrawingToolbar
-          apiRef={excalidrawAPIRef}
-          pageId={currentPage?.id}
-          showPanel={showExcalidrawPanel}
-          onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
-          screenLocked={screenLocked}
-          onToggleScreenLock={handleToggleScreenLock}
-          onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
-          onReloadImage={handleReloadImage}
-          onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
-        />
+      {!toolbarCollapsed && (
+        currentPage?.htmlUrl ? (
+          htmlDrawMode && (
+            <DrawingToolbar
+              apiRef={excalidrawAPIRef}
+              pageId={currentPage?.id}
+              showPanel={showExcalidrawPanel}
+              onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
+              onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
+              onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
+              htmlMode
+            />
+          )
+        ) : (!currentPage?.videoUrl && (
+          <DrawingToolbar
+            apiRef={excalidrawAPIRef}
+            pageId={currentPage?.id}
+            showPanel={showExcalidrawPanel}
+            onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
+            screenLocked={screenLocked}
+            onToggleScreenLock={handleToggleScreenLock}
+            onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
+            onReloadImage={handleReloadImage}
+            onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
+          />
+        ))
       )}
 
       {/* ── 본문 ── */}
@@ -551,14 +606,14 @@ const TeacherStudyViewer = () => {
         {/* ── Excalidraw 캔버스 / YouTube / HTML 도구 ── */}
         <div className="flex-1 relative overflow-hidden">
         {currentPage?.htmlUrl ? (
-          <div className="w-full h-full flex items-center justify-center bg-white">
-            <iframe
-              src={toolUrl(currentPage.htmlUrl)}
-              sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
-              className="w-full h-full"
-              title="HTML 도구"
-            />
-          </div>
+          <HtmlToolOverlay
+            htmlUrl={currentPage.htmlUrl}
+            drawing={htmlDrawMode}
+            containerRef={containerRef}
+            excalidrawAPI={handleHtmlOverlayMount}
+            onChange={handleExcalidrawChange}
+            showPanel={showExcalidrawPanel}
+          />
         ) : currentPage?.videoUrl ? (
           <div className="w-full h-full flex items-center justify-center bg-black">
             <iframe
