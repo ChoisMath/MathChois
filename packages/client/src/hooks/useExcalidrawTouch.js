@@ -47,6 +47,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
   const prevToolRef          = useRef('freedraw');
   const discardTouchIdRef    = useRef(null);   // 백스톱: 차단했으나 샐 수 있는 터치 pointerId
   const discardArmTimeRef    = useRef(0);      // 백스톱 무장 시각
+  const penDownRef           = useRef(false);  // 스타일러스 펜 접촉 중 — 펜이 만드는 touch 를 손가락 팬/줌으로 오인하지 않도록
 
   useEffect(() => {
     const getActiveTool = () =>
@@ -111,6 +112,9 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     };
 
     const handlePointerDown = (e) => {
+      // 펜 접촉을 즉시 기록(closest 체크보다 먼저) — 펜이 동반 발생시키는 touch 가
+      // 1손가락 팬으로 새지 않게 하는 게이트. 펜이 내려가 있으면 손가락 제스처를 전부 무시한다.
+      if (e.pointerType === 'pen') penDownRef.current = true;
       if (!e.target.closest?.('.excalidraw')) return;
 
       // S Pen 배럴버튼 등 비주버튼 → 그리기 전달 차단(스크롤 방지)
@@ -189,6 +193,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     };
 
     const handlePointerUp = (e) => {
+      if (e.pointerType === 'pen') penDownRef.current = false;
       if (isSyntheticUpRef.current) return;
       if (e.pointerType === 'pen' && barrelEraserRef.current) {
         barrelEraserRef.current = false;
@@ -213,8 +218,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       const locked = screenLockedRef.current;
       const count = e.touches.length;
 
-      // 스타일러스 모드 1손가락(그리기 도구) → 그리기 대신 팬 (잠금 아닐 때만)
-      if (count === 1 && !locked && shouldBlockTouchDraw(mode, tool, 1)) {
+      // 스타일러스 모드 1손가락(그리기 도구) → 그리기 대신 팬 (잠금 아니고, 펜이 안 닿았을 때만)
+      if (count === 1 && !locked && !penDownRef.current && shouldBlockTouchDraw(mode, tool, 1)) {
         const t = e.touches[0];
         const appState = excalidrawAPIRef.current?.getAppState();
         viewportRef.current = {
@@ -240,8 +245,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         if (e.cancelable) e.preventDefault();
         return;
       }
-      // 2손가락 핀치 진입
-      if (!locked && count >= 2 && tool === 'freedraw') {
+      // 2손가락 핀치 진입 (펜이 안 닿았을 때만 — 펜 드로잉 중 손가락 줌 방지)
+      if (!locked && count >= 2 && !penDownRef.current && tool === 'freedraw') {
         const t0 = e.touches[0], t1 = e.touches[1];
         const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
         const cx = (t0.clientX + t1.clientX) / 2;
@@ -264,8 +269,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       const locked = screenLockedRef.current;
       const count = e.touches.length;
 
-      // 1손가락 팬 진행
-      if (count === 1 && panStateRef.current && !locked) {
+      // 1손가락 팬 진행 (펜이 닿으면 즉시 중단 → 펜 드로잉이 우선)
+      if (count === 1 && panStateRef.current && !locked && !penDownRef.current) {
         e.stopPropagation();
         if (e.cancelable) e.preventDefault();
         const t = e.touches[0];
@@ -288,8 +293,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         if (e.cancelable) e.preventDefault();
         return;
       }
-      // 2손가락 핀치줌 + 팬
-      if (!locked && count >= 2 && pinchStateRef.current && tool === 'freedraw') {
+      // 2손가락 핀치줌 + 팬 (펜이 안 닿았을 때만)
+      if (!locked && count >= 2 && pinchStateRef.current && !penDownRef.current && tool === 'freedraw') {
         e.stopPropagation();
         if (e.cancelable) e.preventDefault();
         const t0 = e.touches[0], t1 = e.touches[1];
