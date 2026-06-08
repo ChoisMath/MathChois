@@ -60,7 +60,7 @@ export default function CoachingViewer({
   const [showExcalidrawPanel, setShowExcalidrawPanel] = useState(false);
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
-  const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
+  const { triggerPalmRejectionWarmup, isGesturingRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
@@ -131,6 +131,9 @@ export default function CoachingViewer({
       excalidrawAPIRef.current?.updateScene({ appState: { penMode: false }, commitToHistory: false });
       return;
     }
+
+    /* 핀치줌/팬 제스처 중에는 뷰포트만 바뀌므로 무거운 저장/지우개/히스토리 파이프라인을 건너뛴다 */
+    if (isGesturingRef.current) return;
 
     /* 줌-독립 펜 두께 보정 */
     if (appState && Math.abs((appState.zoom?.value || 1) - lastZoomRef.current) > 0.01) {

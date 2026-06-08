@@ -6,11 +6,19 @@ import { BG_ELEMENT_ID } from '../lib/excalidrawUtils';
  * Excalidraw 터치/제스처 제어 훅
  *
  * 입력 모드(스타일러스/손가락)로 그리기 입력을 결정적으로 게이트한다.
- * - 스타일러스 모드: 단일 손가락 + 그리기 도구 → 차단(손바닥 연결선 원천 차단)
+ * - 스타일러스 모드: 단일 손가락 + 그리기 도구 → 그리기는 차단(손바닥 연결선 원천 차단)하되
+ *   잠금이 아니면 그 손가락으로 화면을 좌우/상하 팬한다.
  * - 두 손가락: 커스텀 핀치줌 + 팬 (freedraw)
- * - screenLocked=true: 2손가락 이상 줌/팬 차단
+ * - screenLocked=true: 2손가락 이상 줌/팬 차단, 1손가락 팬도 비활성(HTML 오버레이는 뷰포트 고정)
  * - S Pen 배럴버튼: 그리기 전달 차단
  * - baseStrokeWidthRef: 줌-독립 펜 두께 (핀치줌 시 자동 보정)
+ *
+ * 핀치줌/팬의 updateScene 은 requestAnimationFrame 으로 코얼레싱한다. 태블릿 touchmove 는
+ * 60~120Hz 로 들어오는데, 매 이벤트마다 updateScene → 전체 리렌더 + onChange 를 돌리면
+ * 메인 스레드가 포화되어 줌이 "로딩처럼" 끊기고 Socket.IO 하트비트가 굶어 접속이 끊긴다.
+ * 제스처 누적 뷰포트는 viewportRef 가 단일 출처로 들고, 프레임당 한 번만 반영한다.
+ * 제스처 동안 isGesturingRef=true 를 노출해 호출 뷰어의 onChange 가 무거운 저장/지우개/히스토리
+ * 파이프라인을 건너뛰게 한다(뷰포트만 바뀌고 element 는 그대로이므로).
  *
  * 차단 리스너는 window 캡처에 부착한다. React 19 는 이벤트를 앱 루트(#root)에 위임하는데
  * #root 가 container 의 상위라, container 캡처는 React 가 Excalidraw 핸들러를 디스패치한 뒤에야
@@ -28,6 +36,11 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
   useEffect(() => { onUserDrawStartRef.current = onUserDrawStart; }, [onUserDrawStart]);
   const isTouchingRef        = useRef(false);
   const pinchStateRef        = useRef(null); // { startDist, startZoom, lastCenterX, lastCenterY }
+  const panStateRef          = useRef(null); // { lastX, lastY } — 1손가락 팬
+  const viewportRef          = useRef({ zoom: 1, scrollX: 0, scrollY: 0 }); // 제스처 누적 뷰포트(단일 출처)
+  const isGesturingRef       = useRef(false); // 1손가락 팬 또는 2손가락 핀치 진행 중
+  const rafIdRef             = useRef(0);
+  const pendingViewportRef   = useRef(null);  // { zoom?, scrollX, scrollY, strokeWidth? } — 다음 프레임에 반영할 값
   const touchPointerIdsRef   = useRef(new Set());
   const isSyntheticUpRef     = useRef(false);
   const barrelEraserRef      = useRef(false);  // S Pen 배럴버튼 지우개 활성 중
@@ -50,6 +63,30 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         e.preventDefault();
         e.stopPropagation();
       }
+    };
+
+    /* ── 뷰포트 rAF 코얼레싱 ── */
+    const flushViewport = () => {
+      rafIdRef.current = 0;
+      const pend = pendingViewportRef.current;
+      pendingViewportRef.current = null;
+      const excApi = excalidrawAPIRef.current;
+      if (!pend || !excApi) return;
+      const next = { scrollX: pend.scrollX, scrollY: pend.scrollY };
+      if (pend.zoom != null) next.zoom = { value: pend.zoom };
+      if (pend.strokeWidth != null) next.currentItemStrokeWidth = pend.strokeWidth;
+      excApi.updateScene({ appState: next, commitToHistory: false });
+    };
+    const scheduleViewport = (vp) => {
+      pendingViewportRef.current = vp;
+      if (!rafIdRef.current) rafIdRef.current = requestAnimationFrame(flushViewport);
+    };
+    const endGesture = () => {
+      isGesturingRef.current = false;
+      panStateRef.current = null;
+      pinchStateRef.current = null;
+      if (rafIdRef.current) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = 0; }
+      flushViewport(); // 마지막 위치 즉시 반영(isGesturing=false 상태로 onChange 한 번 정상 통과 → settle)
     };
 
     // 백스톱: 차단한 터치가 그래도 freedraw 를 시작했다면 그 획을 히스토리 오염 없이 제거.
@@ -88,6 +125,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         const count = touchPointerIdsRef.current.size;
 
         // 결정적 모드 규칙: 스타일러스 모드에서 1손가락 그리기 차단
+        // (잠금이 아니면 touch 핸들러가 같은 손가락으로 팬한다 — 여기선 그리기 전달만 막는다)
         if (shouldBlockTouchDraw(getInputMode(), getActiveTool(), count)) {
           e.preventDefault();
           e.stopPropagation();
@@ -170,28 +208,50 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       isTouchingRef.current = true;
       if (!e.target.closest?.('.excalidraw')) return;
 
-      if (shouldBlockTouchDraw(getInputMode(), getActiveTool(), e.touches.length)) {
+      const tool = getActiveTool();
+      const mode = getInputMode();
+      const locked = screenLockedRef.current;
+      const count = e.touches.length;
+
+      // 스타일러스 모드 1손가락(그리기 도구) → 그리기 대신 팬 (잠금 아닐 때만)
+      if (count === 1 && !locked && shouldBlockTouchDraw(mode, tool, 1)) {
+        const t = e.touches[0];
+        const appState = excalidrawAPIRef.current?.getAppState();
+        viewportRef.current = {
+          zoom: appState?.zoom?.value || 1,
+          scrollX: appState?.scrollX || 0,
+          scrollY: appState?.scrollY || 0,
+        };
+        panStateRef.current = { lastX: t.clientX, lastY: t.clientY };
+        isGesturingRef.current = true;
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
+        return;
+      }
+
+      // 그 외 차단 케이스(잠금 상태 1손가락 등) → 그리기만 차단, 팬 없음
+      if (shouldBlockTouchDraw(mode, tool, count)) {
         if (e.cancelable) e.preventDefault();
         e.stopPropagation();
         return;
       }
-      if (screenLockedRef.current && e.touches.length >= 2) {
+      if (locked && count >= 2) {
         e.stopPropagation();
         if (e.cancelable) e.preventDefault();
         return;
       }
-      if (!screenLockedRef.current && e.touches.length >= 2 && getActiveTool() === 'freedraw') {
+      // 2손가락 핀치 진입
+      if (!locked && count >= 2 && tool === 'freedraw') {
         const t0 = e.touches[0], t1 = e.touches[1];
         const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
         const cx = (t0.clientX + t1.clientX) / 2;
         const cy = (t0.clientY + t1.clientY) / 2;
         const appState = excalidrawAPIRef.current?.getAppState();
-        pinchStateRef.current = {
-          startDist: dist,
-          startZoom: appState?.zoom?.value || 1,
-          lastCenterX: cx,
-          lastCenterY: cy,
-        };
+        const z = appState?.zoom?.value || 1;
+        pinchStateRef.current = { startDist: dist, startZoom: z, lastCenterX: cx, lastCenterY: cy };
+        viewportRef.current = { zoom: z, scrollX: appState?.scrollX || 0, scrollY: appState?.scrollY || 0 };
+        panStateRef.current = null;
+        isGesturingRef.current = true;
         e.stopPropagation();
         if (e.cancelable) e.preventDefault();
       }
@@ -199,19 +259,37 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
 
     const handleTouchMove = (e) => {
       if (!e.target.closest?.('.excalidraw')) return;
+      const tool = getActiveTool();
+      const mode = getInputMode();
+      const locked = screenLockedRef.current;
+      const count = e.touches.length;
 
-      if (shouldBlockTouchDraw(getInputMode(), getActiveTool(), e.touches.length)) {
+      // 1손가락 팬 진행
+      if (count === 1 && panStateRef.current && !locked) {
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
+        const t = e.touches[0];
+        const vp = viewportRef.current;
+        vp.scrollX += (t.clientX - panStateRef.current.lastX) / vp.zoom;
+        vp.scrollY += (t.clientY - panStateRef.current.lastY) / vp.zoom;
+        panStateRef.current.lastX = t.clientX;
+        panStateRef.current.lastY = t.clientY;
+        scheduleViewport({ scrollX: vp.scrollX, scrollY: vp.scrollY });
+        return;
+      }
+
+      if (shouldBlockTouchDraw(mode, tool, count)) {
         if (e.cancelable) e.preventDefault();
         e.stopPropagation();
         return;
       }
-      if (screenLockedRef.current && e.touches.length >= 2) {
+      if (locked && count >= 2) {
         e.stopPropagation();
         if (e.cancelable) e.preventDefault();
         return;
       }
-      if (!screenLockedRef.current && e.touches.length >= 2 && pinchStateRef.current
-          && getActiveTool() === 'freedraw') {
+      // 2손가락 핀치줌 + 팬
+      if (!locked && count >= 2 && pinchStateRef.current && tool === 'freedraw') {
         e.stopPropagation();
         if (e.cancelable) e.preventDefault();
         const t0 = e.touches[0], t1 = e.touches[1];
@@ -220,29 +298,30 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         const cy = (t0.clientY + t1.clientY) / 2;
         const ps = pinchStateRef.current;
         const newZoom = Math.min(Math.max(ps.startZoom * (dist / ps.startDist), 0.1), 10);
-        const panDeltaX = cx - ps.lastCenterX;
-        const panDeltaY = cy - ps.lastCenterY;
+        const vp = viewportRef.current;
+        vp.scrollX += (cx - ps.lastCenterX) / newZoom;
+        vp.scrollY += (cy - ps.lastCenterY) / newZoom;
+        vp.zoom = newZoom;
         ps.lastCenterX = cx;
         ps.lastCenterY = cy;
-        const excApi = excalidrawAPIRef.current;
-        if (excApi) {
-          const appState = excApi.getAppState();
-          const appStateUpdate = {
-            zoom: { value: newZoom },
-            scrollX: appState.scrollX + panDeltaX / newZoom,
-            scrollY: appState.scrollY + panDeltaY / newZoom,
-          };
-          if (baseStrokeWidthRef?.current) {
-            appStateUpdate.currentItemStrokeWidth = Math.max(baseStrokeWidthRef.current / newZoom, 0.05);
-          }
-          excApi.updateScene({ appState: appStateUpdate, commitToHistory: false });
-        }
+        const strokeWidth = baseStrokeWidthRef?.current
+          ? Math.max(baseStrokeWidthRef.current / newZoom, 0.05)
+          : null;
+        scheduleViewport({ zoom: newZoom, scrollX: vp.scrollX, scrollY: vp.scrollY, strokeWidth });
       }
     };
 
     const handleTouchEnd = (e) => {
-      if (e.touches.length === 0) isTouchingRef.current = false;
-      if (e.touches.length < 2) pinchStateRef.current = null;
+      if (e.touches.length === 0) {
+        isTouchingRef.current = false;
+        endGesture();
+        return;
+      }
+      // 핀치에서 손가락 하나 뗌 — 남은 손가락은 새 제스처로 다시 시작해야 함(점프 방지)
+      if (e.touches.length < 2) {
+        pinchStateRef.current = null;
+        panStateRef.current = null;
+      }
     };
 
     // window 캡처 리스너 — container 마운트 여부와 무관하게 즉시 부착
@@ -272,6 +351,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
 
     return () => {
       cancelAnimationFrame(rafId);
+      if (rafIdRef.current) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = 0; }
       window.removeEventListener('pointerdown',   handlePointerDown, { capture: true });
       window.removeEventListener('pointermove',   handlePointerMove, { capture: true });
       window.removeEventListener('pointerup',     handlePointerUp,   { capture: true });
@@ -292,5 +372,5 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
 
   const triggerPalmRejectionWarmup = useCallback(() => {}, []);
 
-  return { isTouchingRef, triggerPalmRejectionWarmup, barrelEraserRef };
+  return { isTouchingRef, triggerPalmRejectionWarmup, barrelEraserRef, isGesturingRef };
 }

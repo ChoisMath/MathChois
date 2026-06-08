@@ -405,7 +405,7 @@ const StudyViewer = () => {
     setDrawMode(true);
   }, []);
 
-  const { triggerPalmRejectionWarmup } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef: lockActiveRef, baseStrokeWidthRef, onUserDrawStart: handleUserDrawStart });
+  const { triggerPalmRejectionWarmup, isGesturingRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef: lockActiveRef, baseStrokeWidthRef, onUserDrawStart: handleUserDrawStart });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
@@ -648,6 +648,9 @@ const StudyViewer = () => {
       excalidrawAPIRef.current?.updateScene({ appState: { penMode: false }, commitToHistory: false });
       return;
     }
+
+    /* 핀치줌/팬 제스처 중에는 뷰포트만 바뀌므로 무거운 저장/지우개/히스토리 파이프라인을 건너뛴다 */
+    if (isGesturingRef.current) return;
 
     /* 줌-독립 펜 두께: 줌 변경 감지 시 자동 보정 (미세 부동소수점 변동 무시) */
     if (appState && Math.abs((appState.zoom?.value || 1) - lastZoomRef.current) > 0.01) {
