@@ -18,6 +18,7 @@ function HtmlToolOverlay({
   onChange,
   initialElements = [],
   showPanel = false,
+  wetInkOverlayRef,
 }) {
   return (
     <div className="relative w-full h-full bg-white">
@@ -46,6 +47,13 @@ function HtmlToolOverlay({
             UIOptions={EXCALIDRAW_UI_OPTIONS}
           />
         </ExcalidrawErrorBoundary>
+        {wetInkOverlayRef && (
+          <canvas
+            ref={wetInkOverlayRef}
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            style={{ zIndex: 3 }}
+          />
+        )}
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ import DrawingToolbar from '../../components/study/DrawingToolbar';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, TOUCH_CSS, GRID_STYLE, EXCALIDRAW_UI_OPTIONS } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
+import { useWetInk } from '../../hooks/useWetInk';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
 import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
 import { useExcalidrawUndo } from '../../hooks/useExcalidrawUndo';
@@ -65,6 +66,13 @@ export default function CoachingViewer({
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
+
+  /* wet-ink 오버레이 (readOnly 가 아닐 때만 펜 가로채기) */
+  const penActiveRef     = useRef(true);
+  const wetInkOverlayRef = useRef(null);
+  const drawModeRef      = useRef(!readOnly);
+  useEffect(() => { drawModeRef.current = !readOnly; }, [readOnly]);
+  useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef });
 
   const [problem, setProblem] = useState(null);
   const [solutionLatex, setSolutionLatex] = useState('');
@@ -500,6 +508,7 @@ export default function CoachingViewer({
       screenLocked={screenLocked}
       onToggleScreenLock={handleToggleScreenLock}
       onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
+      onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw'; }}
       onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
     />
   );
@@ -525,6 +534,13 @@ export default function CoachingViewer({
           UIOptions={EXCALIDRAW_UI_OPTIONS}
         />
       </ExcalidrawErrorBoundary>
+      {!readOnly && (
+        <canvas
+          ref={wetInkOverlayRef}
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          style={{ zIndex: 3 }}
+        />
+      )}
     </div>
   );
 
