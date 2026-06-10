@@ -30,7 +30,7 @@ const SHAPE_TOOL_ICONS = {
 const SHAPE_TOOLS    = ['rectangle', 'ellipse', 'triangle'];
 const SAVEABLE_TOOLS = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse', 'triangle'];
 
-function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked, onToggleScreenLock, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false }) {
+function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked, onToggleScreenLock, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, onActiveToolChange }) {
   const [activeTool, setActiveTool]       = useState('freedraw');
   const [color, setColor]                 = useState('#000000');
   const [strokeWidth, setStrokeWidth]     = useState(() =>
@@ -55,6 +55,9 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked
   /* ── 삼각형 모드용 ref ── */
   const activeToolRef = useRef(activeTool);
   useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
+
+  /* 논리 도구 변화 통지 (wet-ink 오버레이가 펜 자유필기만 가로채도록 — 삼각형은 내부적으로 freedraw) */
+  useEffect(() => { onActiveToolChange?.(activeTool); }, [activeTool, onActiveToolChange]);
 
   /* ── 삼각형 모드: pointerup 후 freedraw → 삼각형 line 으로 변환 ── */
   useEffect(() => {
