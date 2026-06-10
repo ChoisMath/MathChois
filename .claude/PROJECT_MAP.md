@@ -29,7 +29,7 @@ packages/
 │   └── src/
 │       ├── App.jsx             # 라우팅 정의
 │       ├── contexts/AuthContext.jsx
-│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem), problems/(ProblemPickerModal), coaching/(CoachingHistoryView), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal)
+│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem), problems/(ProblemPickerModal), coaching/(CoachingHistoryView, AttemptStack), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal)
 │       │   └── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay
 │       ├── layouts/            # MainLayout(public), DashboardLayout(인증)
 │       ├── pages/              # Home, Login, Classrooms, Chapters, Study, Monitor,
@@ -40,7 +40,7 @@ packages/
 │                               #   inputMode.js, penToggles.js, excalidrawHistory.js,
 │                               #   freedrawResample.js, scribbleDetect.js,
 │                               #   problemContent.js([FIGURE:n] 파서), problems.js(API),
-│                               #   coaching.js(convert/review/attempts/uploadWorkImage/getMyHistory/getStudentHistory),
+│                               #   coaching.js(convert/review/attempts/uploadWorkImage/getMyHistory/getStudentHistory/resetStudentQuota/getPageStudents),
 │                               #   dashboard.js(getClassroomDashboard),
 │                               #   visualizations.js(list/facets/CRUD/upload + buildVisualizationQuery) (*.test.js = Vitest)
 └── shared/src/
@@ -77,11 +77,12 @@ packages/
 `pages.aiProblemId`(→`problems`, set null)가 설정된 페이지는 이미지/영상/HTML 배경이 없는 **AI 코칭 페이지**다.
 
 - 학생 study 라우트(`/student/study/:chapterId/page/:pageId`)의 element는 **`pages/Study/StudyPageRouter.jsx`**(StudyViewer 대체). 페이지가 `aiProblemId`면 `CoachingViewer`, 아니면 `StudyViewer`를 렌더한다.
-- **`pages/Study/CoachingViewer.jsx`** — 좌: Excalidraw 풀이(① `student_notes`로 자동저장), 우: 문제·코칭 패널. 2단계 흐름(① 필기→LaTeX 수식 전환 → ② AI 검토), attempt 누적.
-- 패널 UI: **`components/common/CoachingPanel.jsx`**(정답 여부/오류태그/개념태그 + 코멘트 Markdown+KaTeX). 교사 에디터의 문제 선택은 **`components/problems/ProblemPickerModal.jsx`**(문제은행 선택 모달).
+- 학생 study 라우트의 AI 페이지는 `StudyPageRouter`가 `CoachingViewer`로, 교사 study 라우트의 AI 페이지는 **`pages/Study/TeacherStudyPageRouter.jsx`**가 **`TeacherCoachingReview`**로 분기한다(아래 "AI 코칭 횟수 제한" 참조).
+- **`pages/Study/CoachingViewer.jsx`**(학생) — 좌: Excalidraw 풀이(① `student_notes`로 자동저장), 우: 문제·코칭 패널. 2단계 흐름(① 필기→LaTeX 수식 전환 → ② AI 검토), attempt 누적. 우측 패널은 `AttemptStack`로 누적 표시. (`CoachingViewer`는 학생 `StudyPageRouter`와 ③ `StudentWorkViewer`에서 계속 사용.)
+- 패널 UI: **`components/common/CoachingPanel.jsx`**(정답 여부/오류태그/개념태그 + 코멘트 Markdown+KaTeX). 누적 표시는 **`components/coaching/AttemptStack.jsx`**(최신 펼침 + 이전 접힌 카드; 각 카드 = 전달 이미지 + 변환 수식 + CoachingPanel, 학생·교사 공용). 교사 에디터의 문제 선택은 **`components/problems/ProblemPickerModal.jsx`**(문제은행 선택 모달).
 - 교사: `Chapters/Editor.jsx`에서 [AI 코칭] 페이지 추가 + 문제 선택/변경 + AI 미리보기. `components/common/SortablePageItem.jsx`가 AI 페이지를 Sparkles 썸네일로 표시.
 - **보안 패턴: 정답·해설은 학생 클라이언트에 절대 전송하지 않는다.** 학생은 `GET /api/problems/:id/for-coaching`로 표시 필드만 받고, 정답 대조는 **서버 `reviewSolution`에서만** 수행한다. 코칭 시도는 `coaching_attempts`에 불변 누적된다.
-- 서버: 라우트 `routes/coaching.ts`, 서비스 `services/coaching.service.ts`(createAttempt/listAttempts + 기록조회 `listStudentHistory`/`listClassroomStudentHistory`), `services/ai.service.ts`(`convertSolutionToLatex` 필기→LaTeX, `reviewSolution` 정답·해설 대조 코칭), `services/problem.service.ts`(`getProblemForCoaching` 표시 필드만), `services/page.service.ts`(createPage가 `aiProblemId` 허용, `updatePage` 추가). 필기 스냅샷은 `ai-coaching` 버킷에 저장.
+- 서버: 라우트 `routes/coaching.ts`, 서비스 `services/coaching.service.ts`(상수 `COACHING_ATTEMPT_LIMIT = 3`; createAttempt/listAttempts + 한도 `getAttemptUsage(studentId,pageId)`→`{used,limit,resetAt}` / 리셋 `resetQuota(studentId,pageId)`(upsert reset_at=now) / 시도 학생 집계 `listPageStudents(pageId,classroomId)`(classroom 스코프, 정답·해설 미포함) + 기록조회 `listStudentHistory`/`listClassroomStudentHistory`), `services/ai.service.ts`(`convertSolutionToLatex` 필기→LaTeX, `reviewSolution` 정답·해설 대조 코칭), `services/problem.service.ts`(`getProblemForCoaching` 표시 필드만), `services/page.service.ts`(createPage가 `aiProblemId` 허용, `updatePage` 추가). 필기 스냅샷은 `ai-coaching` 버킷에 저장.
 
 ### AI 코칭 풀이 기록 조회 (#4, `feat/coaching-history`)
 
@@ -91,6 +92,23 @@ packages/
 - 클라이언트 공용 뷰: `components/coaching/CoachingHistoryView.jsx` — 기간 필터(프리셋 1주/1개월/전체 + 시작·종료 직접지정, 기본 최근 7일) + 카드 리스트 + 인라인 펼침(`ProblemView` 문제·풀이 + `CoachingPanel` + 필기 이미지) + 페이지네이션. `fetchHistory` prop 주입(ref 안정화).
 - 학생: `pages/History/MyCoachingHistory.jsx`(`/student/coaching-history`), StudentSidebar "내 풀이 기록"(History 아이콘). 교사: `pages/Monitor/StudentCoachingHistory.jsx`(`/teacher/classrooms/:classroomId/students/:studentId/coaching-history`), `ClassroomDetail.jsx` '학생' 탭 멤버 카드의 [코칭 기록] 버튼으로 진입.
 - `components/common/CoachingPanel.jsx`에 `showTeacherNotes` prop(강점 메모 표시) 추가. `lib/coaching.js`에 `getMyHistory`/`getStudentHistory` 추가.
+
+### AI 코칭 횟수 제한·리셋 (`feat/ai-coaching-limits`)
+
+문제(페이지)당 학생 AI 코칭 시도 횟수를 제한(`COACHING_ATTEMPT_LIMIT = 3`)하고 교사가 리셋할 수 있다. 사용 횟수는 `coaching_quota.resetAt` 이후의 `coaching_attempts`만 카운트 — 기록은 보존되고 카운터만 리셋된다.
+
+- 서버 `routes/coaching.ts`:
+  - `POST /coaching/convert` — body에 `pageId` 추가, 사용량 한도(3) 초과 시 429.
+  - `POST /coaching/review` — 한도 초과 시 429, 응답이 attempt 단건 → `{attempt, used, limit, resetAt}`.
+  - `GET /coaching/pages/:pageId/attempts`(본인) 및 `GET /coaching/classrooms/:classroomId/students/:studentId/pages/:pageId/attempts`(교사) — 응답이 배열 → `{attempts, used, limit, resetAt}`.
+  - **신규** `POST /coaching/classrooms/:classroomId/students/:studentId/pages/:pageId/reset`(교사, owner+member 가드 — 횟수 리셋, 기록 보존).
+  - **신규** `GET /coaching/classrooms/:classroomId/pages/:pageId/students`(교사, owner 가드 — 해당 페이지 시도 학생 목록 + used/limit).
+- 클라이언트:
+  - **`pages/Study/TeacherCoachingReview.jsx`**(신규) — 교사 챕터 필기 경로의 AI 코칭 문항 화면. 사이드바=문항 네비, 메인=시도한 학생 카드(이름 + used/limit 배지 + 리셋 버튼, 펼치면 그 학생의 누적 코칭(`AttemptStack`)).
+  - `pages/Study/TeacherStudyPageRouter.jsx` — AI 페이지 분기를 readOnly `CoachingViewer` → `TeacherCoachingReview`로 변경.
+  - `pages/Study/CoachingViewer.jsx`(학생) — 헤더 `AI 코칭 {used}/{limit}` 배지, 한도 도달 시 [수식전환]·[AI검토요청] 모두 비활성+안내. `coaching` 단건 상태 → `attempts[]`+`usage`.
+  - `lib/coaching.js` — `convertSolution(imageUrl, pageId)`로 시그니처 변경, `listAttempts`/`getStudentPageAttempts`/`reviewSolution` 응답 형태 변경, 신규 `resetStudentQuota`/`getPageStudents`.
+- 공유 타입: `shared/src/types/coaching.ts`에 `PageAttemptsResult`, `ReviewResult`, `CoachingStudentSummary` 추가.
 
 ### #5 교사 대시보드 (`feat/teacher-class-dashboard`)
 
@@ -112,7 +130,7 @@ packages/
 | `/teacher/chapters/:id/edit` | Chapters/Editor | 이미지/영상/HTML 도구 업로드 |
 | `/teacher/.../chapters/:chapterId/monitor` | ChapterMonitor | 학생 진도 요약 |
 | `/teacher/.../chapters/:chapterId/monitor/:studentId` | **StudentWorkViewer** (③) | 전체화면 |
-| `/teacher/.../chapters/:chapterId/study/page/:pageId` | **TeacherStudyViewer** (②) | 전체화면 |
+| `/teacher/.../chapters/:chapterId/study/page/:pageId` | **TeacherStudyPageRouter** → TeacherStudyViewer(②) 또는 TeacherCoachingReview(AI 코칭) | 전체화면 |
 | `/teacher/board`, `/board/new`, `/board/:postId/edit` | TeacherBoard, BoardPostEditor | 게시판 |
 | `/teacher/problems` | Problems/ProblemsPage | 문제은행 (탭: 문항등록/등록된 문항), DashboardLayout |
 | `/teacher/visualizations` | Visualizations/VisualizationsPage | 시각화자료 라이브러리 관리(본인 자료 mine=1, 등록/수정/삭제/미리보기), DashboardLayout |
@@ -139,7 +157,7 @@ packages/
 | comments | routes/comments.ts | ③⑤ 코멘트 필기 (위 표 참조) |
 | admin | routes/admin.ts | `GET /admin/users`, `/teachers-with-students`, `/stats`, 비번 초기화 등 |
 | problems | routes/problems.ts | `POST /problems/ocr`, `/problems/markscheme-ocr`, `/problems/generate-solution`(Gemini), `GET /problems`(검색·필터·페이지네이션), `GET /problems/facets`, `GET/POST/PATCH/DELETE /problems/:id`(teacher). `GET /problems/:id/for-coaching`(authenticate, 학생용 — 정답·해설 제외 표시필드만) |
-| coaching | routes/coaching.ts | `POST /coaching/convert`(필기→LaTeX), `POST /coaching/review`(서버에서만 정답 대조 후 attempt 생성), `GET /coaching/pages/:pageId/attempts`(authenticate, studentId=req.user.sub). 기록 조회: `GET /coaching/history`(본인, authenticate), `GET /coaching/classrooms/:classroomId/students/:studentId/history`(교사 — requireRole+isClassroomOwner+isClassroomMember, 해당 클래스 챕터 범위 한정). 모두 정답·해설 select 제외 |
+| coaching | routes/coaching.ts | `POST /coaching/convert`(필기→LaTeX, body `pageId`, 한도 초과 429), `POST /coaching/review`(서버에서만 정답 대조 후 attempt 생성, 한도 초과 429 → `{attempt,used,limit,resetAt}`), `GET /coaching/pages/:pageId/attempts`(본인 → `{attempts,used,limit,resetAt}`), `GET /coaching/classrooms/:classroomId/students/:studentId/pages/:pageId/attempts`(교사). 횟수 제한/리셋: `POST /coaching/classrooms/:classroomId/students/:studentId/pages/:pageId/reset`(교사 owner+member — 리셋, 기록 보존), `GET /coaching/classrooms/:classroomId/pages/:pageId/students`(교사 owner — 시도 학생 목록+횟수). 기록 조회: `GET /coaching/history`(본인, authenticate), `GET /coaching/classrooms/:classroomId/students/:studentId/history`(교사 — requireRole+isClassroomOwner+isClassroomMember, 해당 클래스 챕터 범위 한정). 모두 정답·해설 select 제외 |
 | dashboard | routes/dashboard.ts | `GET /dashboard/classrooms/:classroomId`(authenticate + requireRole('teacher') + isClassroomOwner 403). 집계 전용 — 학생×챕터 코칭 정답률·필기 진도 + 반 요약. 정답·해설 select 제외(카운트만) |
 | visualizations | routes/visualizations.ts | `GET /visualizations`(목록 — 텍스트 q + subject/major/minorUnit 필터 + 페이지네이션, 기본 전체 공유, `mine=1`이면 본인 것만), `GET /visualizations/facets`, `GET/:id`, `POST`(등록), `PATCH/:id`·`DELETE/:id`(소유자 403 가드 — 삭제 시 원본 파일도 제거). 모두 teacher |
 | health | app.ts | `GET /api/health` (DB ping) |
@@ -163,17 +181,18 @@ packages/
 | `assignment_notes` ④ | assignmentId, pageId(→assignment_pages), studentId | (assignment, page, student) unique |
 | `assignment_teacher_comments` ⑤ | teacherId, studentId, pageId(→assignment_pages) | (teacher, student, page) unique |
 | `problems` | createdBy→profiles | 문제은행. title, problemLatex, figureNotes/figures/keywords(jsonb), originalImageUrl, subject/majorUnit/minorUnit/difficulty/problemType/detailType, answer, solution, solutionSource(teacher-markscheme\|ai\|ai-regenerated\|teacher-verified), markschemeImageUrl, aiModel, status, createdAt/updatedAt. 인덱스 5개 |
-| `coaching_attempts` | pageId→pages(cascade), problemId→problems(set null), studentId→profiles(cascade) | AI 코칭 시도 **불변 누적**. workImageUrl, solutionLatex, isCorrect, errorTags/conceptTags(jsonb), strengthNotes, weaknessNotes, commentMarkdown, aiModel, createdAt. 인덱스 (studentId,createdAt)/(pageId,studentId)/(problemId) |
+| `coaching_attempts` | pageId→pages(cascade), problemId→problems(set null), studentId→profiles(cascade) | AI 코칭 시도 **불변 누적**(변경 없음). workImageUrl, solutionLatex, isCorrect, errorTags/conceptTags(jsonb), strengthNotes, weaknessNotes, commentMarkdown, aiModel, createdAt. 인덱스 (studentId,createdAt)/(pageId,studentId)/(problemId) |
+| `coaching_quota` | studentId, pageId | 문제(페이지)당 학생 AI 코칭 횟수 제한/리셋 기준. (student, page) unique, resetAt(이 시각 이후의 `coaching_attempts`만 사용 횟수로 카운트), updatedAt. 시도 기록 자체는 `coaching_attempts`에 그대로 보존 |
 | `visualizations` | createdBy→profiles(cascade) | 시각화자료 라이브러리(교사 간 공유). title(필수)/subject/majorUnit/minorUnit/description/htmlUrl(원본, `visualizations` 버킷). 인덱스 (createdBy)/(subject,majorUnit,minorUnit). 페이지 삽입 시 chapter-tools로 **복제**(독립 복사본) |
 
-> 마이그레이션은 Drizzle Kit(`db:push`/`db:generate`). 추가로 `db/startupMigrate.ts`가 기동 시 멱등 DDL을 실행(예: `pages.html_url`·`pages.ai_problem_id` 컬럼, `problems`·`coaching_attempts` 테이블 보장).
+> 마이그레이션은 Drizzle Kit(`db:push`/`db:generate`). 추가로 `db/startupMigrate.ts`가 기동 시 멱등 DDL을 실행(예: `pages.html_url`·`pages.ai_problem_id` 컬럼, `problems`·`coaching_attempts`·`coaching_quota`(+(student,page) unique index) 테이블 보장).
 
 ## 외부 의존성
 - **PostgreSQL** (Railway) — `DATABASE_URL`.
 - **Google OAuth** — `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
 - **JWT** — `JWT_SECRET`, `JWT_REFRESH_SECRET`.
 - **파일 스토리지(Volume)** — `VOLUME_PATH`(기본 `./local-storage`). 버킷: `chapter-pages`, `chapter-tools`(HTML 전용), `visualizations`(시각화자료 원본 HTML, HTML 전용), `submission-files`, `problem-bank`(문제은행 이미지), `ai-coaching`(코칭 필기 스냅샷, 학생 업로드 허용), post 첨부 등. `/api/files/*`로 서빙. HTML 전용 버킷(`chapter-tools`/`visualizations`)은 `text/html`만 허용.
-- **Google Gemini(선택)** — `GEMINI_API_KEY`(@google/genai), `GEMINI_MODEL`(기본 `gemini-3.5-flash`; 구 `gemini-2.0-flash`는 Google에서 퇴역되어 404 발생 → 변경됨. Railway 환경변수에도 `gemini-3.5-flash` 설정). `services/ai.service.ts`의 OCR(문제/마크스킴)·해설 생성·필기→LaTeX 전환·풀이 검토. 구조화 출력은 `responseJsonSchema`. 문항 OCR meta(과목·대단원·소단원)는 **2022 개정 교육과정 MAP**(`@mathchois/shared`의 `buildCurriculumPromptBlock`)을 프롬프트에 주입해 **MAP 항목에서만 강제 선택**(subject는 enum). 본문 줄바꿈은 `<br>` 태그 + 함수식만 있는 줄은 `\qquad` 들여쓰기(`MD_LINEBREAK_RULE`). 기준 문서: `docs/curriculum/2022-math-curriculum.md`.
+- **Google Gemini(선택)** — `GEMINI_API_KEY`(@google/genai), `GEMINI_MODEL`(기본 `gemini-2.5-flash`). `services/ai.service.ts`의 OCR(문제/마크스킴)·해설 생성·필기→LaTeX 전환·풀이 검토. 429 처리는 spend-cap / rate-limit / 기타로 세분화하고 서버 로그에 실제 원인 기록. 구조화 출력은 `responseJsonSchema`. 문항 OCR meta(과목·대단원·소단원)는 **2022 개정 교육과정 MAP**(`@mathchois/shared`의 `buildCurriculumPromptBlock`)을 프롬프트에 주입해 **MAP 항목에서만 강제 선택**(subject는 enum). 본문 줄바꿈은 `<br>` 태그 + 함수식만 있는 줄은 `\qquad` 들여쓰기(`MD_LINEBREAK_RULE`). 기준 문서: `docs/curriculum/2022-math-curriculum.md`.
 - **SMTP(선택)** — `SMTP_HOST/PORT/USER/PASS/FROM`(비밀번호 초기화 메일). `APP_URL`(메일 링크).
 - **PORT**(기본 3001), **NODE_ENV**.
 - **클라이언트 env** — `VITE_TOOLS_ORIGIN`(HTML 도구를 서빙할 별도 origin), Vite `VITE_*` 빌드타임 주입.
@@ -202,7 +221,7 @@ packages/
   - 렌더: `components/common/ProblemView.jsx`(Markdown+KaTeX+그림). `[FIGURE:n]` 파싱은 `lib/problemContent.js`(+test). #3~#5 뷰어 재사용 예정.
   - 공유 타입: `shared/src/types/problem.ts`(Problem, ProblemFigure, OcrProblemResult, SolutionResult, ProblemListResult, ProblemFacets, SolutionSource).
 - **AI 수학 코칭(`feat/ai-coaching-page`)**: 위 "AI 수학 코칭 페이지" 섹션 참조. **정답·해설을 학생 클라이언트로 절대 보내지 않는 것**이 핵심 불변식 — 학생은 `GET /api/problems/:id/for-coaching`(표시필드만)만 받고, 정답 대조는 서버 `reviewSolution`에서만 수행한다. 코칭 시도는 `coaching_attempts`에 불변 누적.
-  - 공유 타입: `shared/src/types/coaching.ts`(CoachingAttempt, CoachingResult, ConvertResult, CoachingProblemView, ErrorTag, + 기록조회 CoachingAttemptView/CoachingHistoryResult/CoachingHistoryFilters), `models.ts`에 `Page.aiProblemId`.
+  - 공유 타입: `shared/src/types/coaching.ts`(CoachingAttempt, CoachingResult, ConvertResult, CoachingProblemView, ErrorTag, + 기록조회 CoachingAttemptView/CoachingHistoryResult/CoachingHistoryFilters, + 횟수제한 PageAttemptsResult/ReviewResult/CoachingStudentSummary), `models.ts`에 `Page.aiProblemId`.
 - **시각화자료 라이브러리(`feat/visualization-library`)**: 교사가 등록한 standalone HTML을 메타(제목/과목/대단원/소단원/설명)와 함께 저장·검색·**교사 간 공유**. 챕터 편집기 HTML 버튼(`FileCode2`)이 `VisualizationPickerModal`(검색 리스트 + 우상단 [새html등록])을 연다. **삽입은 복사본(독립)** — 서버 `copyHtmlToChapterTools`가 원본을 `chapter-tools`로 복제해 페이지가 자체 복사본을 참조하므로, 원본 교체/삭제가 이미 삽입된 페이지에 영향 없음(새로 삽입하는 페이지부터 교체본 적용). 관리(`/teacher/visualizations`)는 본인 자료만(`mine=1`) — 수정은 **파일 통째 교체 / 단원 / 제목·설명**만(HTML 내부 편집 없음), 삭제는 레코드+원본 파일 제거. 등록+즉시 삽입 흐름은 모달 `onSaved→onSelect`로 처리.
   - 공유 타입: `shared/src/types/visualization.ts`(Visualization, VisualizationListResult, VisualizationFacets, VisualizationFilters). 서버: `routes/visualizations.ts`, `services/visualization.service.ts`, `services/page.service.ts`(`createPage`의 `fromVisualizationId`), `services/storage.service.ts`(`copyHtmlToChapterTools`). 클라: `lib/visualizations.js`(+test).
 - **Markdown 렌더(`components/common/Markdown.jsx`)**: `rehypeRaw`로 교사 작성 HTML(`<br>`,`<center>`)을 허용하되 `rehypeSanitize`로 XSS 차단(플러그인 순서: raw→sanitize→katex). `neutralizeIndentedCode`가 **줄 앞 4칸 이상 들여쓰기를 nbsp로 치환**해 Markdown이 코드 블록으로 오인해 수식이 깨지는 문제를 막는다(펜스 ``` 블록은 보존).
@@ -215,4 +234,4 @@ packages/
 - **`.gitignore`** — `*.tsbuildinfo`·`.superpowers/`·`.plans/`·`review.md` 무시(빌드 산출물·작업 노트는 읽지 않음).
 
 ---
-마지막 업데이트: 2026-06-05 (HTML 페이지 펜 필기 오버레이 추가)
+마지막 업데이트: 2026-06-10 (AI 코칭 횟수 제한·리셋 + coaching_quota 테이블, Gemini 기본 모델 gemini-2.5-flash)
