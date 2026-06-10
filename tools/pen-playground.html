@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>펜 필기감 놀이터 (perfect-freehand 1.2.0 · Excalidraw 동일 파이프라인)</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --panel: #f7f7f8;
+    --line: #e3e3e6;
+    --ink: #111827;
+    --accent: #2563eb;
+    --muted: #6b7280;
+    --grid: #eef1f5;
+    --header-h: 48px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  header {
+    height: var(--header-h);
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  header h1 { font-size: 14px; margin: 0 8px 0 0; white-space: nowrap; }
+  .preset-row { display: flex; gap: 6px; }
+  button {
+    font: inherit;
+    min-height: 40px;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ink);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.ghost { background: var(--panel); }
+  .main { flex: 1; display: flex; min-height: 0; }
+  .canvas-wrap { flex: 1; position: relative; min-width: 0; background: var(--bg); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+  .hint {
+    position: absolute; left: 10px; top: 10px;
+    font-size: 12px; color: var(--muted);
+    background: rgba(255,255,255,.8); padding: 4px 8px; border-radius: 6px;
+    pointer-events: none;
+  }
+  aside {
+    flex: none;
+    width: 320px;
+    max-width: 86vw;
+    border-left: 1px solid var(--line);
+    background: var(--panel);
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .ctrl { display: flex; flex-direction: column; gap: 4px; }
+  .ctrl label { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
+  .ctrl label b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; height: 28px; }
+  .toggles { display: flex; flex-direction: column; gap: 8px; }
+  .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .toggle input { width: 20px; height: 20px; }
+  .seg { display: flex; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; border-radius: 0; flex: 1; min-height: 38px; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .out {
+    font-family: ui-monospace, "Cascadia Code", monospace;
+    font-size: 11px;
+    background: #0f172a; color: #e2e8f0;
+    border-radius: 8px; padding: 10px;
+    white-space: pre; overflow-x: auto;
+    line-height: 1.5;
+  }
+  .out .chg { color: #fde047; }
+  .out .add { color: #86efac; }
+  .row { display: flex; gap: 6px; }
+  .row > * { flex: 1; }
+  h2 { font-size: 12px; margin: 4px 0; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  details summary { cursor: pointer; font-size: 13px; padding: 4px 0; }
+  /* 모바일/세로 태블릿: 컨트롤을 아래로 */
+  @media (max-width: 760px) {
+    .main { flex-direction: column; }
+    aside { width: 100%; max-width: 100%; border-left: none; border-top: 1px solid var(--line); max-height: 48dvh; }
+  }
+  .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+  .swatch { width: 30px; height: 30px; border-radius: 6px; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); cursor: pointer; }
+  .swatch.active { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .zoombar {
+    position: absolute; right: 12px; bottom: 12px;
+    display: flex; gap: 6px; align-items: center;
+    background: rgba(255,255,255,.94); border: 1px solid var(--line);
+    border-radius: 12px; padding: 5px; box-shadow: 0 2px 8px rgba(0,0,0,.1);
+  }
+  .zoombar button { min-height: 44px; min-width: 44px; padding: 6px 10px; font-size: 18px; line-height: 1; }
+  .zoombar #zoomReset { font-size: 13px; min-width: 64px; font-variant-numeric: tabular-nums; }
+  body.panel-hidden aside { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>✒️ 펜 필기감 놀이터</h1>
+  <div class="preset-row">
+    <button data-preset="gel" class="active">균일 젤펜 (추천)</button>
+    <button data-preset="excalidraw">현재 Excalidraw</button>
+    <button data-preset="light">약한 필압형</button>
+  </div>
+  <button id="panelToggle" class="ghost" style="margin-left:auto">패널 숨기기</button>
+</header>
+
+<div class="main">
+  <div class="canvas-wrap">
+    <canvas id="cv"></canvas>
+    <div class="hint" id="hint">S-Pen으로 "가나다", 빠른 획, 천천히 곡선을 써보세요. 우측 토글로 현재↔새 비교.</div>
+    <div class="zoombar">
+      <button id="zoomOut" title="축소">−</button>
+      <button id="zoomReset" title="원래대로">100%</button>
+      <button id="zoomIn" title="확대">＋</button>
+    </div>
+  </div>
+
+  <aside>
+    <div class="seg" id="viewSeg">
+      <button data-view="new" class="active">새 설정</button>
+      <button data-view="current">현재</button>
+      <button data-view="overlay">겹쳐 비교</button>
+    </div>
+
+    <div class="ctrl">
+      <label>굵기 size <b id="vSize"></b></label>
+      <input id="size" type="range" min="2" max="24" step="0.5" />
+    </div>
+    <div class="ctrl">
+      <label>thinning (굵기 변동 0=완전균일) <b id="vThin"></b></label>
+      <input id="thinning" type="range" min="-0.6" max="0.9" step="0.01" />
+    </div>
+    <div class="ctrl">
+      <label>streamline (떨림 완화) <b id="vStream"></b></label>
+      <input id="streamline" type="range" min="0" max="0.9" step="0.01" />
+    </div>
+    <div class="ctrl">
+      <label>smoothing (외곽선 부드러움) <b id="vSmooth"></b></label>
+      <input id="smoothing" type="range" min="0" max="1" step="0.01" />
+    </div>
+    <div class="ctrl">
+      <label>end taper (끝 뾰족함, 0=둥근끝) <b id="vTaper"></b></label>
+      <input id="taper" type="range" min="0" max="60" step="1" />
+    </div>
+
+    <div class="toggles">
+      <label class="toggle"><input id="cap" type="checkbox" checked /> 끝을 둥글게 (cap)</label>
+      <label class="toggle"><input id="simPressure" type="checkbox" /> simulatePressure (속도로 굵기 흉내)</label>
+      <label class="toggle"><input id="realPressure" type="checkbox" checked /> S-Pen 실제 필압 사용</label>
+      <label class="toggle"><input id="stylusOnly" type="checkbox" checked /> 스타일러스만 (손바닥 무시)</label>
+      <label class="toggle"><input id="easeOut" type="checkbox" /> easeOutSine (Excalidraw 끝 모양)</label>
+    </div>
+
+    <h2>색</h2>
+    <div class="swatches" id="swatches"></div>
+
+    <div class="row">
+      <button class="ghost" id="undo">되돌리기</button>
+      <button class="ghost" id="clear">지우기</button>
+    </div>
+
+    <h2>Tier 1 패치 값</h2>
+    <div class="out" id="out"></div>
+    <button id="copy">패치 값 복사</button>
+
+    <details>
+      <summary>이 값들이 들어갈 곳 (Excalidraw 내부)</summary>
+      <div class="out" style="margin-top:6px">node_modules/@excalidraw/excalidraw
+  /dist/**/chunk-*.js
+함수 getFreeDrawSvgPath 의
+options 객체 (patch-package 대상)</div>
+    </details>
+  </aside>
+</div>
+
+<script type="module">
+/* ───────── perfect-freehand 1.2.0 (Excalidraw 번들과 동일 버전, 인라인) ───────── */
+function $(e,t,u,x=h=>h){return e*x(.5-t*(.5-u))}function se(e){return[-e[0],-e[1]]}function l(e,t){return[e[0]+t[0],e[1]+t[1]]}function a(e,t){return[e[0]-t[0],e[1]-t[1]]}function b(e,t){return[e[0]*t,e[1]*t]}function he(e,t){return[e[0]/t,e[1]/t]}function R(e){return[e[1],-e[0]]}function B(e,t){return e[0]*t[0]+e[1]*t[1]}function ue(e,t){return e[0]===t[0]&&e[1]===t[1]}function ge(e){return Math.hypot(e[0],e[1])}function de(e){return e[0]*e[0]+e[1]*e[1]}function A(e,t){return de(a(e,t))}function G(e){return he(e,ge(e))}function ie(e,t){return Math.hypot(e[1]-t[1],e[0]-t[0])}function L(e,t,u){let x=Math.sin(u),h=Math.cos(u),y=e[0]-t[0],n=e[1]-t[1],f=y*h-n*x,d=y*x+n*h;return[f+t[0],d+t[1]]}function K(e,t,u){return l(e,b(a(t,e),u))}function ee(e,t,u){return l(e,b(t,u))}var{min:C,PI:xe}=Math,pe=.275,V=xe+1e-4;function ce(e,t={}){let{size:u=16,smoothing:x=.5,thinning:h=.5,simulatePressure:y=!0,easing:n=r=>r,start:f={},end:d={},last:D=!1}=t,{cap:S=!0,easing:j=r=>r*(2-r)}=f,{cap:q=!0,easing:c=r=>--r*r*r+1}=d;if(e.length===0||u<=0)return[];let p=e[e.length-1].runningLength,g=f.taper===!1?0:f.taper===!0?Math.max(u,p):f.taper,T=d.taper===!1?0:d.taper===!0?Math.max(u,p):d.taper,te=Math.pow(u*x,2),_=[],M=[],H=e.slice(0,10).reduce((r,i)=>{let o=i.pressure;if(y){let s=C(1,i.distance/u),W=C(1,1-s);o=C(1,r+(W-r)*(s*pe))}return(r+o)/2},e[0].pressure),m=$(u,h,e[e.length-1].pressure,n),U,X=e[0].vector,z=e[0].point,F=z,O=z,E=F,J=!1;for(let r=0;r<e.length;r++){let{pressure:i}=e[r],{point:o,vector:s,distance:W,runningLength:I}=e[r];if(r<e.length-1&&p-I<3)continue;if(h){if(y){let v=C(1,W/u),Z=C(1,1-v);i=C(1,H+(Z-H)*(v*pe))}m=$(u,h,i,n)}else m=u/2;U===void 0&&(U=m);let le=I<g?j(I/g):1,fe=p-I<T?c((p-I)/T):1;m=Math.max(.01,m*Math.min(le,fe));let re=(r<e.length-1?e[r+1]:e[r]).vector,Y=r<e.length-1?B(s,re):1,be=B(s,X)<0&&!J,ne=Y!==null&&Y<0;if(be||ne){let v=b(R(X),m);for(let Z=1/13,w=0;w<=1;w+=Z)O=L(a(o,v),o,V*w),_.push(O),E=L(l(o,v),o,V*-w),M.push(E);z=O,F=E,ne&&(J=!0);continue}if(J=!1,r===e.length-1){let v=b(R(s),m);_.push(a(o,v)),M.push(l(o,v));continue}let oe=b(R(K(re,s,Y)),m);O=a(o,oe),(r<=1||A(z,O)>te)&&(_.push(O),z=O),E=l(o,oe),(r<=1||A(F,E)>te)&&(M.push(E),F=E),H=i,X=s}let P=e[0].point.slice(0,2),k=e.length>1?e[e.length-1].point.slice(0,2):l(e[0].point,[1,1]),Q=[],N=[];if(e.length===1){if(!(g||T)||D){let r=ee(P,G(R(a(P,k))),-(U||m)),i=[];for(let o=1/13,s=o;s<=1;s+=o)i.push(L(r,P,V*2*s));return i}}else{if(!(g||T&&e.length===1))if(S)for(let i=1/13,o=i;o<=1;o+=i){let s=L(M[0],P,V*o);Q.push(s)}else{let i=a(_[0],M[0]),o=b(i,.5),s=b(i,.51);Q.push(a(P,o),a(P,s),l(P,s),l(P,o))}let r=R(se(e[e.length-1].vector));if(T||g&&e.length===1)N.push(k);else if(q){let i=ee(k,r,m);for(let o=1/29,s=o;s<1;s+=o)N.push(L(i,k,V*3*s))}else N.push(l(k,b(r,m)),l(k,b(r,m*.99)),a(k,b(r,m*.99)),a(k,b(r,m)))}return _.concat(N,M.reverse(),Q)}function me(e,t={}){var q;let{streamline:u=.5,size:x=16,last:h=!1}=t;if(e.length===0)return[];let y=.15+(1-u)*.85,n=Array.isArray(e[0])?e:e.map(({x:c,y:p,pressure:g=.5})=>[c,p,g]);if(n.length===2){let c=n[1];n=n.slice(0,-1);for(let p=1;p<5;p++)n.push(K(n[0],c,p/4))}n.length===1&&(n=[...n,[...l(n[0],[1,1]),...n[0].slice(2)]]);let f=[{point:[n[0][0],n[0][1]],pressure:n[0][2]>=0?n[0][2]:.25,vector:[1,1],distance:0,runningLength:0}],d=!1,D=0,S=f[0],j=n.length-1;for(let c=1;c<n.length;c++){let p=h&&c===j?n[c].slice(0,2):K(S.point,n[c],y);if(ue(S.point,p))continue;let g=ie(p,S.point);if(D+=g,c<j&&!d){if(D<x)continue;d=!0}S={point:p,pressure:n[c][2]>=0?n[c][2]:.5,vector:G(a(S.point,p)),distance:g,runningLength:D},f.push(S)}return f[0].vector=((q=f[1])==null?void 0:q.vector)||[0,0],f}function ae(e,t={}){return ce(me(e,t),t)}
+const getStroke = ae;
+
+/* ───────── Excalidraw 의 getSvgPathFromStroke (median Q-curve) — 동일 복제 ───────── */
+function med(A0,B0){return[(A0[0]+B0[0])/2,(A0[1]+B0[1])/2];}
+const TO_FIXED='';
+function getSvgPathFromStroke(points){
+  if(!points.length) return '';
+  const max=points.length-1;
+  return points.reduce((acc,point,i,arr)=>{
+    if(i===max){acc.push(point,med(point,arr[0]),'L',arr[0],'Z');}
+    else{acc.push(point,med(point,arr[i+1]));}
+    return acc;
+  },['M',points[0],'Q']).join(' ');
+}
+
+/* ───────── Excalidraw 끝 모양 easing ───────── */
+const easeOutSine = (t) => Math.sin((t*Math.PI)/2);
+
+/* ───────── 상태 ───────── */
+const PRESETS = {
+  gel:        { size:9, thinning:0,    streamline:0.62, smoothing:0.5, taper:0,  cap:true,  simPressure:false, realPressure:true,  easeOut:false },
+  excalidraw: { size:9, thinning:0.6,  streamline:0.5,  smoothing:0.5, taper:0,  cap:true,  simPressure:false, realPressure:true,  easeOut:true  },
+  light:      { size:9, thinning:0.3,  streamline:0.62, smoothing:0.5, taper:0,  cap:true,  simPressure:false, realPressure:true,  easeOut:false },
+};
+let view = 'new';            // new | current | overlay
+let color = '#111827';
+const COLORS = ['#111827','#ef4444','#2563eb','#16a34a','#f59e0b'];
+const strokes = [];          // { pts:[[x,y,pressure],...], color }
+let drawing = null;
+
+/* ───────── DOM ───────── */
+const $$ = (id) => document.getElementById(id);
+const cv = $$('cv'), ctx = cv.getContext('2d');
+const els = {
+  size:$$('size'), thinning:$$('thinning'), streamline:$$('streamline'),
+  smoothing:$$('smoothing'), taper:$$('taper'), cap:$$('cap'),
+  simPressure:$$('simPressure'), realPressure:$$('realPressure'),
+  stylusOnly:$$('stylusOnly'), easeOut:$$('easeOut'),
+};
+const vals = { size:$$('vSize'), thinning:$$('vThin'), streamline:$$('vStream'), smoothing:$$('vSmooth'), taper:$$('vTaper') };
+
+function applyPreset(name){
+  const p = PRESETS[name];
+  els.size.value=p.size; els.thinning.value=p.thinning; els.streamline.value=p.streamline;
+  els.smoothing.value=p.smoothing; els.taper.value=p.taper;
+  els.cap.checked=p.cap; els.simPressure.checked=p.simPressure;
+  els.realPressure.checked=p.realPressure; els.easeOut.checked=p.easeOut;
+  syncLabels(); render(); updateOut();
+}
+function curOpts(){
+  return {
+    size: +els.size.value,
+    thinning: +els.thinning.value,
+    streamline: +els.streamline.value,
+    smoothing: +els.smoothing.value,
+    taper: +els.taper.value,
+    cap: els.cap.checked,
+    simPressure: els.simPressure.checked,
+    realPressure: els.realPressure.checked,
+    easeOut: els.easeOut.checked,
+  };
+}
+function excalidrawOpts(){
+  // 현재 Excalidraw 고정값 (size 만 사용자 굵기와 공유해 모양만 비교)
+  return { size:+els.size.value, thinning:0.6, streamline:0.5, smoothing:0.5, taper:0, cap:true, simPressure:false, realPressure:true, easeOut:true };
+}
+
+/* opts → perfect-freehand options */
+function pfOptions(o){
+  return {
+    size: o.size,
+    thinning: o.thinning,
+    smoothing: o.smoothing,
+    streamline: o.streamline,
+    simulatePressure: o.simPressure,
+    easing: o.easeOut ? easeOutSine : (t)=>t,
+    start: { taper: 0, cap: o.cap },
+    end:   { taper: o.taper, cap: o.cap },
+    last: true,
+  };
+}
+function inputFor(stroke, o){
+  // simulatePressure 또는 실제필압 미사용 → [x,y] (pressure 0.5 흉내); 아니면 [x,y,pressure]
+  if (o.simPressure || !o.realPressure) return stroke.pts.map(p => [p[0], p[1]]);
+  return stroke.pts.map(p => [p[0], p[1], p[2]]);
+}
+
+function drawStroke(stroke, o, col){
+  const outline = getStroke(inputFor(stroke, o), pfOptions(o));
+  if (!outline.length) return;
+  const path = new Path2D(getSvgPathFromStroke(outline));
+  ctx.fillStyle = col;
+  ctx.fill(path);
+}
+
+function render(){
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,cv.width,cv.height);
+  drawGrid();
+  ctx.setTransform(dpr*zoom,0,0,dpr*zoom, panX*dpr, panY*dpr);  // 줌/팬 뷰 변환
+  const all = drawing ? strokes.concat([drawing]) : strokes;
+  for (const s of all){
+    if (view === 'current'){
+      drawStroke(s, excalidrawOpts(), s.color);
+    } else if (view === 'overlay'){
+      drawStroke(s, excalidrawOpts(), 'rgba(239,68,68,0.45)'); // 현재 = 빨강 반투명
+      drawStroke(s, curOpts(), s.color);                        // 새 설정 = 검정
+    } else {
+      drawStroke(s, curOpts(), s.color);
+    }
+  }
+}
+function drawGrid(){
+  const w = cv.clientWidth, h = cv.clientHeight, step = 28 * zoom;
+  if (step < 8) return;
+  const ox = ((panX % step) + step) % step, oy = ((panY % step) + step) % step;
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--grid');
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x=ox; x<=w; x+=step){ ctx.moveTo(x,0); ctx.lineTo(x,h); }
+  for (let y=oy; y<=h; y+=step){ ctx.moveTo(0,y); ctx.lineTo(w,y); }
+  ctx.stroke();
+}
+
+/* ───────── 줌/팬 + 입력 ───────── */
+let zoom = 1, panX = 0, panY = 0;
+const touches = new Map();   // 터치 포인터 추적 (핀치줌/팬용)
+let gesture = null;          // 2손가락 제스처 상태
+
+function resize(){
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(cv.clientWidth * dpr);
+  cv.height = Math.round(cv.clientHeight * dpr);
+  render();
+}
+function screenPt(e){ const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+function pos(e){
+  const p = screenPt(e);
+  const pr = (e.pressure && e.pressure !== 0.5) ? e.pressure : 0.5;
+  return [(p.x - panX) / zoom, (p.y - panY) / zoom, pr];  // 화면 → 월드 좌표
+}
+function setZoomLabel(){ $$('zoomReset').textContent = Math.round(zoom*100) + '%'; }
+function zoomAt(z, cx, cy){
+  cx = (cx == null) ? cv.clientWidth/2 : cx;
+  cy = (cy == null) ? cv.clientHeight/2 : cy;
+  const wx = (cx - panX)/zoom, wy = (cy - panY)/zoom;
+  zoom = Math.max(0.25, Math.min(8, z));
+  panX = cx - wx*zoom; panY = cy - wy*zoom;
+  setZoomLabel(); render();
+}
+
+function startGesture(){
+  const t = [...touches.values()];
+  const dx = t[1].x - t[0].x, dy = t[1].y - t[0].y;
+  gesture = { d0: Math.hypot(dx,dy) || 1, cx: (t[0].x+t[1].x)/2, cy: (t[0].y+t[1].y)/2, panX0: panX, panY0: panY, zoom0: zoom };
+  drawing = null;  // 진행 중인 손가락 획 취소
+}
+function moveGesture(){
+  const t = [...touches.values()];
+  const dx = t[1].x - t[0].x, dy = t[1].y - t[0].y;
+  const d = Math.hypot(dx,dy) || 1;
+  const cx = (t[0].x+t[1].x)/2, cy = (t[0].y+t[1].y)/2;
+  const wx = (gesture.cx - gesture.panX0)/gesture.zoom0, wy = (gesture.cy - gesture.panY0)/gesture.zoom0;
+  zoom = Math.max(0.25, Math.min(8, gesture.zoom0 * d/gesture.d0));
+  panX = cx - wx*zoom; panY = cy - wy*zoom;
+  setZoomLabel(); render();
+}
+
+cv.addEventListener('pointerdown', (e)=>{
+  if (e.pointerType === 'touch'){
+    touches.set(e.pointerId, screenPt(e));
+    if (touches.size === 2) startGesture();
+    if (touches.size >= 2) return;                 // 2손가락 → 제스처
+    if (els.stylusOnly.checked) return;            // 스타일러스 전용 → 1손가락 무시
+  }
+  if (gesture) return;
+  try { cv.setPointerCapture(e.pointerId); } catch {}
+  drawing = { pts:[pos(e)], color };
+  $$('hint').style.display='none';
+  render();
+});
+cv.addEventListener('pointermove', (e)=>{
+  if (e.pointerType === 'touch' && touches.has(e.pointerId)){
+    touches.set(e.pointerId, screenPt(e));
+    if (gesture && touches.size >= 2){ moveGesture(); return; }
+  }
+  if (!drawing || gesture) return;
+  if (els.stylusOnly.checked && e.pointerType === 'touch') return;
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for (const ev of evs) drawing.pts.push(pos(ev));
+  render();
+});
+function endStroke(e){
+  if (e && e.pointerType === 'touch'){ touches.delete(e.pointerId); if (touches.size < 2) gesture = null; }
+  if (!drawing) return;
+  if (drawing.pts.length >= 1) strokes.push(drawing);
+  drawing = null;
+  render();
+}
+cv.addEventListener('pointerup', endStroke);
+cv.addEventListener('pointercancel', endStroke);
+cv.addEventListener('wheel', (e)=>{ e.preventDefault(); const p = screenPt(e); zoomAt(zoom * (e.deltaY < 0 ? 1.12 : 1/1.12), p.x, p.y); }, { passive:false });
+
+$$('zoomIn').addEventListener('click', ()=> zoomAt(zoom*1.25));
+$$('zoomOut').addEventListener('click', ()=> zoomAt(zoom/1.25));
+$$('zoomReset').addEventListener('click', ()=>{ zoom=1; panX=0; panY=0; setZoomLabel(); render(); });
+$$('panelToggle').addEventListener('click', ()=>{
+  const hidden = document.body.classList.toggle('panel-hidden');
+  $$('panelToggle').textContent = hidden ? '패널 보기' : '패널 숨기기';
+  requestAnimationFrame(resize);
+});
+
+/* ───────── 라벨/출력 ───────── */
+function syncLabels(){
+  vals.size.textContent = (+els.size.value).toFixed(1);
+  vals.thinning.textContent = (+els.thinning.value).toFixed(2);
+  vals.streamline.textContent = (+els.streamline.value).toFixed(2);
+  vals.smoothing.textContent = (+els.smoothing.value).toFixed(2);
+  vals.taper.textContent = (+els.taper.value).toFixed(0);
+}
+function updateOut(){
+  const o = curOpts();
+  const lines = [];
+  lines.push('const options = {');
+  lines.push(`  simulatePressure: <span class="${o.simPressure?'chg':'chg'}">${o.simPressure}</span>,`);
+  lines.push('  size: element.strokeWidth * 4.25,');
+  lines.push(`  thinning: <span class="chg">${o.thinning}</span>,        // was 0.6`);
+  lines.push(`  smoothing: ${o.smoothing},`);
+  lines.push(`  streamline: <span class="chg">${o.streamline}</span>,      // was 0.5`);
+  lines.push(`  easing: ${o.easeOut ? '(t) => Math.sin(t*Math.PI/2)' : '<span class="chg">(t) => t</span>'},`);
+  lines.push(`  <span class="add">start: { taper: 0, cap: ${o.cap} },</span>`);
+  lines.push(`  <span class="add">end:   { taper: ${o.taper}, cap: ${o.cap} },</span>`);
+  lines.push('  last: !!element.lastCommittedPoint,');
+  lines.push('};');
+  $$('out').innerHTML = lines.join('\n');
+}
+function plainOut(){
+  const o = curOpts();
+  return [
+    'const options = {',
+    `  simulatePressure: ${o.simPressure},`,
+    '  size: element.strokeWidth * 4.25,',
+    `  thinning: ${o.thinning},`,
+    `  smoothing: ${o.smoothing},`,
+    `  streamline: ${o.streamline},`,
+    `  easing: ${o.easeOut ? '(t) => Math.sin((t * Math.PI) / 2)' : '(t) => t'},`,
+    `  start: { taper: 0, cap: ${o.cap} },`,
+    `  end:   { taper: ${o.taper}, cap: ${o.cap} },`,
+    '  last: !!element.lastCommittedPoint,',
+    '};',
+  ].join('\n');
+}
+
+/* ───────── 이벤트 바인딩 ───────── */
+document.querySelectorAll('[data-preset]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('[data-preset]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    applyPreset(btn.dataset.preset);
+  });
+});
+$$('viewSeg').querySelectorAll('button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    $$('viewSeg').querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    view = btn.dataset.view;
+    render();
+  });
+});
+Object.values(els).forEach(el=>{
+  el.addEventListener('input', ()=>{ syncLabels(); render(); updateOut(); });
+});
+$$('undo').addEventListener('click', ()=>{ strokes.pop(); render(); });
+$$('clear').addEventListener('click', ()=>{ strokes.length=0; render(); });
+$$('copy').addEventListener('click', async ()=>{
+  try { await navigator.clipboard.writeText(plainOut()); $$('copy').textContent='복사됨 ✓'; setTimeout(()=>$$('copy').textContent='패치 값 복사',1200); }
+  catch { alert(plainOut()); }
+});
+
+/* 색 스와치 */
+const sw = $$('swatches');
+COLORS.forEach((c,i)=>{
+  const d = document.createElement('div');
+  d.className = 'swatch' + (i===0?' active':'');
+  d.style.background = c;
+  d.addEventListener('click', ()=>{ color=c; sw.querySelectorAll('.swatch').forEach(s=>s.classList.remove('active')); d.classList.add('active'); });
+  sw.appendChild(d);
+});
+
+window.addEventListener('resize', resize);
+applyPreset('gel');
+setZoomLabel();
+resize();
+</script>
+</body>
+</html>
