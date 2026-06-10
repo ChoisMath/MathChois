@@ -17,17 +17,31 @@ type AiError = Error & { statusCode: number; publicMessage: string };
 /** Gemini SDK 가 던지는 ApiError(상태코드 포함)를 사용자용 메시지로 변환한다. */
 function toAiError(err: unknown): AiError {
   const status = (err as { status?: number })?.status;
+  const rawMessage = (err as { message?: string })?.message ?? '';
   let statusCode = 502;
   let publicMessage = 'AI 호출에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+  let logReason = `status=${status ?? '?'}`;
   if (status === 429) {
     statusCode = 429;
-    publicMessage = 'AI 사용량 한도 또는 크레딧이 소진되어 지금은 AI 기능을 사용할 수 없습니다. 관리자에게 문의해 주세요.';
+    // 429(RESOURCE_EXHAUSTED) 는 월 지출 상한(spend cap)과 요청 속도/할당량(rate limit) 모두에서 나온다.
+    // 둘은 대응이 정반대(관리자 조치 vs 재시도)라 응답 메시지로 구분한다.
+    if (/spend(ing)?\s*(cap|limit)/i.test(rawMessage)) {
+      logReason = 'spend cap exceeded';
+      publicMessage = 'AI 월 사용 한도(지출 상한)에 도달했습니다. 관리자에게 문의해 주세요.';
+    } else if (/rate limit|requests per|quota|\bRPM\b|\bTPM\b|\bRPD\b/i.test(rawMessage)) {
+      logReason = 'rate limit / quota exceeded';
+      publicMessage = 'AI 요청이 잠시 몰려 처리량 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.';
+    } else {
+      logReason = 'resource exhausted (429)';
+      publicMessage = 'AI 사용량 한도 또는 크레딧이 소진되어 지금은 AI 기능을 사용할 수 없습니다. 관리자에게 문의해 주세요.';
+    }
   } else if (status === 400 || status === 404) {
     publicMessage = 'AI 요청이 거부되었습니다. (모델 설정 또는 요청 형식 확인 필요)';
   } else if (typeof status === 'number' && status >= 500) {
     statusCode = 503;
     publicMessage = 'AI 서비스가 일시적으로 불안정합니다. 잠시 후 다시 시도해 주세요.';
   }
+  console.error(`[ai] Gemini call failed — ${logReason}: ${rawMessage || '(no message)'}`);
   const wrapped = new Error(publicMessage) as AiError;
   wrapped.statusCode = statusCode;
   wrapped.publicMessage = publicMessage;

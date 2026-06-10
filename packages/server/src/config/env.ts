@@ -8,7 +8,7 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   VOLUME_PATH: z.string().default('./local-storage'),
   GEMINI_API_KEY: z.string().optional(),  // 없으면 AI 기능만 비활성, 서버는 기동
-  GEMINI_MODEL: z.string().default('gemini-3.5-flash'),
+  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
   PORT: z.coerce.number().default(3001),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   // SMTP (비밀번호 초기화 이메일 발송용 — 선택)
