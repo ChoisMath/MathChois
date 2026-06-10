@@ -61,6 +61,17 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
   log.info('startup migration: pages.ai_problem_id + coaching_attempts ensured');
 
   await pgClient`
+    CREATE TABLE IF NOT EXISTS coaching_quota (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      student_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+      page_id uuid NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+      reset_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`;
+  await pgClient`CREATE UNIQUE INDEX IF NOT EXISTS uq_coaching_quota_student_page ON coaching_quota (student_id, page_id)`;
+  log.info('startup migration: coaching_quota ensured');
+
+  await pgClient`
     CREATE TABLE IF NOT EXISTS visualizations (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       created_by uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,

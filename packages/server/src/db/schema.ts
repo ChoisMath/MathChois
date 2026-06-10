@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, timestamp, integer, jsonb, unique, boolean, index, primaryKey,
+  pgTable, uuid, text, timestamp, integer, jsonb, unique, boolean, index, primaryKey, uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import type { ExcalidrawData, ProblemFigure } from '@mathchois/shared';
 
@@ -292,6 +292,19 @@ export const coachingAttempts = pgTable('coaching_attempts', {
   index('idx_coaching_attempts_student').on(t.studentId, t.createdAt),
   index('idx_coaching_attempts_page_student').on(t.pageId, t.studentId),
   index('idx_coaching_attempts_problem').on(t.problemId),
+]);
+
+// ─── coaching_quota (문제별 AI 사용 횟수 리셋 기준) ────
+// 사용 횟수 = reset_at 이후 생성된 coaching_attempts 수. 행이 없으면 전체를 카운트.
+
+export const coachingQuota = pgTable('coaching_quota', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  studentId: uuid('student_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  pageId: uuid('page_id').notNull().references(() => pages.id, { onDelete: 'cascade' }),
+  resetAt: timestamp('reset_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('uq_coaching_quota_student_page').on(t.studentId, t.pageId),
 ]);
 
 // ─── visualizations (시각화자료 라이브러리) ──────────
