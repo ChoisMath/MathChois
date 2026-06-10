@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
 import ProblemView from '../../components/common/ProblemView';
 import CoachingPanel from '../../components/common/CoachingPanel';
+import AttemptStack from '../../components/coaching/AttemptStack';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, TOUCH_CSS, GRID_STYLE, EXCALIDRAW_UI_OPTIONS } from '../../lib/excalidrawUtils';
@@ -68,7 +69,8 @@ export default function CoachingViewer({
   const [problem, setProblem] = useState(null);
   const [solutionLatex, setSolutionLatex] = useState('');
   const [workImageUrl, setWorkImageUrl] = useState(null);
-  const [coaching, setCoaching] = useState(null);
+  const [attempts, setAttempts] = useState([]);
+  const [usage, setUsage] = useState({ used: 0, limit: 3, resetAt: null });
   const [showOriginal, setShowOriginal] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -102,20 +104,24 @@ export default function CoachingViewer({
     lastSavedRef.current = null;
     lastRoNoteSigRef.current = null;
     lastRoAttemptIdRef.current = null;
-    setProblem(null); setSolutionLatex(''); setWorkImageUrl(null); setCoaching(null); setError('');
+    setProblem(null); setSolutionLatex(''); setWorkImageUrl(null); setAttempts([]); setUsage({ used: 0, limit: 3, resetAt: null }); setError('');
     (async () => {
       try {
         const prob = await getProblemForCoaching(currentPage.aiProblemId);
         if (alive) setProblem(prob);
         // ②교사필기(readOnly·학생 미지정)는 시도 조회 생략, ③학생 코멘트는 해당 학생 시도 조회
         if (readOnly && !viewStudentId) return;
-        const attempts = readOnly
+        const data = readOnly
           ? await getStudentPageAttempts(classroomId, viewStudentId, pageId)
           : await listAttempts(pageId);
-        if (alive && attempts?.length) {
-          setCoaching(attempts[0]);
-          setSolutionLatex(attempts[0].solutionLatex || '');
-          if (attempts[0].workImageUrl) setWorkImageUrl(attempts[0].workImageUrl);
+        if (alive && data) {
+          setAttempts(data.attempts || []);
+          setUsage({ used: data.used ?? 0, limit: data.limit ?? 3, resetAt: data.resetAt ?? null });
+          const latest = (data.attempts || [])[0];
+          if (latest) {
+            setSolutionLatex(latest.solutionLatex || '');
+            if (latest.workImageUrl) setWorkImageUrl(latest.workImageUrl);
+          }
         }
       } catch (err) { if (alive) setError(err.message); }
     })();
@@ -268,11 +274,12 @@ export default function CoachingViewer({
 
     /* 코칭 시도(새 attempt) */
     try {
-      const attempts = await getStudentPageAttempts(classroomId, viewStudentId, pageId);
-      const latest = attempts?.[0];
+      const data = await getStudentPageAttempts(classroomId, viewStudentId, pageId);
+      const latest = data?.attempts?.[0];
       if (latest && latest.id !== lastRoAttemptIdRef.current) {
         lastRoAttemptIdRef.current = latest.id;
-        setCoaching(latest);
+        setAttempts(data.attempts || []);
+        setUsage({ used: data.used ?? 0, limit: data.limit ?? 3, resetAt: data.resetAt ?? null });
         setSolutionLatex(latest.solutionLatex || '');
         if (latest.workImageUrl) setWorkImageUrl(latest.workImageUrl);
       }
@@ -319,19 +326,21 @@ export default function CoachingViewer({
   }
 
   async function handleConvert() {
+    if (usage.used >= usage.limit) { setError('AI 검토 횟수를 모두 사용했습니다. 선생님께 리셋을 요청하세요.'); return; }
     setBusy('convert'); setError('');
     try {
       const blob = await exportWorkBlob();
       if (!blob) { setError('먼저 풀이를 작성하세요.'); setBusy(''); return; }
       const url = await uploadWorkImage(blob, `${user.id}/${pageId}`);
       setWorkImageUrl(url);
-      const { latex } = await convertSolution(url);
+      const { latex } = await convertSolution(url, pageId);
       setSolutionLatex(latex);
     } catch (err) { setError(err.message); }
     setBusy('');
   }
 
   async function handleReview() {
+    if (usage.used >= usage.limit) { setError('AI 검토 횟수를 모두 사용했습니다. 선생님께 리셋을 요청하세요.'); return; }
     if (!solutionLatex) { setError('먼저 수식 전환을 완료하세요.'); return; }
     setBusy('review'); setError('');
     try {
@@ -342,8 +351,9 @@ export default function CoachingViewer({
         url = await uploadWorkImage(blob, `${user.id}/${pageId}`);
         setWorkImageUrl(url);
       }
-      const attempt = await reviewSolution(pageId, url, solutionLatex);
-      setCoaching(attempt);
+      const res = await reviewSolution(pageId, url, solutionLatex);
+      setAttempts((prev) => [res.attempt, ...prev]);
+      setUsage({ used: res.used, limit: res.limit, resetAt: res.resetAt });
     } catch (err) { setError(err.message); }
     setBusy('');
   }
@@ -370,13 +380,6 @@ export default function CoachingViewer({
         )}
       </section>
 
-      {readOnly && workImageUrl && (
-        <section>
-          <h3 className="mb-2 font-bold whitespace-nowrap">학생 제출 풀이</h3>
-          <img src={workImageUrl} alt="학생 제출 풀이" className="w-full rounded-lg border" />
-        </section>
-      )}
-
       <section>
         <h3 className="mb-2 font-bold whitespace-nowrap">{readOnly ? '변환된 풀이' : '변환된 풀이 (수정 가능)'}</h3>
         {readOnly ? (
@@ -385,6 +388,11 @@ export default function CoachingViewer({
             : <p className="text-sm text-gray-400">아직 학생이 제출한 풀이가 없습니다.</p>
         ) : (
           <>
+            {usage.used >= usage.limit && (
+              <p className="mb-2 rounded-md bg-rose-50 p-2 text-sm text-rose-600">
+                AI 검토 횟수({usage.limit}회)를 모두 사용했습니다. 선생님께 리셋을 요청하세요.
+              </p>
+            )}
             <textarea value={solutionLatex} onChange={(e) => setSolutionLatex(e.target.value)} rows={4}
               className="w-full rounded-lg border p-2 font-mono text-sm" placeholder="[수식전환]을 누르면 채워집니다" />
             {solutionLatex && (
@@ -395,9 +403,9 @@ export default function CoachingViewer({
       </section>
 
       <section>
-        <h3 className="mb-2 font-bold whitespace-nowrap">AI 검토</h3>
-        {coaching
-          ? <CoachingPanel attempt={coaching} showTeacherNotes={readOnly} />
+        <h3 className="mb-2 font-bold whitespace-nowrap">AI 검토 기록 {attempts.length > 0 && `(${attempts.length})`}</h3>
+        {attempts.length > 0
+          ? <AttemptStack attempts={attempts} showTeacherNotes={readOnly} />
           : <p className="text-sm text-gray-400">{readOnly ? '아직 학생이 AI 검토를 받지 않았습니다.' : '[AI검토요청]을 누르면 코칭이 표시됩니다.'}</p>}
       </section>
     </div>
@@ -418,12 +426,16 @@ export default function CoachingViewer({
         {error && <span className="text-sm text-rose-600 whitespace-nowrap">{error}</span>}
         {!readOnly && (
           <>
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${
+              usage.used >= usage.limit ? 'bg-rose-100 text-rose-700' : 'bg-indigo-50 text-indigo-600'}`}>
+              AI 코칭 {usage.used} / {usage.limit}
+            </span>
             <span className="text-xs text-gray-400 whitespace-nowrap">{saveStatus === 'saving' ? '저장 중…' : '저장됨'}</span>
-            <button onClick={handleConvert} disabled={!!busy}
+            <button onClick={handleConvert} disabled={!!busy || usage.used >= usage.limit}
               className="flex items-center gap-1 px-3 min-h-11 border rounded-md disabled:opacity-50 whitespace-nowrap">
               {busy === 'convert' ? <Loader size={16} className="animate-spin" /> : <Wand2 size={16} />} 수식전환
             </button>
-            <button onClick={handleReview} disabled={!!busy}
+            <button onClick={handleReview} disabled={!!busy || usage.used >= usage.limit}
               className="flex items-center gap-1 px-3 min-h-11 bg-blue-600 text-white rounded-md disabled:opacity-50 whitespace-nowrap">
               {busy === 'review' ? <Loader size={16} className="animate-spin" /> : <Sparkles size={16} />} AI검토요청
             </button>
