@@ -31,7 +31,6 @@ export default function TeacherStudyPageRouter() {
     return (
       <TeacherCoachingReview
         classroomId={classroomId}
-        chapterId={chapterId}
         pages={state.pages}
         currentPage={state.page}
         onNavigate={(p) => navigate(`${base}/${p.id}`)}
