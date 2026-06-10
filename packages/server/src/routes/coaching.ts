@@ -4,7 +4,7 @@ import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import { readFile, urlToStoragePath } from '../services/storage.service.js';
 import { convertSolutionToLatex, reviewSolution, AI_MODEL_NAME } from '../services/ai.service.js';
-import { createAttempt, listAttempts, listStudentHistory, listClassroomStudentHistory } from '../services/coaching.service.js';
+import { createAttempt, listAttempts, listStudentHistory, listClassroomStudentHistory, getAttemptUsage, resetQuota, listPageStudents, COACHING_ATTEMPT_LIMIT } from '../services/coaching.service.js';
 import { getPageById } from '../services/page.service.js';
 import { getProblem, updateProblem } from '../services/problem.service.js';
 import { isClassroomOwner, isClassroomMember } from '../services/classroom.service.js';
@@ -37,8 +37,12 @@ async function loadWorkImage(imageUrl: string) {
 export async function coachingRoutes(app: FastifyInstance) {
   const auth = { preHandler: [authenticate] };
 
-  app.post<{ Body: { imageUrl: string } }>('/api/coaching/convert', auth, async (req) => {
-    const { imageUrl } = z.object({ imageUrl: z.string() }).parse(req.body);
+  app.post<{ Body: { imageUrl: string; pageId: string } }>('/api/coaching/convert', auth, async (req, reply) => {
+    const { imageUrl, pageId } = z.object({ imageUrl: z.string(), pageId: z.string() }).parse(req.body);
+    const usage = await getAttemptUsage(req.user.sub, pageId);
+    if (usage.used >= usage.limit) {
+      return reply.status(429).send({ error: `AI 검토 횟수(${usage.limit}회)를 모두 사용했습니다. 선생님께 리셋을 요청하세요.` });
+    }
     const { base64, mimeType } = await loadWorkImage(imageUrl);
     return convertSolutionToLatex(mimeType, base64);
   });
@@ -48,6 +52,11 @@ export async function coachingRoutes(app: FastifyInstance) {
     const { pageId, workImageUrl, solutionLatex } = z.object({
       pageId: z.string(), workImageUrl: z.string(), solutionLatex: z.string().min(1),
     }).parse(req.body);
+
+    const usage = await getAttemptUsage(req.user.sub, pageId);
+    if (usage.used >= usage.limit) {
+      return reply.status(429).send({ error: `AI 검토 횟수(${usage.limit}회)를 모두 사용했습니다. 선생님께 리셋을 요청하세요.` });
+    }
 
     const page = await getPageById(pageId);
     if (!page?.aiProblemId) return reply.status(400).send({ error: 'AI 코칭 페이지가 아닙니다' });
@@ -74,7 +83,7 @@ export async function coachingRoutes(app: FastifyInstance) {
       await updateProblem(page.aiProblemId, { coachingSvg: newSvg });
     }
 
-    return createAttempt({
+    const attempt = await createAttempt({
       pageId,
       problemId: page.aiProblemId,
       studentId: req.user.sub,
@@ -89,10 +98,14 @@ export async function coachingRoutes(app: FastifyInstance) {
       coachingSvg: newSvg,
       aiModel: AI_MODEL_NAME,
     });
+    const after = await getAttemptUsage(req.user.sub, pageId);
+    return { attempt, used: after.used, limit: after.limit, resetAt: after.resetAt };
   });
 
   app.get<{ Params: { pageId: string } }>('/api/coaching/pages/:pageId/attempts', auth, async (req) => {
-    return listAttempts(req.params.pageId, req.user.sub);
+    const attempts = await listAttempts(req.params.pageId, req.user.sub);
+    const usage = await getAttemptUsage(req.user.sub, req.params.pageId);
+    return { attempts, used: usage.used, limit: usage.limit, resetAt: usage.resetAt };
   });
 
   // 교사가 특정 학생의 페이지별 코칭 시도를 조회 (읽기 전용) — 클래스 소유·소속 검증
@@ -107,7 +120,9 @@ export async function coachingRoutes(app: FastifyInstance) {
       if (!(await isClassroomMember(classroomId, studentId))) {
         return reply.status(403).send({ error: '이 클래스의 학생이 아닙니다' });
       }
-      return listAttempts(pageId, studentId);
+      const attempts = await listAttempts(pageId, studentId);
+      const usage = await getAttemptUsage(studentId, pageId);
+      return { attempts, used: usage.used, limit: usage.limit, resetAt: usage.resetAt };
     },
   );
 
@@ -137,6 +152,37 @@ export async function coachingRoutes(app: FastifyInstance) {
         page: q.page ? parseInt(q.page, 10) : undefined,
         pageSize: q.pageSize ? parseInt(q.pageSize, 10) : undefined,
       });
+    },
+  );
+
+  // 교사: 학생의 페이지 횟수 리셋(reset_at = now). attempt 기록은 보존.
+  app.post<{ Params: { classroomId: string; studentId: string; pageId: string } }>(
+    '/api/coaching/classrooms/:classroomId/students/:studentId/pages/:pageId/reset',
+    { preHandler: [authenticate, requireRole('teacher')] },
+    async (req, reply) => {
+      const { classroomId, studentId, pageId } = req.params;
+      if (!(await isClassroomOwner(classroomId, req.user.sub))) {
+        return reply.status(403).send({ error: '이 클래스의 담당 교사가 아닙니다' });
+      }
+      if (!(await isClassroomMember(classroomId, studentId))) {
+        return reply.status(403).send({ error: '이 클래스의 학생이 아닙니다' });
+      }
+      await resetQuota(studentId, pageId);
+      const usage = await getAttemptUsage(studentId, pageId);
+      return { used: usage.used, limit: usage.limit, resetAt: usage.resetAt };
+    },
+  );
+
+  // 교사: 해당 페이지에 시도한 학생 목록 + 각자 사용 횟수.
+  app.get<{ Params: { classroomId: string; pageId: string } }>(
+    '/api/coaching/classrooms/:classroomId/pages/:pageId/students',
+    { preHandler: [authenticate, requireRole('teacher')] },
+    async (req, reply) => {
+      const { classroomId, pageId } = req.params;
+      if (!(await isClassroomOwner(classroomId, req.user.sub))) {
+        return reply.status(403).send({ error: '이 클래스의 담당 교사가 아닙니다' });
+      }
+      return listPageStudents(pageId);
     },
   );
 }
