@@ -3,7 +3,7 @@ import { viewportCoordsToSceneCoords } from '@excalidraw/excalidraw';
 import { buildStrokePath, makeFreedrawElement } from '../lib/wetInkStroke';
 
 /**
- * wet-ink 오버레이 (PoC, StudyViewer 이미지 페이지 전용).
+ * wet-ink 오버레이 (5개 필기 뷰어 공용, 기본 ON · ?wetink=0 비상 차단).
  *
  * Excalidraw 는 펜이 움직일 때마다 전체 씬을 재렌더해 태블릿에서 끊긴다. 펜 자유필기 입력을
  * window 캡처에서 가로채(= Excalidraw 로의 전파 차단) 진행 중인 획을 전용 오버레이 캔버스에
@@ -17,8 +17,14 @@ import { buildStrokePath, makeFreedrawElement } from '../lib/wetInkStroke';
  * (삼각형 모드도 Excalidraw activeTool 은 freedraw 이므로 penActiveRef 로 논리 도구를 구분한다.
  *  마우스/손가락/배럴버튼/지우개·도형은 가로채지 않아 기존 동작 유지.)
  */
-export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActiveRef, enabledRef }) {
+export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActiveRef }) {
   useEffect(() => {
+    // 기본 ON. 비상 차단 스위치: ?wetink=0 으로 끄고(localStorage 유지) ?wetink=1 로 되켠다.
+    const wp = new URLSearchParams(window.location.search).get('wetink');
+    if (wp === '0') localStorage.setItem('mc_wetink_off', '1');
+    else if (wp === '1') localStorage.removeItem('mc_wetink_off');
+    if (localStorage.getItem('mc_wetink_off') === '1') return undefined;
+
     let drawing = false;
     let pointerId = null;
     let pts = [];          // [clientX, clientY]
@@ -56,7 +62,7 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       const size = (app?.currentItemStrokeWidth || 1) * zoom * 4.25; // 화면 px (Excalidraw 렌더와 동일)
       const color = app?.currentItemStrokeColor || '#000000';
       const screenPts = pts.map((p) => [p[0] - rect.left, p[1] - rect.top]);
-      const path = buildStrokePath(screenPts, pressures, { size, simulatePressure: false });
+      const path = buildStrokePath(screenPts, pressures, { size, simulatePressure: false, last: true });
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
       c.clearRect(0, 0, rect.width, rect.height);
       if (path) { c.fillStyle = color; c.fill(path); }
@@ -64,7 +70,7 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
     const scheduleRender = () => { if (!rafId) rafId = requestAnimationFrame(render); };
 
     const shouldIntercept = (e) =>
-      enabledRef.current && drawModeRef.current && penActiveRef.current &&
+      drawModeRef.current && penActiveRef.current &&
       e.pointerType === 'pen' && e.button === 0 &&
       !!overlayRef.current && !!e.target.closest?.('.excalidraw');
 
@@ -130,5 +136,5 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       window.removeEventListener('pointerup', onUp, { capture: true });
       window.removeEventListener('pointercancel', onUp, { capture: true });
     };
-  }, [excalidrawAPIRef, overlayRef, drawModeRef, penActiveRef, enabledRef]);
+  }, [excalidrawAPIRef, overlayRef, drawModeRef, penActiveRef]);
 }

@@ -27,6 +27,7 @@ import {
   clearImageCacheForUrl,
 } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
+import { useWetInk } from '../../hooks/useWetInk';
 import HtmlToolOverlay from '../../components/study/HtmlToolOverlay';
 import { HTML_OVERLAY_LOCK_BASE } from '../../lib/htmlOverlay';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
@@ -60,6 +61,8 @@ const StudentWorkViewer = () => {
   const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
 
   const excalidrawAPIRef      = useRef(null);
+  const penActiveRef     = useRef(true);   // 논리 도구가 펜 자유필기인지
+  const wetInkOverlayRef = useRef(null);   // wet-ink 미리보기 오버레이 캔버스
   const saveTimerRef          = useRef(null);
   const currentPageRef        = useRef(null);
   const bgPositionRef         = useRef(null);
@@ -217,6 +220,7 @@ const StudentWorkViewer = () => {
   }, []);
 
   const { triggerPalmRejectionWarmup, isGesturingRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef: lockActiveRef, baseStrokeWidthRef, onUserDrawStart: handleUserDrawStart });
+  useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: commentModeRef, penActiveRef });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [STUDENT_NOTE_PREFIX] });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [STUDENT_NOTE_PREFIX] });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
@@ -694,6 +698,7 @@ const StudentWorkViewer = () => {
             onToggleScreenLock={handleToggleScreenLock}
             onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
             onReloadImage={handleReloadImage}
+            onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw'; }}
             onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
           />
         )
@@ -799,6 +804,13 @@ const StudentWorkViewer = () => {
             <div className="flex items-center justify-center h-full text-gray-400">
               페이지가 없습니다.
             </div>
+          )}
+          {currentPage && (
+            <canvas
+              ref={wetInkOverlayRef}
+              className="absolute inset-0 w-full h-full pointer-events-none"
+              style={{ zIndex: 3 }}
+            />
           )}
         </div>
         )}

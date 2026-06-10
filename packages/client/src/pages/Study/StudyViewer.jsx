@@ -394,14 +394,6 @@ const StudyViewer = () => {
   const pendingSaveDataRef   = useRef(null);
   const penActiveRef         = useRef(true);  // 논리 도구가 펜 자유필기인지 (wet-ink 가로채기 게이트)
   const wetInkOverlayRef     = useRef(null);  // wet-ink 미리보기 오버레이 캔버스
-  /* wet-ink PoC 게이트: 기본 OFF. ?wetink=1 로 켜고(localStorage 유지), ?wetink=0 으로 끈다. */
-  const wetInkEnabledRef     = useRef(false);
-  useEffect(() => {
-    const p = new URLSearchParams(window.location.search).get('wetink');
-    if (p === '1') localStorage.setItem('mc_wetink', '1');
-    else if (p === '0') localStorage.removeItem('mc_wetink');
-    wetInkEnabledRef.current = localStorage.getItem('mc_wetink') === '1';
-  }, []);
   const lockActiveRef = useRef(false); // screenLocked OR HTML 페이지(오버레이 뷰포트 고정)
   useEffect(() => {
     screenLockedRef.current = screenLocked;
@@ -418,7 +410,7 @@ const StudyViewer = () => {
 
   const { triggerPalmRejectionWarmup, isGesturingRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef: lockActiveRef, baseStrokeWidthRef, onUserDrawStart: handleUserDrawStart });
   /* wet-ink PoC: HTML 오버레이가 아닌 이미지 페이지에서만 동작(오버레이 캔버스가 그 분기에만 존재) */
-  useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef, enabledRef: wetInkEnabledRef });
+  useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
