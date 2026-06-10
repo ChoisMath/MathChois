@@ -4,29 +4,25 @@ import tailwindcss from '@tailwindcss/vite'
 
 /*
  * Excalidraw 0.18 은 freedraw 외곽선(perfect-freehand) 파라미터를 하드코딩하고 외부로 노출하지 않는다
- * (getFreeDrawSvgPath 의 thinning/streamline/easing 등). 학생들이 "획 끝이 뾰족하고 굵기가 들쭉날쭉"하다고
- * 평가해, 태블릿 튜닝으로 확정한 값으로 옵션 객체를 통째로 치환한다.
+ * (getFreeDrawSvgPath). 학생 평가 결과 원본 펜 느낌을 유지하되 손떨림 보정(streamline)만 끈다:
+ * streamline 0.5 -> 0 (입력 직결, 보정 지연 제거). thinning(0.6)/smoothing/simulatePressure/easing/taper 등 나머지는 원본 그대로.
  * 번들된 dist 청크를 빌드 시 치환한다(patch-package 대신 — Dockerfile 이 npm ci --ignore-scripts 라 postinstall 미실행).
- * 배포 빌드는 production export(dist/prod) 만 쓰므로 minified 형태에 맞춘다. element 변수(e)는 캡처해 보존.
- * 패턴은 freedraw 옵션 객체 전체에 앵커되어 다른 곳(레이저 트레일 등)을 건드리지 않는다.
+ * 패턴은 freedraw 옵션 trio(thinning/smoothing/streamline)에만 앵커되어 다른 streamline 값(레이저 트레일 등)을 건드리지 않는다.
  */
-function excalidrawGelPen() {
-  const FREEDRAW_OPTS = /simulatePressure:\s*(\w+)\.simulatePressure,\s*size:\s*\1\.strokeWidth\s*\*\s*4\.25,\s*thinning:\s*0?\.6,\s*smoothing:\s*0?\.5,\s*streamline:\s*0?\.5,\s*easing:\s*\w+\s*=>\s*Math\.sin\([^)]*\)\s*,\s*last:\s*!!\s*\1\.lastCommittedPoint/
-  const REPLACEMENT =
-    'simulatePressure:true,size:$1.strokeWidth*4.25,thinning:.46,smoothing:.21,streamline:.49,' +
-    'easing:t=>t,start:{taper:0,cap:true},end:{taper:11,cap:true},last:!!$1.lastCommittedPoint'
+function excalidrawPenTweak() {
+  const FREEDRAW_OPTS = /thinning:\s*0?\.6,(\s*)smoothing:\s*0?\.5,(\s*)streamline:\s*0?\.5/
   let applied = 0
   return {
-    name: 'excalidraw-gel-pen',
+    name: 'excalidraw-pen-tweak',
     enforce: 'pre',
     transform(code, id) {
       if (!id.includes('@excalidraw/excalidraw') || !FREEDRAW_OPTS.test(code)) return null
       applied += 1
-      return code.replace(FREEDRAW_OPTS, REPLACEMENT)
+      return code.replace(FREEDRAW_OPTS, 'thinning:.6,$1smoothing:.5,$2streamline:0')
     },
     buildEnd() {
       if (applied === 0) {
-        this.warn('[excalidraw-gel-pen] freedraw 옵션 패턴 미발견 — Excalidraw 버전 변경 확인 필요(필기감 패치 미적용)')
+        this.warn('[excalidraw-pen-tweak] freedraw 옵션 패턴 미발견 — Excalidraw 버전 변경 확인 필요(streamline 패치 미적용)')
       }
     },
   }
@@ -35,7 +31,7 @@ function excalidrawGelPen() {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    excalidrawGelPen(),
+    excalidrawPenTweak(),
     react(),
     tailwindcss(),
   ],
