@@ -1,12 +1,73 @@
-import { eq, and, desc, gte, lt, sql, type SQL } from 'drizzle-orm';
+import { eq, and, desc, gte, gt, lt, sql, type SQL } from 'drizzle-orm';
 import { db } from '../config/database.js';
-import { coachingAttempts, problems, pages, chapters } from '../db/schema.js';
+import { coachingAttempts, coachingQuota, problems, pages, chapters, profiles } from '../db/schema.js';
+
+export const COACHING_ATTEMPT_LIMIT = 3;
 
 export type CoachingAttemptInsert = typeof coachingAttempts.$inferInsert;
 
 export async function createAttempt(values: CoachingAttemptInsert) {
   const [row] = await db.insert(coachingAttempts).values(values).returning();
   return row;
+}
+
+/** (학생, 페이지)의 현재 사용 횟수. reset_at 이후 attempt만 카운트(행 없으면 전체). */
+export async function getAttemptUsage(studentId: string, pageId: string) {
+  const [q] = await db
+    .select({ resetAt: coachingQuota.resetAt })
+    .from(coachingQuota)
+    .where(and(eq(coachingQuota.studentId, studentId), eq(coachingQuota.pageId, pageId)))
+    .limit(1);
+  const resetAt = q?.resetAt ?? null;
+  const conds: SQL[] = [eq(coachingAttempts.pageId, pageId), eq(coachingAttempts.studentId, studentId)];
+  if (resetAt) conds.push(gt(coachingAttempts.createdAt, resetAt));
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(coachingAttempts)
+    .where(and(...conds));
+  return { used: count, limit: COACHING_ATTEMPT_LIMIT, resetAt: resetAt ? resetAt.toISOString() : null };
+}
+
+/** 교사 리셋: reset_at 을 now() 로 upsert. attempt 는 보존(카운트 기준만 이동). */
+export async function resetQuota(studentId: string, pageId: string) {
+  await db
+    .insert(coachingQuota)
+    .values({ studentId, pageId })
+    .onConflictDoUpdate({
+      target: [coachingQuota.studentId, coachingQuota.pageId],
+      set: { resetAt: sql`now()`, updatedAt: sql`now()` },
+    });
+}
+
+/** 해당 페이지에 시도한 학생별 요약(used = reset_at 이후 카운트). 시도 0 학생은 제외. */
+export async function listPageStudents(pageId: string) {
+  const usedExpr = sql<number>`count(*) filter (where ${coachingQuota.resetAt} is null or ${coachingAttempts.createdAt} > ${coachingQuota.resetAt})::int`;
+  const rows = await db
+    .select({
+      studentId: coachingAttempts.studentId,
+      name: profiles.name,
+      used: usedExpr,
+      resetAt: coachingQuota.resetAt,
+      lastAttemptAt: sql<string>`max(${coachingAttempts.createdAt})`,
+    })
+    .from(coachingAttempts)
+    .innerJoin(profiles, eq(coachingAttempts.studentId, profiles.id))
+    .leftJoin(
+      coachingQuota,
+      and(eq(coachingQuota.studentId, coachingAttempts.studentId), eq(coachingQuota.pageId, coachingAttempts.pageId)),
+    )
+    .where(eq(coachingAttempts.pageId, pageId))
+    .groupBy(coachingAttempts.studentId, profiles.name, coachingQuota.resetAt)
+    .orderBy(profiles.name);
+
+  return rows.map((r) => ({
+    studentId: r.studentId,
+    name: r.name,
+    used: r.used,
+    limit: COACHING_ATTEMPT_LIMIT,
+    resetAt: r.resetAt ? new Date(r.resetAt).toISOString() : null,
+    lastAttemptAt: r.lastAttemptAt,
+  }));
 }
 
 export async function listAttempts(pageId: string, studentId: string) {
