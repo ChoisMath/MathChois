@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, timestamp, integer, jsonb, unique, boolean, index, primaryKey, uniqueIndex,
+  pgTable, uuid, text, timestamp, integer, jsonb, unique, boolean, index, primaryKey,
 } from 'drizzle-orm/pg-core';
 import type { ExcalidrawData, ProblemFigure } from '@mathchois/shared';
 
@@ -304,7 +304,7 @@ export const coachingQuota = pgTable('coaching_quota', {
   resetAt: timestamp('reset_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
-  uniqueIndex('uq_coaching_quota_student_page').on(t.studentId, t.pageId),
+  unique('uq_coaching_quota_student_page').on(t.studentId, t.pageId),
 ]);
 
 // ─── visualizations (시각화자료 라이브러리) ──────────

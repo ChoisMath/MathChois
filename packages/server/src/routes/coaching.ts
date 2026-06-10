@@ -182,7 +182,7 @@ export async function coachingRoutes(app: FastifyInstance) {
       if (!(await isClassroomOwner(classroomId, req.user.sub))) {
         return reply.status(403).send({ error: '이 클래스의 담당 교사가 아닙니다' });
       }
-      return listPageStudents(pageId);
+      return listPageStudents(pageId, classroomId);
     },
   );
 }

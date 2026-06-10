@@ -40,7 +40,7 @@ export async function resetQuota(studentId: string, pageId: string) {
 }
 
 /** 해당 페이지에 시도한 학생별 요약(used = reset_at 이후 카운트). 시도 0 학생은 제외. */
-export async function listPageStudents(pageId: string) {
+export async function listPageStudents(pageId: string, classroomId: string) {
   const usedExpr = sql<number>`count(*) filter (where ${coachingQuota.resetAt} is null or ${coachingAttempts.createdAt} > ${coachingQuota.resetAt})::int`;
   const rows = await db
     .select({
@@ -52,11 +52,13 @@ export async function listPageStudents(pageId: string) {
     })
     .from(coachingAttempts)
     .innerJoin(profiles, eq(coachingAttempts.studentId, profiles.id))
+    .innerJoin(pages, eq(coachingAttempts.pageId, pages.id))
+    .innerJoin(chapters, eq(pages.chapterId, chapters.id))
     .leftJoin(
       coachingQuota,
       and(eq(coachingQuota.studentId, coachingAttempts.studentId), eq(coachingQuota.pageId, coachingAttempts.pageId)),
     )
-    .where(eq(coachingAttempts.pageId, pageId))
+    .where(and(eq(coachingAttempts.pageId, pageId), eq(chapters.classroomId, classroomId)))
     .groupBy(coachingAttempts.studentId, profiles.name, coachingQuota.resetAt)
     .orderBy(profiles.name);
 
@@ -66,7 +68,7 @@ export async function listPageStudents(pageId: string) {
     used: r.used,
     limit: COACHING_ATTEMPT_LIMIT,
     resetAt: r.resetAt ? new Date(r.resetAt).toISOString() : null,
-    lastAttemptAt: r.lastAttemptAt,
+    lastAttemptAt: new Date(r.lastAttemptAt).toISOString(),
   }));
 }
 
