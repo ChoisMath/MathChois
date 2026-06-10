@@ -391,6 +391,11 @@ const StudyViewer = () => {
   const lastZoomRef          = useRef(1);
   const isAdjustingWidthRef  = useRef(false);
   const pendingSaveDataRef   = useRef(null);
+  /* [실험] 드로잉 끊김 바이섹션용 — 무거운 onChange 파이프라인 스로틀 상태 */
+  const lastPipelineRunRef    = useRef(0);
+  const pipelineTrailTimerRef = useRef(null);
+  const inTrailingFlushRef    = useRef(false);
+  const changeHandlerRef      = useRef(null);
   const lockActiveRef = useRef(false); // screenLocked OR HTML 페이지(오버레이 뷰포트 고정)
   useEffect(() => {
     screenLockedRef.current = screenLocked;
@@ -686,6 +691,25 @@ const StudyViewer = () => {
     /* 뷰 모드에서는 저장하지 않음 */
     if (!drawModeRef.current) return;
 
+    /* [실험: 드로잉 끊김 바이섹션] 그리는 동안 무거운 파이프라인(스크리블/스무딩/히스토리/직렬화/저장)을
+       leading+trailing 스로틀로 ~140ms 간격만 실행. 끊김이 줄면 앱 파이프라인이 원인, 그대로면 Excalidraw 렌더가 원인.
+       trailing flush 로 획이 멈춘 직후 1회 실행되어 마지막 상태는 항상 저장 → 데이터 손실 없음. */
+    if (!inTrailingFlushRef.current) {
+      const now = performance.now();
+      if (now - lastPipelineRunRef.current < 140) {
+        clearTimeout(pipelineTrailTimerRef.current);
+        pipelineTrailTimerRef.current = setTimeout(() => {
+          const api = excalidrawAPIRef.current;
+          if (!api || !changeHandlerRef.current) return;
+          inTrailingFlushRef.current = true;
+          changeHandlerRef.current(api.getSceneElements(), api.getAppState());
+          inTrailingFlushRef.current = false;
+        }, 160);
+        return;
+      }
+      lastPipelineRunRef.current = now;
+    }
+
     /* 문지르기 지우개 감지 */
     checkForScribble(elements, appState);
     checkForSmoothing(elements, appState);
@@ -761,6 +785,7 @@ const StudyViewer = () => {
       if (mountedRef.current) setSaveStatus('saved');
     }, 1500);
   }, [chapterId]);
+  changeHandlerRef.current = handleExcalidrawChange;
 
   const handleToggleScreenLock = useCallback(() => {
     setScreenLocked(prev => {
