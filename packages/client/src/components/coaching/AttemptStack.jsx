@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import ProblemView from '../common/ProblemView';
 import CoachingPanel from '../common/CoachingPanel';
 
@@ -29,8 +30,13 @@ export default function AttemptStack({ attempts, showTeacherNotes = false }) {
           <div key={a.id} className="rounded-xl border bg-white">
             <button
               onClick={() => !isLatest && toggle(a.id)}
+              disabled={isLatest}
+              aria-expanded={open}
               className={`flex w-full flex-wrap items-center gap-2 p-2 text-left ${isLatest ? 'cursor-default' : ''}`}
             >
+              {!isLatest && (
+                <ChevronRight size={14} className={`shrink-0 text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`} />
+              )}
               <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600 whitespace-nowrap">
                 {round}회차
               </span>
