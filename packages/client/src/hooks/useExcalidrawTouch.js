@@ -17,6 +17,9 @@ import { BG_ELEMENT_ID } from '../lib/excalidrawUtils';
  * 60~120Hz 로 들어오는데, 매 이벤트마다 updateScene → 전체 리렌더 + onChange 를 돌리면
  * 메인 스레드가 포화되어 줌이 "로딩처럼" 끊기고 Socket.IO 하트비트가 굶어 접속이 끊긴다.
  * 제스처 누적 뷰포트는 viewportRef 가 단일 출처로 들고, 프레임당 한 번만 반영한다.
+ * 줌 반영 시에는 shouldCacheIgnoreZoom=true 를 함께 넣는다 — Excalidraw 는 줌이 바뀌면
+ * 모든 element 의 캔버스 캐시를 재생성하므로(이미지+필기 페이지에서 프레임당 수십 MB 할당
+ * → OOM 튕김), 내장 핀치줌처럼 제스처 동안 캐시를 스케일만 하고 종료 시 1회 재렌더한다.
  * 제스처 동안 isGesturingRef=true 를 노출해 호출 뷰어의 onChange 가 무거운 저장/지우개/히스토리
  * 파이프라인을 건너뛰게 한다(뷰포트만 바뀌고 element 는 그대로이므로).
  *
@@ -74,7 +77,13 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       const excApi = excalidrawAPIRef.current;
       if (!pend || !excApi) return;
       const next = { scrollX: pend.scrollX, scrollY: pend.scrollY };
-      if (pend.zoom != null) next.zoom = { value: pend.zoom };
+      if (pend.zoom != null) {
+        next.zoom = { value: pend.zoom };
+        // Excalidraw 는 줌 값이 바뀌면 모든 element 의 오프스크린 캔버스 캐시를 재생성한다
+        // (이미지 배경은 프레임당 수십 MB 할당 → 태블릿에서 OOM 튕김/ErrorBoundary).
+        // 내장 핀치줌과 동일하게 제스처 동안 캐시 재생성을 끄고 기존 캐시를 스케일만 한다.
+        next.shouldCacheIgnoreZoom = true;
+      }
       if (pend.strokeWidth != null) next.currentItemStrokeWidth = pend.strokeWidth;
       excApi.updateScene({ appState: next, commitToHistory: false });
     };
@@ -88,6 +97,11 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       pinchStateRef.current = null;
       if (rafIdRef.current) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = 0; }
       flushViewport(); // 마지막 위치 즉시 반영(isGesturing=false 상태로 onChange 한 번 정상 통과 → settle)
+      // 제스처 종료 후 캐시 재생성 허용 → 최종 줌에서 한 번만 선명하게 재렌더
+      const excApi = excalidrawAPIRef.current;
+      if (excApi?.getAppState()?.shouldCacheIgnoreZoom) {
+        excApi.updateScene({ appState: { shouldCacheIgnoreZoom: false }, commitToHistory: false });
+      }
     };
 
     // 백스톱: 차단한 터치가 그래도 freedraw 를 시작했다면 그 획을 히스토리 오염 없이 제거.
