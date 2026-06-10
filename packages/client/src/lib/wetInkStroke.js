@@ -27,10 +27,12 @@ function getSvgPathFromStroke(points) {
 
 /* vite.config.js 의 excalidrawPenTweak 치환값과 일치해야 미리보기=commit. */
 const PF_BASE = {
-  thinning: 0,
+  thinning: 0.2,
   smoothing: 0.5,
-  streamline: 0,
-  easing: (t) => Math.sin((t * Math.PI) / 2),
+  streamline: 0.62,
+  easing: (t) => t,
+  start: { taper: 0, cap: true },
+  end: { taper: 0, cap: true },
 };
 
 /* Excalidraw getFreeDrawSvgPath 와 동일하게 입력 점을 구성한다. */
