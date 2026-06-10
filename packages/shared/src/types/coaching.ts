@@ -91,3 +91,26 @@ export interface CoachingHistoryFilters {
   page?: number;
   pageSize?: number;
 }
+
+export interface PageAttemptsResult {        // GET /api/coaching/.../pages/:pageId/attempts
+  attempts: CoachingAttempt[];
+  used: number;
+  limit: number;
+  resetAt: string | null;
+}
+
+export interface ReviewResult {              // POST /api/coaching/review 응답
+  attempt: CoachingAttempt;
+  used: number;
+  limit: number;
+  resetAt: string | null;
+}
+
+export interface CoachingStudentSummary {    // GET /api/coaching/.../pages/:pageId/students 항목
+  studentId: string;
+  name: string | null;
+  used: number;
+  limit: number;
+  resetAt: string | null;
+  lastAttemptAt: string;
+}
