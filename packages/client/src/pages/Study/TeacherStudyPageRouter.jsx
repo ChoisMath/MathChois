@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import TeacherStudyViewer from './TeacherStudyViewer';
-import CoachingViewer from './CoachingViewer';
+import TeacherCoachingReview from './TeacherCoachingReview';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 
 /** 교사 필기 라우트: AI 코칭 페이지면 읽기 전용 CoachingViewer, 아니면 TeacherStudyViewer */
@@ -29,8 +29,8 @@ export default function TeacherStudyPageRouter() {
   if (state.page?.aiProblemId) {
     const base = `/teacher/classrooms/${classroomId}/chapters/${chapterId}/study/page`;
     return (
-      <CoachingViewer
-        readOnly
+      <TeacherCoachingReview
+        classroomId={classroomId}
         chapterId={chapterId}
         pages={state.pages}
         currentPage={state.page}

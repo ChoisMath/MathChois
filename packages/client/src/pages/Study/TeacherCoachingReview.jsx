@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Sparkles, Menu, RotateCcw, Loader } from 'lucide-react';
 import { extractYouTubeId, getYouTubeThumbnail } from '../../lib/youtubeUtils';
 import ProblemView from '../../components/common/ProblemView';
@@ -10,7 +10,7 @@ import { getPageStudents, getStudentPageAttempts, resetStudentQuota } from '../.
  * 교사 챕터 필기 경로의 AI 코칭 문항 화면.
  * 사이드바: 문항(페이지) 네비. 메인: 시도한 학생 카드(횟수 + 리셋 + 펼치면 누적 코칭).
  */
-export default function TeacherCoachingReview({ classroomId, chapterId, pages, currentPage, onNavigate, onExit }) {
+export default function TeacherCoachingReview({ classroomId, pages, currentPage, onNavigate, onExit }) {
   const pageId = currentPage.id;
   const [problem, setProblem] = useState(null);
   const [students, setStudents] = useState([]);
@@ -19,6 +19,7 @@ export default function TeacherCoachingReview({ classroomId, chapterId, pages, c
   const [attemptsById, setAttemptsById] = useState({});
   const [resettingId, setResettingId] = useState(null);
   const [error, setError] = useState('');
+  const aliveRef = useRef(true);
 
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
@@ -28,23 +29,23 @@ export default function TeacherCoachingReview({ classroomId, chapterId, pages, c
   const nextPage = idx >= 0 && idx < pages.length - 1 ? pages[idx + 1] : null;
   const go = (p) => p && onNavigate(p);
 
-  const loadStudents = useCallback(async () => {
-    setLoading(true); setError('');
-    try {
-      const [prob, list] = await Promise.all([
-        getProblemForCoaching(currentPage.aiProblemId),
-        getPageStudents(classroomId, pageId),
-      ]);
-      setProblem(prob);
-      setStudents(list || []);
-    } catch (err) { setError(err.message); }
-    setLoading(false);
-  }, [classroomId, pageId, currentPage.aiProblemId]);
-
   useEffect(() => {
-    setProblem(null); setStudents([]); setOpenId(null); setAttemptsById({});
-    loadStudents();
-  }, [loadStudents]);
+    aliveRef.current = true;
+    (async () => {
+      setProblem(null); setStudents([]); setOpenId(null); setAttemptsById({}); setLoading(true); setError('');
+      try {
+        const [prob, list] = await Promise.all([
+          getProblemForCoaching(currentPage.aiProblemId),
+          getPageStudents(classroomId, pageId),
+        ]);
+        if (!aliveRef.current) return;
+        setProblem(prob);
+        setStudents(list || []);
+      } catch (err) { if (aliveRef.current) setError(err.message); }
+      if (aliveRef.current) setLoading(false);
+    })();
+    return () => { aliveRef.current = false; };
+  }, [classroomId, pageId, currentPage.aiProblemId]);
 
   const toggleStudent = async (studentId) => {
     if (openId === studentId) { setOpenId(null); return; }
