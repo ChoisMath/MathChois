@@ -50,12 +50,10 @@ export default function TeacherCoachingReview({ classroomId, pages, currentPage,
   const toggleStudent = async (studentId) => {
     if (openId === studentId) { setOpenId(null); return; }
     setOpenId(studentId);
-    if (!attemptsById[studentId]) {
-      try {
-        const data = await getStudentPageAttempts(classroomId, studentId, pageId);
-        setAttemptsById((prev) => ({ ...prev, [studentId]: data.attempts || [] }));
-      } catch (err) { setError(err.message); }
-    }
+    try {
+      const data = await getStudentPageAttempts(classroomId, studentId, pageId);
+      if (aliveRef.current) setAttemptsById((prev) => ({ ...prev, [studentId]: data.attempts || [] }));
+    } catch (err) { if (aliveRef.current) setError(err.message); }
   };
 
   const handleReset = async (studentId) => {
@@ -63,9 +61,9 @@ export default function TeacherCoachingReview({ classroomId, pages, currentPage,
     setResettingId(studentId);
     try {
       const res = await resetStudentQuota(classroomId, studentId, pageId);
-      setStudents((prev) => prev.map((s) => (s.studentId === studentId ? { ...s, used: res.used, resetAt: res.resetAt } : s)));
-    } catch (err) { setError(err.message); }
-    setResettingId(null);
+      if (aliveRef.current) setStudents((prev) => prev.map((s) => (s.studentId === studentId ? { ...s, used: res.used, resetAt: res.resetAt } : s)));
+    } catch (err) { if (aliveRef.current) setError(err.message); }
+    if (aliveRef.current) setResettingId(null);
   };
 
   const header = (

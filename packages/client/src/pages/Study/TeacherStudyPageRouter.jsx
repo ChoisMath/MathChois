@@ -4,7 +4,7 @@ import TeacherStudyViewer from './TeacherStudyViewer';
 import TeacherCoachingReview from './TeacherCoachingReview';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 
-/** 교사 필기 라우트: AI 코칭 페이지면 읽기 전용 CoachingViewer, 아니면 TeacherStudyViewer */
+/** 교사 필기 라우트: AI 코칭 페이지면 TeacherCoachingReview(학생별 코칭), 아니면 TeacherStudyViewer */
 export default function TeacherStudyPageRouter() {
   const { classroomId, chapterId, pageId } = useParams();
   const navigate = useNavigate();
