@@ -30,14 +30,16 @@ packages/
 │       ├── App.jsx             # 라우팅 정의
 │       ├── contexts/AuthContext.jsx
 │       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem), problems/(ProblemPickerModal), coaching/(CoachingHistoryView, AttemptStack), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal)
-│       │   └── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay
+│       │   └── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay, HtmlToolOverlay
 │       ├── layouts/            # MainLayout(public), DashboardLayout(인증)
 │       ├── pages/              # Home, Login, Classrooms, Chapters, Study, Monitor,
 │       │                       #   Assignment, Board, Admin, Problems(문제은행), Visualizations(시각화자료), History(코칭기록) 등
 │       ├── hooks/              # useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
-│       │                       #   useScribbleErase(문지르기 지우개), useFreedrawSmoothing, usePenDiagnostics
+│       │                       #   useScribbleErase(문지르기 지우개), useFreedrawSmoothing, usePenDiagnostics,
+│       │                       #   useWetInk(웻잉크 오버레이 — 펜 라이브 렌더)
 │       └── lib/                # api.ts, socket.ts, toolUrl.js, excalidrawUtils, pdfDownloader,
 │                               #   inputMode.js, penToggles.js, excalidrawHistory.js,
+│                               #   wetInkStroke.js(인라인 perfect-freehand + freedraw element 생성),
 │                               #   freedrawResample.js, scribbleDetect.js,
 │                               #   problemContent.js([FIGURE:n] 파서), problems.js(API),
 │                               #   coaching.js(convert/review/attempts/uploadWorkImage/getMyHistory/getStudentHistory/resetStudentQuota/getPageStudents),
@@ -64,6 +66,7 @@ packages/
 5개 뷰어 공통 펜/UI 동작(`feat/pen-input-quality`):
 - 진입 시 기본 도구는 **freedraw(펜) + 검정(`#000000`)** 으로 강제(마지막 도구/빨강 복원 폐기). `DrawingToolbar`가 `pageId` prop으로 페이지 전환 시 펜+검정 리셋.
 - 입력 모드 게이트(`hooks/useExcalidrawTouch.js` + `lib/inputMode.js`)로 손바닥 연결선(phantom line) 차단. 자체 undo/redo(`hooks/useExcalidrawUndo.js` + `lib/excalidrawHistory.js`). 5개 뷰어 모두 사용.
+- **웻잉크(wet-ink) 펜 렌더링**(`hooks/useWetInk.js` + `lib/wetInkStroke.js`): 진행 중인 펜 획을 가벼운 `<canvas>`에 펜 전속도로 렌더하고 pointerup에서 Excalidraw freedraw element로 commit(→ 기존 저장/동기화/undo). 기본 ON, `?wetink=0`이 기기별 비상 kill switch. 5개 뷰어 + CoachingViewer(`!readOnly`) + HtmlToolOverlay에 통합. 아래 "주의사항"의 웻잉크 항목 참조.
 - 진단 오버레이(`PenDiagnosticsOverlay` + `usePenDiagnostics`)는 `?penlog=1` 진입 시 활성화, 현재 **StudyViewer 에만** 마운트.
 
 부가 매핑:
@@ -200,7 +203,7 @@ packages/
 
 ## 주의사항 / 특이 패턴
 - **루트 `CLAUDE.md`는 현재 스택 기준으로 최신**(모노레포/Fastify/Drizzle). 구조 상세는 이 PROJECT_MAP 참조.
-- **HTML 도구 위 펜 필기 오버레이**(`feat/html-page-annotation`): iframe 위에 투명 Excalidraw를 겹쳐 그 위에 필기한다. 공통 컴포넌트 `components/study/HtmlToolOverlay.jsx`(+ `lib/htmlOverlay.js`: pointer-events 라우팅 + `HTML_OVERLAY_LOCK_BASE`). `drawing` 플래그로 **도구 조작↔필기** 전환(OFF=오버레이 click-through로 iframe 조작, ON=오버레이가 입력 장악·iframe 정지·`viewModeEnabled=false`). iframe은 DOM 고정이라 캔버스 pan/zoom 시 필기만 어긋나므로 **뷰포트를 zoom1/scroll0로 상시 고정**(각 뷰어가 `lockActiveRef = screenLocked || htmlUrl`를 `useExcalidrawTouch`의 `screenLockedRef` 자리로 전달 + onChange 복원). 배경 element 없음(`bgPosition` 미사용). 저장·실시간·교사코멘트는 기존 notes/comments 그대로. 적용 뷰어: ① StudyViewer(`drawMode`), ② TeacherStudyViewer(HTML 전용 `htmlDrawMode` 토글 신설), ③ StudentWorkViewer(`commentMode` 재사용). **PDF 내보내기는 HTML에서 비활성**(live iframe 래스터화 불가). ④⑤(과제)는 `assignment_pages`에 `html_url`이 없어 미지원. `DrawingToolbar`는 `htmlMode` prop로 이미지 전용(이미지 이동) 버튼을 숨김.
+- **HTML 도구 위 펜 필기 오버레이**(`feat/html-page-annotation`): iframe 위에 투명 Excalidraw를 겹쳐 그 위에 필기한다. 공통 컴포넌트 `components/study/HtmlToolOverlay.jsx`(+ `lib/htmlOverlay.js`: pointer-events 라우팅 + `HTML_OVERLAY_LOCK_BASE`). `drawing` 플래그로 **도구 조작↔필기** 전환(OFF=오버레이 click-through로 iframe 조작, ON=오버레이가 입력 장악·iframe 정지·`viewModeEnabled=false`). iframe은 DOM 고정이라 캔버스 pan/zoom 시 필기만 어긋나므로 **뷰포트를 zoom1/scroll0로 상시 고정**(각 뷰어가 `lockActiveRef = screenLocked || htmlUrl`를 `useExcalidrawTouch`의 `screenLockedRef` 자리로 전달 + onChange 복원). 배경 element 없음(`bgPosition` 미사용). 저장·실시간·교사코멘트는 기존 notes/comments 그대로. 적용 뷰어: ① StudyViewer(`drawMode`), ② TeacherStudyViewer(HTML 전용 `htmlDrawMode` 토글 신설), ③ StudentWorkViewer(`commentMode` 재사용). **PDF 내보내기는 HTML에서 비활성**(live iframe 래스터화 불가). ④⑤(과제)는 `assignment_pages`에 `html_url`이 없어 미지원. `DrawingToolbar`는 `htmlMode` prop로 이미지 전용(이미지 이동) 버튼을 숨김. `HtmlToolOverlay`는 선택적 `wetInkOverlayRef` prop으로 HTML 도구 Excalidraw 위에 웻잉크 프리뷰 캔버스를 렌더한다(위 웻잉크 항목). `DrawingToolbar`는 선택적 `onActiveToolChange(tool)` 콜백으로 논리적 펜 도구를 뷰어에 알린다(삼각형 모드도 Excalidraw 'freedraw'를 쓰므로 구분 필요).
 - **HTML 도구 페이지는 앱과 다른 origin에서 서빙**해야 함:
   - iframe에 `sandbox`+same-origin이면 opaque origin(`'null'`)이 되어 도구 내부 postMessage / blob worker(수식 입력 등)가 깨진다. 그래서 same-origin sandbox 대신 **별도 origin**(`VITE_TOOLS_ORIGIN`, `lib/toolUrl.js`)으로 띄운다.
   - 서버는 `text/html` 응답에 `Content-Security-Policy: frame-ancestors`(앱 origin만 허용)를 설정하고, helmet이 raw 응답에 직접 박은 `X-Frame-Options`/`Origin-Agent-Cluster`를 `reply.raw.removeHeader`로 제거한다(일반 `reply.removeHeader`로는 안 지워짐). `storage.ts` `GET /api/files/*` 참조.
@@ -214,6 +217,12 @@ packages/
   - **1손가락 팬**: 스타일러스 모드에서 그리기가 차단되는 1손가락 터치를 죽이지 않고 캔버스 좌우/상하 팬으로 쓴다(잠금/HTML 오버레이는 제외 — 뷰포트 고정). 이미지·AI코칭 페이지에 적용. **펜 우선**: 일부 기기(S Pen)는 펜 입력이 pointer(그리기) + touch 를 동시에 발생시키므로, `penDownRef`(`pointerType==='pen'`)가 켜진 동안엔 손가락 팬/줌을 전부 무시한다(펜=그리기, 손가락=이동). 팜 리젝션도 펜이 닿은 동안 유지.
   - **줌/팬 성능**: 핀치줌·1손가락 팬의 `updateScene` 는 `requestAnimationFrame` 으로 코얼레싱(프레임당 1회). 누적 뷰포트는 훅 내부 `viewportRef` 가 단일 출처. 훅이 노출하는 `isGesturingRef` 가 제스처 중임을 알려, 6개 뷰어 onChange 가 penMode 가드 직후 early-return 해 무거운 저장/지우개/히스토리/직렬화 파이프라인을 건너뛴다. (과거: touchmove 마다 updateScene 2회 + 전체 element `JSON.stringify` → 메인 스레드 포화로 줌이 끊기고 Socket.IO 하트비트가 굶어 접속 끊김.)
 - **자체 undo/redo**(`hooks/useExcalidrawUndo.js` + `lib/excalidrawHistory.js`): Excalidraw 0.18이 undo/redo API/키보드를 노출하지 않아 씬 스냅샷 스택으로 구현. onChange 끝에서 350ms debounce 후 확정 상태 기록, Ctrl+Z / Ctrl+Shift+Z(또는 Ctrl+Y) 키바인딩. DrawingToolbar의 `onUndo/onRedo/canUndo/canRedo` prop.
+- **웻잉크(wet-ink) 펜 렌더링**(`feat`, `hooks/useWetInk.js` + `lib/wetInkStroke.js`): 펜 자유그리기의 라이브 획을 Excalidraw 대신 직접 렌더해 지연을 없앤다.
+  - `useWetInk`는 펜 자유그리기를 **window 캡처**에서 가로채(`stopPropagation`으로 Excalidraw가 끊기는 라이브 획을 안 그리게 함; `useExcalidrawTouch`와 공존), 진행 중인 획을 가벼운 `<canvas>`에 펜 전속도로 렌더하고, pointerup에서 freedraw element를 commit한다(`updateScene` → 기존 저장/동기화/undo 경로). 기본 ON. `?wetink=0`이 **기기별 비상 kill switch**(`?wetink=1` 재활성, localStorage `mc_wetink_off`).
+  - `lib/wetInkStroke.js` — **인라인 perfect-freehand 1.2.0**(Excalidraw가 번들하는 동일 버전) + `buildStrokePath`(프리뷰 외곽선) + `makeFreedrawElement`(수동 freedraw element 생성 — `convertToExcalidrawElements`는 freedraw 미지원). `PF_BASE` 옵션은 **Vite transform 값과 반드시 일치**해야 한다.
+  - **Vite 빌드타임 transform**(`vite.config.js`의 `excalidrawPenTweak` 플러그인): Excalidraw 0.18의 `getFreeDrawSvgPath` 안에 **하드코딩된 freedraw 옵션**을 빌드 시 치환한다(API 미노출). `packages/server/Dockerfile`이 `npm ci --ignore-scripts`(postinstall 미실행)라 **patch-package 대신** 이 방식을 쓴다. 현재 값: simulatePressure false, thinning .2, smoothing .5, streamline .62, linear easing, taper 0 + rounded cap.
+  - **⚠️ GOTCHA**: transform 정규식이 Excalidraw 원본 하드코딩 옵션에 앵커되어 있어 **Excalidraw 업그레이드 시 override가 조용히 무력화될 수 있다**(빌드는 경고만 출력). `vite.config.js`와 `wetInkStroke.js`의 `PF_BASE`를 항상 동기 유지할 것.
+  - 파라미터 튜닝: `tools/pen-playground.html`(태블릿에서 펜 감을 잡는 standalone perfect-freehand 튜너).
 - **실험 펜 토글**(`lib/penToggles.js`, localStorage `mc_pen_toggles`): freedraw 리샘플링/스무딩(`useFreedrawSmoothing`, `lib/freedrawResample.js`)·진단 등을 토글 게이트로 켠다(기본 off). 진단 오버레이는 `?penlog=1`로도 활성화.
 - **DrawingToolbar 에서 영역 삭제(가위, `eraser_area`, `Scissors`) 및 `handleDeleteSelected` 제거됨.** 지우개는 획 단위(`eraser`)와 전체 지우기(`Trash2`)만 남음.
 - **문제은행 & AI OCR**(`feat/problem-bank-ocr`): 교사가 문제 이미지를 업로드하면 Gemini OCR로 `problemLatex`/그림 슬롯(`[FIGURE:n]`)을 추출하고, 마크스킴 OCR·AI 해설 생성을 거쳐 `problems` 테이블에 저장한다.
@@ -234,4 +243,4 @@ packages/
 - **`.gitignore`** — `*.tsbuildinfo`·`.superpowers/`·`.plans/`·`review.md` 무시(빌드 산출물·작업 노트는 읽지 않음).
 
 ---
-마지막 업데이트: 2026-06-10 (AI 코칭 횟수 제한·리셋 + coaching_quota 테이블, Gemini 기본 모델 gemini-2.5-flash)
+마지막 업데이트: 2026-06-11 (웻잉크 펜 렌더링 — useWetInk/wetInkStroke + vite excalidrawPenTweak transform + tools/pen-playground.html)
