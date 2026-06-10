@@ -221,6 +221,17 @@ export default function CoachingViewer({
   const handleMount = useCallback(async (api2) => {
     excalidrawAPIRef.current = api2;
     noteLoadedRef.current = false;
+    /* 진입 시 펜(freedraw)+검정 강제 — 안 하면 Excalidraw 기본 selection 이 활성이라 툴바는 펜인데 실제 커서가 선택됨 */
+    if (!readOnly) {
+      setTimeout(() => {
+        const savedWidth = parseFloat(localStorage.getItem('mc_stroke_width') || '0.2');
+        baseStrokeWidthRef.current = savedWidth;
+        const zoom = api2.getAppState()?.zoom?.value || 1;
+        lastZoomRef.current = zoom;
+        api2.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+        api2.setActiveTool({ type: 'freedraw' });
+      }, 0);
+    }
     try {
       let note;
       if (readOnly) {
