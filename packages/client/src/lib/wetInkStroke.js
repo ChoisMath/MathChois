@@ -27,9 +27,9 @@ function getSvgPathFromStroke(points) {
 
 /* vite.config.js 의 excalidrawPenTweak 치환값과 일치해야 미리보기=commit. */
 const PF_BASE = {
-  thinning: 0.2,
-  smoothing: 0.5,
-  streamline: 0.62,
+  thinning: 0,
+  smoothing: 0.12,
+  streamline: 0.16,
   easing: (t) => t,
   start: { taper: 0, cap: true },
   end: { taper: 0, cap: true },

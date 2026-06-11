@@ -59,10 +59,10 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       if (!c || !api || !pts.length) return;
       const app = api.getAppState();
       const zoom = app?.zoom?.value || 1;
-      const size = (app?.currentItemStrokeWidth || 1) * zoom * 4.25; // 화면 px (Excalidraw 렌더와 동일)
+      const size = (app?.currentItemStrokeWidth || 1) * zoom * 10; // 화면 px (vite excalidrawPenTweak 의 size 배수와 동일)
       const color = app?.currentItemStrokeColor || '#000000';
       const screenPts = pts.map((p) => [p[0] - rect.left, p[1] - rect.top]);
-      const path = buildStrokePath(screenPts, pressures, { size, simulatePressure: false, last: true });
+      const path = buildStrokePath(screenPts, pressures, { size, simulatePressure: true, last: true });
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
       c.clearRect(0, 0, rect.width, rect.height);
       if (path) { c.fillStyle = color; c.fill(path); }
@@ -104,7 +104,7 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       const api = excalidrawAPIRef.current;
       if (api && pts.length >= 2) {
         const app = api.getAppState();
-        const simulatePressure = false; // 배포 옵션과 동일 — 실제 필압 사용(thinning .2)
+        const simulatePressure = true; // S-Pen 실제 필압 미사용(균일 젤펜 thinning 0 — pressures 미저장)
         const scenePoints = pts.map(([cx, cy]) => viewportCoordsToSceneCoords({ clientX: cx, clientY: cy }, app));
         const el = makeFreedrawElement(scenePoints, pressures, {
           strokeColor: app?.currentItemStrokeColor || '#000000',
