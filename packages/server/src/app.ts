@@ -138,6 +138,9 @@ export function buildApp() {
       setHeaders: (res, filePath) => {
         if (filePath.includes('/assets/')) {
           res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        } else {
+          // index.html·sw.js·manifest 는 항상 재검증(ETag 304) — 설치형 PWA가 새 배포를 놓치지 않도록
+          res.setHeader('Cache-Control', 'no-cache');
         }
       },
     });
