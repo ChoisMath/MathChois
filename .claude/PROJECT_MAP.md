@@ -45,7 +45,8 @@ packages/
 │                               #   coaching.js(convert/review/attempts/uploadWorkImage/getMyHistory/getStudentHistory/resetStudentQuota/getPageStudents),
 │                               #   dashboard.js(getClassroomDashboard),
 │                               #   visualizations.js(list/facets/CRUD/upload + buildVisualizationQuery),
-│                               #   swUpdate.js(PWA SW 자동 업데이트 — setupSwAutoUpdate) (*.test.js = Vitest)
+│                               #   swUpdate.js(PWA SW 자동 업데이트 — setupSwAutoUpdate),
+│                               #   linkify.js(게시판 본문 plain text의 URL → 자동 하이퍼링크 세그먼트) (*.test.js = Vitest)
 └── shared/src/
     ├── types/             # api, auth, excalidraw, models, socket, problem, coaching, dashboard, visualization
     └── curriculum/        # math2022.ts — 2022 개정 수학과 교육과정 MAP(과목→대단원→소단원+성취기준) + buildCurriculumPromptBlock()

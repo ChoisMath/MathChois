@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, ChevronDown, ChevronUp, Paperclip, Newspaper, Pencil } from 'lucide-react';
 import { api } from '../../lib/api';
+import { splitLinkSegments } from '../../lib/linkify';
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -55,7 +56,23 @@ function PostCard({ post, isTeacher, navigate }) {
       {open && (
         <div className="px-4 pb-4 border-t border-gray-100">
           {post.content ? (
-            <p className="text-sm text-gray-700 mt-3 whitespace-pre-wrap">{post.content}</p>
+            <p className="text-sm text-gray-700 mt-3 whitespace-pre-wrap">
+              {splitLinkSegments(post.content).map((seg, i) =>
+                seg.type === 'link' ? (
+                  <a
+                    key={i}
+                    href={seg.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline break-all"
+                  >
+                    {seg.value}
+                  </a>
+                ) : (
+                  seg.value
+                )
+              )}
+            </p>
           ) : (
             <p className="text-sm text-gray-400 mt-3 italic">내용 없음</p>
           )}
