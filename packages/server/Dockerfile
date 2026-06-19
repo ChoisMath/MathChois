@@ -1,4 +1,5 @@
-FROM node:22-slim AS base
+# 재현성 위해 Node 버전 핀 고정 — floating `22-slim` 의 자동 상향이 런타임 비호환을 유발한 적 있음
+FROM node:22.23.0-slim AS base
 WORKDIR /app
 
 # ─── Dependencies ──────────────────────────────────
