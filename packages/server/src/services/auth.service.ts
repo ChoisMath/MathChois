@@ -27,14 +27,48 @@ export function getGoogleAuthUrl(redirectUri: string): string {
   });
 }
 
-/** Authorization code → Google 사용자 정보 교환 */
+/**
+ * Authorization code → Google 사용자 정보 교환.
+ *
+ * Node 네이티브 fetch(undici)로 직접 토큰 교환한다. google-auth-library 9.x가
+ * 의존하는 node-fetch@2 는 새 Node 22.x 의 gzip 응답 처리에서
+ * ERR_STREAM_PREMATURE_CLOSE 로 깨진다(Gunzip 스트림 조기 종료).
+ * id_token 은 TLS 채널로 Google 토큰 엔드포인트에서 직접 받은 것이라
+ * 서명 재검증 없이 디코드만 한다(인증코드 플로우에서 Google 공식 허용).
+ */
 export async function exchangeGoogleCode(code: string, redirectUri: string) {
-  const { tokens } = await google.getToken({ code, redirect_uri: redirectUri });
-  const ticket = await google.verifyIdToken({
-    idToken: tokens.id_token!,
-    audience: env.GOOGLE_CLIENT_ID,
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
+    }),
   });
-  const payload = ticket.getPayload()!;
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Google token exchange failed: ${res.status} ${detail}`);
+  }
+
+  const tokens = (await res.json()) as { id_token?: string };
+  if (!tokens.id_token) {
+    throw new Error('Google token response missing id_token');
+  }
+
+  const payload = jwt.decode(tokens.id_token) as {
+    sub?: string;
+    email?: string;
+    name?: string;
+    picture?: string;
+  } | null;
+  if (!payload?.sub) {
+    throw new Error('Invalid Google id_token payload');
+  }
+
   return {
     googleId: payload.sub,
     email: payload.email ?? null,
