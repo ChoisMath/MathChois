@@ -66,7 +66,7 @@ export default function FileAttachmentPanel({
       {!readOnly && remainingSlots > 0 && (
         <>
           <input ref={fileInputRef} type="file" multiple
-            accept="image/*,.pdf" onChange={onFileAdd} className="hidden" />
+            onChange={onFileAdd} className="hidden" />
           <button onClick={() => fileInputRef.current?.click()}
             className="mt-1 flex items-center justify-center p-2 w-full border border-dashed border-gray-300 rounded-md text-gray-500 hover:border-purple-300 hover:text-purple-500 cursor-pointer">
             <Plus className="h-5 w-5" />

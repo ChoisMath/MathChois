@@ -9,11 +9,21 @@ const STUDENT_ALLOWED_BUCKETS = new Set(['submission-files', 'ai-coaching']);
 // HTML 전용 버킷 (text/html 만 허용)
 const HTML_ONLY_BUCKETS = new Set(['chapter-tools', 'visualizations']);
 
-// 학생 업로드 허용 MIME 타입
+// 학생 업로드 허용 MIME 타입 (submission-files 는 임의 형식 허용 — 아래 분기 참조)
 const STUDENT_ALLOWED_MIMES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic',
   'application/pdf',
 ]);
+
+// 과제 제출 첨부는 모든 파일 형식을 허용한다. 임의 형식 인라인 서빙 시 XSS 위험이 있어
+// 서빙 단계(GET /api/files/*)에서 비이미지 파일을 강제 다운로드시킨다.
+function studentMimeAllowed(bucket: string, mimetype: string): boolean {
+  if (bucket === 'submission-files') return true;
+  return STUDENT_ALLOWED_MIMES.has(mimetype);
+}
+
+// 앱 origin 에서 인라인 렌더해도 스크립트 실행 위험이 없는 래스터 이미지 형식.
+const INLINE_SAFE_IMAGE_RE = /^image\/(png|jpe?g|gif|webp)$/;
 
 export async function storageRoutes(app: FastifyInstance) {
 
@@ -48,7 +58,7 @@ export async function storageRoutes(app: FastifyInstance) {
       const data = Buffer.concat(chunks);
 
       // 학생 업로드 MIME 타입 제한
-      if (request.user.role === 'student' && !STUDENT_ALLOWED_MIMES.has(file.mimetype)) {
+      if (request.user.role === 'student' && !studentMimeAllowed(bucket, file.mimetype)) {
         return reply.status(400).send({ error: '허용되지 않은 파일 형식입니다.' });
       }
 
@@ -104,7 +114,7 @@ export async function storageRoutes(app: FastifyInstance) {
         }
 
         // 학생 업로드 MIME 타입 제한
-        if (request.user.role === 'student' && !STUDENT_ALLOWED_MIMES.has(part.mimetype)) {
+        if (request.user.role === 'student' && !studentMimeAllowed(bucket, part.mimetype)) {
           return reply.status(400).send({ error: '허용되지 않은 파일 형식입니다.' });
         }
 
@@ -162,24 +172,32 @@ export async function storageRoutes(app: FastifyInstance) {
     // 파일명에 타임스탬프 포함 → immutable 캐시
     reply.header('Content-Type', result.mimeType);
     reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+    reply.header('X-Content-Type-Options', 'nosniff');
 
     // HTML 도구는 앱과 다른 origin(railway.app)에서 서빙되어 앱 origin과 cross-origin 격리된다.
     // sandbox 로 opaque origin('null')을 강제하면 도구 내부 postMessage/blob worker 가 깨지므로
     // 사용하지 않고, 대신 우리 앱에서만 frame 가능하도록 frame-ancestors 로 제한한다.
     // 또 cross-origin frame 을 막는 helmet 의 X-Frame-Options 를 이 응답에서만 해제한다.
-    if (result.mimeType === 'text/html') {
+    // (HTML 도구 버킷에 한정 — 학생이 제출한 .html 등은 아래 강제 다운로드 분기를 탄다.)
+    if (result.mimeType === 'text/html' && HTML_ONLY_BUCKETS.has(bucket)) {
       reply.header(
         'Content-Security-Policy',
         "frame-ancestors https://class.chois.ai.kr http://localhost:3000",
       );
       reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
-      reply.header('X-Content-Type-Options', 'nosniff');
       // helmet 이 onRequest 에서 raw 응답에 직접 setHeader 하므로 reply.removeHeader 로는 안 지워진다.
       reply.raw.removeHeader('X-Frame-Options');
       reply.raw.removeHeader('Origin-Agent-Cluster');
     }
 
-    if (download) {
+    // 제출 첨부(submission-files)는 임의 형식을 허용하므로, 앱 origin 에서 인라인 렌더 시
+    // 스크립트가 실행될 수 있는 형식(HTML/SVG 등)은 강제 다운로드시킨다.
+    // 안전한 래스터 이미지만 인라인 유지(첨부 썸네일 미리보기용).
+    const forceDownload =
+      download ||
+      (bucket === 'submission-files' && !INLINE_SAFE_IMAGE_RE.test(result.mimeType));
+
+    if (forceDownload) {
       // 타임스탬프 접두사 제거 (예: 1709712000000_report.pdf → report.pdf)
       const baseName = filePath.split('/').pop() || 'download';
       const originalName = baseName.replace(/^\d+_/, '');
