@@ -25,6 +25,38 @@ function studentMimeAllowed(bucket: string, mimetype: string): boolean {
 // 앱 origin 에서 인라인 렌더해도 스크립트 실행 위험이 없는 래스터 이미지 형식.
 const INLINE_SAFE_IMAGE_RE = /^image\/(png|jpe?g|gif|webp)$/;
 
+// 업로드 파일명에서 경로/파일시스템 위험 문자만 제거하고 유니코드(한글 등)는 보존한다.
+// busboy 가 이미 basename 처리하지만 방어적으로 경로 분리자·예약 문자·선후행 점을 정리한다.
+function sanitizeFileName(name: string): string {
+  const cleaned = name
+    .replace(/[/\\]/g, '_') // 경로 분리자
+    .replace(/[\x00-\x1f<>:"|?*]/g, '_') // 제어문자 + 파일시스템 예약문자(Windows)
+    .replace(/^\.+/, '') // 선행 점 (숨김/traversal)
+    .replace(/[ .]+$/, ''); // 후행 공백/점 (Windows 는 저장 시 잘림)
+  return cleaned || 'file';
+}
+
+// RFC 5987/6266: 비ASCII(한글) 파일명을 브라우저가 복원하도록 ASCII fallback(filename=)과
+// UTF-8 인코딩(filename*=)을 함께 제공한다. encodeURIComponent 가 남기는 '()* 도 마저 인코딩한다.
+function contentDispositionAttachment(filename: string): string {
+  const asciiFallback = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+  const encoded = encodeURIComponent(filename).replace(
+    /['()*]/g,
+    (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase(),
+  );
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+}
+
+// HTTP 요청 경로의 percent-encoding 을 해제한다. 저장된 파일명에 한글이 포함되면
+// 브라우저가 요청 시 인코딩하므로 디스크 경로와 매칭하려면 디코딩이 필요하다.
+function decodePath(p: string): string {
+  try {
+    return decodeURIComponent(p);
+  } catch {
+    return p; // 잘못된 인코딩은 원본 유지 (readFile 에서 404 처리)
+  }
+}
+
 export async function storageRoutes(app: FastifyInstance) {
 
   // ─── POST /api/files/upload — 파일 업로드 ─────
@@ -68,7 +100,7 @@ export async function storageRoutes(app: FastifyInstance) {
       }
 
       const timestamp = Date.now();
-      const safeName = file.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const safeName = sanitizeFileName(file.filename);
       const fileName = `${timestamp}_${safeName}`;
 
       const url = await uploadFile(bucket, directory, fileName, data);
@@ -125,7 +157,7 @@ export async function storageRoutes(app: FastifyInstance) {
         const data = Buffer.concat(chunks);
 
         const timestamp = Date.now();
-        const safeName = part.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const safeName = sanitizeFileName(part.filename);
         const fileName = `${timestamp}_${safeName}`;
 
         const url = await uploadFile(bucket, directory, fileName, data);
@@ -162,7 +194,7 @@ export async function storageRoutes(app: FastifyInstance) {
     }
 
     const bucket = pathPart.slice(0, slashIdx);
-    const filePath = pathPart.slice(slashIdx + 1);
+    const filePath = decodePath(pathPart.slice(slashIdx + 1));
 
     const result = await readFile(bucket, filePath);
     if (!result) {
@@ -201,7 +233,7 @@ export async function storageRoutes(app: FastifyInstance) {
       // 타임스탬프 접두사 제거 (예: 1709712000000_report.pdf → report.pdf)
       const baseName = filePath.split('/').pop() || 'download';
       const originalName = baseName.replace(/^\d+_/, '');
-      reply.header('Content-Disposition', `attachment; filename="${encodeURIComponent(originalName)}"`);
+      reply.header('Content-Disposition', contentDispositionAttachment(originalName));
     }
 
     return reply.send(result.data);
@@ -222,7 +254,7 @@ export async function storageRoutes(app: FastifyInstance) {
     }
 
     const bucket = rest.slice(0, slashIdx);
-    const filePath = rest.slice(slashIdx + 1);
+    const filePath = decodePath(rest.slice(slashIdx + 1));
 
     const deleted = await removeFile(bucket, filePath);
     if (!deleted) {
