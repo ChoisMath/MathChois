@@ -139,6 +139,31 @@ export async function classroomVideoRoutes(app: FastifyInstance) {
     return svc.getProgressByClassroom(req.params.cid, req.user.sub);
   });
 
+  // ─── 댓글 읽음/미읽음 ─────────────────────────────
+
+  /** 댓글 목록을 본 시각 기록(배지 초기화) */
+  app.post<{ Params: { id: string } }>('/api/classroom-videos/:id/seen', auth, async (req, reply) => {
+    const cv = await loadClassroomVideoOr404(req, reply, req.params.id);
+    if (!cv) return;
+    await svc.markCommentsSeen(cv.id, req.user.sub);
+    return reply.status(204).send();
+  });
+
+  /** 학급의 영상별 미읽음 댓글 수 → VideoUnreadCounts */
+  app.get<{ Params: { cid: string } }>('/api/classrooms/:cid/videos/unread', auth, async (req, reply) => {
+    if (!(await canAccessClassroom(req, req.params.cid))) {
+      return reply.status(403).send({ error: '접근 권한이 없습니다' });
+    }
+    return svc.getUnreadCountsForClassroom(req.params.cid, { id: req.user.sub, isTeacher: req.user.role === 'teacher' });
+  });
+
+  /** 내 모든 학급의 미읽음 댓글 수 → VideoUnreadByClassroom (정적 경로라 routes/videos.ts 의 /api/videos/:id 보다 우선) */
+  app.get('/api/videos/unread', auth, async (req, reply) => {
+    const role = req.user.role;
+    if (role !== 'teacher' && role !== 'student') return reply.send({ byClassroom: {}, total: 0 });
+    return svc.getUnreadTotalForUser(req.user.sub, role);
+  });
+
   // ─── 댓글 ───────────────────────────────────────
 
   app.get<{ Params: { id: string } }>('/api/classroom-videos/:id/comments', auth, async (req, reply) => {

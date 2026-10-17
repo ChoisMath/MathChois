@@ -3,8 +3,9 @@ import { Lock, Reply, Pencil, Trash2, Clock, MessageSquare } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext';
 import { subscribeToRoom } from '../../lib/socket';
 import {
-  listVideoComments, createVideoComment, updateVideoComment, deleteVideoComment,
+  listVideoComments, createVideoComment, updateVideoComment, deleteVideoComment, markVideoCommentsSeen,
 } from '../../lib/videos';
+import { refreshSidebar } from '../../lib/sidebarRefresh';
 import { formatTime } from '../../lib/videoPlayer';
 
 function formatDate(iso) {
@@ -176,6 +177,8 @@ export default function VideoComments({ classroomVideoId, isTeacher, getCurrentT
   const fetchThreads = useCallback(async () => {
     try {
       setThreads(await listVideoComments(classroomVideoId));
+      // 목록을 봤으므로 읽음 처리 → 사이드바/학급 탭의 미읽음 배지 갱신. 실패해도 무시.
+      markVideoCommentsSeen(classroomVideoId).then(() => refreshSidebar()).catch(() => {});
     } catch { /* 유지 */ } finally {
       setLoading(false);
     }

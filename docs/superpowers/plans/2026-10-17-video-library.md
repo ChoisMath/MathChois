@@ -17,7 +17,7 @@
 
 > **테스트 정책:** 서버 패키지에는 테스트 러너가 없다(레포 관행) → `npx tsc -b packages/server/tsconfig.json` + 로컬 PostgreSQL 기동 후 curl E2E. 클라이언트 순수 로직(`lib/videos.js`, `lib/videoPlayer.js`)은 Vitest로 TDD. UI 흐름은 Playwright 스모크(사전 설치 Chromium `/opt/pw-browsers/chromium`, H.264 미지원이라 **webm 샘플** 사용).
 
-**진행 상태 (2026-10-17):** Task 1~12 구현·검증 완료(커밋 `04a56c9`), Task 13(배포 검증)·Task 14(후속) 미완.
+**진행 상태 (2026-10-17):** Task 1~12 완료(커밋 `04a56c9`). Task 14 중 4개 항목을 subagent 병렬 구현으로 완료(커밋 `9102ebd` + 미읽음 배지 커밋). Task 13(배포 검증)과 Task 14의 트랜스코딩/HLS 만 미완.
 
 ---
 
@@ -167,10 +167,13 @@
 - [ ] **Step 4:** 태블릿(Galaxy Tab/iPad) 에서 전체화면·배속·키보드(블루투스) 동작 확인. iPad Safari 는 `webkitEnterFullscreen` 경로.
 - [ ] **Step 5:** Volume 용량 모니터링(영상은 삭제 전까지 보존 — 라이브러리 페이지의 용량 열로 정리 유도).
 
-## Task 14: 후속 과제 (v2 후보, 설계서 비목표)
+## Task 14: 후속 과제 (subagent 병렬 구현 — 2026-10-17)
 
-- [ ] 학생별 시청 기록(`video_progress`: 위치·진도율) + 교사 탭에서 시청률 표시 (Q4 에서 v1 제외로 확정).
-- [ ] 영상 삭제 시 "배정 해제 후 삭제" 원클릭 흐름(현재는 409 + 학급 목록 안내).
-- [ ] 챕터 페이지 배경으로 라이브러리 영상 삽입(`pages.videoUrl` 은 현재 YouTube 전용).
-- [ ] 서버 측 썸네일/트랜스코딩(ffmpeg)·HLS — 브라우저가 mov(H.264 외 코덱)를 못 여는 경우 대비.
-- [ ] 댓글 알림(교사에게 새 비공개 질문 배지).
+> 진행 방식: 공통 스키마(`video_progress`, `video_comment_reads`)와 공유 타입을 먼저 커밋(`6c0f34c`)한 뒤, 파일 소유 범위를 나눈 3개 subagent(시청 기록 / 배정 해제 후 삭제 / 챕터 페이지 영상 삽입)를 병렬로 돌리고, 겹치는 파일이 많은 미읽음 배지는 머지 후 4번째 subagent 로 구현했다. 각 agent 는 커밋하지 않고 tsc/eslint/vitest + 로컬 curl 로 자체 검증, 호출자가 합쳐진 트리에서 재검증(tsc·lint·vitest·vite build·curl E2E 55·Playwright 13) 후 커밋.
+
+- [x] **학생별 시청 기록 + 교사 시청률** — `PUT/GET /api/classroom-videos/:id/progress`(학생), `GET …/progress/summary`(교사), `GET /api/classrooms/:cid/videos/progress`(학생: 본인 맵 / 교사: 통계 맵). `VideoPlayer` `onProgress`(10초 간격 + pause/ended/unmount)·`initialPosition`. 시청 화면 교사용 "시청 현황" 패널, 학급 탭 카드에 진도 바(학생)/시청·완료 수(교사). 완료 기준 90%.
+- [x] **배정 해제 후 삭제 원클릭** — `DELETE /api/videos/:id?force=1`(트랜잭션으로 모든 학급 배정 해제 후 삭제). 409 응답의 `usage` 를 클라이언트 `ApiError.body` 로 전달해 confirm 후 force 재호출.
+- [x] **챕터/과제 페이지에 라이브러리 영상 삽입** — 편집기 영상 버튼이 "YouTube 링크 / 영상자료에서 선택" 선택 모달. `components/videos/PageVideo.jsx`(`PageVideoEmbed`/`PageVideoThumb`)가 YouTube iframe 또는 `VideoPlayer`(hotkeys off — 필기 도구와 키 충돌 방지)를 렌더하며 뷰어 7곳 + `SortablePageItem` 에 적용. 서버 `utils/videoUrl.ts` 로 `videoUrl` 검증(YouTube 또는 `/api/files/videos/library/` 만, 아니면 400).
+- [x] **댓글 미읽음 배지** — `video_comment_reads`(lastSeenAt). `POST /api/classroom-videos/:id/seen`, `GET /api/classrooms/:cid/videos/unread`, `GET /api/videos/unread`. 카운트는 `listCommentThreads` 와 동일한 가시성 규칙(학생: 공개 스레드 + 본인 비공개 스레드의 교사 답글)으로 SQL 1회 집계. 시청 화면 진입/갱신 시 읽음 처리 → 학급 탭 카드·'영상' 탭·사이드바(학급별 + 교사 "영상자료" 총합) 배지.
+- [x] (부수) zod 검증 실패를 500 → 400 으로 매핑(`app.ts` setErrorHandler).
+- [ ] 서버 측 썸네일/트랜스코딩(ffmpeg)·HLS — 브라우저가 mov(H.264 외 코덱)를 못 여는 경우 대비. Docker 이미지에 ffmpeg 추가가 필요해 보류.

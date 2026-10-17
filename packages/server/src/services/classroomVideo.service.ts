@@ -1,6 +1,6 @@
 import { eq, and, asc, desc, sql, inArray, isNull } from 'drizzle-orm';
 import { db } from '../config/database.js';
-import { classroomVideos, videos, videoComments, classrooms, profiles, classroomMembers, videoProgress } from '../db/schema.js';
+import { classroomVideos, videos, videoComments, classrooms, profiles, classroomMembers, videoProgress, videoCommentReads } from '../db/schema.js';
 
 // ─── 학급 배정 ───────────────────────────────────────
 
@@ -355,4 +355,81 @@ export async function getProgressStatsByClassroom(classroomId: string) {
     };
   }
   return out;
+}
+
+// ─── 댓글 읽음/미읽음 (video_comment_reads) ───────────
+
+/** 사용자×학급영상 읽음 시각을 지금으로 upsert */
+export async function markCommentsSeen(classroomVideoId: string, userId: string) {
+  await db.insert(videoCommentReads)
+    .values({ classroomVideoId, userId })
+    .onConflictDoUpdate({
+      target: [videoCommentReads.classroomVideoId, videoCommentReads.userId],
+      set: { lastSeenAt: sql`now()` },
+    });
+}
+
+/**
+ * 미읽음 댓글 집계 쿼리. classroom_videos(cv) 기준 LEFT JOIN 이므로 댓글이 없는 영상도 0건 행이 나온다.
+ * 미읽음 = 본인이 쓰지 않았고, lastSeenAt(없으면 -infinity) 이후 작성됐고, viewer 가 열람 가능한 댓글.
+ *  - 교사(교실 소유자): 전부
+ *  - 학생: 공개 스레드(루트/대댓글 모두 is_private=false — 대댓글은 루트 공개범위를 상속) 또는
+ *          본인이 쓴 비공개 루트에 달린 대댓글(교사 답변)
+ * keyExpr 로 그룹 키(cv.id 또는 cv.classroom_id), scope 로 cv 범위를 지정한다.
+ */
+function unreadCountQuery(viewer: { id: string; isTeacher: boolean }, keyExpr: ReturnType<typeof sql>, scope: ReturnType<typeof sql>) {
+  // 열람 가능 조건은 c 의 JOIN 조건에 넣어 영상마다 항상 한 행(0 포함)이 나오게 한다.
+  const visible = viewer.isTeacher
+    ? sql`TRUE`
+    : sql`(NOT c.is_private OR (c.parent_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM video_comments root WHERE root.id = c.parent_id AND root.author_id = ${viewer.id})))`;
+  return sql`
+    SELECT ${keyExpr} AS key, count(c.id)::int AS unread
+    FROM classroom_videos cv
+    LEFT JOIN video_comment_reads r
+      ON r.classroom_video_id = cv.id AND r.user_id = ${viewer.id}
+    LEFT JOIN video_comments c
+      ON c.classroom_video_id = cv.id
+     AND c.author_id <> ${viewer.id}
+     AND c.created_at > COALESCE(r.last_seen_at, '-infinity'::timestamptz)
+     AND ${visible}
+    WHERE ${scope}
+    GROUP BY ${keyExpr}
+  `;
+}
+
+function sumUnread(rows: Iterable<{ key: string; unread: number }>) {
+  const map: Record<string, number> = {};
+  let total = 0;
+  for (const r of rows) {
+    const n = Number(r.unread) || 0;
+    map[r.key] = n;
+    total += n;
+  }
+  return { map, total };
+}
+
+/** 학급 하나의 영상별 미읽음 댓글 수 */
+export async function getUnreadCountsForClassroom(classroomId: string, viewer: { id: string; isTeacher: boolean }) {
+  const rows = await db.execute<{ key: string; unread: number }>(
+    unreadCountQuery(viewer, sql`cv.id`, sql`cv.classroom_id = ${classroomId}`),
+  );
+  const { map, total } = sumUnread(rows);
+  return { byClassroomVideo: map, total };
+}
+
+/**
+ * 사용자가 속한 모든 학급의 미읽음 댓글 수 (학급별 + 합계).
+ * 교사: 소유 학급, 학생: 소속 학급. 한 번의 GROUP BY 쿼리.
+ */
+export async function getUnreadTotalForUser(userId: string, role: 'teacher' | 'student') {
+  const isTeacher = role === 'teacher';
+  const scope = isTeacher
+    ? sql`cv.classroom_id IN (SELECT id FROM classrooms WHERE teacher_id = ${userId})`
+    : sql`cv.classroom_id IN (SELECT classroom_id FROM classroom_members WHERE student_id = ${userId})`;
+  const rows = await db.execute<{ key: string; unread: number }>(
+    unreadCountQuery({ id: userId, isTeacher }, sql`cv.classroom_id`, scope),
+  );
+  const { map, total } = sumUnread(rows);
+  return { byClassroom: map, total };
 }

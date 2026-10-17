@@ -22,6 +22,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { refreshSidebar } from '../../lib/sidebarRefresh';
+import { getClassroomVideoUnread } from '../../lib/videos';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 
@@ -165,6 +166,7 @@ const ClassroomDetail = () => {
   const [showDeleteClassroom, setShowDeleteClassroom] = useState(false);
   const [deleting, setDeleting]     = useState(false);
   const [unsubmittedCount, setUnsubmittedCount] = useState(0);
+  const [videoUnreadCount, setVideoUnreadCount] = useState(0); // 영상 탭 미읽음 댓글 배지
 
   /* PDF 다운로드 */
   const { downloadMultiplePages } = usePdfDownloader();
@@ -195,6 +197,11 @@ const ClassroomDetail = () => {
           firstPage: ch.pages?.sort((a, b) => a.position - b.position)[0] || null,
         }))
       );
+
+      /* 영상 탭 미읽음 댓글 수 (교사·학생 공통, 실패해도 무시) */
+      getClassroomVideoUnread(id)
+        .then((u) => setVideoUnreadCount(u?.total ?? 0))
+        .catch(() => {});
 
       /* 학생: 미제출 과제 수 (탭 배지용, 페이지 로드 시 즉시 계산) */
       if (!isTeacher && user) {
@@ -543,6 +550,12 @@ const ClassroomDetail = () => {
                 {item.key === 'assignments' && !isTeacher && unsubmittedCount > 0 && (
                   <span className="ml-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full leading-none">
                     {unsubmittedCount}
+                  </span>
+                )}
+                {item.key === 'videos' && videoUnreadCount > 0 && (
+                  <span className="ml-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full leading-none"
+                    title={`새 댓글 ${videoUnreadCount}개`}>
+                    {videoUnreadCount}
                   </span>
                 )}
               </button>

@@ -10,12 +10,12 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   listClassroomVideos, addClassroomVideo, reorderClassroomVideos, removeClassroomVideo,
-  updateClassroomVideo, formatDuration, getClassroomVideoProgress, progressPercent,
+  updateClassroomVideo, formatDuration, getClassroomVideoProgress, progressPercent, getClassroomVideoUnread,
 } from '../../lib/videos';
 import VideoPickerModal from './VideoPickerModal';
 
 /* ─── 영상 카드 (교사: 드래그 정렬·메모·해제) ─── */
-function VideoCard({ cv, isTeacher, progress, onOpen, onRemove, onSaveNote }) {
+function VideoCard({ cv, isTeacher, progress, unread = 0, onOpen, onRemove, onSaveNote }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cv.id, disabled: !isTeacher });
   const [editingNote, setEditingNote] = useState(false);
   const [note, setNote] = useState(cv.note ?? '');
@@ -82,7 +82,15 @@ function VideoCard({ cv, isTeacher, progress, onOpen, onRemove, onSaveNote }) {
         )}
 
         <div className="flex items-center gap-2 mt-auto pt-2 text-xs text-gray-500">
-          <span className="inline-flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" />{cv.commentCount ?? 0}</span>
+          <span className="inline-flex items-center gap-1">
+            <MessageSquare className="h-3.5 w-3.5" />{cv.commentCount ?? 0}
+            {unread > 0 && (
+              <span className="ml-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full leading-none"
+                title={`새 댓글 ${unread}개`}>
+                {unread}
+              </span>
+            )}
+          </span>
           {isTeacher && progress && (
             <span className="inline-flex items-center gap-1 text-gray-500" title="시청한 학생 / 학급 총원 · 완료 학생">
               <Eye className="h-3.5 w-3.5" />시청 {progress.watchedCount}/{progress.totalStudents} · 완료 {progress.completedCount}
@@ -116,6 +124,7 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [progressMap, setProgressMap] = useState({}); // cvId → 학생: 본인 기록 / 교사: 집계
+  const [unreadMap, setUnreadMap] = useState({});     // cvId → 미읽음 댓글 수
   const [loading, setLoading] = useState(true);
   const [showPicker, setShowPicker] = useState(false);
 
@@ -126,12 +135,14 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
 
   const fetchList = useCallback(async () => {
     try {
-      const [list, progress] = await Promise.all([
+      const [list, progress, unread] = await Promise.all([
         listClassroomVideos(classroomId),
         getClassroomVideoProgress(classroomId).catch(() => null), // 시청 기록은 보조 정보 — 실패해도 목록은 표시
+        getClassroomVideoUnread(classroomId).catch(() => null),   // 미읽음 배지도 보조 정보
       ]);
       setItems(list);
       if (progress) setProgressMap(progress);
+      if (unread?.byClassroomVideo) setUnreadMap(unread.byClassroomVideo);
     } catch { /* 유지 */ }
     finally { setLoading(false); }
   }, [classroomId]);
@@ -210,7 +221,7 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
           <SortableContext items={items.map((x) => x.id)} strategy={rectSortingStrategy}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {items.map((cv) => (
-                <VideoCard key={cv.id} cv={cv} isTeacher={isTeacher} progress={progressMap[cv.id]}
+                <VideoCard key={cv.id} cv={cv} isTeacher={isTeacher} progress={progressMap[cv.id]} unread={unreadMap[cv.id] ?? 0}
                   onOpen={openWatch} onRemove={handleRemove} onSaveNote={handleSaveNote} />
               ))}
             </div>

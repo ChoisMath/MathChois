@@ -60,6 +60,15 @@ export const createVideoComment = (classroomVideoId, body) =>
 export const updateVideoComment = (id, content) => api.patch(`/api/video-comments/${id}`, { content });
 export const deleteVideoComment = (id) => api.delete(`/api/video-comments/${id}`);
 
+// ─── 댓글 읽음/미읽음 API ─────────────────────────────
+
+/** 댓글 목록을 본 시각 기록(미읽음 배지 초기화) — 204 */
+export const markVideoCommentsSeen = (classroomVideoId) => api.post(`/api/classroom-videos/${classroomVideoId}/seen`);
+/** 학급의 영상별 미읽음 댓글 수 → { byClassroomVideo: {cvId→n}, total } */
+export const getClassroomVideoUnread = (classroomId) => api.get(`/api/classrooms/${classroomId}/videos/unread`);
+/** 내 모든 학급의 미읽음 댓글 수 → { byClassroom: {classroomId→n}, total } */
+export const getVideoUnreadTotals = () => api.get('/api/videos/unread');
+
 // ─── 시청 기록 API ───────────────────────────────────
 
 /** 학생: 시청 위치 저장(10초 간격 + 일시정지/종료/이탈 시에만 호출 — 분당 300회 제한) */

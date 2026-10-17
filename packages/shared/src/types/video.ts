@@ -145,3 +145,10 @@ export interface VideoUnreadCounts {
   byClassroomVideo: Record<string, number>;
   total: number;
 }
+
+/** 사용자가 속한 모든 학급의 미읽음 댓글 수 (`GET /api/videos/unread`) */
+export interface VideoUnreadByClassroom {
+  /** classroomId → count */
+  byClassroom: Record<string, number>;
+  total: number;
+}
