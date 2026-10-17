@@ -1,5 +1,10 @@
 import { useState } from 'react';
+import { FileCode2 } from 'lucide-react';
 import { uploadVisualizationHtml, createVisualization, updateVisualization } from '../../lib/visualizations';
+import { fileNameFromUrl } from '../../lib/fileAccept';
+import FileDropZone from '../common/FileDropZone';
+
+const ACCEPT = '.html,.htm,text/html';
 
 /**
  * 시각화자료 등록/수정 폼.
@@ -15,6 +20,12 @@ export default function VisualizationForm({ initial = null, onSaved, onCancel })
   const [file, setFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const handleFile = (f) => {
+    setError('');
+    setFile(f);
+    if (f && !title.trim()) setTitle(f.name.replace(/\.[^.]+$/, ''));
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -47,11 +58,31 @@ export default function VisualizationForm({ initial = null, onSaved, onCancel })
     }
   };
 
+  const current = isEdit ? (
+    <span className="text-xs text-gray-600 break-all">
+      현재 파일: {fileNameFromUrl(initial.htmlUrl) || '(파일)'} — 선택하지 않으면 기존 HTML이 유지됩니다.
+    </span>
+  ) : null;
+
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
       <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 whitespace-normal break-keep">
         외부 의존 없이 단독 실행 가능한 standalone HTML 파일만 등록하세요.
       </p>
+
+      <div className="flex flex-col gap-1 text-sm">
+        <span className="font-medium">{isEdit ? 'HTML 파일 교체 (선택)' : 'HTML 파일 *'}</span>
+        <FileDropZone
+          file={file}
+          onFile={handleFile}
+          accept={ACCEPT}
+          icon={FileCode2}
+          disabled={saving}
+          label={isEdit ? '클릭하거나 HTML 파일을 끌어다 놓으면 기존 파일을 교체합니다' : '클릭하거나 HTML 파일을 끌어다 놓으세요'}
+          hint=".html 파일 1개"
+          current={current}
+        />
+      </div>
 
       <label className="flex flex-col gap-1 text-sm">
         <span className="font-medium">제목 *</span>
@@ -74,19 +105,12 @@ export default function VisualizationForm({ initial = null, onSaved, onCancel })
           onChange={(e) => setDescription(e.target.value)} placeholder="간단한 설명" />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="font-medium">{isEdit ? 'HTML 파일 교체 (선택)' : 'HTML 파일 *'}</span>
-        <input type="file" accept=".html,text/html"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        {isEdit && <span className="text-xs text-gray-400">선택하지 않으면 기존 HTML이 유지됩니다.</span>}
-      </label>
-
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div className="flex gap-2 justify-end">
         {onCancel && (
-          <button type="button" onClick={onCancel}
-            className="px-3 min-h-11 border rounded whitespace-nowrap">취소</button>
+          <button type="button" onClick={onCancel} disabled={saving}
+            className="px-3 min-h-11 border rounded whitespace-nowrap disabled:opacity-50">취소</button>
         )}
         <button type="submit" disabled={saving}
           className="px-4 min-h-11 bg-emerald-600 text-white rounded disabled:opacity-50 whitespace-nowrap">

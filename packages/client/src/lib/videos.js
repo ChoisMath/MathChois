@@ -138,24 +138,28 @@ export async function uploadVideoFile(file, kind = 'video', onProgress) {
 
 // ─── 로컬 메타 추출 (길이·썸네일) ───────────────────
 
-function loadVideoElement(file) {
+/**
+ * File 또는 같은 origin 의 영상 URL(`/api/files/videos/library/…`)로 메타데이터까지 로드한 <video> 를 만든다.
+ * URL 문자열이면 object URL 을 만들지 않는다(수정 화면에서 기존 영상으로 썸네일을 다시 캡처할 때 사용).
+ */
+function loadVideoElement(source) {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
     video.preload = 'metadata';
     video.muted = true;
     video.playsInline = true;
-    const objectUrl = URL.createObjectURL(file);
-    const cleanup = () => URL.revokeObjectURL(objectUrl);
+    const objectUrl = typeof source === 'string' ? null : URL.createObjectURL(source);
+    const cleanup = () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
     video.onloadedmetadata = () => resolve({ video, cleanup });
     video.onerror = () => { cleanup(); reject(new Error('이 브라우저에서 재생할 수 없는 영상 형식입니다.')); };
-    video.src = objectUrl;
+    video.src = objectUrl ?? source;
   });
 }
 
-/** 파일의 길이(초) — 실패 시 null */
-export async function probeVideoDuration(file) {
+/** 파일(또는 같은 origin 영상 URL)의 길이(초) — 실패 시 null */
+export async function probeVideoDuration(source) {
   try {
-    const { video, cleanup } = await loadVideoElement(file);
+    const { video, cleanup } = await loadVideoElement(source);
     const d = Number.isFinite(video.duration) ? Math.round(video.duration) : null;
     cleanup();
     return d;
@@ -166,11 +170,11 @@ export async function probeVideoDuration(file) {
 
 /**
  * 특정 시각 프레임을 JPEG Blob 으로 캡처 (썸네일).
- * atSec 생략 시 1초(짧은 영상이면 중간) 지점. 실패 시 null.
+ * source: File 또는 같은 origin 영상 URL. atSec 생략 시 1초(짧은 영상이면 중간) 지점. 실패 시 null.
  */
-export function captureVideoThumbnail(file, atSec) {
+export function captureVideoThumbnail(source, atSec) {
   return new Promise((resolve) => {
-    loadVideoElement(file).then(({ video, cleanup }) => {
+    loadVideoElement(source).then(({ video, cleanup }) => {
       const duration = Number.isFinite(video.duration) ? video.duration : 0;
       const t = atSec != null ? Math.min(Math.max(0, atSec), Math.max(0, duration - 0.1))
         : (duration >= 2 ? 1 : duration / 2);
