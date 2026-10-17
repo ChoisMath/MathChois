@@ -24,6 +24,8 @@ import { problemRoutes } from './routes/problems.js';
 import { coachingRoutes } from './routes/coaching.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { visualizationRoutes } from './routes/visualizations.js';
+import { videoRoutes } from './routes/videos.js';
+import { classroomVideoRoutes } from './routes/classroomVideos.js';
 
 export function buildApp() {
   const app = Fastify({
@@ -102,6 +104,8 @@ export function buildApp() {
   app.register(coachingRoutes);
   app.register(dashboardRoutes);
   app.register(visualizationRoutes);
+  app.register(videoRoutes);
+  app.register(classroomVideoRoutes);
 
   // ─── Global Error Handler ──────────────────────────
 

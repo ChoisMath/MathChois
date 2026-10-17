@@ -61,7 +61,12 @@ VOLUME_PATH=./local-storage        # file storage root (Railway Volume in prod)
 PORT=3001
 NODE_ENV=development
 # SMTP (optional — password-reset email): SMTP_HOST/PORT/USER/PASS/FROM, APP_URL
+# FRAME_ANCESTORS (optional) — extra origins allowed to frame HTML tool pages (space-separated)
 ```
+
+Production domain is **`https://class.chois.pro`** (moved from `class.chois.ai.kr`). The
+HTML-tool `frame-ancestors` CSP is built in `routes/storage.ts` from that origin + `APP_URL`
++ `FRAME_ANCESTORS`; if the domain changes again, update `APP_ORIGIN` there or set the env var.
 
 Client env (Vite `VITE_*`, build-time): `VITE_TOOLS_ORIGIN` — the separate origin used
 to serve HTML tool pages (see Annotation pages note below).
@@ -88,6 +93,11 @@ sync in real time over Socket.IO.
 | ③ | Teacher comment on a student | `pages/Monitor/StudentWorkViewer.jsx` (student views in StudyViewer via `/api/comments/:pageId/for-student`) | `/api/comments/:pageId/:studentId` | `teacher_student_comments` |
 | ④ | Student assignment notes | `pages/Assignment/AssignmentStudyViewer.jsx` | `/api/assignment-notes/:assignmentId/:pageId` | `assignment_notes` |
 | ⑤ | Teacher assignment comment | `pages/Assignment/AssignmentWorkViewer.jsx` (student views in AssignmentStudyViewer) | `/api/assignment-comments/:pageId/:studentId` | `assignment_teacher_comments` |
+
+Beyond annotation, the teacher sidebar also has shared libraries: **문제은행** (`problems`),
+**시각화자료** (standalone HTML tools, `visualizations`) and **영상자료** (uploaded videos,
+`videos` + per-classroom `classroom_videos` with threaded `video_comments`; see
+`docs/superpowers/specs/2026-10-17-video-library-design.md`).
 
 - Server handlers: notes ①②④ → `routes/notes.ts`; comments ③⑤ → `routes/comments.ts`.
   DB logic concentrated in `services/note.service.ts`.
@@ -122,7 +132,10 @@ additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures th
 - **Pen/eraser input** is custom-handled: `hooks/useExcalidrawTouch.js`,
   `hooks/useScribbleErase.js` (S-Pen barrel button, scribble-to-erase, palm rejection).
 - File storage uses `VOLUME_PATH`; buckets: `chapter-pages`, `chapter-tools` (HTML only),
-  `submission-files`, post attachments. Served via `/api/files/*`.
+  `visualizations` (HTML only), `videos` (teacher-only, uploaded through the streaming route
+  `POST /api/videos/upload`, not `/api/files/upload` which buffers whole files in memory),
+  `submission-files`, post attachments. Served via `/api/files/*` as a stream with HTTP Range
+  support (required for `<video>` seeking).
 
 ## Detailed reference
 

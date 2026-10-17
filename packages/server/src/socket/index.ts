@@ -4,13 +4,14 @@ import jwt from 'jsonwebtoken';
 import { eq, and, or, inArray } from 'drizzle-orm';
 import { env } from '../config/env.js';
 import { db } from '../config/database.js';
-import { chapters, pages, classrooms, classroomMembers, assignments, assignmentPages } from '../db/schema.js';
+import { chapters, pages, classrooms, classroomMembers, assignments, assignmentPages, classroomVideos } from '../db/schema.js';
 import type { FastifyBaseLogger } from 'fastify';
 import type { TokenPayload } from '@mathchois/shared';
 import { registerNoteHandlers } from './handlers/notes.js';
 import { registerCommentHandlers } from './handlers/comments.js';
 import { registerAssignmentHandlers } from './handlers/assignments.js';
 import { registerPresenceHandlers } from './handlers/presence.js';
+import { registerVideoHandlers } from './handlers/videos.js';
 
 let io: Server | null = null;
 
@@ -29,6 +30,7 @@ const ROOM_PATTERNS = {
   assignment:   /^assignment:([\w-]+)$/,
   asnComments:  /^asn-comments:([\w-]+):([\w-]+)$/,
   asnWork:      /^asn-work:([\w-]+):([\w-]+)$/,
+  video:        /^video:([\w-]+)$/,
 };
 
 /** page → source chapter + linked chapters → 관련된 모든 classroomId 조회 */
@@ -169,6 +171,30 @@ async function validateRoomAccess(user: TokenPayload, room: string): Promise<boo
     return false;
   }
 
+  // video:{classroomVideoId} → 교실 소유 교사 또는 소속 학생 (학급 영상 댓글)
+  m = room.match(ROOM_PATTERNS.video);
+  if (m) {
+    const cv = await db.select({ classroomId: classroomVideos.classroomId })
+      .from(classroomVideos).where(eq(classroomVideos.id, m[1])).limit(1);
+    if (!cv[0]) return false;
+    if (user.role === 'teacher') {
+      const cls = await db.select({ teacherId: classrooms.teacherId })
+        .from(classrooms).where(eq(classrooms.id, cv[0].classroomId)).limit(1);
+      return cls[0]?.teacherId === user.sub;
+    }
+    if (user.role === 'student') {
+      const member = await db.select({ id: classroomMembers.id })
+        .from(classroomMembers)
+        .where(and(
+          eq(classroomMembers.classroomId, cv[0].classroomId),
+          eq(classroomMembers.studentId, user.sub),
+        ))
+        .limit(1);
+      return member.length > 0;
+    }
+    return false;
+  }
+
   return false; // 알 수 없는 room 패턴
 }
 
@@ -245,6 +271,7 @@ export function setupSocketIO(httpServer: HttpServer, logger: FastifyBaseLogger)
     registerCommentHandlers(io!, socket, user);
     registerAssignmentHandlers(io!, socket, user);
     registerPresenceHandlers(io!, socket, user);
+    registerVideoHandlers(io!, socket, user);
   });
 
   return io;

@@ -3,12 +3,13 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Users, BookOpen, Copy, Check, Trash2, FileText,
   Plus, Hash, ChevronDown, ChevronUp, Edit2, GripVertical,
-  Newspaper, ClipboardList, LogOut, Loader, X, Save, Download, BarChart3
+  Newspaper, ClipboardList, LogOut, Loader, X, Save, Download, BarChart3, Clapperboard
 } from 'lucide-react';
 
 const BoardTab      = lazy(() => import('../../components/board/BoardTab'));
 const AssignmentTab = lazy(() => import('../../components/assignment/AssignmentTab'));
 const ClassroomDashboard = lazy(() => import('../../components/dashboard/ClassroomDashboard'));
+const ClassroomVideoTab  = lazy(() => import('../../components/videos/ClassroomVideoTab'));
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors,
@@ -158,7 +159,7 @@ const ClassroomDetail = () => {
   const [importSelectedChid, setImportSelectedChid] = useState('');
   const [importing, setImporting]                 = useState(false);
 
-  const [activeTab, setActiveTab]   = useState('chapters'); // 'chapters' | 'board' | 'assignments' | 'students'
+  const [activeTab, setActiveTab]   = useState('chapters'); // 'chapters' | 'board' | 'assignments' | 'videos' | 'students' | 'dashboard'
 
   const [deleteTarget, setDeleteTarget]         = useState(null);
   const [showDeleteClassroom, setShowDeleteClassroom] = useState(false);
@@ -522,6 +523,7 @@ const ClassroomDetail = () => {
             { key: 'chapters',    label: '챕터',  Icon: BookOpen },
             { key: 'board',       label: '게시판', Icon: Newspaper },
             { key: 'assignments', label: '과제',  Icon: ClipboardList },
+            { key: 'videos',      label: '영상',  Icon: Clapperboard },
             { key: 'students',    label: '학생',  Icon: Users },
             ...(isTeacher ? [{ key: 'dashboard', label: '대시보드', Icon: BarChart3 }] : []),
           ].map((item) => {
@@ -619,6 +621,13 @@ const ClassroomDetail = () => {
               isTeacher={isTeacher}
               onUnsubmittedCount={!isTeacher ? setUnsubmittedCount : undefined}
             />
+          </Suspense>
+        )}
+
+        {/* ── 영상 탭 ── */}
+        {activeTab === 'videos' && (
+          <Suspense fallback={<p className="text-gray-400 text-sm">로딩 중...</p>}>
+            <ClassroomVideoTab classroomId={id} isTeacher={isTeacher} />
           </Suspense>
         )}
 

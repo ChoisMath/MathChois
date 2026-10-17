@@ -1,7 +1,7 @@
 # 영상자료 라이브러리 + 학급 영상 탭 (Video Library) — 설계
 
 작성일: 2026-10-17
-상태: 설계 초안 → 질의응답으로 확정 후 구현
+상태: 질의응답으로 확정(Q1 삭제 차단 · Q2 2GB mp4/webm/mov · Q3 본인 수정/삭제+교사 전체 삭제 · Q4 v1 로컬 이어보기만) → 구현 완료 (2026-10-17)
 
 ## 배경 / 문제
 
@@ -34,16 +34,16 @@
 | 결정 | 선택 | 비고 |
 |---|---|---|
 | 라이브러리 ↔ 학급 연결 | **참조(reference)** | 시각화자료는 "복사본"이지만 영상은 용량이 커서 복제 불가. `classroom_videos`가 `videos`를 FK로 참조. |
-| 라이브러리 영상 삭제 시 학급 배정이 있으면 | **❓ Q1** 차단(권장) / 연쇄 삭제 | 차단: 배정된 학급 목록을 보여주고 배정 해제 후 삭제. 연쇄: 학급 탭·댓글까지 함께 삭제. |
+| 라이브러리 영상 삭제 시 학급 배정이 있으면 | **차단** (Q1 확정) | 차단: 배정된 학급 목록을 보여주고 배정 해제 후 삭제. 연쇄: 학급 탭·댓글까지 함께 삭제. |
 | 업로드 방식 | **전용 스트리밍 업로드 라우트** `POST /api/videos/upload` | 기존 `/api/files/upload`는 파일 전체를 메모리 Buffer 로 모으므로 수백 MB 영상에 부적합. 디스크로 직접 pipe. |
-| 업로드 한도/형식 | **❓ Q2** mp4·webm·mov, 기본 2GB | Railway Volume 용량과 프록시 타임아웃 고려. |
+| 업로드 한도/형식 | mp4·webm·mov, **2GB** (Q2 확정) | Railway Volume 용량과 프록시 타임아웃 고려. |
 | 서빙 | `GET /api/files/*`를 **스트리밍 + HTTP Range(206)** 로 개선 | 현재는 전체 Buffer 읽기 → 탐색(seek) 불가·메모리 과다. Range 지원이 있어야 `<video>` 가 탐색·배속 재생 가능. 모든 버킷에 공통 적용(동작 동일, 메모리만 절감). |
 | 썸네일 | **클라이언트에서 캡처** (업로드 전 `<video>`→`<canvas>` JPEG) | 서버 ffmpeg 불필요. 길이(duration)도 클라이언트가 읽어 메타로 저장. |
 | 플레이어 | 자체 React 컴포넌트 `VideoPlayer` (native `<video>` + 커스텀 컨트롤) | 키보드 단축키·설정 패널·배속은 브라우저 기본 컨트롤로는 불가. 설정은 `localStorage`(`mc_video_player`)에 기기별 저장. |
 | 댓글 구조 | 루트 댓글 + 1단계 대댓글 | `parentId`는 루트 댓글만 가리킨다(깊이 1). |
 | "교사만 확인" 범위 | 루트 댓글의 `isPrivate` 가 스레드 전체에 적용 | 대댓글은 루트의 공개 범위를 상속. 교사는 모든 스레드를 본다. 학생은 공개 스레드 + 본인이 쓴 비공개 스레드만. |
-| 댓글 권한 | **❓ Q3** | 권장: 본인 댓글 수정/삭제 가능 + 담당 교사는 모든 댓글 삭제 가능. |
-| 시청 기록(이어보기/진도) | **❓ Q4** v1 제외 권장 | v1은 기기 로컬(localStorage)에 마지막 재생 위치만 저장. DB 저장 + 교사 진도 확인은 후속. |
+| 댓글 권한 | 본인 댓글 수정/삭제 + 담당 교사는 모든 댓글 삭제 (Q3 확정) | |
+| 시청 기록(이어보기/진도) | v1 제외 (Q4 확정) | v1은 기기 로컬(localStorage)에 마지막 재생 위치만 저장. DB 저장 + 교사 진도 확인은 후속. |
 | 실시간 | Socket.IO room `video:{classroomVideoId}` → `video-comment:changed` 이벤트 시 클라이언트 재조회 | 비공개 스레드 필터링은 서버 조회에서만 수행되므로 이벤트에는 본문을 싣지 않는다(권한 누수 방지). |
 | 학급 탭 정렬 | `position` + 드래그 정렬(dnd-kit, 챕터 카드와 동일) | |
 
@@ -71,7 +71,7 @@
 |---|---|---|
 | `id` | uuid PK | |
 | `classroomId` | uuid → classrooms (cascade) | |
-| `videoId` | uuid → videos (**Q1**: restrict 또는 cascade) | |
+| `videoId` | uuid → videos (**restrict** — 배정 중 삭제 차단) | |
 | `addedBy` | uuid → profiles (set null) | |
 | `note` | text | 학급용 안내 메모(선택) |
 | `position` | integer default 0 | |
@@ -116,7 +116,7 @@ unique `(classroomId, videoId)`, 인덱스 `(classroomId, position)`.
 | POST | `/api/videos/upload?kind=video\|thumbnail` | 교사 | **스트리밍 업로드**. 한도 초과 413. 응답 `{url, fileName, fileSize, mimeType}` |
 | POST | `/api/videos` | 교사 | 등록(메타 + `videoUrl` + `thumbnailUrl` + `fileSize/mimeType/durationSec`) |
 | PATCH | `/api/videos/:id` | 소유자/관리자 | 메타 수정, 파일/썸네일 교체(이전 파일 정리) |
-| DELETE | `/api/videos/:id` | 소유자/관리자 | 레코드 + 파일 + 썸네일 삭제. **Q1** 배정 중이면 409 + 학급 목록 |
+| DELETE | `/api/videos/:id` | 소유자/관리자 | 레코드 + 파일 + 썸네일 삭제. 배정 중이면 **409 + usage(학급 목록)** |
 
 ### 학급 영상 — `routes/classroomVideos.ts`
 | 메서드 | 경로 | 권한 | 설명 |
@@ -164,7 +164,7 @@ unique `(classroomId, videoId)`, 인덱스 `(classroomId, position)`.
   - `Space`/`K` 재생·일시정지, `M` 음소거, `F` 전체화면, `,`/`.` 배속 한 단계 내림/올림, `0~9` 해당 % 위치로 이동
 - **⚙ 설정 패널**: 방향키 이동 시간(10/20/30/60초), 재생속도(0.7 0.8 0.9 1.0 1.1 1.25 1.5 1.75 2.0 2.25 2.5).
 - 조작 시 화면 중앙에 1초간 피드백 오버레이("+10초", "볼륨 60%", "1.5×").
-- 설정은 `localStorage['mc_video_player']`에 저장(기기별 유지). 마지막 재생 위치는 `localStorage['mc_video_pos:<id>']`(Q4 v1).
+- 설정은 `localStorage['mc_video_player']`에 저장(기기별 유지). 마지막 재생 위치는 `localStorage['mc_video_pos:<id>']`(v1 — 로컬만).
 - 라이브러리 [미리보기] 모달(`VideoPreviewModal`)과 학급 시청 화면이 **같은 컴포넌트**를 쓴다.
 
 ### 5) 학급 [영상] 탭 — `components/videos/ClassroomVideoTab.jsx`
@@ -191,7 +191,7 @@ YouTube 레이아웃: 좌측(또는 상단) 플레이어 + 제목/단원/설명/
 - Range 요청이 파일 범위를 벗어나면 416. HEAD 요청 지원(일부 브라우저가 길이 확인).
 - 학생이 비공개 스레드가 아닌 루트에 "교사만 확인"으로 대댓글을 달 수 없다(대댓글은 루트 설정 상속, 요청 값 무시).
 - 다른 학생의 비공개 스레드에 대댓글 시도 → 403.
-- 라이브러리 영상의 소유자가 아닌 교사가 자기 학급에 배정한 뒤 소유자가 영상을 삭제하려는 경우 → **Q1**.
+- 라이브러리 영상의 소유자가 아닌 교사가 자기 학급에 배정한 뒤 소유자가 영상을 삭제하려는 경우 → 409 로 차단되고 배정 학급 목록이 안내된다.
 - 교실 소유 교사가 아닌 교사(공유 교사)는 학급 영상/댓글에 접근 불가.
 
 ## 테스트
@@ -205,3 +205,9 @@ YouTube 레이아웃: 좌측(또는 상단) 플레이어 + 제목/단원/설명/
 **서버**: `db/schema.ts`, `db/startupMigrate.ts`, `routes/videos.ts`(신규), `routes/classroomVideos.ts`(신규), `services/video.service.ts`(신규), `services/videoComment.service.ts`(신규), `services/storage.service.ts`(스트리밍), `routes/storage.ts`(Range), `socket/index.ts`(room), `socket/handlers/videos.ts`(신규), `app.ts`.
 **공유**: `shared/src/types/video.ts`(신규), `index.ts`.
 **클라이언트**: `lib/videos.js`, `lib/videoPlayer.js`(+tests), `components/videos/{VideoForm,VideoPlayer,VideoPreviewModal,VideoPickerModal,ClassroomVideoTab,VideoComments}.jsx`, `pages/Videos/{VideosPage,ClassroomVideoWatch}.jsx`, `App.jsx`, `layouts/DashboardLayout.jsx`, `pages/Classrooms/ClassroomDetail.jsx`.
+
+## 구현 검증 (2026-10-17)
+
+- `tsc`(server) / ESLint(신규 파일 0 오류) / Vitest 67 tests / `vite build` 통과.
+- 로컬 PostgreSQL + 실제 서버 기동 후 curl E2E 55개 통과: 업로드(형식·역할 거부, 한글 파일명), Range 206/416/suffix/HEAD, 라이브러리 CRUD·검색·facets, 학급 배정(중복 409)·삭제 차단 409·usage, 학생/비구성원 접근, 댓글 공개/비공개 가시성·대댓글 상속·권한, 배정 해제 cascade, 파일 삭제.
+- 수동 확인 필요(배포 후): Railway 프록시의 대용량 업로드 타임아웃/본문 한도(2GB 실측), 태블릿 Safari 전체화면(`webkitEnterFullscreen`).

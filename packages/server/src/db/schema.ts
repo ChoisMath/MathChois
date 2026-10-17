@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, timestamp, integer, jsonb, unique, boolean, index, primaryKey,
+  pgTable, uuid, text, timestamp, integer, bigint, jsonb, unique, boolean, index, primaryKey,
 } from 'drizzle-orm/pg-core';
 import type { ExcalidrawData, ProblemFigure } from '@mathchois/shared';
 
@@ -323,4 +323,62 @@ export const visualizations = pgTable('visualizations', {
 }, (t) => [
   index('idx_visualizations_created_by').on(t.createdBy),
   index('idx_visualizations_subject').on(t.subject, t.majorUnit, t.minorUnit),
+]);
+
+// ─── videos (영상자료 라이브러리, 교사 간 공유) ──────
+
+export const videos = pgTable('videos', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  createdBy: uuid('created_by').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  subject: text('subject'),
+  majorUnit: text('major_unit'),
+  minorUnit: text('minor_unit'),
+  description: text('description'),
+  videoUrl: text('video_url').notNull(),
+  thumbnailUrl: text('thumbnail_url'),
+  mimeType: text('mime_type'),
+  fileSize: bigint('file_size', { mode: 'number' }),
+  durationSec: integer('duration_sec'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  index('idx_videos_created_by').on(t.createdBy),
+  index('idx_videos_subject').on(t.subject, t.majorUnit, t.minorUnit),
+]);
+
+// ─── classroom_videos (학급에 배정된 영상) ──────────
+// 라이브러리 영상을 "참조"한다(복사 아님). 배정 중인 영상은 삭제가 차단된다(restrict).
+
+export const classroomVideos = pgTable('classroom_videos', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  classroomId: uuid('classroom_id').notNull().references(() => classrooms.id, { onDelete: 'cascade' }),
+  videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'restrict' }),
+  addedBy: uuid('added_by').references(() => profiles.id, { onDelete: 'set null' }),
+  note: text('note'),
+  position: integer('position').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  unique('uq_classroom_videos_classroom_video').on(t.classroomId, t.videoId),
+  index('idx_classroom_videos_classroom').on(t.classroomId, t.position),
+  index('idx_classroom_videos_video').on(t.videoId),
+]);
+
+// ─── video_comments (학급 영상 댓글/대댓글) ─────────
+// parentId 는 루트 댓글만 가리킨다(깊이 1). isPrivate("교사만 확인")는 루트에만 의미가 있고
+// 대댓글은 루트의 공개 범위를 상속한다.
+
+export const videoComments = pgTable('video_comments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  classroomVideoId: uuid('classroom_video_id').notNull().references(() => classroomVideos.id, { onDelete: 'cascade' }),
+  authorId: uuid('author_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  parentId: uuid('parent_id').references((): any => videoComments.id, { onDelete: 'cascade' }),
+  content: text('content').notNull(),
+  isPrivate: boolean('is_private').default(false).notNull(),
+  timestampSec: integer('timestamp_sec'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  index('idx_video_comments_cv').on(t.classroomVideoId, t.createdAt),
+  index('idx_video_comments_parent').on(t.parentId),
 ]);

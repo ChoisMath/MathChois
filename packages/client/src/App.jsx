@@ -36,6 +36,10 @@ const AssignmentStudyViewer  = lazy(() => import('./pages/Assignment/AssignmentS
 const ProblemsPage = lazy(() => import('./pages/Problems/ProblemsPage'));
 const VisualizationsPage = lazy(() => import('./pages/Visualizations/VisualizationsPage'));
 
+/* 영상자료 */
+const VideosPage          = lazy(() => import('./pages/Videos/VideosPage'));
+const ClassroomVideoWatch = lazy(() => import('./pages/Videos/ClassroomVideoWatch'));
+
 /* 코칭 기록 */
 const MyCoachingHistory     = lazy(() => import('./pages/History/MyCoachingHistory'));
 const StudentCoachingHistory = lazy(() => import('./pages/Monitor/StudentCoachingHistory'));
@@ -128,6 +132,9 @@ function App() {
               {/* 문제은행 */}
               <Route path="/teacher/problems" element={<ProblemsPage />} />
               <Route path="/teacher/visualizations" element={<VisualizationsPage />} />
+              {/* 영상자료 라이브러리 + 학급 영상 시청/댓글 */}
+              <Route path="/teacher/videos" element={<VideosPage />} />
+              <Route path="/teacher/classrooms/:classroomId/videos/:cvId" element={<ClassroomVideoWatch />} />
               {/* 학생 코칭 기록 */}
               <Route
                 path="/teacher/classrooms/:classroomId/students/:studentId/coaching-history"
@@ -163,6 +170,7 @@ function App() {
               <Route path="/student/classrooms" element={<ClassroomList />} />
               <Route path="/student/classrooms/:id" element={<ClassroomDetail />} />
               <Route path="/student/coaching-history" element={<MyCoachingHistory />} />
+              <Route path="/student/classrooms/:classroomId/videos/:cvId" element={<ClassroomVideoWatch />} />
             </Route>
             {/* StudyViewer: 전체화면 레이아웃, DashboardLayout 제외 */}
             <Route path="/student/study/:chapterId/page/:pageId" element={<StudyPageRouter />} />

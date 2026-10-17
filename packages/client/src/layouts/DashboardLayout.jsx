@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Users, LogIn, LayoutList, Loader, BookMarked, History, LayoutTemplate } from 'lucide-react';
+import { Users, LogIn, LayoutList, Loader, BookMarked, History, LayoutTemplate, Clapperboard } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../lib/api';
@@ -205,6 +205,19 @@ function TeacherSidebar() {
         >
           <LayoutTemplate className={`mr-2 h-4 w-4 ${location.pathname.startsWith('/teacher/visualizations') ? 'text-blue-500' : 'text-gray-400'}`} />
           시각화자료
+        </Link>
+
+        {/* 영상자료 */}
+        <Link
+          to="/teacher/videos"
+          className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors mb-1 ${
+            location.pathname.startsWith('/teacher/videos')
+              ? 'bg-blue-50 text-blue-700'
+              : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+          }`}
+        >
+          <Clapperboard className={`mr-2 h-4 w-4 ${location.pathname.startsWith('/teacher/videos') ? 'text-blue-500' : 'text-gray-400'}`} />
+          영상자료
         </Link>
 
         <Link
