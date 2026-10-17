@@ -23,6 +23,7 @@ import {
 import { isMailConfigured, sendPasswordResetEmail, sendVerificationEmail } from '../services/mail.service.js';
 import { authenticate } from '../middleware/auth.js';
 import { env } from '../config/env.js';
+import { APP_ORIGIN } from './storage.js';
 
 /** Refresh token cookie 옵션 */
 const REFRESH_COOKIE_OPTIONS = {
@@ -95,7 +96,7 @@ export async function authRoutes(app: FastifyInstance) {
         name: name.trim(),
       });
 
-      const baseUrl = env.APP_URL || `${request.protocol}://${request.hostname}`;
+      const baseUrl = getEmailLinkBaseUrl(request);
       const verifyUrl = `${baseUrl}/verify-email/${token}`;
 
       await sendVerificationEmail(normalizedEmail, verifyUrl, name.trim());
@@ -234,7 +235,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     try {
       const token = signPasswordResetToken(profile.id);
-      const baseUrl = env.APP_URL || `${request.protocol}://${request.hostname}`;
+      const baseUrl = getEmailLinkBaseUrl(request);
       const resetUrl = `${baseUrl}/reset-password/${token}`;
 
       await sendPasswordResetEmail(profile.email!, resetUrl, profile.name);
@@ -405,6 +406,18 @@ export async function authRoutes(app: FastifyInstance) {
 }
 
 // ─── Helpers ─────────────────────────────────────
+
+/**
+ * 메일 링크(인증·비밀번호 초기화)의 기준 URL.
+ * trustProxy 로 request.hostname 은 X-Forwarded-Host 를 따르므로, 공격자가 헤더를 위조해
+ * 피해자에게 자기 도메인으로 가는 초기화 링크(유효 토큰 포함)를 보내게 할 수 있다.
+ * 프로덕션에서는 요청 헤더를 쓰지 않고 APP_URL → 고정 도메인 순으로 정한다.
+ */
+function getEmailLinkBaseUrl(request: { hostname: string; protocol: string }) {
+  if (env.APP_URL) return env.APP_URL.replace(/\/+$/, '');
+  if (env.NODE_ENV === 'production') return APP_ORIGIN;
+  return `${request.protocol}://${request.hostname}`;
+}
 
 function getBaseUrl(request: { hostname: string; protocol: string }) {
   // Production: same origin. Dev: server's own URL

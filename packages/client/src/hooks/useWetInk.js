@@ -29,7 +29,6 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
     let pointerId = null;
     let pts = [];          // [clientX, clientY]
     let pressures = [];
-    let hasRealPressure = false;
     let rect = null;       // 오버레이/컨테이너 bounding rect (down 시점)
     let dpr = 1;
     let rafId = 0;
@@ -83,7 +82,6 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       pointerId = e.pointerId;
       pts = [[e.clientX, e.clientY]];
       pressures = [e.pressure || 0.5];
-      hasRealPressure = e.pressure > 0 && e.pressure !== 0.5;
       scheduleRender();
     };
 
@@ -95,7 +93,6 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       for (const ev of evs.length ? evs : [e]) {
         pts.push([ev.clientX, ev.clientY]);
         pressures.push(ev.pressure || 0.5);
-        if (ev.pressure > 0 && ev.pressure !== 0.5) hasRealPressure = true;
       }
       scheduleRender();
     };
@@ -114,7 +111,7 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
         api.updateScene({ elements: [...api.getSceneElements(), el], commitToHistory: false });
       }
       if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
-      drawing = false; pointerId = null; pts = []; pressures = []; hasRealPressure = false;
+      drawing = false; pointerId = null; pts = []; pressures = [];
       // commit 직후 Excalidraw 가 같은 프레임에 요소를 그리므로 다음 프레임에 오버레이 클리어(겹침/깜빡임 방지)
       requestAnimationFrame(clear);
     };

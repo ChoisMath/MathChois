@@ -148,12 +148,13 @@ export function buildApp() {
       root: clientDist,
       prefix: '/',
       wildcard: false,
-      setHeaders: (res, filePath) => {
+      // @fastify/static 10+: setHeaders 는 raw Response 가 아니라 FastifyReply 를 받는다
+      setHeaders: (reply, filePath) => {
         if (filePath.includes('/assets/')) {
-          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          reply.header('Cache-Control', 'public, max-age=31536000, immutable');
         } else {
           // index.html·sw.js·manifest 는 항상 재검증(ETag 304) — 설치형 PWA가 새 배포를 놓치지 않도록
-          res.setHeader('Cache-Control', 'no-cache');
+          reply.header('Cache-Control', 'no-cache');
         }
       },
     });

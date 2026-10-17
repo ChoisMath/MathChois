@@ -509,7 +509,6 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked
             { type: 'rectangle', Icon: Square,   label: '사각형' },
             { type: 'ellipse',   Icon: Circle,   label: '원' },
             { type: 'triangle',  Icon: Triangle, label: '삼각형 (그린 후 자동 변환)' },
-          // eslint-disable-next-line no-unused-vars
           ].map(({ type, Icon: ShapeIcon, label }) => (
             <button key={type}
               onClick={() => { applyTool(type); setShapeMenuOpen(false); }}

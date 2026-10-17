@@ -13,17 +13,16 @@ const acc = (correct, attempts) => (attempts > 0 ? Math.round((correct / attempt
 
 export default function ClassroomDashboard({ classroomId }) {
   const navigate = useNavigate();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // 결과에 classroomId 를 붙여 두고 현재 반과 다르면 로딩 중으로 본다 (effect 안 동기 setState 방지)
+  const [result, setResult] = useState({ classroomId: null, data: null, error: '' });
+  const loading = result.classroomId !== classroomId;
+  const { data, error } = result;
 
   useEffect(() => {
     let alive = true;
-    setLoading(true); setError('');
     getClassroomDashboard(classroomId)
-      .then((d) => { if (alive) setData(d); })
-      .catch((err) => { if (alive) setError(err.message); })
-      .finally(() => { if (alive) setLoading(false); });
+      .then((d) => { if (alive) setResult({ classroomId, data: d, error: '' }); })
+      .catch((err) => { if (alive) setResult({ classroomId, data: null, error: err.message }); });
     return () => { alive = false; };
   }, [classroomId]);
 
