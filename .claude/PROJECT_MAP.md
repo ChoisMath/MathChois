@@ -30,15 +30,15 @@ packages/
 │   └── src/
 │       ├── App.jsx             # 라우팅 정의
 │       ├── contexts/AuthContext.jsx
-│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem, FileDropZone — 클릭/드래그 앤 드롭 파일 선택 영역), problems/(ProblemPickerModal), coaching/(CoachingHistoryView, AttemptStack), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal),
+│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem, SplitPane(2분할 컨테이너 — 손잡이 드래그/키보드로 비율 조정, 드래그 중 투명 오버레이), FileDropZone — 클릭/드래그 앤 드롭 파일 선택 영역), problems/(ProblemPickerModal), coaching/(CoachingHistoryView, AttemptStack), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal),
 │       │                       #   videos/(VideoPlayer, VideoPreviewModal, VideoForm, VideoPickerModal, ClassroomVideoTab, VideoComments)
 │       │   └── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay, HtmlToolOverlay
 │       ├── layouts/            # MainLayout(public), DashboardLayout(인증)
 │       ├── pages/              # Home, Login, Classrooms, Chapters, Study, Monitor,
-│       │                       #   Assignment, Board, Admin, Problems(문제은행), Visualizations(시각화자료), Videos(영상자료 VideosPage + 학급 시청 ClassroomVideoWatch), History(코칭기록) 등
+│       │                       #   Assignment, Board, Admin, Problems(문제은행), Visualizations(시각화자료), Videos(영상자료 VideosPage + 학급 시청 ClassroomVideoWatch + 영상 2분할 필기 ClassroomVideoSplit), History(코칭기록) 등
 │       ├── hooks/              # useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
 │       │                       #   useScribbleErase(문지르기 지우개), useFreedrawSmoothing, usePenDiagnostics,
-│       │                       #   useWetInk(웻잉크 오버레이 — 펜 라이브 렌더)
+│       │                       #   useWetInk(웻잉크 오버레이 — 펜 라이브 렌더), useOrientation(세로 화면 → 위/아래 분할)
 │       └── lib/                # api.ts, socket.ts, toolUrl.js, excalidrawUtils, pdfDownloader,
 │                               #   inputMode.js, penToggles.js, excalidrawHistory.js,
 │                               #   wetInkStroke.js(인라인 perfect-freehand + freedraw element 생성),
@@ -49,6 +49,7 @@ packages/
 │                               #   visualizations.js(list/facets/CRUD/upload + buildVisualizationQuery),
 │                               #   videos.js(라이브러리/학급배정/댓글 API + XHR 진행률 업로드 + 썸네일 캡처/길이 측정),
 │                               #   videoPlayer.js(플레이어 설정 localStorage, SEEK_STEPS/PLAYBACK_RATES, formatTime, 이어보기 위치),
+│                               #   splitLayout.js(영상 2분할 — 비율/영상 위치 `mc_video_split`, 마지막 페이지 `mc_video_split_page:<cv>`, ratioFromPointer/stepRatio),
 │                               #   swUpdate.js(PWA SW 자동 업데이트 — setupSwAutoUpdate),
 │                               #   linkify.js(게시판 본문 plain text의 URL → 자동 하이퍼링크 세그먼트) (*.test.js = Vitest)
 └── shared/src/
@@ -145,6 +146,7 @@ packages/
 | `/teacher/visualizations` | Visualizations/VisualizationsPage | 시각화자료 라이브러리 관리(본인 자료 mine=1, 등록/수정/삭제/미리보기), DashboardLayout |
 | `/teacher/videos` | Videos/VideosPage | 영상자료 라이브러리(내 자료/전체 교사 자료 토글, 등록/수정/삭제/미리보기 플레이어), DashboardLayout |
 | `/teacher/classrooms/:classroomId/videos/:cvId` · `/student/classrooms/:classroomId/videos/:cvId` | Videos/ClassroomVideoWatch | 학급 영상 시청(YouTube 식 플레이어 + 댓글/대댓글 + 같은 학급 다른 영상), DashboardLayout. 학급 상세 '영상' 탭(`ClassroomVideoTab`)에서 진입 |
+| `/student/classrooms/:classroomId/videos/:cvId/split?page=<pageId>` | **Videos/ClassroomVideoSplit** | 영상 2분할 필기(학생 전용). 한쪽 영상 플레이어 + 다른 쪽 교사가 연결한 "필기 챕터"의 `StudyViewer`(**임베드 모드** props `chapterId/pageId/onNavigatePage/onExit/embedded`). 페이지 이동은 `?page=` 만 바꿔 영상이 유지됨. 분할선 드래그·좌우 바꾸기·반쪽 전체화면·세로 화면은 위/아래. **DashboardLayout 밖** 전체화면 |
 | `/teacher/.../assignments/:assignmentId/edit` · `/monitor` | AssignmentEditor, AssignmentMonitor | 과제 |
 | `/teacher/.../assignments/:assignmentId/monitor/:studentId` | **AssignmentWorkViewer** (⑤) | 전체화면 |
 | `/teacher/classrooms/:classroomId/students/:studentId/coaching-history` | Monitor/StudentCoachingHistory | DashboardLayout, 교사가 학생 AI 코칭 풀이 기록 조회 |
@@ -172,7 +174,7 @@ packages/
 | dashboard | routes/dashboard.ts | `GET /dashboard/classrooms/:classroomId`(authenticate + requireRole('teacher') + isClassroomOwner 403). 집계 전용 — 학생×챕터 코칭 정답률·필기 진도 + 반 요약. 정답·해설 select 제외(카운트만) |
 | visualizations | routes/visualizations.ts | `GET /visualizations`(목록 — 텍스트 q + subject/major/minorUnit 필터 + 페이지네이션, 기본 전체 공유, `mine=1`이면 본인 것만), `GET /visualizations/facets`, `GET/:id`, `POST`(등록), `PATCH/:id`·`DELETE/:id`(소유자 403 가드 — 삭제 시 원본 파일도 제거). 모두 teacher |
 | videos | routes/videos.ts | 모두 teacher. `POST /videos/upload?kind=video\|thumbnail`(**스트리밍 업로드** — 디스크 직접 기록, 영상 2GB/썸네일 5MB, mp4/webm/mov, 초과 413), `GET /videos`(목록 q/subject/majorUnit/minorUnit/`mine=1`/페이지네이션 + createdByName), `GET /videos/facets`, `GET /videos/:id`, `GET /videos/:id/usage`(배정 학급), `POST /videos`, `PATCH /videos/:id`(소유자/관리자, 파일 교체 시 이전 파일 정리), `DELETE /videos/:id`(소유자/관리자 — **학급 배정 중이면 409 + usage**, `?force=1` 이면 트랜잭션으로 모든 배정 해제 후 삭제, 파일·썸네일 삭제) |
-| classroomVideos | routes/classroomVideos.ts | 시청 기록: `PUT/GET /classroom-videos/:id/progress`(학생), `GET /classroom-videos/:id/progress/summary`(교사), `GET /classrooms/:cid/videos/progress`(학생 본인 맵/교사 통계 맵). 미읽음: `POST /classroom-videos/:id/seen`, `GET /classrooms/:cid/videos/unread`, `GET /videos/unread`(역할별 학급 합계). 교실 소유 교사/소속 학생 가드. `GET /classrooms/:cid/videos`, `POST`(교사 — `{videoId, note}`, 중복 409), `PATCH /classrooms/:cid/videos/reorder`(`{ids}`), `GET /classroom-videos/:id`(상세 + classroom + siblings), `PATCH`(note)·`DELETE`(교사 — 댓글 cascade). 댓글: `GET /classroom-videos/:id/comments`(학생은 공개 + 본인 비공개 스레드만), `POST`(`content/parentId/isPrivate/timestampSec` — 대댓글은 루트 공개범위 상속, 깊이 1, 타인 비공개 스레드 403), `PATCH /video-comments/:id`(작성자), `DELETE /video-comments/:id`(작성자 또는 교실 소유 교사). 쓰기 후 socket `video:{cvId}` 에 `video-comment:changed` |
+| classroomVideos | routes/classroomVideos.ts | 시청 기록: `PUT/GET /classroom-videos/:id/progress`(학생), `GET /classroom-videos/:id/progress/summary`(교사), `GET /classrooms/:cid/videos/progress`(학생 본인 맵/교사 통계 맵). 미읽음: `POST /classroom-videos/:id/seen`, `GET /classrooms/:cid/videos/unread`, `GET /videos/unread`(역할별 학급 합계). 교실 소유 교사/소속 학생 가드. `GET /classrooms/:cid/videos`, `POST`(교사 — `{videoId, note}`, 중복 409), `PATCH /classrooms/:cid/videos/reorder`(`{ids}`), `GET /classroom-videos/:id`(상세 + classroom + siblings), `PATCH`(note·**chapterId**(필기 챕터 — 같은 학급 챕터가 아니면 400, 전달된 키만 갱신), 응답에 `chapter:{id,title}|null` left join)·`DELETE`(교사 — 댓글 cascade). 댓글: `GET /classroom-videos/:id/comments`(학생은 공개 + 본인 비공개 스레드만), `POST`(`content/parentId/isPrivate/timestampSec` — 대댓글은 루트 공개범위 상속, 깊이 1, 타인 비공개 스레드 403), `PATCH /video-comments/:id`(작성자), `DELETE /video-comments/:id`(작성자 또는 교실 소유 교사). 쓰기 후 socket `video:{cvId}` 에 `video-comment:changed` |
 | health | app.ts | `GET /api/health` (DB ping) |
 
 ## 데이터 모델 (Drizzle 스키마: `packages/server/src/db/schema.ts`)
@@ -198,7 +200,7 @@ packages/
 | `coaching_quota` | studentId, pageId | 문제(페이지)당 학생 AI 코칭 횟수 제한/리셋 기준. (student, page) unique, resetAt(이 시각 이후의 `coaching_attempts`만 사용 횟수로 카운트), updatedAt. 시도 기록 자체는 `coaching_attempts`에 그대로 보존 |
 | `visualizations` | createdBy→profiles(cascade) | 시각화자료 라이브러리(교사 간 공유). title(필수)/subject/majorUnit/minorUnit/description/htmlUrl(원본, `visualizations` 버킷). 인덱스 (createdBy)/(subject,majorUnit,minorUnit). 페이지 삽입 시 chapter-tools로 **복제**(독립 복사본) |
 | `videos` | createdBy→profiles(cascade) | 영상자료 라이브러리(교사 간 공유). title/subject/majorUnit/minorUnit/description/videoUrl(`videos` 버킷 `library/`)/thumbnailUrl(`thumbnails/`)/mimeType/fileSize(bigint)/durationSec. 인덱스 (createdBy)/(subject,majorUnit,minorUnit) |
-| `classroom_videos` | classroomId→classrooms(cascade), videoId→videos(**restrict**), addedBy→profiles(set null) | 학급에 배정된 영상 — 라이브러리를 **참조**(복사 아님). note(학급 안내 메모)/position. (classroom, video) unique. 배정 중인 라이브러리 영상은 삭제 차단 |
+| `classroom_videos` | classroomId→classrooms(cascade), videoId→videos(**restrict**), addedBy→profiles(set null), **chapterId→chapters(set null)** | 학급에 배정된 영상 — 라이브러리를 **참조**(복사 아님). note(학급 안내 메모)/position. (classroom, video) unique. 배정 중인 라이브러리 영상은 삭제 차단 |
 | `video_comments` | classroomVideoId→classroom_videos(cascade), authorId→profiles(cascade), parentId→video_comments(cascade, 루트만 가리킴 — 깊이 1) | 학급 영상 댓글. content/isPrivate("교사만 확인" — 루트에만 의미, 대댓글은 상속)/timestampSec(영상 시각 첨부). 인덱스 (classroomVideoId, createdAt)/(parentId) |
 | `video_progress` | classroomVideoId→classroom_videos(cascade), studentId→profiles(cascade) | 학생 시청 기록. positionSec(이어보기)/maxPositionSec(진도율)/completed(90% 도달, sticky). (cv, student) unique |
 | `video_comment_reads` | classroomVideoId→classroom_videos(cascade), userId→profiles(cascade) | 댓글 읽음 시각 lastSeenAt. 미읽음 = 본인이 쓰지 않은·열람 가능한·lastSeenAt 이후 댓글 수. (cv, user) unique |
@@ -254,6 +256,7 @@ packages/
   - **"교사만 확인"(isPrivate)** 은 루트 댓글에만, 학생만 설정. 대댓글은 루트의 공개 범위를 **상속**(요청 값 무시), 타인의 비공개 스레드에 답글 403, 대댓글의 대댓글 400. 학생 조회는 공개 + 본인 비공개 스레드만 — 필터링은 **서버 조회에서만** 하므로 socket 이벤트(`video-comment:changed`)에는 본문을 싣지 않고 클라이언트가 재조회한다. 댓글 권한: 본인 수정/삭제 + 교실 소유 교사는 모두 삭제.
   - **v2 후속(2026-10-17, subagent 병렬 구현)**: 학생 시청 기록(`video_progress`, `VideoPlayer` `onProgress` 10초 스로틀 + `initialPosition` 이 localStorage 이어보기보다 우선) + 교사 시청 현황 패널/카드 통계; `DELETE /videos/:id?force=1` 배정 해제 후 삭제(`ApiError.body` 로 409 usage 전달); **챕터/과제 페이지에 라이브러리 영상 삽입** — `components/videos/PageVideo.jsx` 의 `PageVideoEmbed`/`PageVideoThumb` 가 YouTube iframe 또는 `VideoPlayer`(뷰어에서는 `hotkeys=false` — 필기 도구 키와 충돌 방지)를 렌더, 편집기 영상 버튼은 "YouTube 링크 / 영상자료에서 선택" 모달(`VideoPickerModal` `selectLabel`), `lib/pageVideoUrl.js` `isLibraryVideoUrl`; 댓글 미읽음 배지(`video_comment_reads`, 시청 화면 `VideoComments.fetchThreads` 가 읽음 처리 후 `refreshSidebar()`, 사이드바/학급 탭/카드 배지). zod 실패는 `app.ts` 에서 400.
   - **플레이어(`components/videos/VideoPlayer.jsx`)**: native `<video>` + 커스텀 컨트롤. ←/→ 설정된 초(10/20/30/60) 이동, ↑/↓ 볼륨, Space/K, M, F, `,`/`.` 배속(0.7~2.5×, 11단계), 0~9 % 이동. 포인터 제스처: 한 번 탭 재생·정지, **더블탭은 오른쪽 절반 앞으로/왼쪽 절반 뒤로**(전체화면 토글 아님 — 태블릿에서 전체화면이 풀리던 문제), **400ms 길게 누른 뒤 좌우 드래그 = 스크럽**(`delta = sign·(|dx|/폭)^1.6·길이` 비선형 — 짧게 끌면 미세, 끝까지 끌면 영상 끝; 드래그 중 일시정지·오버레이, 떼면 복귀; `touch-action: pan-y` 로 세로 스크롤 유지). 다운로드 가드: `controlsList=nodownload`, PiP 비활성, contextmenu 차단, `-webkit-touch-callout: none`. 긴 설명·시청 현황은 `CollapsibleSection`(가로선 ▼ 토글, 기본 접힘). 설정은 `localStorage['mc_video_player']`(기기별), 이어보기 위치는 `mc_video_pos:<key>`(v1 은 로컬만 — DB 시청기록은 후속). 키 리스너는 window 에 붙되 input/textarea 포커스 중엔 무시(`isTypingTarget`). `ref` 로 `getCurrentTime/seekTo` 노출(댓글 시각 첨부·이동). 썸네일은 **클라이언트가 캡처**(`captureVideoThumbnail`, 1초 지점 프레임 → JPEG; File 또는 같은 origin 영상 URL 입력) — 서버 ffmpeg 없음. `VideoForm` 의 썸네일은 자동 캡처(등록된 파일 아님으로 표시) / 직접 등록한 이미지(JPEG·PNG·WebP 5MB, `kind=thumbnail`) / 수정 시 기존 유지 중 하나이며, 수정 화면에서는 [썸네일 교체]·[다른 장면으로](기존 영상 URL 재캡처)로 바꾼다. 영상·HTML·썸네일 파일 선택은 공통 `common/FileDropZone`(클릭 → OS 파일창, 드래그 오버 강조, accept/용량 검사).
+  - **영상 2분할 필기(`feat/video-split-note`, 설계 `docs/superpowers/specs/2026-10-17-video-split-note-design.md`)**: 교사가 학급 [영상] 탭 카드에서 "필기 챕터"(같은 학급 챕터 1개)를 연결하면 학생 영상 상세에 [2분할로 필기하며 보기] 버튼이 생긴다. `ClassroomVideoSplit` 은 `SplitPane` 안에 `VideoPlayer`(`fill`, `fullscreenTargetRef`=분할 루트, `hotkeys`=마지막으로 포인터가 닿은 패널이 영상일 때만) + 임베드 `StudyViewer` 를 둔다. 비율은 **영상 패널 기준**으로 저장해 좌우를 바꿔도 영상 크기가 유지된다. Fullscreen API 가 없는 iPhone Safari 는 `onPseudoFullscreenChange` 로 CSS(`fixed inset-0`) 폴백. AI 코칭 페이지는 분할 안에서 풀지 않고 안내+전체 화면 링크만 표시(v1 비목표).
 - **시각화자료 라이브러리(`feat/visualization-library`)**: 교사가 등록한 standalone HTML을 메타(제목/과목/대단원/소단원/설명)와 함께 저장·검색·**교사 간 공유**. 챕터 편집기 HTML 버튼(`FileCode2`)이 `VisualizationPickerModal`(검색 리스트 + 우상단 [새html등록])을 연다. **삽입은 복사본(독립)** — 서버 `copyHtmlToChapterTools`가 원본을 `chapter-tools`로 복제해 페이지가 자체 복사본을 참조하므로, 원본 교체/삭제가 이미 삽입된 페이지에 영향 없음(새로 삽입하는 페이지부터 교체본 적용). 관리(`/teacher/visualizations`)는 본인 자료만(`mine=1`) — 수정은 **파일 통째 교체 / 단원 / 제목·설명**만(HTML 내부 편집 없음), 삭제는 레코드+원본 파일 제거. 등록+즉시 삽입 흐름은 모달 `onSaved→onSelect`로 처리.
   - 공유 타입: `shared/src/types/visualization.ts`(Visualization, VisualizationListResult, VisualizationFacets, VisualizationFilters). 서버: `routes/visualizations.ts`, `services/visualization.service.ts`, `services/page.service.ts`(`createPage`의 `fromVisualizationId`), `services/storage.service.ts`(`copyHtmlToChapterTools`). 클라: `lib/visualizations.js`(+test).
 - **Markdown 렌더(`components/common/Markdown.jsx`)**: `rehypeRaw`로 교사 작성 HTML(`<br>`,`<center>`)을 허용하되 `rehypeSanitize`로 XSS 차단(플러그인 순서: raw→sanitize→katex). `neutralizeIndentedCode`가 **줄 앞 4칸 이상 들여쓰기를 nbsp로 치환**해 Markdown이 코드 블록으로 오인해 수식이 깨지는 문제를 막는다(펜스 ``` 블록은 보존).
@@ -269,4 +272,4 @@ packages/
 - **`.gitignore`** — `*.tsbuildinfo`·`.superpowers/`·`.plans/`·`review.md` 무시(빌드 산출물·작업 노트는 읽지 않음).
 
 ---
-마지막 업데이트: 2026-10-17 (영상자료 v2 후속: 시청 기록·force 삭제·챕터 페이지 영상 삽입·미읽음 배지 / 직전: 영상자료 라이브러리 + 학급 영상 탭/댓글, 파일 서빙 스트리밍+Range, 도메인 class.chois.pro 이전)
+마지막 업데이트: 2026-10-17 (영상 2분할 필기: classroom_videos.chapter_id·ClassroomVideoSplit·SplitPane·StudyViewer 임베드 모드 / 직전: 영상자료 v2 후속: 시청 기록·force 삭제·챕터 페이지 영상 삽입·미읽음 배지 / 직전: 영상자료 라이브러리 + 학급 영상 탭/댓글, 파일 서빙 스트리밍+Range, 도메인 class.chois.pro 이전)

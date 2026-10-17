@@ -1,6 +1,6 @@
 # 영상 2분할 필기 (Video Split-Note) Implementation Plan
 
-> **For agentic workers:** 이 계획은 Task 단위로 순서대로 구현한다. 각 Task 끝의 검증 명령이 통과해야 다음 Task 로 넘어간다. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** 이 계획은 Task 단위로 순서대로 구현한다. 각 Task 끝의 검증 명령이 통과해야 다음 Task 로 넘어간다. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **설계 문서:** `docs/superpowers/specs/2026-10-17-video-split-note-design.md` (질의응답으로 확정된 결정 Q1~Q4 포함)
 
@@ -13,6 +13,8 @@
 - 레이아웃은 신규 `SplitPane`(CSS grid + 손잡이 드래그 + 드래그 중 투명 오버레이). 비율/배치는 `localStorage['mc_video_split']`.
 - `VideoPlayer` 에 `fullscreenTargetRef` 를 추가해 분할 루트를 전체화면 대상으로 삼는다. `requestFullscreen` 미지원(iPhone Safari)은 CSS 폴백.
 - 플레이어 단축키는 마지막으로 포인터가 닿은 패널이 영상일 때만 활성(`hotkeys={activePane === 'video'}`).
+
+**진행 상태 (2026-10-17):** Task 1~11 완료. Task 12 는 로컬 PostgreSQL + 실제 서버 + Playwright(Chromium) 자동 스모크 23개 통과(상세 버튼 → 분할 진입 → 페이지 이동 중 `<video>` 유지·재생 유지 → 분할선 드래그/좌우 바꾸기 저장 → 단축키 게이트 → 전체화면 대상=분할 루트 → 세로 뷰포트 위/아래 → 연결 해제 시 리다이렉트/버튼 숨김 → 교사 선택/해제/재연결). 미완: Step 5 중 AI 코칭 페이지 안내·페이지 0개 챕터, Step 6 태블릿 실기기(S-Pen·iPad·iPhone 폴백), Step 7 시청 현황 반영 확인 — 배포 후 수동.
 
 **Tech Stack:** Fastify 5 + Drizzle ORM 0.45 + PostgreSQL + zod (server) / React 19 + React Router 7 + Tailwind 4 + Excalidraw 0.18 + lucide-react + Vitest (client). 공용 타입 `@mathchois/shared`.
 
@@ -56,31 +58,31 @@ npm run build -w @mathchois/client                # vite build
 
 **Files:** Modify `packages/shared/src/types/video.ts`, `packages/server/src/db/schema.ts`, `packages/server/src/db/startupMigrate.ts`
 
-- [ ] **Step 1:** `shared/src/types/video.ts` 의 `ClassroomVideo` 에 추가:
+- [x] **Step 1:** `shared/src/types/video.ts` 의 `ClassroomVideo` 에 추가:
   ```ts
   chapterId: string | null;
   /** 연결된 필기 챕터 (left join). 챕터가 삭제되면 FK SET NULL → null */
   chapter: { id: string; title: string } | null;
   ```
-- [ ] **Step 2:** `schema.ts` `classroomVideos` 에 컬럼·인덱스 추가. `chapters` 는 같은 파일 위쪽에 이미 선언돼 있다.
+- [x] **Step 2:** `schema.ts` `classroomVideos` 에 컬럼·인덱스 추가. `chapters` 는 같은 파일 위쪽에 이미 선언돼 있다.
   ```ts
   chapterId: uuid('chapter_id').references(() => chapters.id, { onDelete: 'set null' }),
   // (t) => [...] 에
   index('idx_classroom_videos_chapter').on(t.chapterId),
   ```
-- [ ] **Step 3:** `startupMigrate.ts` 의 classroom_videos 관련 DDL 블록 뒤에 멱등 DDL 추가(프로덕션은 기동 시 DDL 이 유일한 적용 경로):
+- [x] **Step 3:** `startupMigrate.ts` 의 classroom_videos 관련 DDL 블록 뒤에 멱등 DDL 추가(프로덕션은 기동 시 DDL 이 유일한 적용 경로):
   ```ts
   await pgClient`ALTER TABLE classroom_videos ADD COLUMN IF NOT EXISTS chapter_id uuid REFERENCES chapters(id) ON DELETE SET NULL`;
   await pgClient`CREATE INDEX IF NOT EXISTS idx_classroom_videos_chapter ON classroom_videos (chapter_id)`;
   log.info('startup migration: classroom_videos.chapter_id ensured');
   ```
-- [ ] **Step 4:** `npx tsc -b packages/server/tsconfig.json` 통과. (service 가 아직 `chapterId` 를 select 하지 않으므로 타입 오류는 Task 2 에서 해소되거나, 이 단계에서는 shared 타입만 느슨해도 무관 — 서버는 shared 타입을 응답 타입으로 강제하지 않는다.)
+- [x] **Step 4:** `npx tsc -b packages/server/tsconfig.json` 통과. (service 가 아직 `chapterId` 를 select 하지 않으므로 타입 오류는 Task 2 에서 해소되거나, 이 단계에서는 shared 타입만 느슨해도 무관 — 서버는 shared 타입을 응답 타입으로 강제하지 않는다.)
 
 ## Task 2: 서비스 — 챕터 조인·갱신·검증
 
 **Files:** Modify `packages/server/src/services/classroomVideo.service.ts`
 
-- [ ] **Step 1:** import 에 `chapters` 추가. `classroomVideoSelect` 에
+- [x] **Step 1:** import 에 `chapters` 추가. `classroomVideoSelect` 에
   ```ts
   chapterId: classroomVideos.chapterId,
   chapter: {
@@ -89,7 +91,7 @@ npm run build -w @mathchois/client                # vite build
   },
   ```
   Drizzle 의 중첩 select 는 left join 에서 전체가 null 이면 `chapter: null` 로 내려온다(`video` 는 inner join 이라 항상 존재). `listClassroomVideos` / `getClassroomVideoById` 두 쿼리에 `.leftJoin(chapters, eq(classroomVideos.chapterId, chapters.id))` 를 추가한다.
-- [ ] **Step 2:** `updateClassroomVideo` 를 "전달된 키만 set" 으로 바꾼다(현재는 호출부가 항상 `note` 를 덮어쓴다).
+- [x] **Step 2:** `updateClassroomVideo` 를 "전달된 키만 set" 으로 바꾼다(현재는 호출부가 항상 `note` 를 덮어쓴다).
   ```ts
   export async function updateClassroomVideo(id: string, patch: { note?: string | null; chapterId?: string | null }) {
     const set: Partial<typeof classroomVideos.$inferInsert> = {};
@@ -99,7 +101,7 @@ npm run build -w @mathchois/client                # vite build
     return getClassroomVideoById(id);
   }
   ```
-- [ ] **Step 3:** 검증 헬퍼 추가:
+- [x] **Step 3:** 검증 헬퍼 추가:
   ```ts
   /** chapterId 가 해당 학급의 챕터인지 (다른 학급 챕터 연결 방지) */
   export async function isChapterInClassroom(chapterId: string, classroomId: string) {
@@ -108,13 +110,13 @@ npm run build -w @mathchois/client                # vite build
     return !!row;
   }
   ```
-- [ ] **Step 4:** `npx tsc -b packages/server/tsconfig.json` 통과.
+- [x] **Step 4:** `npx tsc -b packages/server/tsconfig.json` 통과.
 
 ## Task 3: 라우트 — PATCH `chapterId`
 
 **Files:** Modify `packages/server/src/routes/classroomVideos.ts` (현재 L87~92)
 
-- [ ] **Step 1:** PATCH 핸들러 교체:
+- [x] **Step 1:** PATCH 핸들러 교체:
   ```ts
   app.patch<{ Params: { id: string } }>('/api/classroom-videos/:id', teacher, async (req, reply) => {
     const cv = await loadClassroomVideoOr404(req, reply, req.params.id);
@@ -132,8 +134,8 @@ npm run build -w @mathchois/client                # vite build
     return svc.updateClassroomVideo(cv.id, patch);
   });
   ```
-- [ ] **Step 2:** `npx tsc -b packages/server/tsconfig.json` 통과.
-- [ ] **Step 3 (curl E2E, 로컬 PostgreSQL):** 교사 토큰으로
+- [x] **Step 2:** `npx tsc -b packages/server/tsconfig.json` 통과.
+- [x] **Step 3 (curl E2E, 로컬 PostgreSQL):** 교사 토큰으로
   - `PATCH {chapterId: <같은 학급 챕터>}` → 200, 응답 `chapter.title` 존재
   - `PATCH {chapterId: <다른 학급 챕터>}` → 400
   - `PATCH {chapterId: null}` → 200, `chapter: null`
@@ -145,29 +147,29 @@ npm run build -w @mathchois/client                # vite build
 
 **Files:** Modify `packages/client/src/components/videos/ClassroomVideoTab.jsx`
 
-- [ ] **Step 1:** `ClassroomVideoTab` 에 `chapters` state. 교사일 때 `fetchList` 와 함께 `api.get('/api/classrooms/${classroomId}/chapters')` 를 로드(`lib/api` import). 실패해도 목록은 표시(보조 정보).
-- [ ] **Step 2:** `handleSaveChapter(cv, chapterId)`:
+- [x] **Step 1:** `ClassroomVideoTab` 에 `chapters` state. 교사일 때 `fetchList` 와 함께 `api.get('/api/classrooms/${classroomId}/chapters')` 를 로드(`lib/api` import). 실패해도 목록은 표시(보조 정보).
+- [x] **Step 2:** `handleSaveChapter(cv, chapterId)`:
   ```js
   const updated = await updateClassroomVideo(cv.id, { chapterId });
   setItems((prev) => prev.map((x) => (x.id === cv.id ? { ...x, chapterId: updated.chapterId, chapter: updated.chapter } : x)));
   ```
   실패 시 `alert`.
-- [ ] **Step 3:** `VideoCard` props 에 `chapters`, `onSaveChapter` 추가. 메모 영역 아래에
+- [x] **Step 3:** `VideoCard` props 에 `chapters`, `onSaveChapter` 추가. 메모 영역 아래에
   - 교사: `<select>`(`BookOpen` 아이콘 라벨 "필기 챕터") — 옵션 `연결 없음` + `chapters`(position 순, 제목). `value={cv.chapterId ?? ''}`, `onChange → onSaveChapter(cv, value || null)`. 최소 터치 높이 `min-h-9`.
   - 학생(및 교사 select 아래): `cv.chapter` 있으면 칩 `필기 챕터 · {title}`(`BookOpen` h-3.5, `bg-amber-50 text-amber-800`).
-- [ ] **Step 4:** `npm run lint` 통과. 수동: 선택 즉시 저장·새로고침 후 유지, "연결 없음" 으로 해제.
+- [x] **Step 4:** `npm run lint` 통과. 수동: 선택 즉시 저장·새로고침 후 유지, "연결 없음" 으로 해제.
 
 ## Task 5: `lib/splitLayout.js` (TDD)
 
 **Files:** Create `packages/client/src/lib/splitLayout.js`, `packages/client/src/lib/splitLayout.test.js`
 
-- [ ] **Step 1 (테스트 먼저):** `splitLayout.test.js`
+- [x] **Step 1 (테스트 먼저):** `splitLayout.test.js`
   - `loadSplitSettings()` 기본 `{ ratio: 0.5, videoSide: 'start' }`; 저장값 `ratio: 0.05` → `0.2`, `0.95` → `0.8`, `NaN` → `0.5`; `videoSide: 'x'` → `'start'`.
   - `saveSplitSettings({ ratio: 0.3 })` 가 기존 `videoSide` 를 유지(머지)하고 정규화된 값을 반환.
   - `ratioFromPointer({ left: 100, top: 0, width: 800, height: 600 }, 300, 0, 'horizontal', 0.2, 0.8)` → `0.25`; 세로 모드는 `top/height` 사용; 클램프 동작.
   - `loadSplitPage('cv1')` null → `saveSplitPage('cv1', 'p1')` → `'p1'`.
   `localStorage` 는 Vitest `jsdom` 환경 또는 `videoPlayer.test.js` 와 같은 방식의 스텁 사용(기존 테스트 파일의 설정을 그대로 따른다).
-- [ ] **Step 2 (구현):**
+- [x] **Step 2 (구현):**
   ```js
   export const SPLIT_KEY = 'mc_video_split';
   export const SPLIT_PAGE_PREFIX = 'mc_video_split_page:';
@@ -184,13 +186,13 @@ npm run build -w @mathchois/client                # vite build
   }
   ```
   `useOrientation()` 훅(React): `matchMedia('(orientation: portrait)')` → `'vertical' | 'horizontal'`, `change` 이벤트 구독. 훅은 `react-refresh` 규칙 때문에 컴포넌트 파일이 아닌 이 lib 에 두어도 되지만 테스트 대상이 아니므로 `hooks/useOrientation.js` 로 분리해도 좋다(결정: `hooks/useOrientation.js`).
-- [ ] **Step 3:** `npm test -w @mathchois/client` 통과.
+- [x] **Step 3:** `npm test -w @mathchois/client` 통과.
 
 ## Task 6: `SplitPane` 컴포넌트
 
 **Files:** Create `packages/client/src/components/common/SplitPane.jsx`
 
-- [ ] **Step 1:** props `{ orientation, ratio, onRatioChange, min, max, handleLabel, children }` (children 은 정확히 2개). 렌더:
+- [x] **Step 1:** props `{ orientation, ratio, onRatioChange, min, max, handleLabel, children }` (children 은 정확히 2개). 렌더:
   ```jsx
   <div ref={rootRef} className="relative h-full w-full min-h-0 min-w-0"
        style={{ display: 'grid', [vertical ? 'gridTemplateRows' : 'gridTemplateColumns']: `${ratio}fr 12px ${1 - ratio}fr` }}>
@@ -204,9 +206,9 @@ npm run build -w @mathchois/client                # vite build
     {dragging && <div className={`fixed inset-0 z-[70] ${vertical ? 'cursor-row-resize' : 'cursor-col-resize'}`} />}
   </div>
   ```
-- [ ] **Step 2:** 드래그: `startDrag` → `e.currentTarget.setPointerCapture(e.pointerId)`, `setDragging(true)`; `pointermove` → `onRatioChange(ratioFromPointer(rootRef.current.getBoundingClientRect(), e.clientX, e.clientY, orientation, min, max))`; `pointerup/pointercancel` → `setDragging(false)`. 투명 오버레이는 `<video>`·Excalidraw·HTML 도구 iframe 이 이벤트를 먹지 않게 하는 용도(iframe 위에서는 pointermove 가 부모에 오지 않으므로 필수).
-- [ ] **Step 3:** 키보드: `←/↑` −0.02, `→/↓` +0.02 (클램프).
-- [ ] **Step 4:** `npm run lint` 통과.
+- [x] **Step 2:** 드래그: `startDrag` → `e.currentTarget.setPointerCapture(e.pointerId)`, `setDragging(true)`; `pointermove` → `onRatioChange(ratioFromPointer(rootRef.current.getBoundingClientRect(), e.clientX, e.clientY, orientation, min, max))`; `pointerup/pointercancel` → `setDragging(false)`. 투명 오버레이는 `<video>`·Excalidraw·HTML 도구 iframe 이 이벤트를 먹지 않게 하는 용도(iframe 위에서는 pointermove 가 부모에 오지 않으므로 필수).
+- [x] **Step 3:** 키보드: `←/↑` −0.02, `→/↓` +0.02 (클램프).
+- [x] **Step 4:** `npm run lint` 통과.
 
 ## Task 7: `StudyViewer` 임베드 모드 (동작 불변 리팩터링)
 
@@ -214,14 +216,14 @@ npm run build -w @mathchois/client                # vite build
 
 변경 지점은 모두 라우트 결합부이며 로직은 바뀌지 않는다. 변경 전 기존 라우트(`/student/study/:chapterId/page/:pageId`)의 동작을 눈으로 확인해 두고, 변경 후 동일함을 재확인한다.
 
-- [ ] **Step 1 (L347~348):** 시그니처와 식별자 소스:
+- [x] **Step 1 (L347~348):** 시그니처와 식별자 소스:
   ```js
   const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigatePage, onExit, embedded = false } = {}) => {
     const params = useParams();
     const chapterId = chapterIdProp ?? params.chapterId;
     const pageId    = pageIdProp ?? params.pageId;
   ```
-- [ ] **Step 2:** 이동 헬퍼 2개를 `navigate` 선언 직후에 추가:
+- [x] **Step 2:** 이동 헬퍼 2개를 `navigate` 선언 직후에 추가:
   ```js
   const goToPage = useCallback((pid, opts) => {
     if (embedded) onNavigatePage?.(pid);
@@ -232,22 +234,22 @@ npm run build -w @mathchois/client                # vite build
     else navigate(`/student/classrooms/${chapter?.classroomId}`);
   }, [embedded, onExit, navigate, chapter?.classroomId]);
   ```
-- [ ] **Step 3:** 호출부 치환(라인은 현재 기준):
+- [x] **Step 3:** 호출부 치환(라인은 현재 기준):
   - L539 `navigate(.../${pgs[0].id}, { replace: true })` → `goToPage(pgs[0].id, { replace: true })` (해당 effect 의 deps 에 `goToPage` 추가 또는 ref 로 읽기 — 기존 `eslint-disable` 주석이 있으면 그대로 둔다)
   - L927 뒤로가기 `onClick` → `exitViewer`
   - L1013 / L1025 이전·다음 → `goToPage(prevPage.id)` / `goToPage(nextPage.id)`
   - L1174~1175 `PageNavOverlay` → 동일
   - L1084 사이드바 `<Link to=...>` → `embedded` 일 때는 `<button type="button" onClick={() => goToPage(pg.id)}>` 로 렌더. 두 분기를 하나로 유지하려면 `const Item = embedded ? 'button' : Link;` + `{...(embedded ? { type: 'button', onClick } : { to })}` 패턴. `ref={activeSidebarItemRef}` 와 className 은 유지(`block w-full text-left` 추가).
-- [ ] **Step 4:** 루트 높이 L921 `style={{ height: embedded ? '100%' : '100vh' }}`, 로딩 화면 L914 `min-h-screen` → `embedded ? 'h-full' : 'min-h-screen'`.
-- [ ] **Step 5:** `StudyPageRouter.jsx` 는 변경 없음(라우트 전용). `TeacherNotesModal` 등 모달은 `fixed inset-0` 이므로 분할 화면 위에 전체로 뜬다 — 의도된 동작.
-- [ ] **Step 6:** `npm run lint` 통과. 수동 회귀: 기존 라우트에서 뒤로가기·이전/다음·사이드바 클릭·오버레이 탭·첫 페이지 리다이렉트(`/page/undefined` 같은 잘못된 id) 모두 이전과 동일.
+- [x] **Step 4:** 루트 높이 L921 `style={{ height: embedded ? '100%' : '100vh' }}`, 로딩 화면 L914 `min-h-screen` → `embedded ? 'h-full' : 'min-h-screen'`.
+- [x] **Step 5:** `StudyPageRouter.jsx` 는 변경 없음(라우트 전용). `TeacherNotesModal` 등 모달은 `fixed inset-0` 이므로 분할 화면 위에 전체로 뜬다 — 의도된 동작.
+- [x] **Step 6:** `npm run lint` 통과. 수동 회귀: 기존 라우트에서 뒤로가기·이전/다음·사이드바 클릭·오버레이 탭·첫 페이지 리다이렉트(`/page/undefined` 같은 잘못된 id) 모두 이전과 동일.
 
 ## Task 8: `VideoPlayer.fullscreenTargetRef`
 
 **Files:** Modify `packages/client/src/components/videos/VideoPlayer.jsx`
 
-- [ ] **Step 1:** props 에 `fullscreenTargetRef`, `onPseudoFullscreenChange` 추가(둘 다 optional). 내부 `const targetEl = () => fullscreenTargetRef?.current ?? containerRef.current;`.
-- [ ] **Step 2:** `toggleFullscreen`(L144~):
+- [x] **Step 1:** props 에 `fullscreenTargetRef`, `onPseudoFullscreenChange` 추가(둘 다 optional). 내부 `const targetEl = () => fullscreenTargetRef?.current ?? containerRef.current;`.
+- [x] **Step 2:** `toggleFullscreen`(L144~):
   ```js
   const el = targetEl(); const v = videoRef.current;
   if (document.fullscreenElement) { document.exitFullscreen?.().catch(() => {}); }
@@ -256,20 +258,20 @@ npm run build -w @mathchois/client                # vite build
     setPseudo((p) => { const n = !p; onPseudoFullscreenChange?.(n); return n; });
   } else if (v?.webkitEnterFullscreen) { v.webkitEnterFullscreen(); }
   ```
-- [ ] **Step 3:** `fullscreen` 상태: `fullscreenchange` 리스너는 `setFullscreen(document.fullscreenElement === targetEl())` 로, 아이콘/`title` 은 `fullscreen || pseudo` 기준. `Escape` 키는 pseudo 모드에서도 해제(`hotkeys` 가 false 여도 분할 화면 쪽에서 처리하므로 여기서는 생략 가능 — 결정: 분할 화면이 처리).
-- [ ] **Step 4:** 기존 사용처(`ClassroomVideoWatch`, `VideoPreviewModal`, `PageVideoEmbed`)는 prop 미지정 → 동작 동일. `npm run lint` 통과.
+- [x] **Step 3:** `fullscreen` 상태: `fullscreenchange` 리스너는 `setFullscreen(document.fullscreenElement === targetEl())` 로, 아이콘/`title` 은 `fullscreen || pseudo` 기준. `Escape` 키는 pseudo 모드에서도 해제(`hotkeys` 가 false 여도 분할 화면 쪽에서 처리하므로 여기서는 생략 가능 — 결정: 분할 화면이 처리).
+- [x] **Step 4:** 기존 사용처(`ClassroomVideoWatch`, `VideoPreviewModal`, `PageVideoEmbed`)는 prop 미지정 → 동작 동일. `npm run lint` 통과.
 
 ## Task 9: 분할 화면 `ClassroomVideoSplit` + 라우트
 
 **Files:** Create `packages/client/src/pages/Videos/ClassroomVideoSplit.jsx`, `packages/client/src/hooks/useOrientation.js`; Modify `packages/client/src/App.jsx`
 
-- [ ] **Step 1 (App.jsx):** `const ClassroomVideoSplit = lazy(() => import('./pages/Videos/ClassroomVideoSplit'));` 학생 `ProtectedRoute` 안, `DashboardLayout` **밖**(L176 `StudyPageRouter` 옆):
+- [x] **Step 1 (App.jsx):** `const ClassroomVideoSplit = lazy(() => import('./pages/Videos/ClassroomVideoSplit'));` 학생 `ProtectedRoute` 안, `DashboardLayout` **밖**(L176 `StudyPageRouter` 옆):
   ```jsx
   {/* 영상 2분할 필기: 전체화면 레이아웃, DashboardLayout 제외 */}
   <Route path="/student/classrooms/:classroomId/videos/:cvId/split" element={<ClassroomVideoSplit />} />
   ```
-- [ ] **Step 2 (데이터 로드):** `useParams` → `classroomId, cvId`; `useSearchParams`. `Promise.all([getClassroomVideo(cvId), getVideoProgress(cvId).catch(() => null)])` → `detail.chapter` 가 없으면 `navigate('/student/classrooms/${classroomId}/videos/${cvId}', { replace: true })`. 있으면 `getCachedChapterAndPages(detail.chapterId)` 로 `pages`.
-- [ ] **Step 3 (현재 페이지):**
+- [x] **Step 2 (데이터 로드):** `useParams` → `classroomId, cvId`; `useSearchParams`. `Promise.all([getClassroomVideo(cvId), getVideoProgress(cvId).catch(() => null)])` → `detail.chapter` 가 없으면 `navigate('/student/classrooms/${classroomId}/videos/${cvId}', { replace: true })`. 있으면 `getCachedChapterAndPages(detail.chapterId)` 로 `pages`.
+- [x] **Step 3 (현재 페이지):**
   ```js
   const pageParam = searchParams.get('page');
   const pageId = useMemo(() => {
@@ -282,8 +284,8 @@ npm run build -w @mathchois/client                # vite build
   const handleNavigatePage = (pid) => { saveSplitPage(cvId, pid); setSearchParams({ page: pid }, { replace: false }); };
   ```
   `?page=` 를 바꿔도 라우트 element 는 같으므로 `VideoPlayer` 는 유지된다.
-- [ ] **Step 4 (레이아웃 상태):** `const [split, setSplit] = useState(loadSplitSettings)`; `orientation = useOrientation()`; `activePane` state('video'|'notes'), 루트 `onPointerDownCapture={(e) => setActivePane(videoPaneRef.current?.contains(e.target) ? 'video' : 'notes')}`; `fullscreen`(real) + `pseudoFull` state; `rootRef`.
-- [ ] **Step 5 (렌더):**
+- [x] **Step 4 (레이아웃 상태):** `const [split, setSplit] = useState(loadSplitSettings)`; `orientation = useOrientation()`; `activePane` state('video'|'notes'), 루트 `onPointerDownCapture={(e) => setActivePane(videoPaneRef.current?.contains(e.target) ? 'video' : 'notes')}`; `fullscreen`(real) + `pseudoFull` state; `rootRef`.
+- [x] **Step 5 (렌더):**
   ```jsx
   <div ref={rootRef} className={`flex flex-col bg-gray-100 ${pseudoFull ? 'fixed inset-0 z-[80]' : ''}`} style={{ height: '100dvh' }}>
     {!isFull && (
@@ -306,7 +308,7 @@ npm run build -w @mathchois/client                # vite build
   - `videoFirst = split.videoSide === 'start'`. 비율은 **영상 쪽 기준**으로 저장: `onRatio = (r) => setSplitAndSave({ ratio: videoFirst ? r : 1 - r })`. `swapSides` 는 `videoSide` 만 토글.
   - `VideoPlayer` ref 에 `toggleFullscreen` 노출이 필요하면 Task 8 의 `useImperativeHandle` 에 추가(`toggleFullscreen`).
   - 전체화면 중(`isFull = fullscreen || pseudoFull`) 상단 바를 숨기고, 분할선 위 작은 플로팅 버튼(⇄, ⤢)만 남긴다. `Escape` 로 pseudo 해제(window keydown).
-- [ ] **Step 6 (영상 패널):**
+- [x] **Step 6 (영상 패널):**
   ```jsx
   <div ref={videoPaneRef} className="h-full flex flex-col bg-black">
     <div className="flex-1 min-h-0 flex items-center justify-center">
@@ -325,7 +327,7 @@ npm run build -w @mathchois/client                # vite build
   </div>
   ```
   `handleProgress`/`getCurrentTime`/`seekTo` 는 `ClassroomVideoWatch` 와 동일(`seekTo` 의 `window.scrollTo` 는 제거). `VideoPlayer` 컨테이너가 `aspect-video` 고정이면 패널을 꽉 채우도록 `className`/`fill` prop 이 필요할 수 있다 — 구현 시 플레이어 루트 스타일 확인 후 `fill` prop(`h-full w-full` + `<video class="object-contain">`) 추가.
-- [ ] **Step 7 (필기 패널):**
+- [x] **Step 7 (필기 패널):**
   ```jsx
   const page = pages.find((p) => p.id === pageId);
   page?.aiProblemId
@@ -333,35 +335,35 @@ npm run build -w @mathchois/client                # vite build
     : <StudyViewer embedded chapterId={detail.chapterId} pageId={pageId} onNavigatePage={handleNavigatePage} onExit={goBack} />
   ```
   `goBack = () => navigate('/student/classrooms/${classroomId}/videos/${cvId}')`.
-- [ ] **Step 8:** `npm run lint`, `npm run build -w @mathchois/client` 통과.
+- [x] **Step 8:** `npm run lint`, `npm run build -w @mathchois/client` 통과.
 
 ## Task 10: 상세 화면 진입 버튼 / 칩
 
 **Files:** Modify `packages/client/src/pages/Videos/ClassroomVideoWatch.jsx`
 
-- [ ] **Step 1:** 제목(`<h1>`) 줄을 `flex items-start justify-between gap-2` 로 감싸고 우측에
+- [x] **Step 1:** 제목(`<h1>`) 줄을 `flex items-start justify-between gap-2` 로 감싸고 우측에
   - 학생 & `detail.chapter`: `<Link to={`${base}/classrooms/${classroomId}/videos/${detail.id}/split${remembered ? `?page=${remembered}` : ''}`}>` (`Columns2` 아이콘, "2분할로 필기하며 보기", `bg-blue-600 text-white min-h-9`). `remembered = loadSplitPage(detail.id)`.
   - 교사 & `detail.chapter`: 칩 `연결된 챕터 · {title}`(`BookOpen`), 클릭 시 `/teacher/chapters/${chapter.id}/edit`.
-- [ ] **Step 2:** `npm run lint` 통과.
+- [x] **Step 2:** `npm run lint` 통과.
 
 ## Task 11: 정적 검증 + 문서
 
 **Files:** Modify `.claude/PROJECT_MAP.md`
 
-- [ ] **Step 1:** `npx tsc -b packages/server/tsconfig.json` · `npm run lint` · `npm test -w @mathchois/client` · `npm run build -w @mathchois/client` 모두 통과.
-- [ ] **Step 2:** `PROJECT_MAP.md`
+- [x] **Step 1:** `npx tsc -b packages/server/tsconfig.json` · `npm run lint` · `npm test -w @mathchois/client` · `npm run build -w @mathchois/client` 모두 통과.
+- [x] **Step 2:** `PROJECT_MAP.md`
   - 폴더 구조: `pages/Videos` 에 `ClassroomVideoSplit`, `components/common/SplitPane`, `lib/splitLayout.js`, `hooks/useOrientation.js`.
   - 라우트 표: `/student/classrooms/:classroomId/videos/:cvId/split` (DashboardLayout 밖, `?page=`), `StudyViewer` 임베드 props 한 줄.
   - 서버 라우트 표 classroomVideos: `PATCH`(note·chapterId — 같은 학급 챕터 검증 400), 응답 `chapter`.
   - 데이터 모델 `classroom_videos`: `chapterId→chapters(set null)` "필기 챕터".
-- [ ] **Step 3:** 설계 문서 상태 줄을 "구현 완료(날짜)" 로 갱신.
+- [x] **Step 3:** 설계 문서 상태 줄을 "구현 완료(날짜)" 로 갱신.
 
 ## Task 12: 동적 검증 (로컬 E2E + 태블릿)
 
-- [ ] **Step 1 (로컬, 데스크톱 Chrome):** 교사 로그인 → 학급 [영상] 탭 → 카드 "필기 챕터" 선택 → 칩 표시 → 새로고침 유지. 학생 로그인 → 영상 상세에 버튼 → 분할 진입 → 좌 영상 재생 중 우측 페이지 이전/다음/사이드바/오버레이로 이동해도 **영상 재생 유지**(`<video>` 가 리마운트되지 않음 — DevTools Elements 로 확인) → URL `?page=` 갱신 → 새로고침 시 같은 페이지 → 필기 후 1.5초 뒤 "저장됨" → 다른 탭(교사 StudentWorkViewer)에서 코멘트 작성 시 실시간 반영.
-- [ ] **Step 2 (분할 조작):** 분할선 드래그(20%~80% 클램프) → 새로고침 후 비율 유지 → ⇄ 좌우 바꾸기 → 비율은 영상 기준 유지 → HTML 도구 페이지 위에서도 드래그 정상(오버레이).
-- [ ] **Step 3 (전체화면):** 플레이어 ⤢ → 분할 루트가 전체화면, 영상은 반쪽을 채우고 필기창 유지 → `Esc` 복귀. 상단 바 ⤢ 도 동일.
-- [ ] **Step 4 (단축키):** 필기창에 포인터를 둔 뒤 `Space`/`←` → 영상 변화 없음. 영상 패널 클릭 후 `Space` → 재생/정지.
+- [x] **Step 1 (로컬, 데스크톱 Chrome):** 교사 로그인 → 학급 [영상] 탭 → 카드 "필기 챕터" 선택 → 칩 표시 → 새로고침 유지. 학생 로그인 → 영상 상세에 버튼 → 분할 진입 → 좌 영상 재생 중 우측 페이지 이전/다음/사이드바/오버레이로 이동해도 **영상 재생 유지**(`<video>` 가 리마운트되지 않음 — DevTools Elements 로 확인) → URL `?page=` 갱신 → 새로고침 시 같은 페이지 → 필기 후 1.5초 뒤 "저장됨" → 다른 탭(교사 StudentWorkViewer)에서 코멘트 작성 시 실시간 반영.
+- [x] **Step 2 (분할 조작):** 분할선 드래그(20%~80% 클램프) → 새로고침 후 비율 유지 → ⇄ 좌우 바꾸기 → 비율은 영상 기준 유지 → HTML 도구 페이지 위에서도 드래그 정상(오버레이).
+- [x] **Step 3 (전체화면):** 플레이어 ⤢ → 분할 루트가 전체화면, 영상은 반쪽을 채우고 필기창 유지 → `Esc` 복귀. 상단 바 ⤢ 도 동일.
+- [x] **Step 4 (단축키):** 필기창에 포인터를 둔 뒤 `Space`/`←` → 영상 변화 없음. 영상 패널 클릭 후 `Space` → 재생/정지.
 - [ ] **Step 5 (예외):** 챕터 삭제 후 상세 → 버튼 사라짐, 분할 URL 직접 진입 → 상세로 replace. `?page=<다른 챕터 페이지 id>` → 첫 페이지로 교정. AI 코칭 페이지 → 안내 + 링크. 페이지 0개 챕터 → "페이지가 없습니다."
 - [ ] **Step 6 (태블릿):** 갤럭시탭(Chrome, S-Pen): 펜 필기·손바닥 거부·바렐 버튼 지우기가 분할 상태에서 동일하게 동작, 분할선 손가락 드래그, 회전 시 위/아래 전환. iPad Safari: 전체화면 동작. iPhone Safari: CSS 폴백 전체화면.
 - [ ] **Step 7:** 시청 기록: 분할 화면에서 본 진도가 교사 "시청 현황" 에 반영.

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Clapperboard, MessageSquare, Users, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Clapperboard, MessageSquare, Users, CheckCircle2, Columns2, BookOpen } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   getClassroomVideo, formatDuration, getVideoProgress, saveVideoProgress, getVideoProgressSummary,
 } from '../../lib/videos';
 import { formatTime } from '../../lib/videoPlayer';
+import { loadSplitPage } from '../../lib/splitLayout';
 import VideoPlayer from '../../components/videos/VideoPlayer';
 import VideoComments from '../../components/videos/VideoComments';
 import CollapsibleSection from '../../components/videos/CollapsibleSection';
@@ -152,6 +153,7 @@ export default function ClassroomVideoWatch() {
 
   const v = detail.video;
   const meta = [v.subject, v.majorUnit, v.minorUnit].filter(Boolean).join(' · ');
+  const splitPage = isTeacher ? null : loadSplitPage(detail.id); // 2분할에서 마지막으로 본 챕터 페이지(기기 저장)
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -173,10 +175,29 @@ export default function ClassroomVideoWatch() {
             onProgress={isTeacher ? undefined : handleProgress}
           />
 
-          <h1 className="text-lg font-bold text-gray-900 mt-3">{v.title}</h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {[meta, formatDuration(v.durationSec)].filter(Boolean).join(' · ')}
-          </p>
+          <div className="flex items-start justify-between gap-3 mt-3">
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-gray-900">{v.title}</h1>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {[meta, formatDuration(v.durationSec)].filter(Boolean).join(' · ')}
+              </p>
+            </div>
+            {/* 필기 챕터가 연결된 영상: 학생은 2분할 진입, 교사는 연결 칩 */}
+            {detail.chapter && (isTeacher ? (
+              <Link to={`/teacher/chapters/${detail.chapter.id}/edit`}
+                className="shrink-0 inline-flex items-center gap-1 max-w-[50%] text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded px-2 py-1 hover:bg-amber-100"
+                title="학생이 2분할 화면에서 옆에 놓고 필기하는 챕터">
+                <BookOpen className="h-3.5 w-3.5 shrink-0" /><span className="truncate">필기 챕터 · {detail.chapter.title}</span>
+              </Link>
+            ) : (
+              <Link
+                to={`${base}/classrooms/${classroomId}/videos/${detail.id}/split${splitPage ? `?page=${encodeURIComponent(splitPage)}` : ''}`}
+                className="shrink-0 inline-flex items-center gap-1.5 min-h-9 px-3 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+                title={`"${detail.chapter.title}" 챕터를 옆에 놓고 필기하며 보기`}>
+                <Columns2 className="h-4 w-4" /> 2분할로 필기하며 보기
+              </Link>
+            ))}
+          </div>
 
           {isTeacher && <VideoProgressPanel classroomVideoId={detail.id} />}
 
