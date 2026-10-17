@@ -12,6 +12,7 @@ import {
   updatePage,
 } from '../services/page.service.js';
 import { isLinkedChapter } from '../services/chapter.service.js';
+import { isValidPageVideoUrl, INVALID_VIDEO_URL_MESSAGE } from '../utils/videoUrl.js';
 
 export async function pageRoutes(app: FastifyInstance) {
 
@@ -41,7 +42,11 @@ export async function pageRoutes(app: FastifyInstance) {
 
     // 배치 삽입
     if (Array.isArray(body.pages)) {
-      const items = (body.pages as { imageUrl?: string; videoUrl?: string; htmlUrl?: string; position: number }[]).map((pg) => ({
+      const bulk = body.pages as { imageUrl?: string; videoUrl?: string; htmlUrl?: string; position: number }[];
+      if (bulk.some((pg) => pg.videoUrl != null && !isValidPageVideoUrl(pg.videoUrl))) {
+        return reply.status(400).send({ error: INVALID_VIDEO_URL_MESSAGE });
+      }
+      const items = bulk.map((pg) => ({
         chapterId,
         imageUrl: pg.imageUrl ?? null,
         videoUrl: pg.videoUrl ?? null,
@@ -59,6 +64,9 @@ export async function pageRoutes(app: FastifyInstance) {
     };
     if (!imageUrl && !videoUrl && !htmlUrl && !aiProblemId && !fromVisualizationId) {
       return reply.status(400).send({ error: 'imageUrl, videoUrl, htmlUrl, aiProblemId, or fromVisualizationId is required' });
+    }
+    if (videoUrl != null && !isValidPageVideoUrl(videoUrl)) {
+      return reply.status(400).send({ error: INVALID_VIDEO_URL_MESSAGE });
     }
     const page = await createPage({ chapterId, imageUrl, videoUrl, htmlUrl, aiProblemId, fromVisualizationId, position });
     return reply.status(201).send(page);

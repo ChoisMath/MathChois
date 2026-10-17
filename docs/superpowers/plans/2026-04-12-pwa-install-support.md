@@ -466,7 +466,7 @@ Open `docs/superpowers/plans/2026-04-12-pwa-install-support.md` and verify all t
 
 - [ ] **Step 3: Done**
 
-PWA install support is now live in production builds. Deploy to Railway (`class.chois.ai.kr`) to make it available to end users. No Dockerfile or server-side changes needed — static files in `packages/client/dist/` are served as-is.
+PWA install support is now live in production builds. Deploy to Railway (`class.chois.pro`) to make it available to end users. No Dockerfile or server-side changes needed — static files in `packages/client/dist/` are served as-is.
 
 ---
 

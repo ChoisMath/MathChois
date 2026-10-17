@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Sparkles, Menu, RotateCcw, Loader } from 'lucide-react';
-import { extractYouTubeId, getYouTubeThumbnail } from '../../lib/youtubeUtils';
+import { PageVideoThumb } from '../../components/videos/PageVideo';
 import ProblemView from '../../components/common/ProblemView';
 import AttemptStack from '../../components/coaching/AttemptStack';
 import { getProblemForCoaching } from '../../lib/problems';
@@ -97,7 +97,7 @@ export default function TeacherCoachingReview({ classroomId, pages, currentPage,
             ) : pg.htmlUrl ? (
               <div className="flex aspect-video w-full items-center justify-center bg-emerald-50 text-xs font-medium text-emerald-600">HTML</div>
             ) : pg.videoUrl ? (
-              <img src={getYouTubeThumbnail(extractYouTubeId(pg.videoUrl))} alt={`영상 ${i + 1}`} className="h-auto w-full bg-gray-900 object-cover" loading="lazy" />
+              <PageVideoThumb videoUrl={pg.videoUrl} alt={`영상 ${i + 1}`} className="h-auto w-full bg-gray-900 object-cover" loading="lazy" />
             ) : (
               <img src={pg.imageUrl} alt={`페이지 ${i + 1}`} className="h-auto w-full bg-white object-contain" loading="lazy" />
             )}

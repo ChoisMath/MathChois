@@ -1,7 +1,26 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { Readable } from 'node:stream';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
-import { uploadFile, readFile, removeFile } from '../services/storage.service.js';
+import { uploadFile, removeFile, statFile, openFileStream } from '../services/storage.service.js';
+import { env } from '../config/env.js';
+
+// 프로덕션 앱 도메인. (구 도메인 class.chois.ai.kr → class.chois.pro 로 이전됨)
+export const APP_ORIGIN = 'https://class.chois.pro';
+
+/**
+ * HTML 도구 iframe 의 frame-ancestors 허용 목록.
+ * 도메인이 코드에 하드코딩되어 있으면 도메인 이전 시 모든 시각화자료 iframe 이 조용히 차단된다
+ * (브라우저가 CSP 위반으로 빈 화면만 표시). env 로 확장 가능하게 하고 기본값에 현재 도메인을 둔다.
+ */
+export function buildFrameAncestors(): string {
+  const origins = new Set<string>([APP_ORIGIN, 'http://localhost:3000']);
+  if (env.APP_URL) {
+    try { origins.add(new URL(env.APP_URL).origin); } catch { /* 잘못된 APP_URL 은 무시 */ }
+  }
+  for (const o of (env.FRAME_ANCESTORS ?? '').split(/\s+/).filter(Boolean)) origins.add(o);
+  return `frame-ancestors ${[...origins].join(' ')}`;
+}
 
 // 학생 업로드 허용 버킷
 const STUDENT_ALLOWED_BUCKETS = new Set(['submission-files', 'ai-coaching']);
@@ -27,7 +46,7 @@ const INLINE_SAFE_IMAGE_RE = /^image\/(png|jpe?g|gif|webp)$/;
 
 // 업로드 파일명에서 경로/파일시스템 위험 문자만 제거하고 유니코드(한글 등)는 보존한다.
 // busboy 가 이미 basename 처리하지만 방어적으로 경로 분리자·예약 문자·선후행 점을 정리한다.
-function sanitizeFileName(name: string): string {
+export function sanitizeFileName(name: string): string {
   const cleaned = name
     .replace(/[/\\]/g, '_') // 경로 분리자
     .replace(/[\x00-\x1f<>:"|?*]/g, '_') // 제어문자 + 파일시스템 예약문자(Windows)
@@ -55,6 +74,35 @@ function decodePath(p: string): string {
   } catch {
     return p; // 잘못된 인코딩은 원본 유지 (readFile 에서 404 처리)
   }
+}
+
+/**
+ * HTTP Range 헤더 파서 (`bytes=start-end` 단일 범위만 지원 — 브라우저 <video> 가 쓰는 형태).
+ * 반환: 유효 범위 / null(헤더 없음·형식 불일치 → 전체 응답) / 'unsatisfiable'(416)
+ */
+export function parseRange(header: string | undefined, size: number):
+  { start: number; end: number } | null | 'unsatisfiable' {
+  if (!header) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m) return null;
+  const [, startStr, endStr] = m;
+  if (startStr === '' && endStr === '') return null;
+  let start: number;
+  let end: number;
+  if (startStr === '') {
+    // suffix range: 마지막 N 바이트
+    const suffix = Number(endStr);
+    if (suffix === 0) return 'unsatisfiable';
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = Number(startStr);
+    end = endStr === '' ? size - 1 : Math.min(Number(endStr), size - 1);
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size) {
+    return 'unsatisfiable';
+  }
+  return { start, end };
 }
 
 export async function storageRoutes(app: FastifyInstance) {
@@ -176,9 +224,11 @@ export async function storageRoutes(app: FastifyInstance) {
     }
   });
 
-  // ─── GET /api/files/:bucket/* — 파일 서빙 ────
+  // ─── GET/HEAD /api/files/:bucket/* — 파일 서빙 (스트리밍 + Range) ────
+  // 파일 전체를 Buffer 로 읽지 않고 스트리밍한다. 영상(<video>)은 탐색·배속을 위해
+  // HTTP Range(206) 가 필요하며, 큰 파일도 메모리를 점유하지 않는다.
 
-  app.get('/api/files/*', async (request, reply) => {
+  const serveFile = async (request: FastifyRequest, reply: FastifyReply) => {
     const url = request.url;
     const prefix = '/api/files/';
     const rest = url.slice(prefix.length);
@@ -196,26 +246,24 @@ export async function storageRoutes(app: FastifyInstance) {
     const bucket = pathPart.slice(0, slashIdx);
     const filePath = decodePath(pathPart.slice(slashIdx + 1));
 
-    const result = await readFile(bucket, filePath);
-    if (!result) {
+    const stat = await statFile(bucket, filePath);
+    if (!stat) {
       return reply.status(404).send({ error: 'File not found' });
     }
 
     // 파일명에 타임스탬프 포함 → immutable 캐시
-    reply.header('Content-Type', result.mimeType);
+    reply.header('Content-Type', stat.mimeType);
     reply.header('Cache-Control', 'public, max-age=31536000, immutable');
     reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('Accept-Ranges', 'bytes');
 
     // HTML 도구는 앱과 다른 origin(railway.app)에서 서빙되어 앱 origin과 cross-origin 격리된다.
     // sandbox 로 opaque origin('null')을 강제하면 도구 내부 postMessage/blob worker 가 깨지므로
     // 사용하지 않고, 대신 우리 앱에서만 frame 가능하도록 frame-ancestors 로 제한한다.
     // 또 cross-origin frame 을 막는 helmet 의 X-Frame-Options 를 이 응답에서만 해제한다.
     // (HTML 도구 버킷에 한정 — 학생이 제출한 .html 등은 아래 강제 다운로드 분기를 탄다.)
-    if (result.mimeType === 'text/html' && HTML_ONLY_BUCKETS.has(bucket)) {
-      reply.header(
-        'Content-Security-Policy',
-        "frame-ancestors https://class.chois.ai.kr http://localhost:3000",
-      );
+    if (stat.mimeType === 'text/html' && HTML_ONLY_BUCKETS.has(bucket)) {
+      reply.header('Content-Security-Policy', buildFrameAncestors());
       reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
       // helmet 이 onRequest 에서 raw 응답에 직접 setHeader 하므로 reply.removeHeader 로는 안 지워진다.
       reply.raw.removeHeader('X-Frame-Options');
@@ -227,7 +275,7 @@ export async function storageRoutes(app: FastifyInstance) {
     // 안전한 래스터 이미지만 인라인 유지(첨부 썸네일 미리보기용).
     const forceDownload =
       download ||
-      (bucket === 'submission-files' && !INLINE_SAFE_IMAGE_RE.test(result.mimeType));
+      (bucket === 'submission-files' && !INLINE_SAFE_IMAGE_RE.test(stat.mimeType));
 
     if (forceDownload) {
       // 타임스탬프 접두사 제거 (예: 1709712000000_report.pdf → report.pdf)
@@ -236,8 +284,30 @@ export async function storageRoutes(app: FastifyInstance) {
       reply.header('Content-Disposition', contentDispositionAttachment(originalName));
     }
 
-    return reply.send(result.data);
-  });
+    const range = parseRange(request.headers.range, stat.size);
+    if (range === 'unsatisfiable') {
+      reply.header('Content-Range', `bytes */${stat.size}`);
+      return reply.status(416).send();
+    }
+
+    if (range) {
+      reply.status(206);
+      reply.header('Content-Range', `bytes ${range.start}-${range.end}/${stat.size}`);
+      reply.header('Content-Length', range.end - range.start + 1);
+    } else {
+      reply.header('Content-Length', stat.size);
+    }
+
+    if (request.method === 'HEAD') {
+      // Fastify 자동 HEAD 는 payload 가 undefined 면 Content-Length 를 0 으로 덮어쓴다.
+      // 빈 스트림을 보내면 위에서 설정한 길이·Range 헤더가 유지되고 파일은 읽지 않는다.
+      return reply.send(Readable.from([]));
+    }
+    return reply.send(openFileStream(bucket, filePath, range ?? undefined));
+  };
+
+  // HEAD 는 Fastify 가 GET 에서 자동 노출(exposeHeadRoutes)한다 — 핸들러 안의 method 분기로 본문만 생략.
+  app.get('/api/files/*', serveFile);
 
   // ─── DELETE /api/files/:bucket/* — 파일 삭제 ──
 

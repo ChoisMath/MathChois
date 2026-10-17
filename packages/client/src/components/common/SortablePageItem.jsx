@@ -2,7 +2,7 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Trash2, GripVertical, Play, FileCode2, Sparkles } from 'lucide-react';
-import { extractYouTubeId, getYouTubeThumbnail } from '../../lib/youtubeUtils';
+import { PageVideoThumb } from '../videos/PageVideo';
 
 const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage, isDeleting }) => {
   const {
@@ -20,8 +20,6 @@ const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage,
     zIndex: isDragging ? 10 : 1,
     opacity: isDragging ? 0.8 : 1,
   };
-
-  const videoId = page.videoUrl ? extractYouTubeId(page.videoUrl) : null;
 
   return (
     <div
@@ -45,10 +43,10 @@ const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage,
           <FileCode2 className="h-8 w-8 text-emerald-600" />
           <span className="absolute bottom-1 inset-x-0 text-center text-[10px] text-emerald-700 font-medium">HTML 도구</span>
         </div>
-      ) : videoId ? (
+      ) : page.videoUrl ? (
         <div className="relative">
-          <img
-            src={getYouTubeThumbnail(videoId)}
+          <PageVideoThumb
+            videoUrl={page.videoUrl}
             alt={`영상 ${index + 1}`}
             className="w-full h-auto object-cover bg-gray-900"
             loading="lazy"

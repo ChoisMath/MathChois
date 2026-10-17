@@ -1,10 +1,26 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Users, LogIn, LayoutList, Loader, BookMarked, History, LayoutTemplate } from 'lucide-react';
+import { Users, LogIn, LayoutList, Loader, BookMarked, History, LayoutTemplate, Clapperboard } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../lib/api';
 import { subscribeSidebarRefresh } from '../lib/sidebarRefresh';
+import { getVideoUnreadTotals } from '../lib/videos';
+
+const EMPTY_UNREAD = { byClassroom: {}, total: 0 };
+
+/** 사이드바 공용 미읽음 배지 (영상 댓글) */
+function UnreadBadge({ count, title }) {
+  if (!(count > 0)) return null;
+  return (
+    <span
+      className="ml-auto flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full leading-none shrink-0"
+      title={title ?? `새 영상 댓글 ${count}개`}
+    >
+      {count}
+    </span>
+  );
+}
 
 /* ── 학생 전용 사이드바 ── */
 function StudentSidebar() {
@@ -16,6 +32,10 @@ function StudentSidebar() {
   const [joining, setJoining]       = useState(false);
   const [joinError, setJoinError]   = useState('');
   const [classrooms, setClassrooms] = useState([]);
+  const [videoUnread, setVideoUnread] = useState(EMPTY_UNREAD);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => subscribeSidebarRefresh(setRefreshKey), []);
 
   const fetchClassrooms = async () => {
     if (!user) return;
@@ -25,12 +45,14 @@ function StudentSidebar() {
     } catch {
       // ignore
     }
+    // 영상 댓글 미읽음 배지 — 실패해도 무시
+    getVideoUnreadTotals().then((u) => setVideoUnread(u || EMPTY_UNREAD)).catch(() => {});
   };
 
   useEffect(() => {
     fetchClassrooms();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id, refreshKey]);
 
   const handleJoin = async (e) => {
     e.preventDefault();
@@ -125,13 +147,14 @@ function StudentSidebar() {
                 <li key={cls.id}>
                   <Link
                     to={to}
-                    className={`block px-3 py-2 text-sm rounded-md transition-colors truncate ${
+                    className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${
                       isActive
                         ? 'bg-blue-50 text-blue-700 font-medium'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
                   >
-                    {cls.name}
+                    <span className="truncate">{cls.name}</span>
+                    <UnreadBadge count={videoUnread.byClassroom?.[cls.id]} />
                   </Link>
                 </li>
               );
@@ -149,6 +172,7 @@ function TeacherSidebar() {
   const location = useLocation();
 
   const [classrooms, setClassrooms] = useState([]);
+  const [videoUnread, setVideoUnread] = useState(EMPTY_UNREAD);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => subscribeSidebarRefresh(setRefreshKey), []);
@@ -158,6 +182,8 @@ function TeacherSidebar() {
     api.get('/api/classrooms')
       .then((data) => setClassrooms(data || []))
       .catch(() => {});
+    // 영상 댓글 미읽음 배지 — 실패해도 무시
+    getVideoUnreadTotals().then((u) => setVideoUnread(u || EMPTY_UNREAD)).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, refreshKey]);
 
@@ -207,6 +233,20 @@ function TeacherSidebar() {
           시각화자료
         </Link>
 
+        {/* 영상자료 */}
+        <Link
+          to="/teacher/videos"
+          className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors mb-1 ${
+            location.pathname.startsWith('/teacher/videos')
+              ? 'bg-blue-50 text-blue-700'
+              : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+          }`}
+        >
+          <Clapperboard className={`mr-2 h-4 w-4 ${location.pathname.startsWith('/teacher/videos') ? 'text-blue-500' : 'text-gray-400'}`} />
+          영상자료
+          <UnreadBadge count={videoUnread.total} title={`학급 영상에 새 댓글 ${videoUnread.total}개`} />
+        </Link>
+
         <Link
           to="/teacher/classrooms"
           className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors mb-2 ${
@@ -230,13 +270,14 @@ function TeacherSidebar() {
                 <li key={cls.id}>
                   <Link
                     to={to}
-                    className={`block px-3 py-2 text-sm rounded-md transition-colors truncate ${
+                    className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${
                       isActive
                         ? 'bg-blue-50 text-blue-700 font-medium'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
                   >
-                    {cls.name}
+                    <span className="truncate">{cls.name}</span>
+                    <UnreadBadge count={videoUnread.byClassroom?.[cls.id]} />
                   </Link>
                 </li>
               );

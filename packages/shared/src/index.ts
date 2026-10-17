@@ -7,4 +7,5 @@ export * from './types/problem.js';
 export * from './types/coaching.js';
 export * from './types/dashboard.js';
 export * from './types/visualization.js';
+export * from './types/video.js';
 export * from './curriculum/math2022.js';

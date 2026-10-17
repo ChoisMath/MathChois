@@ -22,18 +22,20 @@ packages/
 │       ├── db/                 # schema.ts(Drizzle), startupMigrate.ts(기동 시 idempotent DDL)
 │       ├── middleware/         # auth.ts(JWT), roleGuard.ts(requireRole)
 │       ├── routes/             # auth, classrooms, chapters, pages, storage, posts,
-│       │                       #   assignments, notes, comments, admin, problems, coaching, dashboard, visualizations
-│       ├── services/           # *.service.ts (DB 접근 로직) + ai.service.ts(Gemini), problem.service.ts, coaching.service.ts, dashboard.service.ts, visualization.service.ts
-│       └── socket/             # index.ts + handlers/(notes, comments, assignments, presence)
+│       │                       #   assignments, notes, comments, admin, problems, coaching, dashboard, visualizations,
+│       │                       #   videos(영상자료 라이브러리+스트리밍 업로드), classroomVideos(학급 영상 배정+댓글)
+│       ├── services/           # *.service.ts (DB 접근 로직) + ai.service.ts(Gemini), problem.service.ts, coaching.service.ts, dashboard.service.ts, visualization.service.ts, video.service.ts, classroomVideo.service.ts
+│       └── socket/             # index.ts + handlers/(notes, comments, assignments, presence, videos)
 ├── client/                 # @mathchois/client (React SPA)
 │   └── src/
 │       ├── App.jsx             # 라우팅 정의
 │       ├── contexts/AuthContext.jsx
-│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem), problems/(ProblemPickerModal), coaching/(CoachingHistoryView, AttemptStack), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal)
+│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem), problems/(ProblemPickerModal), coaching/(CoachingHistoryView, AttemptStack), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal),
+│       │                       #   videos/(VideoPlayer, VideoPreviewModal, VideoForm, VideoPickerModal, ClassroomVideoTab, VideoComments)
 │       │   └── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay, HtmlToolOverlay
 │       ├── layouts/            # MainLayout(public), DashboardLayout(인증)
 │       ├── pages/              # Home, Login, Classrooms, Chapters, Study, Monitor,
-│       │                       #   Assignment, Board, Admin, Problems(문제은행), Visualizations(시각화자료), History(코칭기록) 등
+│       │                       #   Assignment, Board, Admin, Problems(문제은행), Visualizations(시각화자료), Videos(영상자료 VideosPage + 학급 시청 ClassroomVideoWatch), History(코칭기록) 등
 │       ├── hooks/              # useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
 │       │                       #   useScribbleErase(문지르기 지우개), useFreedrawSmoothing, usePenDiagnostics,
 │       │                       #   useWetInk(웻잉크 오버레이 — 펜 라이브 렌더)
@@ -45,10 +47,12 @@ packages/
 │                               #   coaching.js(convert/review/attempts/uploadWorkImage/getMyHistory/getStudentHistory/resetStudentQuota/getPageStudents),
 │                               #   dashboard.js(getClassroomDashboard),
 │                               #   visualizations.js(list/facets/CRUD/upload + buildVisualizationQuery),
+│                               #   videos.js(라이브러리/학급배정/댓글 API + XHR 진행률 업로드 + 썸네일 캡처/길이 측정),
+│                               #   videoPlayer.js(플레이어 설정 localStorage, SEEK_STEPS/PLAYBACK_RATES, formatTime, 이어보기 위치),
 │                               #   swUpdate.js(PWA SW 자동 업데이트 — setupSwAutoUpdate),
 │                               #   linkify.js(게시판 본문 plain text의 URL → 자동 하이퍼링크 세그먼트) (*.test.js = Vitest)
 └── shared/src/
-    ├── types/             # api, auth, excalidraw, models, socket, problem, coaching, dashboard, visualization
+    ├── types/             # api, auth, excalidraw, models, socket, problem, coaching, dashboard, visualization, video
     └── curriculum/        # math2022.ts — 2022 개정 수학과 교육과정 MAP(과목→대단원→소단원+성취기준) + buildCurriculumPromptBlock()
 ```
 (제외: `node_modules/`, `dist/`, `.next/`, `drizzle/` 마이그레이션 SQL, `legacy_rails/`)
@@ -139,6 +143,8 @@ packages/
 | `/teacher/board`, `/board/new`, `/board/:postId/edit` | TeacherBoard, BoardPostEditor | 게시판 |
 | `/teacher/problems` | Problems/ProblemsPage | 문제은행 (탭: 문항등록/등록된 문항), DashboardLayout |
 | `/teacher/visualizations` | Visualizations/VisualizationsPage | 시각화자료 라이브러리 관리(본인 자료 mine=1, 등록/수정/삭제/미리보기), DashboardLayout |
+| `/teacher/videos` | Videos/VideosPage | 영상자료 라이브러리(내 자료/전체 교사 자료 토글, 등록/수정/삭제/미리보기 플레이어), DashboardLayout |
+| `/teacher/classrooms/:classroomId/videos/:cvId` · `/student/classrooms/:classroomId/videos/:cvId` | Videos/ClassroomVideoWatch | 학급 영상 시청(YouTube 식 플레이어 + 댓글/대댓글 + 같은 학급 다른 영상), DashboardLayout. 학급 상세 '영상' 탭(`ClassroomVideoTab`)에서 진입 |
 | `/teacher/.../assignments/:assignmentId/edit` · `/monitor` | AssignmentEditor, AssignmentMonitor | 과제 |
 | `/teacher/.../assignments/:assignmentId/monitor/:studentId` | **AssignmentWorkViewer** (⑤) | 전체화면 |
 | `/teacher/classrooms/:classroomId/students/:studentId/coaching-history` | Monitor/StudentCoachingHistory | DashboardLayout, 교사가 학생 AI 코칭 풀이 기록 조회 |
@@ -154,8 +160,8 @@ packages/
 | auth | routes/auth.ts | `GET /auth/google`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`, `GET /profiles/:id` |
 | classrooms | routes/classrooms.ts | `GET/POST /classrooms`, `GET /classrooms/:id`, `/:id/members`, 클래스코드 가입 |
 | chapters | routes/chapters.ts | `GET /classrooms/:cid/chapters`, `GET/PATCH/DELETE /chapters/:id` |
-| pages | routes/pages.ts | `GET /chapters/:chapterId/pages`, `POST` 생성(`htmlUrl`/`aiProblemId`/**`fromVisualizationId`**(시각화자료 복제 삽입) 허용), `PATCH /pages/:id`, `DELETE /pages/:id` |
-| storage | routes/storage.ts | `POST /files/upload`(+multiple), `GET /files/*`, `DELETE /files/*` |
+| pages | routes/pages.ts | `GET /chapters/:chapterId/pages`, `POST` 생성(`htmlUrl`/`aiProblemId`/**`fromVisualizationId`**(시각화자료 복제 삽입) 허용; `videoUrl` 은 YouTube 또는 `/api/files/videos/library/…` 만 — `utils/videoUrl.ts`, 아니면 400), `PATCH /pages/:id`, `DELETE /pages/:id` |
+| storage | routes/storage.ts | `POST /files/upload`(+multiple), `GET /files/*`(**스트리밍 + HTTP Range 206/416 + HEAD** — 영상 탐색/배속용, 전체 Buffer 읽기 없음), `DELETE /files/*` |
 | posts | routes/posts.ts | `GET /posts`, `GET /classrooms/:cid/posts`, `GET/DELETE /posts/:id` (+파일) |
 | assignments | routes/assignments.ts | `GET /classrooms/:cid/assignments`, `GET/DELETE /assignments/:id`, `/:id/pages`, `/:id/submissions` |
 | notes | routes/notes.ts | ①② 및 ④ 필기 (위 표 참조) + `student-summary`, `student-notes-for/:studentId` |
@@ -165,6 +171,8 @@ packages/
 | coaching | routes/coaching.ts | `POST /coaching/convert`(필기→LaTeX, body `pageId`, 한도 초과 429), `POST /coaching/review`(서버에서만 정답 대조 후 attempt 생성, 한도 초과 429 → `{attempt,used,limit,resetAt}`), `GET /coaching/pages/:pageId/attempts`(본인 → `{attempts,used,limit,resetAt}`), `GET /coaching/classrooms/:classroomId/students/:studentId/pages/:pageId/attempts`(교사). 횟수 제한/리셋: `POST /coaching/classrooms/:classroomId/students/:studentId/pages/:pageId/reset`(교사 owner+member — 리셋, 기록 보존), `GET /coaching/classrooms/:classroomId/pages/:pageId/students`(교사 owner — 시도 학생 목록+횟수). 기록 조회: `GET /coaching/history`(본인, authenticate), `GET /coaching/classrooms/:classroomId/students/:studentId/history`(교사 — requireRole+isClassroomOwner+isClassroomMember, 해당 클래스 챕터 범위 한정). 모두 정답·해설 select 제외 |
 | dashboard | routes/dashboard.ts | `GET /dashboard/classrooms/:classroomId`(authenticate + requireRole('teacher') + isClassroomOwner 403). 집계 전용 — 학생×챕터 코칭 정답률·필기 진도 + 반 요약. 정답·해설 select 제외(카운트만) |
 | visualizations | routes/visualizations.ts | `GET /visualizations`(목록 — 텍스트 q + subject/major/minorUnit 필터 + 페이지네이션, 기본 전체 공유, `mine=1`이면 본인 것만), `GET /visualizations/facets`, `GET/:id`, `POST`(등록), `PATCH/:id`·`DELETE/:id`(소유자 403 가드 — 삭제 시 원본 파일도 제거). 모두 teacher |
+| videos | routes/videos.ts | 모두 teacher. `POST /videos/upload?kind=video\|thumbnail`(**스트리밍 업로드** — 디스크 직접 기록, 영상 2GB/썸네일 5MB, mp4/webm/mov, 초과 413), `GET /videos`(목록 q/subject/majorUnit/minorUnit/`mine=1`/페이지네이션 + createdByName), `GET /videos/facets`, `GET /videos/:id`, `GET /videos/:id/usage`(배정 학급), `POST /videos`, `PATCH /videos/:id`(소유자/관리자, 파일 교체 시 이전 파일 정리), `DELETE /videos/:id`(소유자/관리자 — **학급 배정 중이면 409 + usage**, `?force=1` 이면 트랜잭션으로 모든 배정 해제 후 삭제, 파일·썸네일 삭제) |
+| classroomVideos | routes/classroomVideos.ts | 시청 기록: `PUT/GET /classroom-videos/:id/progress`(학생), `GET /classroom-videos/:id/progress/summary`(교사), `GET /classrooms/:cid/videos/progress`(학생 본인 맵/교사 통계 맵). 미읽음: `POST /classroom-videos/:id/seen`, `GET /classrooms/:cid/videos/unread`, `GET /videos/unread`(역할별 학급 합계). 교실 소유 교사/소속 학생 가드. `GET /classrooms/:cid/videos`, `POST`(교사 — `{videoId, note}`, 중복 409), `PATCH /classrooms/:cid/videos/reorder`(`{ids}`), `GET /classroom-videos/:id`(상세 + classroom + siblings), `PATCH`(note)·`DELETE`(교사 — 댓글 cascade). 댓글: `GET /classroom-videos/:id/comments`(학생은 공개 + 본인 비공개 스레드만), `POST`(`content/parentId/isPrivate/timestampSec` — 대댓글은 루트 공개범위 상속, 깊이 1, 타인 비공개 스레드 403), `PATCH /video-comments/:id`(작성자), `DELETE /video-comments/:id`(작성자 또는 교실 소유 교사). 쓰기 후 socket `video:{cvId}` 에 `video-comment:changed` |
 | health | app.ts | `GET /api/health` (DB ping) |
 
 ## 데이터 모델 (Drizzle 스키마: `packages/server/src/db/schema.ts`)
@@ -189,14 +197,20 @@ packages/
 | `coaching_attempts` | pageId→pages(cascade), problemId→problems(set null), studentId→profiles(cascade) | AI 코칭 시도 **불변 누적**(변경 없음). workImageUrl, solutionLatex, isCorrect, errorTags/conceptTags(jsonb), strengthNotes, weaknessNotes, commentMarkdown, aiModel, createdAt. 인덱스 (studentId,createdAt)/(pageId,studentId)/(problemId) |
 | `coaching_quota` | studentId, pageId | 문제(페이지)당 학생 AI 코칭 횟수 제한/리셋 기준. (student, page) unique, resetAt(이 시각 이후의 `coaching_attempts`만 사용 횟수로 카운트), updatedAt. 시도 기록 자체는 `coaching_attempts`에 그대로 보존 |
 | `visualizations` | createdBy→profiles(cascade) | 시각화자료 라이브러리(교사 간 공유). title(필수)/subject/majorUnit/minorUnit/description/htmlUrl(원본, `visualizations` 버킷). 인덱스 (createdBy)/(subject,majorUnit,minorUnit). 페이지 삽입 시 chapter-tools로 **복제**(독립 복사본) |
+| `videos` | createdBy→profiles(cascade) | 영상자료 라이브러리(교사 간 공유). title/subject/majorUnit/minorUnit/description/videoUrl(`videos` 버킷 `library/`)/thumbnailUrl(`thumbnails/`)/mimeType/fileSize(bigint)/durationSec. 인덱스 (createdBy)/(subject,majorUnit,minorUnit) |
+| `classroom_videos` | classroomId→classrooms(cascade), videoId→videos(**restrict**), addedBy→profiles(set null) | 학급에 배정된 영상 — 라이브러리를 **참조**(복사 아님). note(학급 안내 메모)/position. (classroom, video) unique. 배정 중인 라이브러리 영상은 삭제 차단 |
+| `video_comments` | classroomVideoId→classroom_videos(cascade), authorId→profiles(cascade), parentId→video_comments(cascade, 루트만 가리킴 — 깊이 1) | 학급 영상 댓글. content/isPrivate("교사만 확인" — 루트에만 의미, 대댓글은 상속)/timestampSec(영상 시각 첨부). 인덱스 (classroomVideoId, createdAt)/(parentId) |
+| `video_progress` | classroomVideoId→classroom_videos(cascade), studentId→profiles(cascade) | 학생 시청 기록. positionSec(이어보기)/maxPositionSec(진도율)/completed(90% 도달, sticky). (cv, student) unique |
+| `video_comment_reads` | classroomVideoId→classroom_videos(cascade), userId→profiles(cascade) | 댓글 읽음 시각 lastSeenAt. 미읽음 = 본인이 쓰지 않은·열람 가능한·lastSeenAt 이후 댓글 수. (cv, user) unique |
 
-> 마이그레이션은 Drizzle Kit(`db:push`/`db:generate`). 추가로 `db/startupMigrate.ts`가 기동 시 멱등 DDL을 실행(예: `pages.html_url`·`pages.ai_problem_id` 컬럼, `problems`·`coaching_attempts`·`coaching_quota`(+(student,page) unique index) 테이블 보장).
+> 마이그레이션은 Drizzle Kit(`db:push`/`db:generate`). 추가로 `db/startupMigrate.ts`가 기동 시 멱등 DDL을 실행(예: `pages.html_url`·`pages.ai_problem_id` 컬럼, `problems`·`coaching_attempts`·`coaching_quota`(+(student,page) unique index)·`visualizations`·`videos`·`classroom_videos`·`video_comments` 테이블 보장).
 
 ## 외부 의존성
 - **PostgreSQL** (Railway) — `DATABASE_URL`.
 - **Google OAuth** — `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
 - **JWT** — `JWT_SECRET`, `JWT_REFRESH_SECRET`.
-- **파일 스토리지(Volume)** — `VOLUME_PATH`(기본 `./local-storage`). 버킷: `chapter-pages`, `chapter-tools`(HTML 전용), `visualizations`(시각화자료 원본 HTML, HTML 전용), `submission-files`, `problem-bank`(문제은행 이미지), `ai-coaching`(코칭 필기 스냅샷, 학생 업로드 허용), post 첨부 등. `/api/files/*`로 서빙. HTML 전용 버킷(`chapter-tools`/`visualizations`)은 `text/html`만 허용.
+- **파일 스토리지(Volume)** — `VOLUME_PATH`(기본 `./local-storage`). 버킷: `chapter-pages`, `chapter-tools`(HTML 전용), `visualizations`(시각화자료 원본 HTML, HTML 전용), `videos`(영상자료 — 교사 전용, `POST /api/videos/upload` 스트리밍 라우트로만 업로드, `library/` 영상 + `thumbnails/` JPEG), `submission-files`, `problem-bank`(문제은행 이미지), `ai-coaching`(코칭 필기 스냅샷, 학생 업로드 허용), post 첨부 등. `/api/files/*`로 서빙(스트리밍 + Range). HTML 전용 버킷(`chapter-tools`/`visualizations`)은 `text/html`만 허용.
+- **앱 도메인** — 프로덕션 `https://class.chois.pro`(구 `class.chois.ai.kr` 에서 이전). HTML 도구 iframe 의 `frame-ancestors` 는 `routes/storage.ts`의 `buildFrameAncestors()`가 **이 도메인 + `APP_URL` + `FRAME_ANCESTORS`(공백 구분, 선택) + localhost:3000** 으로 조립한다. 도메인이 또 바뀌면 `APP_ORIGIN` 상수 또는 Railway 환경변수 `FRAME_ANCESTORS`/`APP_URL`을 갱신할 것(안 하면 시각화자료 iframe 이 CSP 에 막혀 빈 화면이 된다).
 - **Google Gemini(선택)** — `GEMINI_API_KEY`(@google/genai), `GEMINI_MODEL`(기본 `gemini-2.5-flash`). `services/ai.service.ts`의 OCR(문제/마크스킴)·해설 생성·필기→LaTeX 전환·풀이 검토. 429 처리는 spend-cap / rate-limit / 기타로 세분화하고 서버 로그에 실제 원인 기록. 구조화 출력은 `responseJsonSchema`. 문항 OCR meta(과목·대단원·소단원)는 **2022 개정 교육과정 MAP**(`@mathchois/shared`의 `buildCurriculumPromptBlock`)을 프롬프트에 주입해 **MAP 항목에서만 강제 선택**(subject는 enum). 본문 줄바꿈은 `<br>` 태그 + 함수식만 있는 줄은 `\qquad` 들여쓰기(`MD_LINEBREAK_RULE`). 기준 문서: `docs/curriculum/2022-math-curriculum.md`.
 - **SMTP(선택)** — `SMTP_HOST/PORT/USER/PASS/FROM`(비밀번호 초기화 메일). `APP_URL`(메일 링크).
 - **PORT**(기본 3001), **NODE_ENV**.
@@ -234,6 +248,12 @@ packages/
   - 공유 타입: `shared/src/types/problem.ts`(Problem, ProblemFigure, OcrProblemResult, SolutionResult, ProblemListResult, ProblemFacets, SolutionSource).
 - **AI 수학 코칭(`feat/ai-coaching-page`)**: 위 "AI 수학 코칭 페이지" 섹션 참조. **정답·해설을 학생 클라이언트로 절대 보내지 않는 것**이 핵심 불변식 — 학생은 `GET /api/problems/:id/for-coaching`(표시필드만)만 받고, 정답 대조는 서버 `reviewSolution`에서만 수행한다. 코칭 시도는 `coaching_attempts`에 불변 누적.
   - 공유 타입: `shared/src/types/coaching.ts`(CoachingAttempt, CoachingResult, ConvertResult, CoachingProblemView, ErrorTag, + 기록조회 CoachingAttemptView/CoachingHistoryResult/CoachingHistoryFilters, + 횟수제한 PageAttemptsResult/ReviewResult/CoachingStudentSummary), `models.ts`에 `Page.aiProblemId`.
+- **영상자료 라이브러리 + 학급 영상 탭(`feat/video-library`, 설계 `docs/superpowers/specs/2026-10-17-video-library-design.md`)**: 교사가 mp4/webm/mov 영상을 Volume(`videos` 버킷)에 올리고 메타(제목/과목/대단원/소단원/설명)와 함께 **교사 간 공유**한다. 학급 상세 '영상' 탭에서 라이브러리 영상을 **참조로 배정**(`classroom_videos`), 학생은 YouTube 식 시청 화면에서 댓글/대댓글로 질문한다. 비자명한 결정:
+  - **업로드는 전용 스트리밍 라우트**(`POST /api/videos/upload`) — 기존 `/api/files/upload`는 파일 전체를 메모리 Buffer 로 모으므로 수 GB 영상에 쓰지 않는다. busboy 한도 초과 시 `file.truncated` 로 감지해 부분 파일을 지우고 413. 서빙(`GET /api/files/*`)은 **스트리밍 + Range(206)** 로 바꿨다(없으면 `<video>` 탐색·배속 불가). Fastify 자동 HEAD 는 payload 가 undefined 면 Content-Length 를 0 으로 덮어쓰므로 **빈 Readable** 을 보낸다.
+  - **삭제 차단**: 학급에 배정된 라이브러리 영상은 `DELETE /api/videos/:id` 가 409(+usage)를 반환(FK `restrict`). 배정 해제 후 삭제. drizzle 0.44 는 DB 오류를 `DrizzleQueryError` 로 감싸므로 unique 위반 판정은 `err.cause?.code === '23505'` 도 본다.
+  - **"교사만 확인"(isPrivate)** 은 루트 댓글에만, 학생만 설정. 대댓글은 루트의 공개 범위를 **상속**(요청 값 무시), 타인의 비공개 스레드에 답글 403, 대댓글의 대댓글 400. 학생 조회는 공개 + 본인 비공개 스레드만 — 필터링은 **서버 조회에서만** 하므로 socket 이벤트(`video-comment:changed`)에는 본문을 싣지 않고 클라이언트가 재조회한다. 댓글 권한: 본인 수정/삭제 + 교실 소유 교사는 모두 삭제.
+  - **v2 후속(2026-10-17, subagent 병렬 구현)**: 학생 시청 기록(`video_progress`, `VideoPlayer` `onProgress` 10초 스로틀 + `initialPosition` 이 localStorage 이어보기보다 우선) + 교사 시청 현황 패널/카드 통계; `DELETE /videos/:id?force=1` 배정 해제 후 삭제(`ApiError.body` 로 409 usage 전달); **챕터/과제 페이지에 라이브러리 영상 삽입** — `components/videos/PageVideo.jsx` 의 `PageVideoEmbed`/`PageVideoThumb` 가 YouTube iframe 또는 `VideoPlayer`(뷰어에서는 `hotkeys=false` — 필기 도구 키와 충돌 방지)를 렌더, 편집기 영상 버튼은 "YouTube 링크 / 영상자료에서 선택" 모달(`VideoPickerModal` `selectLabel`), `lib/pageVideoUrl.js` `isLibraryVideoUrl`; 댓글 미읽음 배지(`video_comment_reads`, 시청 화면 `VideoComments.fetchThreads` 가 읽음 처리 후 `refreshSidebar()`, 사이드바/학급 탭/카드 배지). zod 실패는 `app.ts` 에서 400.
+  - **플레이어(`components/videos/VideoPlayer.jsx`)**: native `<video>` + 커스텀 컨트롤. ←/→ 설정된 초(10/20/30/60) 이동, ↑/↓ 볼륨, Space/K, M, F, `,`/`.` 배속(0.7~2.5×, 11단계), 0~9 % 이동. 설정은 `localStorage['mc_video_player']`(기기별), 이어보기 위치는 `mc_video_pos:<key>`(v1 은 로컬만 — DB 시청기록은 후속). 키 리스너는 window 에 붙되 input/textarea 포커스 중엔 무시(`isTypingTarget`). `ref` 로 `getCurrentTime/seekTo` 노출(댓글 시각 첨부·이동). 썸네일은 **클라이언트가 캡처**(`captureVideoThumbnail`, 1초 지점 프레임 → JPEG) — 서버 ffmpeg 없음.
 - **시각화자료 라이브러리(`feat/visualization-library`)**: 교사가 등록한 standalone HTML을 메타(제목/과목/대단원/소단원/설명)와 함께 저장·검색·**교사 간 공유**. 챕터 편집기 HTML 버튼(`FileCode2`)이 `VisualizationPickerModal`(검색 리스트 + 우상단 [새html등록])을 연다. **삽입은 복사본(독립)** — 서버 `copyHtmlToChapterTools`가 원본을 `chapter-tools`로 복제해 페이지가 자체 복사본을 참조하므로, 원본 교체/삭제가 이미 삽입된 페이지에 영향 없음(새로 삽입하는 페이지부터 교체본 적용). 관리(`/teacher/visualizations`)는 본인 자료만(`mine=1`) — 수정은 **파일 통째 교체 / 단원 / 제목·설명**만(HTML 내부 편집 없음), 삭제는 레코드+원본 파일 제거. 등록+즉시 삽입 흐름은 모달 `onSaved→onSelect`로 처리.
   - 공유 타입: `shared/src/types/visualization.ts`(Visualization, VisualizationListResult, VisualizationFacets, VisualizationFilters). 서버: `routes/visualizations.ts`, `services/visualization.service.ts`, `services/page.service.ts`(`createPage`의 `fromVisualizationId`), `services/storage.service.ts`(`copyHtmlToChapterTools`). 클라: `lib/visualizations.js`(+test).
 - **Markdown 렌더(`components/common/Markdown.jsx`)**: `rehypeRaw`로 교사 작성 HTML(`<br>`,`<center>`)을 허용하되 `rehypeSanitize`로 XSS 차단(플러그인 순서: raw→sanitize→katex). `neutralizeIndentedCode`가 **줄 앞 4칸 이상 들여쓰기를 nbsp로 치환**해 Markdown이 코드 블록으로 오인해 수식이 깨지는 문제를 막는다(펜스 ``` 블록은 보존).
@@ -249,4 +269,4 @@ packages/
 - **`.gitignore`** — `*.tsbuildinfo`·`.superpowers/`·`.plans/`·`review.md` 무시(빌드 산출물·작업 노트는 읽지 않음).
 
 ---
-마지막 업데이트: 2026-06-11 (PWA 자동 업데이트 — swUpdate.js + vite swBuildVersion 플러그인 + 정적 서빙 no-cache 헤더 / 직전: 웻잉크 펜 렌더링 useWetInk/wetInkStroke + excalidrawPenTweak)
+마지막 업데이트: 2026-10-17 (영상자료 v2 후속: 시청 기록·force 삭제·챕터 페이지 영상 삽입·미읽음 배지 / 직전: 영상자료 라이브러리 + 학급 영상 탭/댓글, 파일 서빙 스트리밍+Range, 도메인 class.chois.pro 이전)

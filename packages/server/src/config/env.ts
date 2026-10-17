@@ -18,6 +18,9 @@ const envSchema = z.object({
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().optional(),  // 발신자 표시 이름+주소 (없으면 SMTP_USER 사용)
   APP_URL: z.string().optional(),    // 프론트 URL (이메일 링크용, 없으면 자동 감지)
+  // HTML 도구(iframe) 를 프레임할 수 있는 앱 origin 목록(공백 구분, 선택).
+  // 기본값은 프로덕션 도메인 https://class.chois.pro + APP_URL + localhost:3000.
+  FRAME_ANCESTORS: z.string().optional(),
 });
 
 function loadEnv() {

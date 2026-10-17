@@ -8,6 +8,7 @@ import rateLimit from '@fastify/rate-limit';
 import jwt from 'jsonwebtoken';
 import path from 'node:path';
 import { sql } from 'drizzle-orm';
+import { ZodError } from 'zod';
 import { env } from './config/env.js';
 import { db } from './config/database.js';
 import { authRoutes } from './routes/auth.js';
@@ -24,6 +25,8 @@ import { problemRoutes } from './routes/problems.js';
 import { coachingRoutes } from './routes/coaching.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { visualizationRoutes } from './routes/visualizations.js';
+import { videoRoutes } from './routes/videos.js';
+import { classroomVideoRoutes } from './routes/classroomVideos.js';
 
 export function buildApp() {
   const app = Fastify({
@@ -102,10 +105,20 @@ export function buildApp() {
   app.register(coachingRoutes);
   app.register(dashboardRoutes);
   app.register(visualizationRoutes);
+  app.register(videoRoutes);
+  app.register(classroomVideoRoutes);
 
   // ─── Global Error Handler ──────────────────────────
 
   app.setErrorHandler((error: Error & { statusCode?: number; publicMessage?: string }, request, reply) => {
+    // zod `.parse()` 실패(ZodError)는 statusCode 가 없어 500 으로 떨어졌다 → 요청 오류(400)로 매핑
+    if (error instanceof ZodError) {
+      return reply.status(400).send({
+        error: '요청 형식이 올바르지 않습니다.',
+        statusCode: 400,
+        issues: error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      });
+    }
     const statusCode = error.statusCode ?? 500;
     request.log.error({ err: error, url: request.url, method: request.method }, 'Request error');
     reply.status(statusCode).send({

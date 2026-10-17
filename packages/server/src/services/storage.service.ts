@@ -1,4 +1,7 @@
 import fs from 'node:fs/promises';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import type { Readable } from 'node:stream';
 import path from 'node:path';
 import { env } from '../config/env.js';
 
@@ -30,6 +33,55 @@ export async function uploadFile(
 
   // URL 패턴: /api/files/{bucket}/{directory}/{fileName}
   return `/api/files/${bucket}/${directory}/${fileName}`;
+}
+
+/**
+ * 스트림을 디스크에 직접 기록한다(메모리 버퍼링 없음 — 수 GB 영상 업로드용).
+ * 기록 도중 오류/한도 초과(`onAbort`가 true 반환) 시 부분 파일을 삭제한다.
+ */
+export async function uploadStream(
+  bucket: string,
+  directory: string,
+  fileName: string,
+  source: Readable,
+  isTruncated?: () => boolean,
+): Promise<{ url: string; size: number }> {
+  const dir = safePath(bucket, directory);
+  await fs.mkdir(dir, { recursive: true });
+  const filePath = safePath(bucket, directory, fileName);
+
+  try {
+    await pipeline(source, createWriteStream(filePath));
+    if (isTruncated?.()) {
+      throw Object.assign(new Error('파일 크기 한도를 초과했습니다.'), { statusCode: 413 });
+    }
+    const { size } = await fs.stat(filePath);
+    return { url: `/api/files/${bucket}/${directory}/${fileName}`, size };
+  } catch (err) {
+    await fs.unlink(filePath).catch(() => {});
+    throw err;
+  }
+}
+
+/** 파일 메타(크기·MIME) — 스트리밍 서빙용. 없으면 null */
+export async function statFile(bucket: string, filePath: string): Promise<{
+  size: number;
+  mimeType: string;
+} | null> {
+  try {
+    const absPath = safePath(bucket, filePath);
+    const st = await fs.stat(absPath);
+    if (!st.isFile()) return null;
+    return { size: st.size, mimeType: getMimeType(filePath) };
+  } catch {
+    return null;
+  }
+}
+
+/** 파일 읽기 스트림 (Range 요청용 start/end 는 inclusive 바이트 오프셋) */
+export function openFileStream(bucket: string, filePath: string, range?: { start: number; end: number }) {
+  const absPath = safePath(bucket, filePath);
+  return createReadStream(absPath, range ? { start: range.start, end: range.end } : undefined);
 }
 
 /** 파일 읽기 (스트림 대신 Buffer — 이미지는 작으므로 충분) */
@@ -150,6 +202,12 @@ function getMimeType(filePath: string): string {
     '.txt': 'text/plain',
     '.html': 'text/html',
     '.htm': 'text/html',
+    '.mp4': 'video/mp4',
+    '.m4v': 'video/x-m4v',
+    '.webm': 'video/webm',
+    '.mov': 'video/quicktime',
+    '.ogv': 'video/ogg',
+    '.mp3': 'audio/mpeg',
   };
   return types[ext] ?? 'application/octet-stream';
 }
