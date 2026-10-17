@@ -382,3 +382,32 @@ export const videoComments = pgTable('video_comments', {
   index('idx_video_comments_cv').on(t.classroomVideoId, t.createdAt),
   index('idx_video_comments_parent').on(t.parentId),
 ]);
+
+// ─── video_progress (학생 시청 기록) ──────────────────
+// 학생×학급영상 1행. positionSec=마지막 위치(이어보기), maxPositionSec=도달한 최대 위치(진도율 산출),
+// completed=영상 길이의 90% 이상 도달.
+
+export const videoProgress = pgTable('video_progress', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  classroomVideoId: uuid('classroom_video_id').notNull().references(() => classroomVideos.id, { onDelete: 'cascade' }),
+  studentId: uuid('student_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  positionSec: integer('position_sec').notNull().default(0),
+  maxPositionSec: integer('max_position_sec').notNull().default(0),
+  completed: boolean('completed').notNull().default(false),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  unique('uq_video_progress_cv_student').on(t.classroomVideoId, t.studentId),
+  index('idx_video_progress_cv').on(t.classroomVideoId),
+]);
+
+// ─── video_comment_reads (댓글 읽음 시각) ──────────────
+// 사용자×학급영상 1행. lastSeenAt 이후 작성된 (본인이 쓰지 않은, 열람 가능한) 댓글 수 = 미읽음 배지.
+
+export const videoCommentReads = pgTable('video_comment_reads', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  classroomVideoId: uuid('classroom_video_id').notNull().references(() => classroomVideos.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  unique('uq_video_comment_reads_cv_user').on(t.classroomVideoId, t.userId),
+]);

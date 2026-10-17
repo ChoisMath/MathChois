@@ -105,3 +105,43 @@ export interface VideoPlayerSettings {
   volume: number;   // 0~1
   muted: boolean;
 }
+
+// ─── 시청 기록 (v2) ───────────────────────────────────
+
+export interface VideoProgress {
+  classroomVideoId: string;
+  studentId: string;
+  positionSec: number;
+  maxPositionSec: number;
+  completed: boolean;
+  updatedAt: string;
+}
+
+/** 교사용: 학급 영상별 학생 시청 현황 */
+export interface VideoProgressSummary {
+  classroomVideoId: string;
+  durationSec: number | null;
+  students: {
+    studentId: string;
+    name: string | null;
+    avatarUrl: string | null;
+    positionSec: number;
+    maxPositionSec: number;
+    /** 0~100, durationSec 없으면 null */
+    progressPct: number | null;
+    completed: boolean;
+    updatedAt: string | null;   // null = 시청 기록 없음
+  }[];
+  watchedCount: number;
+  completedCount: number;
+  totalStudents: number;
+}
+
+// ─── 댓글 미읽음 (v2) ─────────────────────────────────
+
+/** 학급 영상별 미읽음 댓글 수 (본인이 쓰지 않은, 열람 가능한, lastSeenAt 이후 댓글) */
+export interface VideoUnreadCounts {
+  /** classroomVideoId → count */
+  byClassroomVideo: Record<string, number>;
+  total: number;
+}

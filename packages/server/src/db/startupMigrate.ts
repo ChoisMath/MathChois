@@ -131,4 +131,26 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
   await pgClient`CREATE INDEX IF NOT EXISTS idx_video_comments_cv ON video_comments (classroom_video_id, created_at)`;
   await pgClient`CREATE INDEX IF NOT EXISTS idx_video_comments_parent ON video_comments (parent_id)`;
   log.info('startup migration: videos / classroom_videos / video_comments ensured');
+
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS video_progress (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      classroom_video_id uuid NOT NULL REFERENCES classroom_videos(id) ON DELETE CASCADE,
+      student_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+      position_sec integer NOT NULL DEFAULT 0,
+      max_position_sec integer NOT NULL DEFAULT 0,
+      completed boolean NOT NULL DEFAULT false,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`;
+  await pgClient`CREATE UNIQUE INDEX IF NOT EXISTS uq_video_progress_cv_student ON video_progress (classroom_video_id, student_id)`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_video_progress_cv ON video_progress (classroom_video_id)`;
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS video_comment_reads (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      classroom_video_id uuid NOT NULL REFERENCES classroom_videos(id) ON DELETE CASCADE,
+      user_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+      last_seen_at timestamptz NOT NULL DEFAULT now()
+    )`;
+  await pgClient`CREATE UNIQUE INDEX IF NOT EXISTS uq_video_comment_reads_cv_user ON video_comment_reads (classroom_video_id, user_id)`;
+  log.info('startup migration: video_progress / video_comment_reads ensured');
 }
