@@ -40,12 +40,12 @@ const TEACHER_COMMENT_PREFIX = '__atc_';
    이 모달은 현재 빈 상태로 표시됩니다. 서버에 해당 엔드포인트 추가 후 연동 필요. */
 function TeacherNotesModal({ page, onClose }) {
   const containerRef = useRef(null);
-  const [status, setStatus] = useState('loading'); // 'loading' | 'ok'
-  const [noteElements, setNoteElements] = useState([]);
-  const [noteFiles, setNoteFiles] = useState({});
-  const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
+  // 교사 필기 API 연동 전까지 비어 있는 고정값 (연동 시 setter 를 다시 꺼내 쓴다)
+  const [noteElements] = useState([]);
+  const [noteFiles] = useState({});
+  const { isDownloading, downloadPage } = usePdfDownloader();
   const bgPositionRef = useRef(null);
-  const [dbBgPosition, setDbBgPosition] = useState(null);
+  const [dbBgPosition] = useState(null);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -53,11 +53,8 @@ function TeacherNotesModal({ page, onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  useEffect(() => {
-    // TODO: 서버에 assignment_teacher_notes API 필요
-    // 현재 해당 엔드포인트가 없으므로 이미지만 표시
-    setStatus('ok');
-  }, [page.id]);
+  // TODO: 서버에 assignment_teacher_notes API 필요 — 현재 엔드포인트가 없으므로 이미지만 표시
+  // (로드할 데이터가 없어 'loading' 상태 없이 바로 렌더한다)
 
   const handleMount = useCallback(async (apiRef) => {
     if (!page.imageUrl || !containerRef.current) return;
@@ -101,14 +98,12 @@ function TeacherNotesModal({ page, onClose }) {
         <div className="h-12 flex items-center justify-between px-4 border-b flex-shrink-0">
           <span className="font-semibold text-gray-800">교사 필기</span>
           <div className="flex items-center gap-2">
-            {status === 'ok' && (
-              <PdfDownloadButton
-                onClick={() => downloadPage('교사_필기', noteElements, noteFiles, page.imageUrl, bgPositionRef.current)}
-                isDownloading={isDownloading}
-                label="PDF 다운로드"
-                className="py-1 px-2 text-xs"
-              />
-            )}
+            <PdfDownloadButton
+              onClick={() => downloadPage('교사_필기', noteElements, noteFiles, page.imageUrl, bgPositionRef.current)}
+              isDownloading={isDownloading}
+              label="PDF 다운로드"
+              className="py-1 px-2 text-xs"
+            />
             <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer">
               <X className="h-5 w-5" />
             </button>
@@ -120,25 +115,18 @@ function TeacherNotesModal({ page, onClose }) {
           </div>
         ) : (
         <div ref={containerRef} className="flex-1 relative overflow-hidden bg-gray-50">
-          {status === 'loading' && (
-            <div className="flex items-center justify-center h-full text-gray-400">불러오는 중...</div>
-          )}
-          {status === 'ok' && (
-            <>
-              <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{PANEL_HIDE_CSS}</style>
-              <ExcalidrawErrorBoundary key={page.id + '_modal'}>
-              <Excalidraw
-                excalidrawAPI={handleMount}
-                initialData={{
-                  elements: noteElements,
-                  appState: { viewBackgroundColor: 'transparent', scrollX: 0, scrollY: 0 },
-                }}
-                viewModeEnabled={true}
-                UIOptions={EXCALIDRAW_UI_OPTIONS}
-              />
-              </ExcalidrawErrorBoundary>
-            </>
-          )}
+          <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{PANEL_HIDE_CSS}</style>
+          <ExcalidrawErrorBoundary key={page.id + '_modal'}>
+          <Excalidraw
+            excalidrawAPI={handleMount}
+            initialData={{
+              elements: noteElements,
+              appState: { viewBackgroundColor: 'transparent', scrollX: 0, scrollY: 0 },
+            }}
+            viewModeEnabled={true}
+            UIOptions={EXCALIDRAW_UI_OPTIONS}
+          />
+          </ExcalidrawErrorBoundary>
         </div>
         )}
       </div>
@@ -365,7 +353,7 @@ const AssignmentStudyViewer = () => {
     return subscribeToRoom(
       `asn-comments:${currentPage.id}:${user.id}`,
       'asn-comment:updated',
-      (data) => {
+      () => {
         clearTimeout(commentDebounceRef.current);
         commentDebounceRef.current = setTimeout(async () => {
           // 코멘트가 업데이트되면 최신 데이터를 다시 fetch

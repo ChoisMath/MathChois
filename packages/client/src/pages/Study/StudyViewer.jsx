@@ -87,6 +87,8 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
       return;
     }
 
+    // 페이지 이동 시 이전 페이지 필기를 가리고 Excalidraw 를 다시 마운트하기 위한 의도적 초기화
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus('loading');
     excApiRef.current = null;
 
@@ -175,7 +177,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
       console.error('교사 필기 모달 bg 로드 실패:', err);
       excApi.updateScene({ elements: noteElementsRef.current });
     }
-  }, [currentPage?.imageUrl, dbBgPosition]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentPage?.imageUrl, dbBgPosition]);
 
   return (
     <div

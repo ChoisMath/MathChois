@@ -4,13 +4,12 @@ import { verifyEmail } from '../lib/api';
 
 const VerifyEmail = () => {
   const { token } = useParams();
-  const [error, setError] = useState('');
+  const [requestError, setRequestError] = useState('');
+  // 토큰이 없으면 요청 없이 바로 오류 (effect 안 동기 setState 대신 렌더 중 파생)
+  const error = token ? requestError : '인증 링크가 올바르지 않습니다.';
 
   useEffect(() => {
-    if (!token) {
-      setError('인증 링크가 올바르지 않습니다.');
-      return;
-    }
+    if (!token) return;
 
     let cancelled = false;
 
@@ -23,7 +22,7 @@ const VerifyEmail = () => {
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err.message || '인증 링크가 만료되었거나 올바르지 않습니다.');
+          setRequestError(err.message || '인증 링크가 만료되었거나 올바르지 않습니다.');
         }
       });
 

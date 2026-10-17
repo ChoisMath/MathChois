@@ -18,7 +18,7 @@ The core of the app is **5 annotation pages** (see the table below).
 
 | Package | Name | Stack |
 |---|---|---|
-| `packages/server` | `@mathchois/server` | Fastify 5 + Drizzle ORM 0.44 + PostgreSQL (`postgres` driver) + Socket.IO 4 + JWT/Google OAuth + nodemailer. `tsx` (dev) / `tsc` (build). |
+| `packages/server` | `@mathchois/server` | Fastify 5 + Drizzle ORM 0.45 + PostgreSQL (`postgres` driver) + Socket.IO 4 + JWT/Google OAuth + nodemailer. `tsx` (dev) / `tsc` (build). |
 | `packages/client` | `@mathchois/client` | React 19 + Vite 7 + Tailwind 4 + React Router 7 + Excalidraw 0.18 + dnd-kit + jspdf + socket.io-client. PWA. |
 | `packages/shared` | `@mathchois/shared` | Shared TS types (exported from source, not a build artifact). |
 

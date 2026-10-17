@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import nodemailer, { type Transporter } from 'nodemailer';
 import { env } from '../config/env.js';
 
 /** SMTP 설정 여부 확인 */
@@ -7,9 +7,9 @@ export function isMailConfigured(): boolean {
 }
 
 /** Nodemailer transporter (lazy init) */
-let _transporter: nodemailer.Transporter | null = null;
+let _transporter: Transporter | null = null;
 
-function getTransporter(): nodemailer.Transporter {
+function getTransporter(): Transporter {
   if (!_transporter) {
     if (!isMailConfigured()) {
       throw new Error('SMTP is not configured (SMTP_USER, SMTP_PASS)');
@@ -25,6 +25,16 @@ function getTransporter(): nodemailer.Transporter {
     });
   }
   return _transporter;
+}
+
+/** 메일 HTML 에 넣는 사용자 입력(이름) 이스케이프 — 가입 시 이름에 태그를 넣어 피싱 링크를 심는 것을 막는다 */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /** 이메일 가입확인 이메일 전송 */
@@ -44,7 +54,7 @@ export async function sendVerificationEmail(
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
         <h2 style="color: #1e40af; margin-bottom: 16px;">가입확인</h2>
         <p style="color: #374151; line-height: 1.6;">
-          안녕하세요, <strong>${userName}</strong>님.
+          안녕하세요, <strong>${escapeHtml(userName)}</strong>님.
         </p>
         <p style="color: #374151; line-height: 1.6;">
           ChoisClass 회원가입을 완료하려면 아래 버튼을 클릭해 주세요.
@@ -88,7 +98,7 @@ export async function sendPasswordResetEmail(
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
         <h2 style="color: #1e40af; margin-bottom: 16px;">비밀번호 초기화</h2>
         <p style="color: #374151; line-height: 1.6;">
-          안녕하세요, <strong>${displayName}</strong>님.
+          안녕하세요, <strong>${escapeHtml(displayName)}</strong>님.
         </p>
         <p style="color: #374151; line-height: 1.6;">
           비밀번호 초기화가 요청되었습니다. 아래 버튼을 클릭하면 비밀번호가 초기화되고 로그인 페이지로 이동합니다.
