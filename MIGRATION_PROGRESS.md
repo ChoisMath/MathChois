@@ -7,7 +7,7 @@
 
 - **현재 Phase**: Phase 0-6 전체 완료, Phase 7 미착수
 - **마지막 작업 세션**: 2026-02-27
-- **프로덕션**: `class.chois.ai.kr` 배포 완료, 정상 운영 중
+- **프로덕션**: `class.chois.pro` 배포 완료, 정상 운영 중 (구 도메인 `class.chois.ai.kr` 에서 이전)
 - **DB 상태**: 스키마 코드(`schema.ts`)와 프로덕션 DB 100% 일치 확인 (2026-02-27)
 - **다음 할 일**: Phase 7 (TypeScript 정리) 또는 추가 기능 개발
 
@@ -174,7 +174,7 @@
   - packages/client/index.html: 정적 HTML fallback + og:url, canonical meta 추가
   - packages/client/public/privacy.html: 정적 개인정보처리방침 페이지 신규
   - packages/client/public/robots.txt: 크롤러 허용 정책
-  - DNS: Cloudflare proxy 비활성화 → Railway IP 직접 연결 (class.chois.ai.kr → 66.33.22.1)
+  - DNS: Cloudflare proxy 비활성화 → Railway IP 직접 연결 (당시 class.chois.ai.kr → 66.33.22.1, 현재 도메인은 class.chois.pro)
 - [x] Railway PostgreSQL `drizzle-kit push` 완료 (DB 스키마 동기화 확인)
 - [x] 배포 완료 — Railway ChoisClass 서비스 SUCCESS (2026-02-27)
 

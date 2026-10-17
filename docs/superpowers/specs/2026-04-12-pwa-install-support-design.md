@@ -1,7 +1,7 @@
 # PWA 설치 지원 (최소 침습 방식)
 
 **작성일:** 2026-04-12
-**대상 앱:** ChoisClass (`class.chois.ai.kr`)
+**대상 앱:** ChoisClass (`class.chois.pro`)
 **범위:** `packages/client`
 
 ## 목표
@@ -115,7 +115,7 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 
 ## 수용 기준 (수동 검증)
 
-1. `npm run build && npm run preview` (또는 배포 환경 `class.chois.ai.kr`)에서 검증
+1. `npm run build && npm run preview` (또는 배포 환경 `class.chois.pro`)에서 검증
 2. Chrome DevTools → Application → Manifest 탭: manifest 로드 성공, 아이콘 3개 표시, 에러 없음
 3. Application → Service Workers 탭: `sw.js` activated & running
 4. 주소창 우측에 설치 아이콘 등장 → 클릭 시 설치 다이얼로그 표시

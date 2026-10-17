@@ -2,6 +2,24 @@ import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import { uploadFile, readFile, removeFile } from '../services/storage.service.js';
+import { env } from '../config/env.js';
+
+// 프로덕션 앱 도메인. (구 도메인 class.chois.ai.kr → class.chois.pro 로 이전됨)
+export const APP_ORIGIN = 'https://class.chois.pro';
+
+/**
+ * HTML 도구 iframe 의 frame-ancestors 허용 목록.
+ * 도메인이 코드에 하드코딩되어 있으면 도메인 이전 시 모든 시각화자료 iframe 이 조용히 차단된다
+ * (브라우저가 CSP 위반으로 빈 화면만 표시). env 로 확장 가능하게 하고 기본값에 현재 도메인을 둔다.
+ */
+export function buildFrameAncestors(): string {
+  const origins = new Set<string>([APP_ORIGIN, 'http://localhost:3000']);
+  if (env.APP_URL) {
+    try { origins.add(new URL(env.APP_URL).origin); } catch { /* 잘못된 APP_URL 은 무시 */ }
+  }
+  for (const o of (env.FRAME_ANCESTORS ?? '').split(/\s+/).filter(Boolean)) origins.add(o);
+  return `frame-ancestors ${[...origins].join(' ')}`;
+}
 
 // 학생 업로드 허용 버킷
 const STUDENT_ALLOWED_BUCKETS = new Set(['submission-files', 'ai-coaching']);
@@ -212,10 +230,7 @@ export async function storageRoutes(app: FastifyInstance) {
     // 또 cross-origin frame 을 막는 helmet 의 X-Frame-Options 를 이 응답에서만 해제한다.
     // (HTML 도구 버킷에 한정 — 학생이 제출한 .html 등은 아래 강제 다운로드 분기를 탄다.)
     if (result.mimeType === 'text/html' && HTML_ONLY_BUCKETS.has(bucket)) {
-      reply.header(
-        'Content-Security-Policy',
-        "frame-ancestors https://class.chois.ai.kr http://localhost:3000",
-      );
+      reply.header('Content-Security-Policy', buildFrameAncestors());
       reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
       // helmet 이 onRequest 에서 raw 응답에 직접 setHeader 하므로 reply.removeHeader 로는 안 지워진다.
       reply.raw.removeHeader('X-Frame-Options');
