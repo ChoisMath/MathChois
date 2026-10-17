@@ -214,8 +214,8 @@ export async function removeComment(id: string) {
 
 // ─── 시청 기록 (video_progress) ──────────────────────
 
-/** 완료 판정 비율: 최대 도달 위치가 길이의 90% 이상이면 완료 */
-export const PROGRESS_COMPLETE_RATIO = 0.9;
+/** 완료 판정 비율: 최대 도달 위치가 길이의 80% 이상이면 학습 완료(교사 요청: 끝 인사 등을 건너뛰어도 완료로 인정) */
+export const PROGRESS_COMPLETE_RATIO = 0.8;
 
 function toProgressRow(r: {
   classroomVideoId: string; studentId: string; positionSec: number; maxPositionSec: number;
@@ -242,7 +242,7 @@ export function progressPercent(maxPositionSec: number, durationSec: number | nu
  * 학생 시청 위치 upsert (classroomVideoId, studentId 유니크).
  * - positionSec: 현재 위치(그대로 덮어씀)
  * - maxPositionSec: 기존값과 새 값 중 큰 값
- * - completed: durationSec>0 이고 maxPositionSec >= 90% 면 true. 한 번 true 가 되면 유지.
+ * - completed: durationSec>0 이고 maxPositionSec >= 80%(PROGRESS_COMPLETE_RATIO) 면 true. 한 번 true 가 되면 유지.
  */
 export async function upsertProgress(
   classroomVideoId: string,

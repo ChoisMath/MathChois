@@ -4,8 +4,9 @@ import { ArrowLeft, Clapperboard, MessageSquare, Users, CheckCircle2, Columns2, 
 import { useIntervalRefresh } from '../../hooks/useIntervalRefresh';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  getClassroomVideo, formatDuration, getVideoProgress, saveVideoProgress, getVideoProgressSummary,
+  getClassroomVideo, formatDuration, getVideoProgress, reportVideoProgress, getVideoProgressSummary,
 } from '../../lib/videos';
+import ProgressSaveStatus from '../../components/videos/ProgressSaveStatus';
 import { formatTime } from '../../lib/videoPlayer';
 import { loadSplitPage } from '../../lib/splitLayout';
 import VideoPlayer from '../../components/videos/VideoPlayer';
@@ -129,6 +130,7 @@ export default function ClassroomVideoWatch() {
   const playerRef = useRef(null);
   const [detail, setDetail] = useState(null);
   const [progress, setProgress] = useState(null); // 학생 본인 서버 시청 기록
+  const [saveStatus, setSaveStatus] = useState(null); // 학생: 마지막 시청 기록 저장 결과(진단 표시)
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -156,9 +158,10 @@ export default function ClassroomVideoWatch() {
   }, [load]);
 
   // 학생: 플레이어가 보고하는 위치를 서버에 저장 (플레이어 쪽에서 10초 간격으로 제한됨)
-  const handleProgress = useCallback((positionSec, durationSec) => {
+  const handleProgress = useCallback((positionSec, durationSec, opts) => {
     if (isTeacher) return;
-    saveVideoProgress(cvId, { positionSec, durationSec }).catch(() => { /* 다음 보고 때 재시도 */ });
+    reportVideoProgress(cvId, { positionSec, durationSec, keepalive: !!opts?.keepalive })
+      .then((st) => setSaveStatus(st));
   }, [cvId, isTeacher]);
 
   const getCurrentTime = useCallback(() => playerRef.current?.getCurrentTime() ?? 0, []);
@@ -211,6 +214,7 @@ export default function ClassroomVideoWatch() {
               </p>
             </div>
             {/* 필기 챕터가 연결된 영상: 학생은 2분할 진입, 교사는 연결 칩 */}
+            {!isTeacher && <ProgressSaveStatus status={saveStatus} className="shrink-0 mt-1" />}
             {detail.chapter && (isTeacher ? (
               <Link to={`/teacher/chapters/${detail.chapter.id}/edit`}
                 className="shrink-0 inline-flex items-center gap-1 max-w-[50%] text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded px-2 py-1 hover:bg-amber-100"

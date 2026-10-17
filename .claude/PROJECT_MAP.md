@@ -202,7 +202,7 @@ packages/
 | `videos` | createdBy→profiles(cascade) | 영상자료 라이브러리(교사 간 공유). title/subject/majorUnit/minorUnit/description/videoUrl(`videos` 버킷 `library/`)/thumbnailUrl(`thumbnails/`)/mimeType/fileSize(bigint)/durationSec. 인덱스 (createdBy)/(subject,majorUnit,minorUnit) |
 | `classroom_videos` | classroomId→classrooms(cascade), videoId→videos(**restrict**), addedBy→profiles(set null), **chapterId→chapters(set null)** | 학급에 배정된 영상 — 라이브러리를 **참조**(복사 아님). note(학급 안내 메모)/position. (classroom, video) unique. 배정 중인 라이브러리 영상은 삭제 차단 |
 | `video_comments` | classroomVideoId→classroom_videos(cascade), authorId→profiles(cascade), parentId→video_comments(cascade, 루트만 가리킴 — 깊이 1) | 학급 영상 댓글. content/isPrivate("교사만 확인" — 루트에만 의미, 대댓글은 상속)/timestampSec(영상 시각 첨부). 인덱스 (classroomVideoId, createdAt)/(parentId) |
-| `video_progress` | classroomVideoId→classroom_videos(cascade), studentId→profiles(cascade) | 학생 시청 기록. positionSec(이어보기)/maxPositionSec(진도율)/completed(90% 도달, sticky). (cv, student) unique |
+| `video_progress` | classroomVideoId→classroom_videos(cascade), studentId→profiles(cascade) | 학생 시청 기록. positionSec(이어보기)/maxPositionSec(진도율)/completed(**80%** 도달 — `PROGRESS_COMPLETE_RATIO`, sticky). (cv, student) unique |
 | `video_comment_reads` | classroomVideoId→classroom_videos(cascade), userId→profiles(cascade) | 댓글 읽음 시각 lastSeenAt. 미읽음 = 본인이 쓰지 않은·열람 가능한·lastSeenAt 이후 댓글 수. (cv, user) unique |
 
 > 마이그레이션은 Drizzle Kit(`db:push`/`db:generate`). 추가로 `db/startupMigrate.ts`가 기동 시 멱등 DDL을 실행(예: `pages.html_url`·`pages.ai_problem_id` 컬럼, `problems`·`coaching_attempts`·`coaching_quota`(+(student,page) unique index)·`visualizations`·`videos`·`classroom_videos`·`video_comments` 테이블 보장).

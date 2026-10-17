@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowLeftRight, ChevronLeft, ChevronRight, Maximize, Minimize, Sparkles } from 'lucide-react';
-import { getClassroomVideo, getVideoProgress, saveVideoProgress } from '../../lib/videos';
+import { getClassroomVideo, getVideoProgress, reportVideoProgress } from '../../lib/videos';
+import ProgressSaveStatus from '../../components/videos/ProgressSaveStatus';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { loadSplitSettings, saveSplitSettings, loadSplitPage, saveSplitPage } from '../../lib/splitLayout';
 import { useOrientation } from '../../hooks/useOrientation';
@@ -58,6 +59,7 @@ export default function ClassroomVideoSplit() {
   const [detail, setDetail] = useState(null);
   const [progress, setProgress] = useState(null);
   const [pages, setPages] = useState(null); // null = 아직 로드 전
+  const [saveStatus, setSaveStatus] = useState(null); // 마지막 시청 기록 저장 결과(진단 표시)
   // 오류는 cvId 와 함께 저장해, 다른 영상으로 이동하면 effect 안에서 setState 없이 자연히 사라진다
   const [errorState, setErrorState] = useState(null); // { cvId, message } | null
   const error = errorState?.cvId === cvId ? errorState.message : '';
@@ -145,8 +147,9 @@ export default function ClassroomVideoSplit() {
   const toggleFullscreen = useCallback(() => playerRef.current?.toggleFullscreen(), []);
 
   /* ── 플레이어 연동 ── */
-  const handleProgress = useCallback((positionSec, durationSec) => {
-    saveVideoProgress(cvId, { positionSec, durationSec }).catch(() => { /* 다음 보고 때 재시도 */ });
+  const handleProgress = useCallback((positionSec, durationSec, opts) => {
+    reportVideoProgress(cvId, { positionSec, durationSec, keepalive: !!opts?.keepalive })
+      .then((st) => setSaveStatus(st));
   }, [cvId]);
   const getCurrentTime = useCallback(() => playerRef.current?.getCurrentTime() ?? 0, []);
   const seekTo = useCallback((sec) => playerRef.current?.seekTo(sec), []);
@@ -193,7 +196,10 @@ export default function ClassroomVideoSplit() {
       </div>
       {!isFull && (
         <div className="bg-white border-t px-3 py-1.5 overflow-y-auto max-h-[45%] shrink-0">
-          <p className="text-sm font-semibold text-gray-900 truncate" title={v.title}>{v.title}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-gray-900 truncate" title={v.title}>{v.title}</p>
+            <ProgressSaveStatus status={saveStatus} className="shrink-0" />
+          </div>
           <CollapsibleSection label={`댓글 ${detail.commentCount ?? 0}`}>
             <VideoComments classroomVideoId={detail.id} isTeacher={false} getCurrentTime={getCurrentTime} onSeek={seekTo} />
           </CollapsibleSection>
