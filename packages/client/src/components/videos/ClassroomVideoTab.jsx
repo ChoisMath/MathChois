@@ -189,6 +189,13 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
 
   useEffect(() => { setLoading(true); fetchList(); }, [fetchList]);
 
+  /* 다른 탭/앱에서 돌아왔을 때 시청 기록·미읽음을 다시 읽는다(학생 시청은 소켓 이벤트가 없음) */
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchList(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [fetchList]);
+
   /* 교사: 학급 챕터 목록(필기 챕터 선택지). 실패해도 영상 목록은 표시 — 보조 정보 */
   useEffect(() => {
     if (!isTeacher) return undefined;

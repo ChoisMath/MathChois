@@ -11,10 +11,12 @@ const HANDLE_PX = 12;
  * - 드래그 중에는 화면 전체에 투명 오버레이를 깔아 `<video>`·Excalidraw·HTML 도구 iframe 이 pointermove 를 먹지 않게 한다
  *   (별도 origin iframe 위에서는 pointermove 가 부모로 오지 않으므로 필수).
  * - 두 패널은 `min-w-0 min-h-0 overflow-hidden` 이라 내부 콘텐츠(Excalidraw 등)가 자기 컨테이너 크기에 맞춰진다.
+ * - `reverse` 는 시각 순서만 바꾼다(CSS `order`). children 의 DOM 순서는 유지되므로 `<video>` 가 리마운트되지 않는다
+ *   (좌우 바꾸기 중 재생이 끊기지 않음). `ratio` 는 항상 **시각적으로 첫 번째** 패널의 비율.
  */
 export default function SplitPane({
   orientation = 'horizontal', ratio, onRatioChange, min = RATIO_MIN, max = RATIO_MAX,
-  handleLabel = '분할 비율 조정', className = '', children,
+  reverse = false, handleLabel = '분할 비율 조정', className = '', children,
 }) {
   const rootRef = useRef(null);
   const [dragging, setDragging] = useState(false);
@@ -63,7 +65,7 @@ export default function SplitPane({
       className={`relative h-full w-full min-h-0 min-w-0 ${className}`}
       style={{ display: 'grid', [vertical ? 'gridTemplateRows' : 'gridTemplateColumns']: template }}
     >
-      <div className="min-w-0 min-h-0 overflow-hidden">{first}</div>
+      <div className="min-w-0 min-h-0 overflow-hidden" style={{ order: reverse ? 3 : 1 }}>{first}</div>
 
       <div
         role="separator"
@@ -80,6 +82,7 @@ export default function SplitPane({
         onKeyDown={onKeyDown}
         className={`flex items-center justify-center select-none touch-none outline-none transition-colors
           ${dragging ? 'bg-blue-400' : 'bg-gray-300 hover:bg-blue-300 focus-visible:bg-blue-300'} ${cursor}`}
+        style={{ order: 2 }}
         title={handleLabel}
       >
         {vertical
@@ -87,7 +90,7 @@ export default function SplitPane({
           : <GripVertical className="h-4 w-4 text-gray-600 pointer-events-none" />}
       </div>
 
-      <div className="min-w-0 min-h-0 overflow-hidden">{second}</div>
+      <div className="min-w-0 min-h-0 overflow-hidden" style={{ order: reverse ? 1 : 3 }}>{second}</div>
 
       {dragging && <div className={`fixed inset-0 z-[70] ${cursor}`} aria-hidden="true" />}
     </div>

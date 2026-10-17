@@ -227,8 +227,10 @@ export const api = {
     });
   },
 
-  put<T>(url: string, body?: unknown): Promise<T> {
+  /** init: fetch 옵션 추가(예: 페이지 이탈 시 `keepalive: true`) */
+  put<T>(url: string, body?: unknown, init?: RequestInit): Promise<T> {
     return apiFetch<T>(url, {
+      ...init,
       method: 'PUT',
       body: body != null ? JSON.stringify(body) : undefined,
     });

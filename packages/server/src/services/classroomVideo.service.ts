@@ -274,6 +274,13 @@ export async function upsertProgress(
   return toProgressRow(row);
 }
 
+/** videos.durationSec 이 비어 있을 때만 채운다(이미 값이 있으면 건드리지 않음). */
+export async function backfillVideoDuration(videoId: string, durationSec: number) {
+  await db.update(videos)
+    .set({ durationSec: Math.floor(durationSec), updatedAt: new Date() })
+    .where(and(eq(videos.id, videoId), isNull(videos.durationSec)));
+}
+
 export async function getProgress(classroomVideoId: string, studentId: string) {
   const rows = await db.select().from(videoProgress)
     .where(and(eq(videoProgress.classroomVideoId, classroomVideoId), eq(videoProgress.studentId, studentId)))

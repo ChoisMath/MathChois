@@ -249,9 +249,10 @@ export default function ClassroomVideoSplit() {
       )}
 
       <div className="flex-1 min-h-0 relative">
-        <SplitPane orientation={orientation} ratio={paneRatio} onRatioChange={handleRatio}>
-          {videoFirst ? videoPane : notesPane}
-          {videoFirst ? notesPane : videoPane}
+        {/* DOM 순서는 항상 [영상, 필기] — 좌우 바꾸기는 reverse(CSS order) 로만 처리해 플레이어가 리마운트되지 않는다 */}
+        <SplitPane orientation={orientation} ratio={paneRatio} onRatioChange={handleRatio} reverse={!videoFirst}>
+          {videoPane}
+          {notesPane}
         </SplitPane>
 
         {/* 전체화면 중: 상단 바 대신 작은 플로팅 버튼 */}

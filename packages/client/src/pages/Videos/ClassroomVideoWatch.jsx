@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Clapperboard, MessageSquare, Users, CheckCircle2, Columns2, BookOpen } from 'lucide-react';
+import { ArrowLeft, Clapperboard, MessageSquare, Users, CheckCircle2, Columns2, BookOpen, RefreshCw } from 'lucide-react';
+import { useIntervalRefresh } from '../../hooks/useIntervalRefresh';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   getClassroomVideo, formatDuration, getVideoProgress, saveVideoProgress, getVideoProgressSummary,
@@ -19,17 +20,39 @@ function formatWatchedAt(iso) {
 }
 
 /* ─── 교사용 시청 현황 패널 (접기/펼치기) ─── */
+const PROGRESS_PANEL_REFRESH_MS = 30000;
+
 function VideoProgressPanel({ classroomVideoId }) {
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const aliveRef = useRef(true);
+
+  const load = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const s = await getVideoProgressSummary(classroomVideoId);
+      if (aliveRef.current) { setSummary(s); setError(''); }
+    } catch (err) {
+      if (aliveRef.current) setError(err.message ?? '시청 현황을 불러올 수 없습니다.');
+    } finally {
+      if (aliveRef.current) setRefreshing(false);
+    }
+  }, [classroomVideoId]);
 
   useEffect(() => {
-    let alive = true;
-    getVideoProgressSummary(classroomVideoId)
-      .then((s) => { if (alive) setSummary(s); })
-      .catch((err) => { if (alive) setError(err.message ?? '시청 현황을 불러올 수 없습니다.'); });
-    return () => { alive = false; };
-  }, [classroomVideoId]);
+    aliveRef.current = true;
+    load();
+    return () => { aliveRef.current = false; };
+  }, [load]);
+
+  // 학생 시청은 실시간 소켓 이벤트가 없으므로 주기적으로 + 탭에 돌아왔을 때 다시 읽는다
+  useIntervalRefresh(load, PROGRESS_PANEL_REFRESH_MS, typeof document !== 'undefined' && document.visibilityState === 'visible');
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [load]);
 
   const headline = summary
     ? `시청 ${summary.watchedCount}/${summary.totalStudents} · 완료 ${summary.completedCount}`
@@ -42,6 +65,11 @@ function VideoProgressPanel({ classroomVideoId }) {
         <Users className="h-4 w-4 text-gray-500" />
         <span className="font-semibold text-gray-800">시청 현황</span>
         <span className={`text-xs ${error ? 'text-red-600' : 'text-gray-500'}`}>{headline}</span>
+        <span className="flex-1" />
+        <button type="button" onClick={load} disabled={refreshing} title="시청 현황 새로고침 (30초마다 자동 갱신)"
+          className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-50 cursor-pointer">
+          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       {summary && (

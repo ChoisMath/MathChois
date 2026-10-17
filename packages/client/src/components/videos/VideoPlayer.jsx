@@ -20,7 +20,8 @@ const PROGRESS_REPORT_INTERVAL_MS = 10000;
  * - autoPlay
  * - hotkeys: window 키보드 단축키 활성(기본 true). 입력창 포커스 중엔 자동 무시.
  * - initialPosition: 서버 시청 기록 등에서 온 이어보기 위치(초). > 0 이면 localStorage 위치보다 우선.
- * - onProgress(positionSec, durationSec): 시청 위치 보고 — 재생 중 최대 10초마다 + 일시정지/종료/언마운트 시.
+ * - onProgress(positionSec, durationSec, { keepalive }): 시청 위치 보고 — 재생 중 최대 10초마다 + 일시정지/종료/언마운트 시,
+ *   그리고 탭 숨김·페이지 이탈(visibilitychange/pagehide) 시 `keepalive: true` 로(요청이 이탈 중에도 완료되도록).
  * - fill: true 면 16:9 고정 대신 부모를 꽉 채운다(영상 2분할 패널처럼 세로로 긴 영역). 영상은 object-contain.
  * - fullscreenTargetRef: 전체화면으로 올릴 요소(기본은 플레이어 자신). 2분할 화면은 분할 루트를 넘겨
  *   "영상은 반쪽을 채우고 나머지 반쪽은 필기창" 전체화면을 만든다.
@@ -41,6 +42,8 @@ export default function VideoPlayer({
   const flashTimerRef = useRef(null);
   const lastSaveRef = useRef(0);
   const lastReportRef = useRef(0);
+  // 마지막으로 관측한 위치/길이. 언마운트 시 React 가 videoRef 를 먼저 떼어내므로(ref 는 null) 스냅샷으로 보고한다.
+  const snapshotRef = useRef({ time: 0, duration: 0, touched: false });
   const onProgressRef = useRef(onProgress); // 이벤트 핸들러/언마운트 정리가 최신 콜백을 읽기 위한 미러
   useEffect(() => { onProgressRef.current = onProgress; }, [onProgress]);
 
@@ -228,16 +231,36 @@ export default function VideoPlayer({
   }, [hotkeys, settings.seekStep, settings.playbackRate, seekBy, changeVolume, togglePlay, toggleMute, toggleFullscreen, changeRate, seekTo, showFlash]);
 
   /* ── 시청 위치 보고 (서버 저장 등 — 호출 빈도 제한) ── */
-  const reportProgress = useCallback((force = false) => {
+  const reportProgress = useCallback((force = false, opts = undefined) => {
     const cb = onProgressRef.current;
+    if (!cb) return;
     const v = videoRef.current;
-    if (!cb || !v) return;
+    if (v) {
+      snapshotRef.current = {
+        time: v.currentTime || 0,
+        duration: Number.isFinite(v.duration) ? v.duration : snapshotRef.current.duration,
+        touched: true,
+      };
+    }
+    const snap = snapshotRef.current;
+    if (!snap.touched) return; // 아직 재생/메타데이터가 없으면 보고할 것이 없다
     const now = Date.now();
     if (!force && now - lastReportRef.current < PROGRESS_REPORT_INTERVAL_MS) return;
     lastReportRef.current = now;
-    const dur = Number.isFinite(v.duration) ? Math.floor(v.duration) : 0;
-    cb(Math.floor(v.currentTime || 0), dur);
+    cb(Math.floor(snap.time), Math.floor(snap.duration || 0), opts);
   }, []);
+
+  /* 탭 숨김/페이지 이탈(앱 전환·창 닫기·새로고침) 시 마지막 위치를 keepalive 로 보고 */
+  useEffect(() => {
+    const onHide = () => reportProgress(true, { keepalive: true });
+    const onVisibility = () => { if (document.visibilityState === 'hidden') onHide(); };
+    window.addEventListener('pagehide', onHide);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [reportProgress]);
 
   /* ── 탭/클릭: 한 번 = 재생·정지, 두 번 = 오른쪽 절반 앞으로 / 왼쪽 절반 뒤로 (설정된 초) ──
      전체화면(특히 태블릿·휴대폰)에서 더블탭이 전체화면을 해제하지 않도록 더블클릭=전체화면은 제거했다.
@@ -379,6 +402,7 @@ export default function VideoPlayer({
     if (!v) return;
     setDuration(v.duration || 0);
     setError('');
+    snapshotRef.current = { ...snapshotRef.current, duration: Number.isFinite(v.duration) ? v.duration : 0 };
     v.playbackRate = settings.playbackRate;
     v.volume = settings.volume;
     v.muted = settings.muted;
@@ -394,6 +418,7 @@ export default function VideoPlayer({
     const v = videoRef.current;
     if (!v) return;
     setCurrentTime(v.currentTime);
+    snapshotRef.current = { time: v.currentTime || 0, duration: Number.isFinite(v.duration) ? v.duration : 0, touched: true };
     const now = Date.now();
     if (storageKey && now - lastSaveRef.current > 5000) {
       lastSaveRef.current = now;

@@ -72,12 +72,12 @@ export const getVideoUnreadTotals = () => api.get('/api/videos/unread');
 // ─── 시청 기록 API ───────────────────────────────────
 
 /** 학생: 시청 위치 저장(10초 간격 + 일시정지/종료/이탈 시에만 호출 — 분당 300회 제한) */
-export const saveVideoProgress = (classroomVideoId, { positionSec, durationSec } = {}) =>
+export const saveVideoProgress = (classroomVideoId, { positionSec, durationSec, keepalive = false } = {}) =>
   api.put(`/api/classroom-videos/${classroomVideoId}/progress`, {
     positionSec: Math.max(0, Math.floor(Number(positionSec) || 0)),
     ...(Number.isFinite(Number(durationSec)) && Number(durationSec) > 0
       ? { durationSec: Math.floor(Number(durationSec)) } : {}),
-  });
+  }, keepalive ? { keepalive: true } : undefined); // 페이지 이탈(pagehide) 중에도 요청이 완료되도록
 /** 학생: 본인 시청 기록 (없으면 null) */
 export const getVideoProgress = (classroomVideoId) => api.get(`/api/classroom-videos/${classroomVideoId}/progress`);
 /** 교사: 학생별 시청 현황 요약 */
