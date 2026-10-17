@@ -159,13 +159,19 @@
 - [x] **Step 3:** Playwright 스모크 13/13 — 등록(썸네일 캡처·제목 자동) → 미리보기 단축키(+10초/볼륨/배속 1.1 적용) → 설정 패널(30초·2.5× localStorage) → 학급 배정 → 교사 댓글(비공개 체크박스 없음) → 학생 비공개 댓글+시각 첨부 → 교사 실시간 수신·답글 → 학생 실시간 수신 → 제3 학생에게 비공개 미노출. 스크린샷 `scratchpad/e2e/0*.png`.
 - [x] **Step 4:** 문서 갱신 — `PROJECT_MAP.md`(구조/라우트/모델/주의사항), `CLAUDE.md`, 설계서 상태.
 
-## Task 13: 배포 후 검증 (미완)
+## Task 13: 배포 후 검증
 
-- [ ] **Step 1:** Railway 배포 후 기동 로그에 `videos / classroom_videos / video_comments ensured` 확인.
-- [ ] **Step 2:** 시각화자료 미리보기가 다시 보이는지(CSP `frame-ancestors https://class.chois.pro`) 확인. 여전히 목록이 비면 `railway variables`(`VOLUME_PATH`, `VITE_TOOLS_ORIGIN`)·`railway ssh` 로 `$VOLUME_PATH/visualizations/library` 확인.
-- [ ] **Step 3:** 실제 수업 영상(수백 MB~1.5GB) 업로드로 Railway 프록시 타임아웃/본문 한도 실측. 실패 시 `MAX_VIDEO_BYTES` 하향 또는 분할 업로드 검토.
-- [ ] **Step 4:** 태블릿(Galaxy Tab/iPad) 에서 전체화면·배속·키보드(블루투스) 동작 확인. iPad Safari 는 `webkitEnterFullscreen` 경로.
-- [ ] **Step 5:** Volume 용량 모니터링(영상은 삭제 전까지 보존 — 라이브러리 페이지의 용량 열로 정리 유도).
+- [x] **Step 1:** Railway 배포 로그에 startup migration 로그 확인 (사용자 확인 2026-10-17).
+- [x] **Step 2:** 시각화자료 미리보기 복구 확인. `VOLUME_PATH` 변수가 Railway 에 없음이 확인되어 `RAILWAY_VOLUME_MOUNT_PATH` fallback + 관리자 "Volume 진단" 카드(`GET /api/admin/storage-info`)를 추가. 진단 카드의 경고/누락 수치 확인은 사용자 몫.
+- [x] **Step 3:** 15MB 수업 영상 업로드·재생 확인. 수백 MB~2GB 는 추후 실측.
+- [x] **Step 4:** 학급 배정 → 학생 시청 → 비공개 댓글 → 교사 실시간 갱신 확인.
+- [x] **Step 5:** Android 전체화면에서 더블탭 이동 확인. iPad Safari 는 기본 플레이어라 예외.
+- [ ] **Step 6:** Railway 서비스가 `claude/laughing-sagan-2clgzp` 브랜치를 배포 중(main 머지 커밋에는 배포 상태 없음). 배포 브랜치를 `main` 으로 되돌리고 main 을 브랜치와 동기화할 것.
+
+### 사용 중 개선 요청 (2026-10-17, 반영 완료)
+- [x] 미리보기 모달: 영상 폭 고정·본문 스크롤. 설명/시청 현황은 `CollapsibleSection` 으로 접기(기본 접힘).
+- [x] 더블탭 = 좌/우 절반 뒤로/앞으로 이동(전체화면 토글 제거). 길게 누른 뒤 드래그 = 비선형 스크럽.
+- [x] 다운로드 가드(controlsList·PiP·contextmenu·touch-callout).
 
 ## Task 14: 후속 과제 (subagent 병렬 구현 — 2026-10-17)
 
