@@ -30,13 +30,13 @@ packages/
 │   └── src/
 │       ├── App.jsx             # 라우팅 정의
 │       ├── contexts/AuthContext.jsx
-│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem, FileDropZone — 클릭/드래그 앤 드롭 파일 선택 영역), problems/(ProblemPickerModal), coaching/(CoachingHistoryView, AttemptStack), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal),
+│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem, FileDropZone — 클릭/드래그 앤 드롭 파일 선택 영역, SortOrderSelect — 정렬 순서 선택), problems/(ProblemPickerModal), coaching/(CoachingHistoryView, AttemptStack), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal),
 │       │                       #   videos/(VideoPlayer, VideoPreviewModal, VideoForm, VideoPickerModal, ClassroomVideoTab, VideoComments)
 │       │   └── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay, HtmlToolOverlay
 │       ├── layouts/            # MainLayout(public), DashboardLayout(인증)
 │       ├── pages/              # Home, Login, Classrooms, Chapters, Study, Monitor,
 │       │                       #   Assignment, Board, Admin, Problems(문제은행), Visualizations(시각화자료), Videos(영상자료 VideosPage + 학급 시청 ClassroomVideoWatch), History(코칭기록) 등
-│       ├── hooks/              # useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
+│       ├── hooks/              # useSortOrder(목록 정렬 순서 — 사용자별 localStorage), useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
 │       │                       #   useScribbleErase(문지르기 지우개), useFreedrawSmoothing, usePenDiagnostics,
 │       │                       #   useWetInk(웻잉크 오버레이 — 펜 라이브 렌더)
 │       └── lib/                # api.ts, socket.ts, toolUrl.js, excalidrawUtils, pdfDownloader,
@@ -50,7 +50,8 @@ packages/
 │                               #   videos.js(라이브러리/학급배정/댓글 API + XHR 진행률 업로드 + 썸네일 캡처/길이 측정),
 │                               #   videoPlayer.js(플레이어 설정 localStorage, SEEK_STEPS/PLAYBACK_RATES, formatTime, 이어보기 위치),
 │                               #   swUpdate.js(PWA SW 자동 업데이트 — setupSwAutoUpdate),
-│                               #   linkify.js(게시판 본문 plain text의 URL → 자동 하이퍼링크 세그먼트) (*.test.js = Vitest)
+│                               #   linkify.js(게시판 본문 plain text의 URL → 자동 하이퍼링크 세그먼트),
+│                               #   sortOrder.js(학급 상세 [챕터]·[영상] 탭 정렬 — 최신순/등록순/교사 지정순, sortItems + localStorage 저장) (*.test.js = Vitest)
 └── shared/src/
     ├── types/             # api, auth, excalidraw, models, socket, problem, coaching, dashboard, visualization, video
     └── curriculum/        # math2022.ts — 2022 개정 수학과 교육과정 MAP(과목→대단원→소단원+성취기준) + buildCurriculumPromptBlock()
@@ -172,7 +173,7 @@ packages/
 | dashboard | routes/dashboard.ts | `GET /dashboard/classrooms/:classroomId`(authenticate + requireRole('teacher') + isClassroomOwner 403). 집계 전용 — 학생×챕터 코칭 정답률·필기 진도 + 반 요약. 정답·해설 select 제외(카운트만) |
 | visualizations | routes/visualizations.ts | `GET /visualizations`(목록 — 텍스트 q + subject/major/minorUnit 필터 + 페이지네이션, 기본 전체 공유, `mine=1`이면 본인 것만), `GET /visualizations/facets`, `GET/:id`, `POST`(등록), `PATCH/:id`·`DELETE/:id`(소유자 403 가드 — 삭제 시 원본 파일도 제거). 모두 teacher |
 | videos | routes/videos.ts | 모두 teacher. `POST /videos/upload?kind=video\|thumbnail`(**스트리밍 업로드** — 디스크 직접 기록, 영상 2GB/썸네일 5MB, mp4/webm/mov, 초과 413), `GET /videos`(목록 q/subject/majorUnit/minorUnit/`mine=1`/페이지네이션 + createdByName), `GET /videos/facets`, `GET /videos/:id`, `GET /videos/:id/usage`(배정 학급), `POST /videos`, `PATCH /videos/:id`(소유자/관리자, 파일 교체 시 이전 파일 정리), `DELETE /videos/:id`(소유자/관리자 — **학급 배정 중이면 409 + usage**, `?force=1` 이면 트랜잭션으로 모든 배정 해제 후 삭제, 파일·썸네일 삭제) |
-| classroomVideos | routes/classroomVideos.ts | 시청 기록: `PUT/GET /classroom-videos/:id/progress`(학생), `GET /classroom-videos/:id/progress/summary`(교사), `GET /classrooms/:cid/videos/progress`(학생 본인 맵/교사 통계 맵). 미읽음: `POST /classroom-videos/:id/seen`, `GET /classrooms/:cid/videos/unread`, `GET /videos/unread`(역할별 학급 합계). 교실 소유 교사/소속 학생 가드. `GET /classrooms/:cid/videos`, `POST`(교사 — `{videoId, note}`, 중복 409), `PATCH /classrooms/:cid/videos/reorder`(`{ids}`), `GET /classroom-videos/:id`(상세 + classroom + siblings), `PATCH`(note)·`DELETE`(교사 — 댓글 cascade). 댓글: `GET /classroom-videos/:id/comments`(학생은 공개 + 본인 비공개 스레드만), `POST`(`content/parentId/isPrivate/timestampSec` — 대댓글은 루트 공개범위 상속, 깊이 1, 타인 비공개 스레드 403), `PATCH /video-comments/:id`(작성자), `DELETE /video-comments/:id`(작성자 또는 교실 소유 교사). 쓰기 후 socket `video:{cvId}` 에 `video-comment:changed` |
+| classroomVideos | routes/classroomVideos.ts | 시청 기록: `PUT/GET /classroom-videos/:id/progress`(학생), `GET /classroom-videos/:id/progress/summary`(교사), `GET /classrooms/:cid/videos/progress`(학생 본인 맵/교사 통계 맵). 미읽음: `POST /classroom-videos/:id/seen`, `GET /classrooms/:cid/videos/unread`, `GET /videos/unread`(역할별 학급 합계). 교실 소유 교사/소속 학생 가드. `GET /classrooms/:cid/videos`, `POST`(교사 — `{videoId, note}`, 중복 409, 새 배정은 position 0 + 기존 shift → 맨 위), `PATCH /classrooms/:cid/videos/reorder`(`{ids}`), `GET /classroom-videos/:id`(상세 + classroom + siblings), `PATCH`(note)·`DELETE`(교사 — 댓글 cascade). 댓글: `GET /classroom-videos/:id/comments`(학생은 공개 + 본인 비공개 스레드만), `POST`(`content/parentId/isPrivate/timestampSec` — 대댓글은 루트 공개범위 상속, 깊이 1, 타인 비공개 스레드 403), `PATCH /video-comments/:id`(작성자), `DELETE /video-comments/:id`(작성자 또는 교실 소유 교사). 쓰기 후 socket `video:{cvId}` 에 `video-comment:changed` |
 | health | app.ts | `GET /api/health` (DB ping) |
 
 ## 데이터 모델 (Drizzle 스키마: `packages/server/src/db/schema.ts`)
@@ -181,7 +182,7 @@ packages/
 | `profiles` | — | googleId/email unique, role, isAdmin, authMethod(google\|email), passwordHash |
 | `classrooms` | teacherId→profiles | classCode unique |
 | `classroom_members` | classroomId, studentId | (classroom, student) unique |
-| `chapters` | classroomId, sourceChapterId(self) | position, sourceChapterId(복제 출처) |
+| `chapters` | classroomId, sourceChapterId(self) | position, sourceChapterId(복제 출처), createdAt(최신순/등록순 정렬용 — startupMigrate 가 보강). 새 챕터는 position 0 에 삽입되고 기존 챕터는 +1 shift(새 항목이 맨 위) |
 | `pages` | chapterId, aiProblemId→problems(set null) | imageUrl / videoUrl / **htmlUrl**(HTML 도구) / position. `aiProblemId` 설정 시 배경 없는 AI 코칭 페이지 |
 | `student_notes` ① | studentId, pageId | (student, page) unique, excalidrawData |
 | `teacher_notes` ② | teacherId, pageId | (teacher, page) unique |
