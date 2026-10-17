@@ -219,7 +219,7 @@ export const PROGRESS_COMPLETE_RATIO = 0.8;
 
 function toProgressRow(r: {
   classroomVideoId: string; studentId: string; positionSec: number; maxPositionSec: number;
-  completed: boolean; updatedAt: Date;
+  completed: boolean; updatedAt: Date | string | null;
 }) {
   return {
     classroomVideoId: r.classroomVideoId,
@@ -227,7 +227,7 @@ function toProgressRow(r: {
     positionSec: r.positionSec,
     maxPositionSec: r.maxPositionSec,
     completed: r.completed,
-    updatedAt: r.updatedAt.toISOString(),
+    updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : (r.updatedAt ?? new Date().toISOString()),
   };
 }
 
@@ -252,26 +252,34 @@ export async function upsertProgress(
   const positionSec = Math.max(0, Math.floor(input.positionSec));
   const durationSec = input.durationSec != null && input.durationSec > 0 ? Math.floor(input.durationSec) : 0;
   const threshold = durationSec > 0 ? durationSec * PROGRESS_COMPLETE_RATIO : null;
-  const insertCompleted = threshold != null && positionSec >= threshold;
 
-  const maxExpr = sql`GREATEST(${videoProgress.maxPositionSec}, ${positionSec})`;
-  const completedExpr = threshold != null
-    ? sql`(${videoProgress.completed} OR ${maxExpr} >= ${threshold})`
-    : sql`${videoProgress.completed}`;
-
-  const [row] = await db.insert(videoProgress)
-    .values({ classroomVideoId, studentId, positionSec, maxPositionSec: positionSec, completed: insertCompleted })
-    .onConflictDoUpdate({
-      target: [videoProgress.classroomVideoId, videoProgress.studentId],
-      set: {
-        positionSec,
-        maxPositionSec: maxExpr,
-        completed: completedExpr,
-        updatedAt: sql`now()`,
-      },
-    })
-    .returning();
-  return toProgressRow(row);
+  // ON CONFLICT 에 의존하지 않는 단순 upsert(조회 → 갱신/삽입).
+  // 운영 DB 의 인덱스 상태와 무관하게 동작하고, 실패 시 DB 오류 문구를 사용자 메시지로 노출해 진단할 수 있게 한다.
+  try {
+    const existing = await getProgress(classroomVideoId, studentId);
+    if (existing) {
+      const maxPositionSec = Math.max(existing.maxPositionSec, positionSec);
+      const completed = existing.completed || (threshold != null && maxPositionSec >= threshold);
+      const [row] = await db.update(videoProgress)
+        .set({ positionSec, maxPositionSec, completed, updatedAt: new Date() })
+        .where(and(eq(videoProgress.classroomVideoId, classroomVideoId), eq(videoProgress.studentId, studentId)))
+        .returning();
+      return toProgressRow(row ?? { classroomVideoId, studentId, positionSec, maxPositionSec, completed, updatedAt: new Date() });
+    }
+    const completed = threshold != null && positionSec >= threshold;
+    const [row] = await db.insert(videoProgress)
+      .values({ classroomVideoId, studentId, positionSec, maxPositionSec: positionSec, completed })
+      .returning();
+    return toProgressRow(row ?? { classroomVideoId, studentId, positionSec, maxPositionSec: positionSec, completed, updatedAt: new Date() });
+  } catch (err: unknown) {
+    // drizzle 0.45 는 DB 오류를 DrizzleQueryError 로 감싸므로 cause 의 메시지를 우선 노출
+    const e = err as { message?: string; cause?: { message?: string; code?: string } };
+    const detail = e.cause?.message ?? e.message ?? String(err);
+    throw Object.assign(new Error(`video_progress upsert failed: ${detail}`), {
+      statusCode: 500,
+      publicMessage: `시청 기록 저장 오류: ${detail}`,
+    });
+  }
 }
 
 /** videos.durationSec 이 비어 있을 때만 채운다(이미 값이 있으면 건드리지 않음). */
