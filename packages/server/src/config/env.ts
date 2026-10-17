@@ -6,7 +6,10 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(16),
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
-  VOLUME_PATH: z.string().default('./local-storage'),
+  // Railway Volume 을 쓰면 RAILWAY_VOLUME_MOUNT_PATH 가 자동 주입된다 — VOLUME_PATH 미설정 시 그 경로를 쓴다.
+  // (둘 다 없으면 컨테이너 내부 ./local-storage → 재배포 시 파일이 사라지므로 프로덕션에서는 반드시 둘 중 하나가 있어야 한다)
+  VOLUME_PATH: z.string().optional(),
+  RAILWAY_VOLUME_MOUNT_PATH: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),  // 없으면 AI 기능만 비활성, 서버는 기동
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
   PORT: z.coerce.number().default(3001),
@@ -30,8 +33,13 @@ function loadEnv() {
     console.error(result.error.flatten().fieldErrors);
     process.exit(1);
   }
-  return result.data;
+  const data = result.data;
+  const volumePath = data.VOLUME_PATH || data.RAILWAY_VOLUME_MOUNT_PATH || './local-storage';
+  if (data.NODE_ENV === 'production' && !data.VOLUME_PATH && !data.RAILWAY_VOLUME_MOUNT_PATH) {
+    console.warn('[env] VOLUME_PATH / RAILWAY_VOLUME_MOUNT_PATH 가 없어 ./local-storage 를 사용합니다 — 재배포 시 업로드 파일이 사라집니다!');
+  }
+  return { ...data, VOLUME_PATH: volumePath, VOLUME_PATH_SOURCE: data.VOLUME_PATH ? 'VOLUME_PATH' : (data.RAILWAY_VOLUME_MOUNT_PATH ? 'RAILWAY_VOLUME_MOUNT_PATH' : 'default') as 'VOLUME_PATH' | 'RAILWAY_VOLUME_MOUNT_PATH' | 'default' };
 }
 
 export const env = loadEnv();
-export type Env = z.infer<typeof envSchema>;
+export type Env = typeof env;

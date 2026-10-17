@@ -221,7 +221,99 @@ export default function VideoPlayer({
   const pausedByClickRef = useRef(false);
   useEffect(() => () => clearTimeout(tapTimerRef.current), []);
 
+  /* ── 길게 누른 뒤 좌우 드래그 = 스크럽(미세·장거리 이동) ──
+     400ms 이상 누르면 스크럽 모드로 들어가고, 드래그 거리에 따라 비선형으로 이동한다:
+     delta = sign · (|dx| / 폭)^1.6 · 영상 길이 → 짧은 드래그는 몇 초(미세), 화면 끝까지 끌면 영상 끝까지(장거리).
+     스크럽 중에는 일시정지하고 미리보기 위치를 보여 주며, 떼면 원래 재생 상태로 복귀한다. */
+  const SCRUB_HOLD_MS = 400;
+  const SCRUB_EXP = 1.6;
+  const pressRef = useRef(null);      // { id, x, y, timer }
+  const scrubRef = useRef(null);      // { startTime, width, wasPlaying, lastApply }
+  const [scrub, setScrub] = useState(null); // { target, delta } 오버레이용
+
+  useEffect(() => () => clearTimeout(pressRef.current?.timer), []);
+
+  const onVideoPointerDown = (e) => {
+    if (e.button != null && e.button !== 0) return;
+    const v = videoRef.current;
+    if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return;
+    clearTimeout(pressRef.current?.timer);
+    const target = e.currentTarget;
+    const id = e.pointerId;
+    pressRef.current = {
+      id, x: e.clientX, y: e.clientY,
+      timer: setTimeout(() => {
+        // 길게 누름 확정 → 스크럽 시작
+        clearTimeout(tapTimerRef.current);
+        tapTimerRef.current = null;
+        lastTapRef.current = 0;
+        try { target.setPointerCapture(id); } catch { /* ignore */ }
+        scrubRef.current = {
+          startTime: v.currentTime,
+          width: target.getBoundingClientRect().width || 1,
+          wasPlaying: !v.paused,
+          lastApply: 0,
+        };
+        v.pause();
+        try { navigator.vibrate?.(15); } catch { /* ignore */ }
+        setScrub({ target: v.currentTime, delta: 0 });
+        setControlsVisible(true);
+      }, SCRUB_HOLD_MS),
+    };
+  };
+
+  const onVideoPointerMove = (e) => {
+    const v = videoRef.current;
+    const press = pressRef.current;
+    if (!v || !press || press.id !== e.pointerId) return;
+    const sc = scrubRef.current;
+    if (!sc) {
+      // 아직 길게 누름 전: 손가락이 움직이면(스크롤 등) 길게 누름 취소
+      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) {
+        clearTimeout(press.timer);
+        pressRef.current = null;
+      }
+      return;
+    }
+    const dx = e.clientX - press.x;
+    const ratio = Math.min(1, Math.abs(dx) / sc.width);
+    const delta = Math.sign(dx) * Math.pow(ratio, SCRUB_EXP) * v.duration;
+    const target = clamp(sc.startTime + delta, 0, v.duration);
+    const now = Date.now();
+    if (now - sc.lastApply > 80) {
+      sc.lastApply = now;
+      v.currentTime = target;
+      setCurrentTime(target);
+    }
+    setScrub({ target, delta: target - sc.startTime });
+  };
+
+  const finishScrub = (e) => {
+    const v = videoRef.current;
+    const press = pressRef.current;
+    if (press && press.id === e.pointerId) {
+      clearTimeout(press.timer);
+      pressRef.current = null;
+    }
+    const sc = scrubRef.current;
+    if (!sc || !v) return false;
+    scrubRef.current = null;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    const dx = e.clientX - (press?.x ?? e.clientX);
+    const ratio = Math.min(1, Math.abs(dx) / sc.width);
+    const target = clamp(sc.startTime + Math.sign(dx) * Math.pow(ratio, SCRUB_EXP) * v.duration, 0, v.duration);
+    v.currentTime = target;
+    setCurrentTime(target);
+    setScrub(null);
+    if (sc.wasPlaying) v.play().catch(() => {});
+    const d = target - sc.startTime;
+    showFlash(`${formatTime(target)} (${d >= 0 ? '+' : '−'}${formatTime(Math.abs(d))})`);
+    revealControls();
+    return true;
+  };
+
   const onVideoPointerUp = (e) => {
+    if (finishScrub(e)) return; // 스크럽으로 끝난 제스처는 탭으로 처리하지 않는다
     if (e.button != null && e.button !== 0) return;
     const v = videoRef.current;
     if (!v) return;
@@ -320,7 +412,7 @@ export default function VideoPlayer({
         src={src}
         poster={poster || undefined}
         className="w-full h-full"
-        style={{ WebkitTouchCallout: 'none' }}
+        style={{ WebkitTouchCallout: 'none', touchAction: 'pan-y pinch-zoom' }}
         playsInline
         autoPlay={autoPlay}
         preload="metadata"
@@ -328,7 +420,10 @@ export default function VideoPlayer({
         disablePictureInPicture
         draggable={false}
         onContextMenu={(e) => e.preventDefault()}
+        onPointerDown={onVideoPointerDown}
+        onPointerMove={onVideoPointerMove}
         onPointerUp={onVideoPointerUp}
+        onPointerCancel={finishScrub}
         onLoadedMetadata={onLoadedMetadata}
         onTimeUpdate={onTimeUpdate}
         onProgress={onBuffered}
@@ -338,8 +433,21 @@ export default function VideoPlayer({
         onError={() => setError('영상을 불러올 수 없습니다. 파일이 삭제되었거나 브라우저가 지원하지 않는 형식입니다.')}
       />
 
+      {/* 스크럽(길게 누른 뒤 드래그) 오버레이 */}
+      {scrub && (
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1">
+          <span className="px-4 py-2 rounded-full bg-black/70 text-white text-xl font-semibold tabular-nums">
+            {formatTime(scrub.target)}
+            <span className={`ml-2 text-base ${scrub.delta >= 0 ? 'text-green-300' : 'text-orange-300'}`}>
+              {scrub.delta >= 0 ? '+' : '−'}{formatTime(Math.abs(scrub.delta))}
+            </span>
+          </span>
+          <span className="px-2 py-0.5 rounded bg-black/50 text-white/80 text-[11px]">좌우로 드래그하여 이동 · 짧게 끌면 미세 이동</span>
+        </div>
+      )}
+
       {/* 중앙 피드백 */}
-      {flash && (
+      {flash && !scrub && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="px-4 py-2 rounded-full bg-black/60 text-white text-lg font-semibold">{flash}</span>
         </div>
