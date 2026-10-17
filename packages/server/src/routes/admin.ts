@@ -14,6 +14,7 @@ import {
   resetUserData,
 } from '../services/admin.service.js';
 import { getProfileById, setMustResetPassword, updateProfileName } from '../services/auth.service.js';
+import { getStorageInfo } from '../services/storageInfo.service.js';
 
 export async function adminRoutes(app: FastifyInstance) {
 
@@ -127,6 +128,15 @@ export async function adminRoutes(app: FastifyInstance) {
     preHandler: [authenticate, requireAdmin],
   }, async () => {
     return getSystemStats();
+  });
+
+  // ─── GET /api/admin/storage-info — Volume 진단 (경로 출처·버킷별 파일 수·누락 파일) ─────
+  // "시각화자료가 안 보인다" 같은 문제를 Railway CLI 없이 확인하기 위한 엔드포인트.
+
+  app.get('/api/admin/storage-info', {
+    preHandler: [authenticate, requireAdmin],
+  }, async () => {
+    return getStorageInfo();
   });
 
   // ─── POST /api/admin/reset — 전체 데이터 초기화 ─────

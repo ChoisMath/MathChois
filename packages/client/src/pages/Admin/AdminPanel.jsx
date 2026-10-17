@@ -775,6 +775,75 @@ function ClassroomsTab() {
   );
 }
 
+// ─── Volume 진단 카드 (GET /api/admin/storage-info) ──────
+// Railway CLI 없이 "파일이 실제로 Volume 에 있는지"를 확인한다.
+
+function StorageInfoCard() {
+  const [info, setInfo] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.get('/api/admin/storage-info')
+      .then(setInfo)
+      .catch((err) => setError(err.message ?? '진단 정보를 불러올 수 없습니다.'));
+  }, []);
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-4">
+      <h3 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+        <HardDrive className="h-5 w-5 text-gray-500" /> Volume 진단
+      </h3>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {!info && !error && <p className="text-sm text-gray-400">확인 중...</p>}
+      {info && (
+        <div className="space-y-3 text-sm">
+          {info.warnings.length > 0 ? (
+            <ul className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-red-700 space-y-1">
+              {info.warnings.map((w) => <li key={w}>⚠ {w}</li>)}
+            </ul>
+          ) : (
+            <p className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-green-700">
+              ✓ Volume 경로와 DB 참조 파일이 모두 정상입니다.
+            </p>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+            <div className="bg-gray-50 rounded px-3 py-2">
+              <p className="text-gray-500">경로 <span className="text-gray-400">({info.volumePathSource})</span></p>
+              <p className="font-mono text-gray-800 break-all">{info.volumeRoot}</p>
+            </div>
+            <div className="bg-gray-50 rounded px-3 py-2">
+              <p className="text-gray-500">env</p>
+              <p className="font-mono text-gray-800 break-all">VOLUME_PATH={info.env.VOLUME_PATH ?? '(없음)'}</p>
+              <p className="font-mono text-gray-800 break-all">RAILWAY_VOLUME_MOUNT_PATH={info.env.RAILWAY_VOLUME_MOUNT_PATH ?? '(없음)'}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {info.buckets.map((b) => (
+              <div key={b.bucket} className={`rounded px-3 py-2 ${b.exists ? 'bg-gray-50' : 'bg-gray-100 opacity-60'}`}>
+                <p className="text-xs text-gray-500 font-mono">{b.bucket}{!b.exists && ' (없음)'}</p>
+                <p className="text-sm font-semibold text-gray-800">{b.files.toLocaleString()}개 · {formatBytes(b.bytes)}</p>
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+            {[['시각화자료', info.dbReferences.visualizations], ['영상자료', info.dbReferences.videos], ['챕터 HTML 페이지', info.dbReferences.chapterHtmlPages]].map(([label, r]) => (
+              <div key={label} className={`rounded px-3 py-2 ${r.missing ? 'bg-red-50' : 'bg-gray-50'}`}>
+                <p className="text-gray-500">{label} DB 참조</p>
+                <p className="font-semibold text-gray-800">{r.total}건 중 누락 {r.missing}건</p>
+                {r.samples.length > 0 && (
+                  <ul className="mt-1 font-mono text-[10px] text-red-700 space-y-0.5">
+                    {r.samples.slice(0, 5).map((u) => <li key={u} className="truncate">{u}</li>)}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── 시스템 현황 탭 ────────────────────────────────
 
 function StatsTab() {
@@ -816,6 +885,8 @@ function StatsTab() {
           ))}
         </div>
       </div>
+
+      <StorageInfoCard />
 
       {/* DB 테이블 */}
       <div className="bg-white border border-gray-200 rounded-lg p-4">
