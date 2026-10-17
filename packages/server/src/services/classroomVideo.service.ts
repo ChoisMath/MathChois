@@ -66,12 +66,18 @@ export async function getClassroomVideoDetail(id: string) {
 }
 
 export async function addClassroomVideo(classroomId: string, videoId: string, addedBy: string, note?: string | null) {
-  const [{ maxPos }] = await db.select({ maxPos: sql<number>`COALESCE(MAX(${classroomVideos.position}), -1)` })
-    .from(classroomVideos).where(eq(classroomVideos.classroomId, classroomId));
   try {
-    const [row] = await db.insert(classroomVideos)
-      .values({ classroomId, videoId, addedBy, note: note ?? null, position: Number(maxPos) + 1 })
-      .returning();
+    // 새 영상을 맨 앞(0)에 넣고 기존 배정은 한 칸씩 뒤로 민다 → "교사 지정순"에서도 새 항목이 가장 위.
+    // unique 위반 시 트랜잭션이 롤백되므로 shift 도 함께 되돌아간다.
+    const row = await db.transaction(async (tx) => {
+      await tx.update(classroomVideos)
+        .set({ position: sql`${classroomVideos.position} + 1` })
+        .where(eq(classroomVideos.classroomId, classroomId));
+      const [inserted] = await tx.insert(classroomVideos)
+        .values({ classroomId, videoId, addedBy, note: note ?? null, position: 0 })
+        .returning();
+      return inserted;
+    });
     return getClassroomVideoById(row.id);
   } catch (err: unknown) {
     // drizzle 0.44 는 DB 오류를 DrizzleQueryError 로 감싸므로 cause 의 코드도 본다

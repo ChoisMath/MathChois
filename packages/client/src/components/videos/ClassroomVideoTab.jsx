@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Clapperboard, Plus, GripVertical, Trash2, MessageSquare, Pencil, Check, X, Eye, CheckCircle2 } from 'lucide-react';
 import {
@@ -13,10 +13,14 @@ import {
   updateClassroomVideo, formatDuration, getClassroomVideoProgress, progressPercent, getClassroomVideoUnread,
 } from '../../lib/videos';
 import VideoPickerModal from './VideoPickerModal';
+import SortOrderSelect from '../common/SortOrderSelect';
+import { useAuth } from '../../contexts/AuthContext';
+import { useSortOrder } from '../../hooks/useSortOrder';
+import { sortItems, isManualOrder } from '../../lib/sortOrder';
 
 /* ─── 영상 카드 (교사: 드래그 정렬·메모·해제) ─── */
-function VideoCard({ cv, isTeacher, progress, unread = 0, onOpen, onRemove, onSaveNote }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cv.id, disabled: !isTeacher });
+function VideoCard({ cv, isTeacher, sortable = isTeacher, progress, unread = 0, onOpen, onRemove, onSaveNote }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cv.id, disabled: !sortable });
   const [editingNote, setEditingNote] = useState(false);
   const [note, setNote] = useState(cv.note ?? '');
   const v = cv.video;
@@ -50,7 +54,7 @@ function VideoCard({ cv, isTeacher, progress, unread = 0, onOpen, onRemove, onSa
               style={{ width: `${progress.completed ? 100 : myPct}%` }} />
           </span>
         )}
-        {isTeacher && (
+        {sortable && (
           <span {...attributes} {...listeners}
             onClick={(e) => e.stopPropagation()}
             className="absolute top-1.5 left-1.5 p-1 rounded bg-black/50 text-white opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing touch-none"
@@ -122,7 +126,12 @@ function VideoCard({ cv, isTeacher, progress, unread = 0, onOpen, onRemove, onSa
  */
 export default function ClassroomVideoTab({ classroomId, isTeacher }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [items, setItems] = useState([]);
+  /* 정렬 순서(최신순/등록순/교사 지정순) — 사용자별 localStorage 유지. 드래그 정렬은 교사 지정순에서만 */
+  const [sortOrder, setSortOrder] = useSortOrder('videos', user?.id);
+  const sortedItems = useMemo(() => sortItems(items, sortOrder), [items, sortOrder]);
+  const canReorder = isTeacher && isManualOrder(sortOrder);
   const [progressMap, setProgressMap] = useState({}); // cvId → 학생: 본인 기록 / 교사: 집계
   const [unreadMap, setUnreadMap] = useState({});     // cvId → 미읽음 댓글 수
   const [loading, setLoading] = useState(true);
@@ -183,10 +192,11 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
   };
 
   const handleDragEnd = async ({ active, over }) => {
-    if (!over || active.id === over.id) return;
-    const oldIdx = items.findIndex((x) => x.id === active.id);
-    const newIdx = items.findIndex((x) => x.id === over.id);
-    const next = arrayMove(items, oldIdx, newIdx);
+    if (!canReorder || !over || active.id === over.id) return;
+    const oldIdx = sortedItems.findIndex((x) => x.id === active.id);
+    const newIdx = sortedItems.findIndex((x) => x.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const next = arrayMove(sortedItems, oldIdx, newIdx).map((x, i) => ({ ...x, position: i }));
     setItems(next);
     try {
       await reorderClassroomVideos(classroomId, next.map((x) => x.id));
@@ -197,12 +207,18 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
 
   return (
     <div>
-      {isTeacher && (
-        <div className="flex justify-end mb-3">
-          <button onClick={() => setShowPicker(true)}
-            className="inline-flex items-center gap-1.5 px-3 min-h-11 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 cursor-pointer">
-            <Plus className="h-4 w-4" /> 영상 추가
-          </button>
+      {(isTeacher || items.length > 0) && (
+        <div className="flex items-center justify-end gap-3 mb-3 flex-wrap">
+          {isTeacher && items.length > 0 && !canReorder && (
+            <span className="text-xs text-gray-400">드래그 정렬은 ‘교사 지정순’에서 가능합니다</span>
+          )}
+          {items.length > 0 && <SortOrderSelect value={sortOrder} onChange={setSortOrder} />}
+          {isTeacher && (
+            <button onClick={() => setShowPicker(true)}
+              className="inline-flex items-center gap-1.5 px-3 min-h-11 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 cursor-pointer">
+              <Plus className="h-4 w-4" /> 영상 추가
+            </button>
+          )}
         </div>
       )}
 
@@ -218,10 +234,10 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
         </div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={items.map((x) => x.id)} strategy={rectSortingStrategy}>
+          <SortableContext items={sortedItems.map((x) => x.id)} strategy={rectSortingStrategy}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.map((cv) => (
-                <VideoCard key={cv.id} cv={cv} isTeacher={isTeacher} progress={progressMap[cv.id]} unread={unreadMap[cv.id] ?? 0}
+              {sortedItems.map((cv) => (
+                <VideoCard key={cv.id} cv={cv} isTeacher={isTeacher} sortable={canReorder} progress={progressMap[cv.id]} unread={unreadMap[cv.id] ?? 0}
                   onOpen={openWatch} onRemove={handleRemove} onSaveNote={handleSaveNote} />
               ))}
             </div>

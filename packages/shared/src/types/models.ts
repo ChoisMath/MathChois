@@ -24,6 +24,7 @@ export interface Chapter {
   description: string | null;
   position: number;
   sourceChapterId?: string | null;
+  createdAt?: string | null;
 }
 
 export interface Page {

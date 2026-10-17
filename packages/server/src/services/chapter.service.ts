@@ -1,4 +1,4 @@
-import { eq, desc, and, sql, inArray } from 'drizzle-orm';
+import { eq, sql, inArray } from 'drizzle-orm';
 import { db } from '../config/database.js';
 import { chapters, pages } from '../db/schema.js';
 
@@ -76,27 +76,30 @@ export async function createChapter(data: {
   position?: number;
   sourceChapterId?: string | null;
 }) {
-  // position 자동 계산: 기존 최대값 + 1
-  let position = data.position;
-  if (position === undefined) {
-    const maxRows = await db
-      .select({ maxPos: sql<number>`COALESCE(MAX(${chapters.position}), -1)` })
-      .from(chapters)
-      .where(eq(chapters.classroomId, data.classroomId));
-    position = (maxRows[0]?.maxPos ?? -1) + 1;
-  }
+  // position 미지정 시 새 챕터를 맨 앞(0)에 넣고 기존 챕터는 한 칸씩 뒤로 민다.
+  // → "교사 지정순"에서도 새로 등록한 항목이 가장 위에 보인다.
+  return db.transaction(async (tx) => {
+    let position = data.position;
+    if (position === undefined) {
+      await tx
+        .update(chapters)
+        .set({ position: sql`${chapters.position} + 1` })
+        .where(eq(chapters.classroomId, data.classroomId));
+      position = 0;
+    }
 
-  const [created] = await db
-    .insert(chapters)
-    .values({
-      classroomId: data.classroomId,
-      title: data.title,
-      description: data.description ?? null,
-      position,
-      sourceChapterId: data.sourceChapterId ?? null,
-    })
-    .returning();
-  return created;
+    const [created] = await tx
+      .insert(chapters)
+      .values({
+        classroomId: data.classroomId,
+        title: data.title,
+        description: data.description ?? null,
+        position,
+        sourceChapterId: data.sourceChapterId ?? null,
+      })
+      .returning();
+    return created;
+  });
 }
 
 /** 챕터 수정 */
