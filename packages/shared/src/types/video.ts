@@ -65,6 +65,10 @@ export interface ClassroomVideo {
   note: string | null;
   position: number;
   createdAt: string;
+  /** 연결된 필기 챕터 id (교사가 설정). 챕터 삭제 시 FK SET NULL */
+  chapterId: string | null;
+  /** 연결된 필기 챕터 (left join) — 없거나 삭제되면 null */
+  chapter: { id: string; title: string } | null;
   video: Video;
   commentCount: number;
 }

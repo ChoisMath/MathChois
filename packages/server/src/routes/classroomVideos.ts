@@ -87,8 +87,17 @@ export async function classroomVideoRoutes(app: FastifyInstance) {
   app.patch<{ Params: { id: string } }>('/api/classroom-videos/:id', teacher, async (req, reply) => {
     const cv = await loadClassroomVideoOr404(req, reply, req.params.id);
     if (!cv) return;
-    const body = z.object({ note: z.string().nullable().optional() }).parse(req.body);
-    return svc.updateClassroomVideo(cv.id, { note: body.note ?? null });
+    const body = z.object({
+      note: z.string().nullable().optional(),
+      chapterId: z.string().uuid().nullable().optional(),
+    }).parse(req.body);
+    if (body.chapterId && !(await svc.isChapterInClassroom(body.chapterId, cv.classroomId))) {
+      return reply.status(400).send({ error: '이 학급의 챕터가 아닙니다.' });
+    }
+    const patch: svc.ClassroomVideoPatch = {};
+    if ('note' in body) patch.note = body.note ?? null;
+    if ('chapterId' in body) patch.chapterId = body.chapterId ?? null;
+    return svc.updateClassroomVideo(cv.id, patch);
   });
 
   app.delete<{ Params: { id: string } }>('/api/classroom-videos/:id', teacher, async (req, reply) => {

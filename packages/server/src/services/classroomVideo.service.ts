@@ -1,6 +1,6 @@
 import { eq, and, asc, desc, sql, inArray, isNull } from 'drizzle-orm';
 import { db } from '../config/database.js';
-import { classroomVideos, videos, videoComments, classrooms, profiles, classroomMembers, videoProgress, videoCommentReads } from '../db/schema.js';
+import { classroomVideos, videos, videoComments, classrooms, chapters, profiles, classroomMembers, videoProgress, videoCommentReads } from '../db/schema.js';
 
 // ─── 학급 배정 ───────────────────────────────────────
 
@@ -27,9 +27,12 @@ const classroomVideoSelect = {
   videoId: classroomVideos.videoId,
   addedBy: classroomVideos.addedBy,
   note: classroomVideos.note,
+  chapterId: classroomVideos.chapterId,
   position: classroomVideos.position,
   createdAt: classroomVideos.createdAt,
   video: videoSelect,
+  // 필기 챕터(left join) — 연결이 없거나 챕터가 삭제되면 null
+  chapter: { id: chapters.id, title: chapters.title },
   // 루트 댓글 수(대댓글 제외). 비공개 스레드도 포함한 총수 — 카드 배지 용도.
   commentCount: sql<number>`(
     SELECT count(*)::int FROM video_comments vc
@@ -41,6 +44,7 @@ export async function listClassroomVideos(classroomId: string) {
   return db.select(classroomVideoSelect)
     .from(classroomVideos)
     .innerJoin(videos, eq(classroomVideos.videoId, videos.id))
+    .leftJoin(chapters, eq(classroomVideos.chapterId, chapters.id))
     .where(eq(classroomVideos.classroomId, classroomId))
     .orderBy(asc(classroomVideos.position), asc(classroomVideos.createdAt));
 }
@@ -49,6 +53,7 @@ export async function getClassroomVideoById(id: string) {
   const rows = await db.select(classroomVideoSelect)
     .from(classroomVideos)
     .innerJoin(videos, eq(classroomVideos.videoId, videos.id))
+    .leftJoin(chapters, eq(classroomVideos.chapterId, chapters.id))
     .where(eq(classroomVideos.id, id))
     .limit(1);
   return rows[0] ?? null;
@@ -83,9 +88,25 @@ export async function addClassroomVideo(classroomId: string, videoId: string, ad
   }
 }
 
-export async function updateClassroomVideo(id: string, patch: { note?: string | null }) {
-  await db.update(classroomVideos).set(patch).where(eq(classroomVideos.id, id));
+export type ClassroomVideoPatch = { note?: string | null; chapterId?: string | null };
+
+/** 전달된 키만 갱신한다(note 만 보내면 chapterId 는 유지). */
+export async function updateClassroomVideo(id: string, patch: ClassroomVideoPatch) {
+  const set: Partial<typeof classroomVideos.$inferInsert> = {};
+  if ('note' in patch) set.note = patch.note ?? null;
+  if ('chapterId' in patch) set.chapterId = patch.chapterId ?? null;
+  if (Object.keys(set).length > 0) {
+    await db.update(classroomVideos).set(set).where(eq(classroomVideos.id, id));
+  }
   return getClassroomVideoById(id);
+}
+
+/** chapterId 가 해당 학급의 챕터인지 — 다른 학급 챕터를 필기 챕터로 연결하는 것을 막는다. */
+export async function isChapterInClassroom(chapterId: string, classroomId: string) {
+  const [row] = await db.select({ id: chapters.id }).from(chapters)
+    .where(and(eq(chapters.id, chapterId), eq(chapters.classroomId, classroomId)))
+    .limit(1);
+  return !!row;
 }
 
 export async function reorderClassroomVideos(classroomId: string, ids: string[]) {
