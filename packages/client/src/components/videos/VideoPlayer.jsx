@@ -212,6 +212,48 @@ export default function VideoPlayer({
     cb(Math.floor(v.currentTime || 0), dur);
   }, []);
 
+  /* ── 탭/클릭: 한 번 = 재생·정지, 두 번 = 오른쪽 절반 앞으로 / 왼쪽 절반 뒤로 (설정된 초) ──
+     전체화면(특히 태블릿·휴대폰)에서 더블탭이 전체화면을 해제하지 않도록 더블클릭=전체화면은 제거했다.
+     마우스는 첫 클릭을 즉시 반영하고 더블클릭이면 원래 재생 상태로 되돌린 뒤 이동한다(YouTube 데스크톱과 동일).
+     터치/펜은 두 번째 탭을 기다렸다가(350ms) 단일 탭이면 재생·정지한다. */
+  const lastTapRef = useRef(0);
+  const tapTimerRef = useRef(null);
+  const pausedByClickRef = useRef(false);
+  useEffect(() => () => clearTimeout(tapTimerRef.current), []);
+
+  const onVideoPointerUp = (e) => {
+    if (e.button != null && e.button !== 0) return;
+    const v = videoRef.current;
+    if (!v) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const forward = e.clientX - rect.left > rect.width / 2;
+    const now = Date.now();
+    const isMouse = e.pointerType === 'mouse';
+
+    if (now - lastTapRef.current < 350) {
+      // 두 번째 탭 → 이동
+      lastTapRef.current = 0;
+      clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = null;
+      if (isMouse && pausedByClickRef.current) v.play().catch(() => {});
+      pausedByClickRef.current = false;
+      seekBy(forward ? settingsRef.current.seekStep : -settingsRef.current.seekStep);
+      return;
+    }
+
+    lastTapRef.current = now;
+    if (isMouse) {
+      pausedByClickRef.current = !v.paused; // 이 클릭이 정지시키는지 기억
+      togglePlay();
+    } else {
+      revealControls();
+      tapTimerRef.current = setTimeout(() => {
+        tapTimerRef.current = null;
+        togglePlay();
+      }, 350);
+    }
+  };
+
   /* ── <video> 이벤트 ── */
   const onLoadedMetadata = () => {
     const v = videoRef.current;
@@ -266,7 +308,8 @@ export default function VideoPlayer({
   return (
     <div
       ref={containerRef}
-      className="relative w-full aspect-video bg-black rounded-lg overflow-hidden select-none outline-none group"
+      className="relative w-full aspect-video bg-black rounded-lg overflow-hidden select-none outline-none group touch-manipulation"
+      style={{ WebkitTouchCallout: 'none' }}
       tabIndex={0}
       onMouseMove={revealControls}
       onTouchStart={revealControls}
@@ -277,11 +320,15 @@ export default function VideoPlayer({
         src={src}
         poster={poster || undefined}
         className="w-full h-full"
+        style={{ WebkitTouchCallout: 'none' }}
         playsInline
         autoPlay={autoPlay}
         preload="metadata"
-        onClick={togglePlay}
-        onDoubleClick={toggleFullscreen}
+        controlsList="nodownload noremoteplayback"
+        disablePictureInPicture
+        draggable={false}
+        onContextMenu={(e) => e.preventDefault()}
+        onPointerUp={onVideoPointerUp}
         onLoadedMetadata={onLoadedMetadata}
         onTimeUpdate={onTimeUpdate}
         onProgress={onBuffered}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Clapperboard, MessageSquare, ChevronDown, ChevronUp, Users, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Clapperboard, MessageSquare, Users, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   getClassroomVideo, formatDuration, getVideoProgress, saveVideoProgress, getVideoProgressSummary,
@@ -8,6 +8,7 @@ import {
 import { formatTime } from '../../lib/videoPlayer';
 import VideoPlayer from '../../components/videos/VideoPlayer';
 import VideoComments from '../../components/videos/VideoComments';
+import CollapsibleSection from '../../components/videos/CollapsibleSection';
 
 function formatWatchedAt(iso) {
   if (!iso) return '';
@@ -20,7 +21,6 @@ function formatWatchedAt(iso) {
 function VideoProgressPanel({ classroomVideoId }) {
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
-  const [open, setOpen] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -35,18 +35,15 @@ function VideoProgressPanel({ classroomVideoId }) {
     : (error || '불러오는 중...');
 
   return (
-    <section className="mt-3 rounded-lg border border-gray-200 bg-white">
-      <button type="button" onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 rounded-lg"
-        aria-expanded={open}>
+    <CollapsibleSection className="mt-2" label={`시청 현황 · ${headline}`}>
+      <section className="rounded-lg border border-gray-200 bg-white">
+      <div className="flex items-center gap-2 px-3 py-2 text-sm">
         <Users className="h-4 w-4 text-gray-500" />
         <span className="font-semibold text-gray-800">시청 현황</span>
         <span className={`text-xs ${error ? 'text-red-600' : 'text-gray-500'}`}>{headline}</span>
-        <span className="flex-1" />
-        {open ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
-      </button>
+      </div>
 
-      {open && summary && (
+      {summary && (
         summary.students.length === 0 ? (
           <p className="px-3 pb-3 text-xs text-gray-400">학급에 학생이 없습니다.</p>
         ) : (
@@ -84,7 +81,8 @@ function VideoProgressPanel({ classroomVideoId }) {
           </ul>
         )
       )}
-    </section>
+      </section>
+    </CollapsibleSection>
   );
 }
 
@@ -188,7 +186,9 @@ export default function ClassroomVideoWatch() {
             </div>
           )}
           {v.description && (
-            <p className="mt-3 text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg px-3 py-2">{v.description}</p>
+            <CollapsibleSection label="설명" className="mt-2">
+              <p className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg px-3 py-2">{v.description}</p>
+            </CollapsibleSection>
           )}
 
           <VideoComments
