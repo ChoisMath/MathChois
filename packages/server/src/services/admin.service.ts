@@ -294,11 +294,19 @@ export async function getSystemStats() {
     db.select({ cnt: count() }).from(assignmentTeacherComments).then(r => ({ table: 'assignment_teacher_comments', rows: r[0].cnt })),
   ]);
 
-  // Storage 용량
+  // Storage 용량 — Volume 루트에 실제로 존재하는 버킷 디렉토리를 그대로 나열한다
+  // (과거의 고정 목록 chapter-pages/assignments/posts 는 실제 버킷과 달랐다. lost+found 는 파일시스템 폴더라 제외)
   const totalStorage = await getDirectorySize(VOLUME_ROOT);
-  const buckets = ['chapter-pages', 'assignments', 'posts'];
+  let bucketNames: string[] = [];
+  try {
+    const entries = await fs.readdir(VOLUME_ROOT, { withFileTypes: true });
+    bucketNames = entries
+      .filter((e) => e.isDirectory() && e.name !== 'lost+found' && !e.name.startsWith('.'))
+      .map((e) => e.name)
+      .sort();
+  } catch { /* volume 미존재 */ }
   const bucketStats = await Promise.all(
-    buckets.map(async (bucket) => ({
+    bucketNames.map(async (bucket) => ({
       bucket,
       size: await getDirectorySize(path.resolve(VOLUME_ROOT, bucket)),
     })),
