@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Excalidraw, exportToBlob } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Loader, Wand2, Sparkles, Menu } from 'lucide-react';
-import { extractYouTubeId, getYouTubeThumbnail } from '../../lib/youtubeUtils';
+import { PageVideoThumb } from '../../components/videos/PageVideo';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
 import ProblemView from '../../components/common/ProblemView';
@@ -494,7 +494,7 @@ export default function CoachingViewer({
               <div className="flex aspect-video w-full items-center justify-center bg-emerald-50 text-xs font-medium text-emerald-600">HTML</div>
             ) : pg.videoUrl ? (
               <div className="relative">
-                <img src={getYouTubeThumbnail(extractYouTubeId(pg.videoUrl))} alt={`영상 ${i + 1}`} className="h-auto w-full bg-gray-900 object-cover" loading="lazy" decoding="async" />
+                <PageVideoThumb videoUrl={pg.videoUrl} alt={`영상 ${i + 1}`} className="h-auto w-full bg-gray-900 object-cover" loading="lazy" decoding="async" />
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="rounded-full bg-red-600 p-1"><svg className="h-3 w-3 fill-white text-white" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21" /></svg></div>
                 </div>

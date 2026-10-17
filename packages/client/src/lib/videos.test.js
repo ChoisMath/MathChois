@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildVideoQuery, formatBytes, formatDuration } from './videos.js';
+import { buildVideoQuery, formatBytes, formatDuration, progressPercent } from './videos.js';
 
 describe('videos lib', () => {
   it('builds query strings skipping empty values', () => {
@@ -20,5 +20,15 @@ describe('videos lib', () => {
     expect(formatDuration(59)).toBe('0:59');
     expect(formatDuration(600)).toBe('10:00');
     expect(formatDuration(3661)).toBe('1:01:01');
+  });
+
+  it('computes progress percent', () => {
+    expect(progressPercent(30, 100)).toBe(30);
+    expect(progressPercent(33, 100)).toBe(33);
+    expect(progressPercent(150, 100)).toBe(100);
+    expect(progressPercent(-5, 100)).toBe(0);
+    expect(progressPercent(10, 0)).toBeNull();
+    expect(progressPercent(10, null)).toBeNull();
+    expect(progressPercent(undefined, 60)).toBe(0);
   });
 });

@@ -54,7 +54,7 @@ async function apiFetch<T>(
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, body.error ?? res.statusText);
+    throw new ApiError(res.status, body.error ?? res.statusText, body);
   }
 
   // 204 No Content
@@ -64,9 +64,12 @@ async function apiFetch<T>(
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  /** 에러 응답 JSON 본문 (예: 409 의 `usage`) */
+  body?: Record<string, any>;
+  constructor(public status: number, message: string, body?: Record<string, any>) {
     super(message);
     this.name = 'ApiError';
+    this.body = body;
   }
 }
 

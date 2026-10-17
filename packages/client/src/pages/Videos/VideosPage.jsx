@@ -40,7 +40,20 @@ export default function VideosPage() {
       await deleteVideo(v.id);
       fetchList(result.page);
     } catch (err) {
-      alert(err.message ?? '삭제에 실패했습니다.');
+      const usage = err?.status === 409 ? err.body?.usage?.classrooms : null;
+      if (!usage?.length) {
+        alert(err.message ?? '삭제에 실패했습니다.');
+        return;
+      }
+      // 배정 해제 후 삭제 원클릭
+      const names = usage.map((c) => c.classroomName).join(', ');
+      if (!confirm(`다음 학급에 배정되어 있습니다: ${names}\n배정을 모두 해제하고 삭제할까요? (해당 학급의 댓글·시청 기록도 삭제됩니다)`)) return;
+      try {
+        await deleteVideo(v.id, { force: true });
+        fetchList(result.page);
+      } catch (err2) {
+        alert(err2.message ?? '삭제에 실패했습니다.');
+      }
     }
   };
 

@@ -140,14 +140,16 @@ export async function videoRoutes(app: FastifyInstance) {
     return svc.getVideoById(req.params.id);
   });
 
-  app.delete<{ Params: { id: string } }>('/api/videos/:id', teacher, async (req, reply) => {
+  // ?force=1 — 배정된 학급이 있어도 배정을 모두 해제한 뒤 삭제(소유자/관리자)
+  app.delete<{ Params: { id: string }; Querystring: { force?: string } }>('/api/videos/:id', teacher, async (req, reply) => {
     const existing = await svc.getVideoById(req.params.id);
     if (!existing) return reply.status(404).send({ error: '영상자료를 찾을 수 없습니다' });
     if (existing.createdBy !== req.user.sub && !req.user.isAdmin) {
       return reply.status(403).send({ error: '삭제 권한이 없습니다' });
     }
+    const force = req.query.force === '1' || req.query.force === 'true';
     try {
-      await svc.removeVideo(req.params.id);
+      await svc.removeVideo(req.params.id, { force });
     } catch (err) {
       const e = err as { statusCode?: number; message: string; usage?: unknown };
       if (e.statusCode === 409) return reply.status(409).send({ error: e.message, usage: e.usage });

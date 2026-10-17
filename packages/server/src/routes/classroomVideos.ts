@@ -42,6 +42,7 @@ function safeEmit(classroomVideoId: string) {
 export async function classroomVideoRoutes(app: FastifyInstance) {
   const auth = { preHandler: [authenticate] };
   const teacher = { preHandler: [authenticate, requireRole('teacher')] };
+  const student = { preHandler: [authenticate, requireRole('student')] };
 
   // ─── 학급 배정 ───────────────────────────────────
 
@@ -95,6 +96,47 @@ export async function classroomVideoRoutes(app: FastifyInstance) {
     if (!cv) return;
     await svc.removeClassroomVideo(cv.id);
     return reply.status(204).send();
+  });
+
+  // ─── 시청 기록 ───────────────────────────────────
+
+  const progressBody = z.object({
+    positionSec: z.number().int().nonnegative(),
+    durationSec: z.number().int().nonnegative().optional(),
+  });
+
+  /** 학생: 본인 시청 위치 저장(upsert). 클라이언트가 10초 간격 + 일시정지/종료/이탈 시에만 호출. */
+  app.put<{ Params: { id: string } }>('/api/classroom-videos/:id/progress', student, async (req, reply) => {
+    const cv = await loadClassroomVideoOr404(req, reply, req.params.id);
+    if (!cv) return;
+    const body = progressBody.parse(req.body);
+    return svc.upsertProgress(cv.id, req.user.sub, body);
+  });
+
+  /** 학생: 본인 시청 기록 (없으면 null) */
+  app.get<{ Params: { id: string } }>('/api/classroom-videos/:id/progress', student, async (req, reply) => {
+    const cv = await loadClassroomVideoOr404(req, reply, req.params.id);
+    if (!cv) return;
+    const row = await svc.getProgress(cv.id, req.user.sub);
+    return reply.send(row); // null 도 JSON 으로 응답
+  });
+
+  /** 교사(교실 소유자): 학생별 시청 현황 */
+  app.get<{ Params: { id: string } }>('/api/classroom-videos/:id/progress/summary', teacher, async (req, reply) => {
+    const cv = await loadClassroomVideoOr404(req, reply, req.params.id);
+    if (!cv) return;
+    const summary = await svc.getProgressSummary(cv.id);
+    if (!summary) return reply.status(404).send({ error: '학급 영상을 찾을 수 없습니다' });
+    return summary;
+  });
+
+  /** 학급 전체 영상의 시청 기록 — 학생: 본인 맵(cvId→progress), 교사: 집계 맵(cvId→{watched,completed,total}) */
+  app.get<{ Params: { cid: string } }>('/api/classrooms/:cid/videos/progress', auth, async (req, reply) => {
+    if (!(await canAccessClassroom(req, req.params.cid))) {
+      return reply.status(403).send({ error: '접근 권한이 없습니다' });
+    }
+    if (req.user.role === 'teacher') return svc.getProgressStatsByClassroom(req.params.cid);
+    return svc.getProgressByClassroom(req.params.cid, req.user.sub);
   });
 
   // ─── 댓글 ───────────────────────────────────────

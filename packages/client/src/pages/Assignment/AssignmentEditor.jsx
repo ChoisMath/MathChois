@@ -18,7 +18,9 @@ import {
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import SortablePageItem from '../../components/common/SortablePageItem';
-import { extractYouTubeId, getYouTubeEmbedUrl } from '../../lib/youtubeUtils';
+import VideoPickerModal from '../../components/videos/VideoPickerModal';
+import { PageVideoEmbed } from '../../components/videos/PageVideo';
+import { extractYouTubeId } from '../../lib/youtubeUtils';
 
 
 const AssignmentEditor = () => {
@@ -41,6 +43,8 @@ const AssignmentEditor = () => {
   const [savingMeta, setSavingMeta] = useState(false);
 
   /* YouTube URL 입력 */
+  const [showVideoChoice, setShowVideoChoice]   = useState(false); // YouTube 링크 / 영상자료 선택
+  const [showVideoPicker, setShowVideoPicker]   = useState(false);
   const [showYouTubeModal, setShowYouTubeModal] = useState(false);
   const [youtubeUrl, setYoutubeUrl]             = useState('');
   const [youtubeError, setYoutubeError]         = useState('');
@@ -248,6 +252,26 @@ const AssignmentEditor = () => {
     setAddingVideo(false);
   };
 
+  // 영상자료 라이브러리 영상을 과제 페이지로 삽입 (videoUrl = 라이브러리 파일 경로)
+  const handleInsertLibraryVideo = async (video) => {
+    setShowVideoPicker(false);
+    if (!video?.videoUrl) return;
+    setAddingVideo(true);
+    try {
+      const basePosition = pages.length > 0 ? Math.max(...pages.map((p) => p.position)) + 1 : 0;
+      const newPage = await api.post(`/api/assignments/${assignmentId}/pages`, {
+        videoUrl: video.videoUrl,
+        position: basePosition,
+      });
+      await fetchData();
+      if (newPage) setSelectedPage(newPage);
+    } catch (err) {
+      alert(err.message ?? '영상 페이지 추가에 실패했습니다.');
+      console.error('영상 페이지 추가 실패:', err.message);
+    }
+    setAddingVideo(false);
+  };
+
   const handleDeletePage = async (page) => {
     if (!confirm('이 페이지를 삭제하시겠습니까?')) return;
     setDeleting(true);
@@ -349,9 +373,9 @@ const AssignmentEditor = () => {
             {uploading ? <Loader className="animate-spin h-5 w-5" /> : <Plus className="h-5 w-5" />}
           </button>
           <button
-            onClick={() => { setShowYouTubeModal(true); setYoutubeUrl(''); setYoutubeError(''); }}
-            disabled={uploading}
-            title="YouTube 영상 페이지 추가"
+            onClick={() => setShowVideoChoice(true)}
+            disabled={uploading || addingVideo}
+            title="영상 페이지 추가 (YouTube / 영상자료)"
             className="inline-flex items-center justify-center p-2 bg-red-500 text-white rounded-md hover:bg-red-600 disabled:opacity-50 cursor-pointer"
           >
             <Video className="h-5 w-5" />
@@ -397,12 +421,7 @@ const AssignmentEditor = () => {
           {selectedPage ? (
             selectedPage.videoUrl ? (
               <div className="w-full h-full flex items-center justify-center bg-black rounded">
-                <iframe
-                  src={getYouTubeEmbedUrl(extractYouTubeId(selectedPage.videoUrl))}
-                  className="w-full h-full rounded"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
+                <PageVideoEmbed videoUrl={selectedPage.videoUrl} title="영상 미리보기" className="w-full h-full rounded" hotkeys />
               </div>
             ) : (
               <img src={selectedPage.imageUrl} alt="선택된 페이지" className="w-full h-auto block shadow-sm bg-white" />
@@ -410,11 +429,46 @@ const AssignmentEditor = () => {
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-gray-400">
               <p className="text-lg">페이지를 추가하세요</p>
-              <p className="text-sm mt-1">이미지 또는 YouTube 영상을 추가할 수 있습니다</p>
+              <p className="text-sm mt-1">이미지, YouTube 영상, 영상자료를 추가할 수 있습니다</p>
             </div>
           )}
         </div>
       </div>
+
+      {/* ── 영상 추가 방식 선택 모달 ── */}
+      {showVideoChoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowVideoChoice(false)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-gray-900 mb-3">영상 페이지 추가</h2>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => { setShowVideoChoice(false); setShowYouTubeModal(true); setYoutubeUrl(''); setYoutubeError(''); }}
+                className="w-full min-h-11 px-4 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 cursor-pointer whitespace-nowrap"
+              >
+                YouTube 링크
+              </button>
+              <button
+                onClick={() => { setShowVideoChoice(false); setShowVideoPicker(true); }}
+                className="w-full min-h-11 px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer whitespace-nowrap"
+              >
+                영상자료에서 선택
+              </button>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setShowVideoChoice(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">취소</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 영상자료 선택 모달 ── */}
+      {showVideoPicker && (
+        <VideoPickerModal
+          selectLabel="삽입"
+          onSelect={handleInsertLibraryVideo}
+          onClose={() => setShowVideoPicker(false)}
+        />
+      )}
 
       {/* ── YouTube URL 입력 모달 ── */}
       {showYouTubeModal && (
@@ -433,12 +487,7 @@ const AssignmentEditor = () => {
             {youtubeError && <p className="text-sm text-red-500 mt-1">{youtubeError}</p>}
             {youtubeUrl && extractYouTubeId(youtubeUrl) && (
               <div className="mt-3 aspect-video rounded overflow-hidden bg-black">
-                <iframe
-                  src={getYouTubeEmbedUrl(extractYouTubeId(youtubeUrl))}
-                  className="w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
+                <PageVideoEmbed videoUrl={youtubeUrl} title="YouTube 미리보기" className="w-full h-full" />
               </div>
             )}
             <div className="flex justify-end gap-2 mt-4">

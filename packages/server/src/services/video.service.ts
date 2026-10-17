@@ -65,20 +65,26 @@ export async function getVideoUsage(videoId: string) {
 }
 
 /**
- * 영상 삭제. 학급에 배정 중이면 삭제하지 않고 409 를 던진다(설계 결정 Q1: 차단).
+ * 영상 삭제.
+ * - 기본: 학급에 배정 중이면 삭제하지 않고 409 를 던진다(설계 결정 Q1: 차단).
+ * - `force`: 소유자가 모든 학급 배정(classroom_videos)을 먼저 해제한 뒤 영상을 지운다
+ *   (댓글·시청 기록은 FK cascade). 다른 교사 학급의 배정도 소유자 판단으로 해제한다.
  * 레코드 삭제 후 원본 파일·썸네일도 제거한다.
  */
-export async function removeVideo(id: string) {
+export async function removeVideo(id: string, opts: { force?: boolean } = {}) {
   const row = await getVideoById(id);
   if (!row) return null;
   const usage = await getVideoUsage(id);
-  if (usage.classrooms.length > 0) {
+  if (usage.classrooms.length > 0 && !opts.force) {
     throw Object.assign(
       new Error(`${usage.classrooms.length}개 학급에 배정된 영상입니다. 각 학급의 [영상] 탭에서 배정을 해제한 뒤 삭제하세요.`),
       { statusCode: 409, usage },
     );
   }
-  await db.delete(videos).where(eq(videos.id, id));
+  await db.transaction(async (tx) => {
+    if (opts.force) await tx.delete(classroomVideos).where(eq(classroomVideos.videoId, id));
+    await tx.delete(videos).where(eq(videos.id, id));
+  });
   await removeVideoFiles(row.videoUrl, row.thumbnailUrl);
   return row;
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clapperboard, Plus, GripVertical, Trash2, MessageSquare, Pencil, Check, X } from 'lucide-react';
+import { Clapperboard, Plus, GripVertical, Trash2, MessageSquare, Pencil, Check, X, Eye, CheckCircle2 } from 'lucide-react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -10,16 +10,19 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   listClassroomVideos, addClassroomVideo, reorderClassroomVideos, removeClassroomVideo,
-  updateClassroomVideo, formatDuration,
+  updateClassroomVideo, formatDuration, getClassroomVideoProgress, progressPercent,
 } from '../../lib/videos';
 import VideoPickerModal from './VideoPickerModal';
 
 /* ─── 영상 카드 (교사: 드래그 정렬·메모·해제) ─── */
-function VideoCard({ cv, isTeacher, onOpen, onRemove, onSaveNote }) {
+function VideoCard({ cv, isTeacher, progress, onOpen, onRemove, onSaveNote }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cv.id, disabled: !isTeacher });
   const [editingNote, setEditingNote] = useState(false);
   const [note, setNote] = useState(cv.note ?? '');
   const v = cv.video;
+  // 학생: 본인 시청률(길이를 모르면 바 숨김). 교사: 시청/완료 학생 수.
+  const myPct = !isTeacher && progress ? progressPercent(progress.maxPositionSec, v.durationSec) : null;
+  const showMyBar = !isTeacher && progress && (myPct != null || progress.completed);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -38,6 +41,13 @@ function VideoCard({ cv, isTeacher, onOpen, onRemove, onSaveNote }) {
         {v.durationSec != null && (
           <span className="absolute bottom-1.5 right-1.5 text-[11px] px-1.5 py-0.5 rounded bg-black/75 text-white tabular-nums">
             {formatDuration(v.durationSec)}
+          </span>
+        )}
+        {showMyBar && (
+          <span className="absolute inset-x-0 bottom-0 h-1 bg-white/30" aria-label="내 시청률"
+            title={progress.completed ? '시청 완료' : `${myPct}% 시청`}>
+            <span className={`block h-full ${progress.completed ? 'bg-green-500' : 'bg-blue-500'}`}
+              style={{ width: `${progress.completed ? 100 : myPct}%` }} />
           </span>
         )}
         {isTeacher && (
@@ -73,6 +83,14 @@ function VideoCard({ cv, isTeacher, onOpen, onRemove, onSaveNote }) {
 
         <div className="flex items-center gap-2 mt-auto pt-2 text-xs text-gray-500">
           <span className="inline-flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" />{cv.commentCount ?? 0}</span>
+          {isTeacher && progress && (
+            <span className="inline-flex items-center gap-1 text-gray-500" title="시청한 학생 / 학급 총원 · 완료 학생">
+              <Eye className="h-3.5 w-3.5" />시청 {progress.watchedCount}/{progress.totalStudents} · 완료 {progress.completedCount}
+            </span>
+          )}
+          {!isTeacher && progress?.completed && (
+            <span className="inline-flex items-center gap-0.5 text-green-700 font-medium"><CheckCircle2 className="h-3.5 w-3.5" />완료</span>
+          )}
           <div className="flex-1" />
           {isTeacher && !editingNote && (
             <>
@@ -97,6 +115,7 @@ function VideoCard({ cv, isTeacher, onOpen, onRemove, onSaveNote }) {
 export default function ClassroomVideoTab({ classroomId, isTeacher }) {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
+  const [progressMap, setProgressMap] = useState({}); // cvId → 학생: 본인 기록 / 교사: 집계
   const [loading, setLoading] = useState(true);
   const [showPicker, setShowPicker] = useState(false);
 
@@ -106,8 +125,14 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
   );
 
   const fetchList = useCallback(async () => {
-    try { setItems(await listClassroomVideos(classroomId)); }
-    catch { /* 유지 */ }
+    try {
+      const [list, progress] = await Promise.all([
+        listClassroomVideos(classroomId),
+        getClassroomVideoProgress(classroomId).catch(() => null), // 시청 기록은 보조 정보 — 실패해도 목록은 표시
+      ]);
+      setItems(list);
+      if (progress) setProgressMap(progress);
+    } catch { /* 유지 */ }
     finally { setLoading(false); }
   }, [classroomId]);
 
@@ -185,7 +210,7 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
           <SortableContext items={items.map((x) => x.id)} strategy={rectSortingStrategy}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {items.map((cv) => (
-                <VideoCard key={cv.id} cv={cv} isTeacher={isTeacher}
+                <VideoCard key={cv.id} cv={cv} isTeacher={isTeacher} progress={progressMap[cv.id]}
                   onOpen={openWatch} onRemove={handleRemove} onSaveNote={handleSaveNote} />
               ))}
             </div>

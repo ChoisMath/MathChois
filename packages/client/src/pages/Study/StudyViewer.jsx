@@ -25,7 +25,7 @@ import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
-import { extractYouTubeId, getYouTubeEmbedUrl, getYouTubeThumbnail } from '../../lib/youtubeUtils';
+import { PageVideoEmbed, PageVideoThumb } from '../../components/videos/PageVideo';
 import HtmlToolOverlay from '../../components/study/HtmlToolOverlay';
 import { HTML_OVERLAY_LOCK_BASE } from '../../lib/htmlOverlay';
 
@@ -281,7 +281,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
                       <div className="w-full aspect-video flex items-center justify-center bg-emerald-50 text-emerald-600 text-xs font-medium">HTML</div>
                     ) : pg.videoUrl ? (
                       <div className="relative">
-                        <img src={getYouTubeThumbnail(extractYouTubeId(pg.videoUrl))} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover bg-gray-900" loading="lazy" decoding="async" />
+                        <PageVideoThumb videoUrl={pg.videoUrl} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover bg-gray-900" loading="lazy" decoding="async" />
                         <div className="absolute inset-0 flex items-center justify-center">
                           <div className="bg-red-600 rounded-full p-1"><svg className="h-3 w-3 text-white fill-white" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div>
                         </div>
@@ -310,12 +310,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
             </div>
           ) : currentPage?.videoUrl ? (
             <div className="flex-1 flex items-center justify-center bg-black">
-              <iframe
-                src={getYouTubeEmbedUrl(extractYouTubeId(currentPage.videoUrl))}
-                className="w-full h-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
+              <PageVideoEmbed videoUrl={currentPage.videoUrl} title="영상" className="w-full h-full" />
             </div>
           ) : (
           <div ref={containerRef} className="flex-1 relative overflow-hidden bg-gray-50">
@@ -1098,7 +1093,7 @@ const StudyViewer = () => {
                     <div className="w-full aspect-video flex items-center justify-center bg-emerald-50 text-emerald-600 text-xs font-medium">HTML</div>
                   ) : pg.videoUrl ? (
                     <div className="relative">
-                      <img src={getYouTubeThumbnail(extractYouTubeId(pg.videoUrl))} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover bg-gray-900" loading="lazy" decoding="async" />
+                      <PageVideoThumb videoUrl={pg.videoUrl} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover bg-gray-900" loading="lazy" decoding="async" />
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="bg-red-600 rounded-full p-1"><svg className="h-3 w-3 text-white fill-white" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div>
                       </div>
@@ -1129,12 +1124,7 @@ const StudyViewer = () => {
           />
         ) : currentPage?.videoUrl ? (
           <div className="w-full h-full flex items-center justify-center bg-black">
-            <iframe
-              src={getYouTubeEmbedUrl(extractYouTubeId(currentPage.videoUrl))}
-              className="w-full h-full"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+            <PageVideoEmbed videoUrl={currentPage.videoUrl} title="영상" className="w-full h-full" />
           </div>
         ) : (
         <div

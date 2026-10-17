@@ -8,6 +8,9 @@ import {
   loadResumePosition, saveResumePosition, isTypingTarget,
 } from '../../lib/videoPlayer';
 
+/** onProgress 최소 호출 간격(ms) — 서버 분당 요청 제한 보호 */
+const PROGRESS_REPORT_INTERVAL_MS = 10000;
+
 /**
  * 자체 영상 플레이어 (native <video> + 커스텀 컨트롤).
  *
@@ -16,17 +19,24 @@ import {
  * - storageKey: 이어보기 위치 저장 키(없으면 저장 안 함)
  * - autoPlay
  * - hotkeys: window 키보드 단축키 활성(기본 true). 입력창 포커스 중엔 자동 무시.
+ * - initialPosition: 서버 시청 기록 등에서 온 이어보기 위치(초). > 0 이면 localStorage 위치보다 우선.
+ * - onProgress(positionSec, durationSec): 시청 위치 보고 — 재생 중 최대 10초마다 + 일시정지/종료/언마운트 시.
  * - ref: { getCurrentTime(), seekTo(sec), pause() }
  *
  * 단축키: ←/→ 설정된 초만큼 이동, ↑/↓ 볼륨, Space/K 재생·정지, M 음소거, F 전체화면,
  *        , / . 배속 내림/올림, 0~9 해당 % 위치. ⚙ 설정: 이동 시간(10/20/30/60초)·배속(0.7~2.5×).
  */
-export default function VideoPlayer({ src, poster, title, storageKey, autoPlay = false, hotkeys = true, ref }) {
+export default function VideoPlayer({
+  src, poster, title, storageKey, autoPlay = false, hotkeys = true, initialPosition = 0, onProgress, ref,
+}) {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
   const hideTimerRef = useRef(null);
   const flashTimerRef = useRef(null);
   const lastSaveRef = useRef(0);
+  const lastReportRef = useRef(0);
+  const onProgressRef = useRef(onProgress); // 이벤트 핸들러/언마운트 정리가 최신 콜백을 읽기 위한 미러
+  useEffect(() => { onProgressRef.current = onProgress; }, [onProgress]);
 
   const [settings, setSettings] = useState(() => loadSettings());
   const settingsRef = useRef(settings); // 키 핸들러가 최신 설정을 동기적으로 읽기 위한 미러
@@ -190,6 +200,18 @@ export default function VideoPlayer({ src, poster, title, storageKey, autoPlay =
     return () => window.removeEventListener('keydown', onKey);
   }, [hotkeys, settings.seekStep, settings.playbackRate, seekBy, changeVolume, togglePlay, toggleMute, toggleFullscreen, changeRate, seekTo, showFlash]);
 
+  /* ── 시청 위치 보고 (서버 저장 등 — 호출 빈도 제한) ── */
+  const reportProgress = useCallback((force = false) => {
+    const cb = onProgressRef.current;
+    const v = videoRef.current;
+    if (!cb || !v) return;
+    const now = Date.now();
+    if (!force && now - lastReportRef.current < PROGRESS_REPORT_INTERVAL_MS) return;
+    lastReportRef.current = now;
+    const dur = Number.isFinite(v.duration) ? Math.floor(v.duration) : 0;
+    cb(Math.floor(v.currentTime || 0), dur);
+  }, []);
+
   /* ── <video> 이벤트 ── */
   const onLoadedMetadata = () => {
     const v = videoRef.current;
@@ -199,7 +221,8 @@ export default function VideoPlayer({ src, poster, title, storageKey, autoPlay =
     v.playbackRate = settings.playbackRate;
     v.volume = settings.volume;
     v.muted = settings.muted;
-    const resume = loadResumePosition(storageKey);
+    const serverPos = Number(initialPosition) || 0;
+    const resume = serverPos > 0 ? serverPos : loadResumePosition(storageKey);
     if (resume > 0 && resume < (v.duration || Infinity) - 5) {
       v.currentTime = resume;
       showFlash(`${formatTime(resume)} 부터 이어보기`);
@@ -215,9 +238,10 @@ export default function VideoPlayer({ src, poster, title, storageKey, autoPlay =
       lastSaveRef.current = now;
       saveResumePosition(storageKey, v.currentTime, v.duration);
     }
+    if (!v.paused) reportProgress(false);
   };
 
-  const onProgress = () => {
+  const onBuffered = () => {
     const v = videoRef.current;
     if (!v || !v.buffered.length || !v.duration) return;
     setBuffered(v.buffered.end(v.buffered.length - 1) / v.duration);
@@ -226,12 +250,16 @@ export default function VideoPlayer({ src, poster, title, storageKey, autoPlay =
   const persistPosition = () => {
     const v = videoRef.current;
     if (v && storageKey) saveResumePosition(storageKey, v.currentTime, v.duration);
+    reportProgress(true);
   };
 
   useEffect(() => () => {
     const v = videoRef.current;
     if (v && storageKey) saveResumePosition(storageKey, v.currentTime, v.duration);
   }, [storageKey]);
+
+  // 언마운트(화면 이탈) 시 마지막 위치 보고
+  useEffect(() => () => { reportProgress(true); }, [reportProgress]);
 
   const progressPct = duration ? (currentTime / duration) * 100 : 0;
 
@@ -256,7 +284,7 @@ export default function VideoPlayer({ src, poster, title, storageKey, autoPlay =
         onDoubleClick={toggleFullscreen}
         onLoadedMetadata={onLoadedMetadata}
         onTimeUpdate={onTimeUpdate}
-        onProgress={onProgress}
+        onProgress={onBuffered}
         onPlay={() => { setPlaying(true); revealControls(); }}
         onPause={() => { setPlaying(false); setControlsVisible(true); persistPosition(); }}
         onEnded={() => { setPlaying(false); setControlsVisible(true); persistPosition(); }}

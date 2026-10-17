@@ -41,7 +41,7 @@ export const getVideoUsage = (id) => api.get(`/api/videos/${id}/usage`);
 export const getVideoFacets = () => api.get('/api/videos/facets');
 export const createVideo = (body) => api.post('/api/videos', body);
 export const updateVideo = (id, body) => api.patch(`/api/videos/${id}`, body);
-export const deleteVideo = (id) => api.delete(`/api/videos/${id}`);
+export const deleteVideo = (id, { force } = {}) => api.delete(`/api/videos/${id}${force ? '?force=1' : ''}`);
 
 // ─── 학급 배정 / 댓글 API ───────────────────────────
 
@@ -59,6 +59,31 @@ export const createVideoComment = (classroomVideoId, body) =>
   api.post(`/api/classroom-videos/${classroomVideoId}/comments`, body);
 export const updateVideoComment = (id, content) => api.patch(`/api/video-comments/${id}`, { content });
 export const deleteVideoComment = (id) => api.delete(`/api/video-comments/${id}`);
+
+// ─── 시청 기록 API ───────────────────────────────────
+
+/** 학생: 시청 위치 저장(10초 간격 + 일시정지/종료/이탈 시에만 호출 — 분당 300회 제한) */
+export const saveVideoProgress = (classroomVideoId, { positionSec, durationSec } = {}) =>
+  api.put(`/api/classroom-videos/${classroomVideoId}/progress`, {
+    positionSec: Math.max(0, Math.floor(Number(positionSec) || 0)),
+    ...(Number.isFinite(Number(durationSec)) && Number(durationSec) > 0
+      ? { durationSec: Math.floor(Number(durationSec)) } : {}),
+  });
+/** 학생: 본인 시청 기록 (없으면 null) */
+export const getVideoProgress = (classroomVideoId) => api.get(`/api/classroom-videos/${classroomVideoId}/progress`);
+/** 교사: 학생별 시청 현황 요약 */
+export const getVideoProgressSummary = (classroomVideoId) =>
+  api.get(`/api/classroom-videos/${classroomVideoId}/progress/summary`);
+/** 학급 전체 영상 시청 기록 맵 — 학생: cvId→{positionSec,maxPositionSec,completed}, 교사: cvId→{watchedCount,completedCount,totalStudents} */
+export const getClassroomVideoProgress = (classroomId) => api.get(`/api/classrooms/${classroomId}/videos/progress`);
+
+/** 시청률 % (0~100 반올림·클램프). 길이를 모르면 null */
+export function progressPercent(maxPositionSec, durationSec) {
+  const d = Number(durationSec);
+  if (!Number.isFinite(d) || d <= 0) return null;
+  const m = Number(maxPositionSec) || 0;
+  return Math.max(0, Math.min(100, Math.round((m / d) * 100)));
+}
 
 // ─── 업로드 (XHR: 진행률 필요 — fetch 는 업로드 progress 미지원) ─────
 

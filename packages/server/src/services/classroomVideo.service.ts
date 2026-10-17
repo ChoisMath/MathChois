@@ -1,6 +1,6 @@
 import { eq, and, asc, desc, sql, inArray, isNull } from 'drizzle-orm';
 import { db } from '../config/database.js';
-import { classroomVideos, videos, videoComments, classrooms, profiles } from '../db/schema.js';
+import { classroomVideos, videos, videoComments, classrooms, profiles, classroomMembers, videoProgress } from '../db/schema.js';
 
 // ─── 학급 배정 ───────────────────────────────────────
 
@@ -189,4 +189,170 @@ export async function updateComment(id: string, content: string) {
 export async function removeComment(id: string) {
   const [row] = await db.delete(videoComments).where(eq(videoComments.id, id)).returning();
   return row ?? null;
+}
+
+// ─── 시청 기록 (video_progress) ──────────────────────
+
+/** 완료 판정 비율: 최대 도달 위치가 길이의 90% 이상이면 완료 */
+export const PROGRESS_COMPLETE_RATIO = 0.9;
+
+function toProgressRow(r: {
+  classroomVideoId: string; studentId: string; positionSec: number; maxPositionSec: number;
+  completed: boolean; updatedAt: Date;
+}) {
+  return {
+    classroomVideoId: r.classroomVideoId,
+    studentId: r.studentId,
+    positionSec: r.positionSec,
+    maxPositionSec: r.maxPositionSec,
+    completed: r.completed,
+    updatedAt: r.updatedAt.toISOString(),
+  };
+}
+
+/** 0~100 반올림·클램프. durationSec 없으면 null */
+export function progressPercent(maxPositionSec: number, durationSec: number | null | undefined) {
+  if (durationSec == null || !(durationSec > 0)) return null;
+  const pct = Math.round((maxPositionSec / durationSec) * 100);
+  return Math.max(0, Math.min(100, pct));
+}
+
+/**
+ * 학생 시청 위치 upsert (classroomVideoId, studentId 유니크).
+ * - positionSec: 현재 위치(그대로 덮어씀)
+ * - maxPositionSec: 기존값과 새 값 중 큰 값
+ * - completed: durationSec>0 이고 maxPositionSec >= 90% 면 true. 한 번 true 가 되면 유지.
+ */
+export async function upsertProgress(
+  classroomVideoId: string,
+  studentId: string,
+  input: { positionSec: number; durationSec?: number | null },
+) {
+  const positionSec = Math.max(0, Math.floor(input.positionSec));
+  const durationSec = input.durationSec != null && input.durationSec > 0 ? Math.floor(input.durationSec) : 0;
+  const threshold = durationSec > 0 ? durationSec * PROGRESS_COMPLETE_RATIO : null;
+  const insertCompleted = threshold != null && positionSec >= threshold;
+
+  const maxExpr = sql`GREATEST(${videoProgress.maxPositionSec}, ${positionSec})`;
+  const completedExpr = threshold != null
+    ? sql`(${videoProgress.completed} OR ${maxExpr} >= ${threshold})`
+    : sql`${videoProgress.completed}`;
+
+  const [row] = await db.insert(videoProgress)
+    .values({ classroomVideoId, studentId, positionSec, maxPositionSec: positionSec, completed: insertCompleted })
+    .onConflictDoUpdate({
+      target: [videoProgress.classroomVideoId, videoProgress.studentId],
+      set: {
+        positionSec,
+        maxPositionSec: maxExpr,
+        completed: completedExpr,
+        updatedAt: sql`now()`,
+      },
+    })
+    .returning();
+  return toProgressRow(row);
+}
+
+export async function getProgress(classroomVideoId: string, studentId: string) {
+  const rows = await db.select().from(videoProgress)
+    .where(and(eq(videoProgress.classroomVideoId, classroomVideoId), eq(videoProgress.studentId, studentId)))
+    .limit(1);
+  return rows[0] ? toProgressRow(rows[0]) : null;
+}
+
+/** 교사용: 학급 영상 하나의 학생별 시청 현황 (학급 구성원 전원 — 기록 없는 학생 포함) */
+export async function getProgressSummary(classroomVideoId: string) {
+  const cv = await getClassroomVideoById(classroomVideoId);
+  if (!cv) return null;
+  const durationSec = cv.video.durationSec ?? null;
+
+  const rows = await db.select({
+    studentId: classroomMembers.studentId,
+    name: profiles.name,
+    avatarUrl: profiles.avatarUrl,
+    positionSec: videoProgress.positionSec,
+    maxPositionSec: videoProgress.maxPositionSec,
+    completed: videoProgress.completed,
+    updatedAt: videoProgress.updatedAt,
+  })
+    .from(classroomMembers)
+    .innerJoin(profiles, eq(classroomMembers.studentId, profiles.id))
+    .leftJoin(videoProgress, and(
+      eq(videoProgress.studentId, classroomMembers.studentId),
+      eq(videoProgress.classroomVideoId, classroomVideoId),
+    ))
+    .where(eq(classroomMembers.classroomId, cv.classroomId))
+    .orderBy(asc(profiles.name), asc(classroomMembers.joinedAt));
+
+  const students = rows.map((r) => {
+    const maxPositionSec = r.maxPositionSec ?? 0;
+    return {
+      studentId: r.studentId,
+      name: r.name,
+      avatarUrl: r.avatarUrl,
+      positionSec: r.positionSec ?? 0,
+      maxPositionSec,
+      progressPct: r.updatedAt ? progressPercent(maxPositionSec, durationSec) : (durationSec ? 0 : null),
+      completed: !!r.completed,
+      updatedAt: r.updatedAt ? r.updatedAt.toISOString() : null,
+    };
+  });
+
+  return {
+    classroomVideoId,
+    durationSec,
+    students,
+    watchedCount: students.filter((s) => s.updatedAt != null).length,
+    completedCount: students.filter((s) => s.completed).length,
+    totalStudents: students.length,
+  };
+}
+
+/** 학생용: 학급의 모든 영상에 대한 본인 시청 기록 맵 (cvId → progress) */
+export async function getProgressByClassroom(classroomId: string, studentId: string) {
+  const rows = await db.select({
+    classroomVideoId: videoProgress.classroomVideoId,
+    positionSec: videoProgress.positionSec,
+    maxPositionSec: videoProgress.maxPositionSec,
+    completed: videoProgress.completed,
+  })
+    .from(videoProgress)
+    .innerJoin(classroomVideos, eq(videoProgress.classroomVideoId, classroomVideos.id))
+    .where(and(eq(classroomVideos.classroomId, classroomId), eq(videoProgress.studentId, studentId)));
+
+  const out: Record<string, { positionSec: number; maxPositionSec: number; completed: boolean }> = {};
+  for (const r of rows) {
+    out[r.classroomVideoId] = { positionSec: r.positionSec, maxPositionSec: r.maxPositionSec, completed: r.completed };
+  }
+  return out;
+}
+
+/** 교사용: 학급의 모든 영상에 대한 시청/완료 학생 수 맵 (cvId → stats). 영상 전부 포함(0건도). */
+export async function getProgressStatsByClassroom(classroomId: string) {
+  const [{ totalStudents }] = await db.select({ totalStudents: sql<number>`count(*)::int` })
+    .from(classroomMembers).where(eq(classroomMembers.classroomId, classroomId));
+
+  const rows = await db.select({
+    classroomVideoId: classroomVideos.id,
+    watchedCount: sql<number>`count(${videoProgress.id})::int`,
+    completedCount: sql<number>`count(*) filter (where ${videoProgress.completed})::int`,
+  })
+    .from(classroomVideos)
+    .leftJoin(videoProgress, and(
+      eq(videoProgress.classroomVideoId, classroomVideos.id),
+      // 현재 학급 구성원의 기록만 집계(탈퇴 학생 제외)
+      sql`EXISTS (SELECT 1 FROM classroom_members cm WHERE cm.classroom_id = ${classroomVideos.classroomId} AND cm.student_id = ${videoProgress.studentId})`,
+    ))
+    .where(eq(classroomVideos.classroomId, classroomId))
+    .groupBy(classroomVideos.id);
+
+  const out: Record<string, { watchedCount: number; completedCount: number; totalStudents: number }> = {};
+  for (const r of rows) {
+    out[r.classroomVideoId] = {
+      watchedCount: r.watchedCount,
+      completedCount: r.completedCount,
+      totalStudents: Number(totalStudents),
+    };
+  }
+  return out;
 }

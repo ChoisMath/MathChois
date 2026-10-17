@@ -30,6 +30,7 @@ import { isClassroomOwner } from '../services/classroom.service.js';
 import { removeFile, urlToStoragePath, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
 import { getIO } from '../socket/index.js';
 import { emitSubmissionUpdated } from '../socket/handlers/assignments.js';
+import { isValidPageVideoUrl, INVALID_VIDEO_URL_MESSAGE } from '../utils/videoUrl.js';
 
 export async function assignmentRoutes(app: FastifyInstance) {
 
@@ -192,6 +193,9 @@ export async function assignmentRoutes(app: FastifyInstance) {
     const { imageUrl, videoUrl, position } = request.body;
     if (!imageUrl && !videoUrl) {
       return reply.status(400).send({ error: 'imageUrl or videoUrl is required' });
+    }
+    if (videoUrl != null && !isValidPageVideoUrl(videoUrl)) {
+      return reply.status(400).send({ error: INVALID_VIDEO_URL_MESSAGE });
     }
 
     const page = await createAssignmentPage({

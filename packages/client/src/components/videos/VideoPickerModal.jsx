@@ -10,8 +10,9 @@ const FILTER_FIELDS = [
 /**
  * 학급에 배정할 영상자료 선택/등록 모달 (모든 교사의 자료에서 검색).
  * onSelect(video) / onClose(). excludeIds: 이미 배정된 영상 id(배정됨 표시).
+ * selectLabel: 선택 버튼 문구(기본 '배정', 챕터 편집기에서는 '삽입').
  */
-export default function VideoPickerModal({ onSelect, onClose, excludeIds = [] }) {
+export default function VideoPickerModal({ onSelect, onClose, excludeIds = [], selectLabel = '배정' }) {
   const [mode, setMode] = useState('list'); // 'list' | 'register'
   const [facets, setFacets] = useState({});
   const [filters, setFilters] = useState({});
@@ -92,7 +93,7 @@ export default function VideoPickerModal({ onSelect, onClose, excludeIds = [] })
                         <span className="font-medium whitespace-nowrap truncate">{v.title}</span>
                         <button onClick={() => onSelect(v)} disabled={already}
                           className="px-3 min-h-11 bg-blue-600 text-white rounded text-sm whitespace-nowrap disabled:opacity-40 disabled:bg-gray-400">
-                          {already ? '배정됨' : '배정'}
+                          {already ? `${selectLabel}됨` : selectLabel}
                         </button>
                       </div>
                       <p className="text-xs text-gray-500 whitespace-nowrap truncate">
