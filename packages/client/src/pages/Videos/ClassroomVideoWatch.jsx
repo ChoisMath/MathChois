@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Clapperboard, MessageSquare, Users, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Clapperboard, MessageSquare, Users, CheckCircle2, Columns2, BookOpen, RefreshCw } from 'lucide-react';
+import { useIntervalRefresh } from '../../hooks/useIntervalRefresh';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  getClassroomVideo, formatDuration, getVideoProgress, saveVideoProgress, getVideoProgressSummary,
+  getClassroomVideo, formatDuration, getVideoProgress, reportVideoProgress, getVideoProgressSummary,
 } from '../../lib/videos';
+import ProgressSaveStatus from '../../components/videos/ProgressSaveStatus';
 import { formatTime } from '../../lib/videoPlayer';
+import { loadSplitPage } from '../../lib/splitLayout';
 import VideoPlayer from '../../components/videos/VideoPlayer';
 import VideoComments from '../../components/videos/VideoComments';
 import CollapsibleSection from '../../components/videos/CollapsibleSection';
@@ -18,17 +21,39 @@ function formatWatchedAt(iso) {
 }
 
 /* ─── 교사용 시청 현황 패널 (접기/펼치기) ─── */
+const PROGRESS_PANEL_REFRESH_MS = 30000;
+
 function VideoProgressPanel({ classroomVideoId }) {
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const aliveRef = useRef(true);
+
+  const load = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const s = await getVideoProgressSummary(classroomVideoId);
+      if (aliveRef.current) { setSummary(s); setError(''); }
+    } catch (err) {
+      if (aliveRef.current) setError(err.message ?? '시청 현황을 불러올 수 없습니다.');
+    } finally {
+      if (aliveRef.current) setRefreshing(false);
+    }
+  }, [classroomVideoId]);
 
   useEffect(() => {
-    let alive = true;
-    getVideoProgressSummary(classroomVideoId)
-      .then((s) => { if (alive) setSummary(s); })
-      .catch((err) => { if (alive) setError(err.message ?? '시청 현황을 불러올 수 없습니다.'); });
-    return () => { alive = false; };
-  }, [classroomVideoId]);
+    aliveRef.current = true;
+    load();
+    return () => { aliveRef.current = false; };
+  }, [load]);
+
+  // 학생 시청은 실시간 소켓 이벤트가 없으므로 주기적으로 + 탭에 돌아왔을 때 다시 읽는다
+  useIntervalRefresh(load, PROGRESS_PANEL_REFRESH_MS, typeof document !== 'undefined' && document.visibilityState === 'visible');
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [load]);
 
   const headline = summary
     ? `시청 ${summary.watchedCount}/${summary.totalStudents} · 완료 ${summary.completedCount}`
@@ -41,6 +66,11 @@ function VideoProgressPanel({ classroomVideoId }) {
         <Users className="h-4 w-4 text-gray-500" />
         <span className="font-semibold text-gray-800">시청 현황</span>
         <span className={`text-xs ${error ? 'text-red-600' : 'text-gray-500'}`}>{headline}</span>
+        <span className="flex-1" />
+        <button type="button" onClick={load} disabled={refreshing} title="시청 현황 새로고침 (30초마다 자동 갱신)"
+          className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-50 cursor-pointer">
+          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       {summary && (
@@ -100,6 +130,7 @@ export default function ClassroomVideoWatch() {
   const playerRef = useRef(null);
   const [detail, setDetail] = useState(null);
   const [progress, setProgress] = useState(null); // 학생 본인 서버 시청 기록
+  const [saveStatus, setSaveStatus] = useState(null); // 학생: 마지막 시청 기록 저장 결과(진단 표시)
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -127,9 +158,10 @@ export default function ClassroomVideoWatch() {
   }, [load]);
 
   // 학생: 플레이어가 보고하는 위치를 서버에 저장 (플레이어 쪽에서 10초 간격으로 제한됨)
-  const handleProgress = useCallback((positionSec, durationSec) => {
+  const handleProgress = useCallback((positionSec, durationSec, opts) => {
     if (isTeacher) return;
-    saveVideoProgress(cvId, { positionSec, durationSec }).catch(() => { /* 다음 보고 때 재시도 */ });
+    reportVideoProgress(cvId, { positionSec, durationSec, keepalive: !!opts?.keepalive })
+      .then((st) => setSaveStatus(st));
   }, [cvId, isTeacher]);
 
   const getCurrentTime = useCallback(() => playerRef.current?.getCurrentTime() ?? 0, []);
@@ -152,6 +184,7 @@ export default function ClassroomVideoWatch() {
 
   const v = detail.video;
   const meta = [v.subject, v.majorUnit, v.minorUnit].filter(Boolean).join(' · ');
+  const splitPage = isTeacher ? null : loadSplitPage(detail.id); // 2분할에서 마지막으로 본 챕터 페이지(기기 저장)
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -173,10 +206,30 @@ export default function ClassroomVideoWatch() {
             onProgress={isTeacher ? undefined : handleProgress}
           />
 
-          <h1 className="text-lg font-bold text-gray-900 mt-3">{v.title}</h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {[meta, formatDuration(v.durationSec)].filter(Boolean).join(' · ')}
-          </p>
+          <div className="flex items-start justify-between gap-3 mt-3">
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-gray-900">{v.title}</h1>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {[meta, formatDuration(v.durationSec)].filter(Boolean).join(' · ')}
+              </p>
+            </div>
+            {/* 필기 챕터가 연결된 영상: 학생은 2분할 진입, 교사는 연결 칩 */}
+            {!isTeacher && <ProgressSaveStatus status={saveStatus} className="shrink-0 mt-1" />}
+            {detail.chapter && (isTeacher ? (
+              <Link to={`/teacher/chapters/${detail.chapter.id}/edit`}
+                className="shrink-0 inline-flex items-center gap-1 max-w-[50%] text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded px-2 py-1 hover:bg-amber-100"
+                title="학생이 2분할 화면에서 옆에 놓고 필기하는 챕터">
+                <BookOpen className="h-3.5 w-3.5 shrink-0" /><span className="truncate">필기 챕터 · {detail.chapter.title}</span>
+              </Link>
+            ) : (
+              <Link
+                to={`${base}/classrooms/${classroomId}/videos/${detail.id}/split${splitPage ? `?page=${encodeURIComponent(splitPage)}` : ''}`}
+                className="shrink-0 inline-flex items-center gap-1.5 min-h-9 px-3 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+                title={`"${detail.chapter.title}" 챕터를 옆에 놓고 필기하며 보기`}>
+                <Columns2 className="h-4 w-4" /> 2분할로 필기하며 보기
+              </Link>
+            ))}
+          </div>
 
           {isTeacher && <VideoProgressPanel classroomVideoId={detail.id} />}
 

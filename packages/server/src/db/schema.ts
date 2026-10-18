@@ -356,12 +356,15 @@ export const classroomVideos = pgTable('classroom_videos', {
   videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'restrict' }),
   addedBy: uuid('added_by').references(() => profiles.id, { onDelete: 'set null' }),
   note: text('note'),
+  // 필기 챕터: 학생이 영상 2분할 화면에서 옆에 놓고 필기할 같은 학급의 챕터(교사 설정). 챕터 삭제 시 연결만 해제.
+  chapterId: uuid('chapter_id').references(() => chapters.id, { onDelete: 'set null' }),
   position: integer('position').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
   unique('uq_classroom_videos_classroom_video').on(t.classroomId, t.videoId),
   index('idx_classroom_videos_classroom').on(t.classroomId, t.position),
   index('idx_classroom_videos_video').on(t.videoId),
+  index('idx_classroom_videos_chapter').on(t.chapterId),
 ]);
 
 // ─── video_comments (학급 영상 댓글/대댓글) ─────────

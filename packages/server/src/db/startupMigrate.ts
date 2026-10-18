@@ -116,6 +116,9 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
   await pgClient`CREATE UNIQUE INDEX IF NOT EXISTS uq_classroom_videos_classroom_video ON classroom_videos (classroom_id, video_id)`;
   await pgClient`CREATE INDEX IF NOT EXISTS idx_classroom_videos_classroom ON classroom_videos (classroom_id, position)`;
   await pgClient`CREATE INDEX IF NOT EXISTS idx_classroom_videos_video ON classroom_videos (video_id)`;
+  // 필기 챕터 연결(영상 2분할 필기) — 기존 배포 DB 에 컬럼 보강
+  await pgClient`ALTER TABLE classroom_videos ADD COLUMN IF NOT EXISTS chapter_id uuid REFERENCES chapters(id) ON DELETE SET NULL`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_classroom_videos_chapter ON classroom_videos (chapter_id)`;
   await pgClient`
     CREATE TABLE IF NOT EXISTS video_comments (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

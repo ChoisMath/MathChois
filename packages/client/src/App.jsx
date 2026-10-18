@@ -39,6 +39,7 @@ const VisualizationsPage = lazy(() => import('./pages/Visualizations/Visualizati
 /* 영상자료 */
 const VideosPage          = lazy(() => import('./pages/Videos/VideosPage'));
 const ClassroomVideoWatch = lazy(() => import('./pages/Videos/ClassroomVideoWatch'));
+const ClassroomVideoSplit = lazy(() => import('./pages/Videos/ClassroomVideoSplit'));
 
 /* 코칭 기록 */
 const MyCoachingHistory     = lazy(() => import('./pages/History/MyCoachingHistory'));
@@ -174,6 +175,8 @@ function App() {
             </Route>
             {/* StudyViewer: 전체화면 레이아웃, DashboardLayout 제외 */}
             <Route path="/student/study/:chapterId/page/:pageId" element={<StudyPageRouter />} />
+            {/* 영상 2분할 필기(영상 + 연결 챕터 StudyViewer): 전체화면 레이아웃, DashboardLayout 제외 */}
+            <Route path="/student/classrooms/:classroomId/videos/:cvId/split" element={<ClassroomVideoSplit />} />
             {/* Phase 5 — 학생 과제 필기 (전체화면) */}
             <Route
               path="/student/assignments/:assignmentId/page/:pageId"

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clapperboard, Plus, GripVertical, Trash2, MessageSquare, Pencil, Check, X, Eye, CheckCircle2 } from 'lucide-react';
+import { Clapperboard, Plus, GripVertical, Trash2, MessageSquare, Pencil, Check, X, Eye, CheckCircle2, BookOpen } from 'lucide-react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -13,9 +13,22 @@ import {
   updateClassroomVideo, formatDuration, getClassroomVideoProgress, progressPercent, getClassroomVideoUnread,
 } from '../../lib/videos';
 import VideoPickerModal from './VideoPickerModal';
+import { api } from '../../lib/api';
 
-/* ─── 영상 카드 (교사: 드래그 정렬·메모·해제) ─── */
-function VideoCard({ cv, isTeacher, progress, unread = 0, onOpen, onRemove, onSaveNote }) {
+/** 연결된 필기 챕터 칩 (교사·학생 공통) */
+function ChapterChip({ chapter }) {
+  if (!chapter) return null;
+  return (
+    <span className="inline-flex items-center gap-1 max-w-full text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded px-2 py-0.5"
+      title={`필기 챕터: ${chapter.title}`}>
+      <BookOpen className="h-3.5 w-3.5 shrink-0" />
+      <span className="truncate">필기 챕터 · {chapter.title}</span>
+    </span>
+  );
+}
+
+/* ─── 영상 카드 (교사: 드래그 정렬·메모·필기 챕터 연결·해제) ─── */
+function VideoCard({ cv, isTeacher, progress, unread = 0, chapters = [], onOpen, onRemove, onSaveNote, onSaveChapter }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cv.id, disabled: !isTeacher });
   const [editingNote, setEditingNote] = useState(false);
   const [note, setNote] = useState(cv.note ?? '');
@@ -81,6 +94,32 @@ function VideoCard({ cv, isTeacher, progress, unread = 0, onOpen, onRemove, onSa
           cv.note && <p className="text-xs text-blue-700 bg-blue-50 rounded px-2 py-1 mt-1 whitespace-pre-wrap">{cv.note}</p>
         )}
 
+        {/* 필기 챕터: 교사는 선택, 학생은 칩만. 학생은 영상 상세의 [2분할로 필기하며 보기] 로 이 챕터를 옆에 놓고 필기한다. */}
+        {isTeacher ? (
+          <label className="flex items-center gap-1.5 mt-1 text-xs text-gray-600">
+            <BookOpen className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+            <span className="shrink-0">필기 챕터</span>
+            <select
+              value={cv.chapterId ?? ''}
+              onChange={(e) => onSaveChapter(cv, e.target.value || null)}
+              onClick={(e) => e.stopPropagation()}
+              className="flex-1 min-w-0 min-h-9 border border-gray-200 rounded px-1.5 text-xs bg-white truncate"
+              title="학생이 2분할 화면에서 옆에 놓고 필기할 챕터"
+            >
+              <option value="">연결 없음</option>
+              {chapters.map((ch) => (
+                <option key={ch.id} value={ch.id}>{ch.title}</option>
+              ))}
+              {/* 삭제되지 않았지만 목록 로드에 실패한 경우에도 현재 값이 표시되도록 */}
+              {cv.chapter && !chapters.some((ch) => ch.id === cv.chapter.id) && (
+                <option value={cv.chapter.id}>{cv.chapter.title}</option>
+              )}
+            </select>
+          </label>
+        ) : (
+          cv.chapter && <div className="mt-1"><ChapterChip chapter={cv.chapter} /></div>
+        )}
+
         <div className="flex items-center gap-2 mt-auto pt-2 text-xs text-gray-500">
           <span className="inline-flex items-center gap-1">
             <MessageSquare className="h-3.5 w-3.5" />{cv.commentCount ?? 0}
@@ -125,6 +164,7 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
   const [items, setItems] = useState([]);
   const [progressMap, setProgressMap] = useState({}); // cvId → 학생: 본인 기록 / 교사: 집계
   const [unreadMap, setUnreadMap] = useState({});     // cvId → 미읽음 댓글 수
+  const [chapters, setChapters] = useState([]);       // 교사: 필기 챕터 선택용 학급 챕터 목록
   const [loading, setLoading] = useState(true);
   const [showPicker, setShowPicker] = useState(false);
 
@@ -148,6 +188,23 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
   }, [classroomId]);
 
   useEffect(() => { setLoading(true); fetchList(); }, [fetchList]);
+
+  /* 다른 탭/앱에서 돌아왔을 때 시청 기록·미읽음을 다시 읽는다(학생 시청은 소켓 이벤트가 없음) */
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchList(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [fetchList]);
+
+  /* 교사: 학급 챕터 목록(필기 챕터 선택지). 실패해도 영상 목록은 표시 — 보조 정보 */
+  useEffect(() => {
+    if (!isTeacher) return undefined;
+    let alive = true;
+    api.get(`/api/classrooms/${classroomId}/chapters`)
+      .then((list) => { if (alive) setChapters([...(list || [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))); })
+      .catch(() => { /* 유지 */ });
+    return () => { alive = false; };
+  }, [classroomId, isTeacher]);
 
   const openWatch = (cv) => {
     navigate(`/${isTeacher ? 'teacher' : 'student'}/classrooms/${classroomId}/videos/${cv.id}`);
@@ -179,6 +236,17 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
       setItems((prev) => prev.map((x) => (x.id === cv.id ? { ...x, note: updated?.note ?? note } : x)));
     } catch (err) {
       alert(err.message ?? '메모 저장에 실패했습니다.');
+    }
+  };
+
+  const handleSaveChapter = async (cv, chapterId) => {
+    try {
+      const updated = await updateClassroomVideo(cv.id, { chapterId });
+      setItems((prev) => prev.map((x) => (
+        x.id === cv.id ? { ...x, chapterId: updated?.chapterId ?? chapterId, chapter: updated?.chapter ?? null } : x
+      )));
+    } catch (err) {
+      alert(err.message ?? '필기 챕터 연결에 실패했습니다.');
     }
   };
 
@@ -222,7 +290,8 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {items.map((cv) => (
                 <VideoCard key={cv.id} cv={cv} isTeacher={isTeacher} progress={progressMap[cv.id]} unread={unreadMap[cv.id] ?? 0}
-                  onOpen={openWatch} onRemove={handleRemove} onSaveNote={handleSaveNote} />
+                  chapters={chapters}
+                  onOpen={openWatch} onRemove={handleRemove} onSaveNote={handleSaveNote} onSaveChapter={handleSaveChapter} />
               ))}
             </div>
           </SortableContext>
