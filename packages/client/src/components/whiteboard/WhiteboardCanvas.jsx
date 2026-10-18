@@ -118,7 +118,7 @@ function WhiteboardCanvasInner({
   const fileIdsIn = (elements) => elements.filter((el) => el.type === 'image' && el.fileId).map((el) => el.fileId);
 
   /* ── 장면 적용 공통 ── */
-  const applyScene = useCallback((elements, { files, bg } = {}) => {
+  const applyScene = useCallback((elements, { files, bg, fit = false } = {}) => {
     const excalidraw = apiRef.current;
     if (!excalidraw) return;
     if (files) {
@@ -133,6 +133,12 @@ function WhiteboardCanvasInner({
       ...NEVER,
     });
     void loadFilesFor(fileIdsIn(restored));
+    if (fit) {
+      requestAnimationFrame(() => {
+        const guide = apiRef.current?.getSceneElements().find(isGuideElement);
+        if (guide) apiRef.current.scrollToContent(guide, { fitToViewport: true, viewportZoomFactor: 0.95 });
+      });
+    }
   }, [loadFilesFor]);
 
   /* ── 빈 보드 템플릿: 기본 템플릿 자동 적용 / 선택 오버레이 (init 시점에 결정) ── */
@@ -174,7 +180,7 @@ function WhiteboardCanvasInner({
     onInit: (d) => {
       collab.resetKnown();
       collab.markKnown(d.elements);
-      applyScene(d.elements, { files: d.files, bg: d.backgroundColor });
+      applyScene(d.elements, { files: d.files, bg: d.backgroundColor, fit: true });
       setBackgroundColor(d.backgroundColor);
       setLocked(d.locked); setLockedAll(d.lockedAll); setServerReadOnly(d.readOnly);
       setUsers(d.users); onUsers?.(d.users);
@@ -196,7 +202,7 @@ function WhiteboardCanvasInner({
     onScene: (d) => {
       collab.resetKnown();
       collab.markKnown(d.elements);
-      applyScene(d.elements, { files: d.files, bg: d.backgroundColor });
+      applyScene(d.elements, { files: d.files, bg: d.backgroundColor, fit: d.reason === 'template' });
       setBackgroundColor(d.backgroundColor);
       if (d.reason === 'template') { templateAppliedRef.current = true; setStartPicker(false); }
       if (d.reason === 'reset') showToast('보드가 초기화되었습니다.');
@@ -322,6 +328,7 @@ function WhiteboardCanvasInner({
   const handleMount = useCallback((excalidrawApi) => {
     apiRef.current = excalidrawApi;
     setExcApi(excalidrawApi);
+    if (import.meta.env.DEV) window.__wbApi = excalidrawApi; // 개발/E2E 디버그용
     // 첫 장면에 안내선을 넣고 발표 영역에 맞춘다
     excalidrawApi.updateScene({ elements: [createGuideElement()], ...NEVER });
     requestAnimationFrame(() => {
