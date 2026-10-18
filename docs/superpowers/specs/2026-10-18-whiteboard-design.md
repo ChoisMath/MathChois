@@ -38,7 +38,7 @@
 | Q5 | 템플릿 범위 | 그래픽 오거나이저 16종 + 분석 14종 + 활동 4종(장단점, 동의 또는 반대, TPS, 어느 쪽을 선택) = **34종**. 주기율표·전체 검색·슬라이드/첨부 계열 제외. |
 | Q6 | 도구 UI | **Excalidraw 기본 UI 노출**(도형·텍스트·화살표·펜·이미지·색상·글꼴, 한국어). 기존 S펜·손바닥 거부 훅 유지. 상단 자체 바: 바탕색, 템플릿, 모둠 전환, 잠금 표시, 화면 맞춤. 이미지는 긴 변 1600px·1MB 이하로 축소해 `whiteboard-files` 버킷에 업로드, 보드에는 URL만 저장. |
 | Q7 | 협업자 표시·작성자 | Excalidraw `collaborators`로 이름표 커서 표시. 요소에 `customData.authorId/authorName` 기록, 교사 화면에서만 작성자 확인. 격자 타일에 접속 인원·이름 표시. |
-| Q8 | 캔버스 | 무한 캔버스 + 1600×900 **발표 영역 안내선** + "화면 맞춤". 썸네일·내보내기는 발표 영역 기준, 밖에 요소가 있으면 전체 범위. |
+| Q8 | 캔버스 | 무한 캔버스 + 3200×1800 **발표 영역 안내선** + "화면 맞춤". 썸네일·내보내기는 발표 영역 기준, 밖에 요소가 있으면 전체 범위. |
 | Q9 | 교사 관리 작업 | **초기화**(확인 후), **템플릿 재적용**(빈 보드에만), **내보내기**(PNG/PDF, 모둠 하나 또는 전체). 보드마다 **직전 저장본 1개** 보관 → "직전 상태로 되돌리기". |
 | Q10 | 연결(linked) 챕터 | 보드 내용·모둠 배정·잠금·열람 허용은 **학급별 독립**(저장 단위 = 페이지 + 학급 + 모둠). 기본 템플릿만 원본 페이지 속성으로 공통. 연결 학급 교사도 자기 학급 배정·잠금·초기화 가능. |
 
@@ -200,7 +200,7 @@ Room `wb:{whiteboardGroupId}`. `validateRoomAccess`에 패턴 추가:
 데이터 구조: `{ key, name, category, build(ox, oy) → ExcalidrawElementSkeleton[] }`.
 `convertToExcalidrawElements`로 요소화. 스타일 공통: `strokeColor '#1e1e1e'`, `backgroundColor 'transparent'`,
 `strokeWidth 2`, `roughness 0`, `roundness null`, 텍스트 `fontFamily 1`(Virgil 대신 한글 가독성을 위해
-`fontFamily: 5`(Excalifont) 또는 기본 Helvetica = 2 사용 검토), 기준 영역 1600×900.
+`fontFamily: 5`(Excalifont) 또는 기본 Helvetica = 2 사용 검토), 기준 영역 3200×1800.
 삽입 시 모든 요소에 공통 `groupIds: [templateInstanceId]`를 부여해 한 번에 이동/삭제된다.
 
 | 카테고리 | key (34) |

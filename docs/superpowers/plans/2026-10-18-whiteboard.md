@@ -55,7 +55,7 @@ npm run build -w @mathchois/client                # vite build
 - `lib/groupAssign.js` (+`.test.js`) — 신규. `distributeEvenly(studentIds, count, seed?)`, `moveStudent(groups, sid, gid)`.
 - `lib/whiteboardTemplates.js` (+`.test.js`) — 신규. 템플릿 34종 skeleton 빌더 + `TEMPLATE_CATEGORIES`.
 - `lib/whiteboardImage.js` (+`.test.js`) — 신규. 이미지 축소(캔버스), 파일 ref ↔ Excalidraw files 변환.
-- `lib/whiteboardExport.js` — 신규. 썸네일/PNG/PDF 범위 계산(`getExportBounds`, 발표 영역 1600×900 기준) + export 헬퍼.
+- `lib/whiteboardExport.js` — 신규. 썸네일/PNG/PDF 범위 계산(`getExportBounds`, 발표 영역 3200×1800 기준) + export 헬퍼.
 - `hooks/useWhiteboardCollab.js` — 신규. 소켓 join/init/elements/pointer/presence/files/lock/scene.
 - `components/whiteboard/WhiteboardCanvas.jsx` — 신규. Excalidraw + collab 훅 + S펜 훅.
 - `components/whiteboard/WhiteboardTopBar.jsx` — 신규.
@@ -187,10 +187,10 @@ npm run build -w @mathchois/client                # vite build
 
 **Files:** Create `packages/client/src/lib/whiteboardTemplates.js`, `packages/client/src/lib/whiteboardTemplates.test.js`, `packages/client/src/components/whiteboard/TemplateThumb.jsx`, `packages/client/src/components/whiteboard/TemplatePickerDialog.jsx`
 
-- [ ] **Step 1:** 테스트: `TEMPLATES.length === 34`, key 유일, 카테고리 3개(`organizer` 16 / `analysis` 14 / `activity` 4), 각 `build(0,0)` 결과가 (a) 비어 있지 않고 (b) 모든 skeleton 이 `type ∈ {rectangle, ellipse, diamond, line, arrow, text}` (c) 숫자 좌표 (d) 1600×900 안에 들어옴(`x+width ≤ 1600`, 텍스트는 `x ≤ 1600`) (e) `strokeColor === '#1e1e1e'`.
+- [ ] **Step 1:** 테스트: `TEMPLATES.length === 34`, key 유일, 카테고리 3개(`organizer` 16 / `analysis` 14 / `activity` 4), 각 `build(0,0)` 결과가 (a) 비어 있지 않고 (b) 모든 skeleton 이 `type ∈ {rectangle, ellipse, diamond, line, arrow, text}` (c) 숫자 좌표 (d) 3200×1800 안에 들어옴(`x+width ≤ 3200`, 텍스트는 `x ≤ 3200`) (e) `strokeColor === '#1e1e1e'`.
 - [ ] **Step 2:** 빌더 헬퍼(`whiteboardTemplates.js` 내부):
   ```js
-  export const BOARD_W = 1600, BOARD_H = 900;
+  export const BOARD_W = 3200, BOARD_H = 1800;
   const S = { strokeColor: '#1e1e1e', backgroundColor: 'transparent', strokeWidth: 2, roughness: 0, roundness: null, fillStyle: 'solid' };
   const rect = (x, y, w, h, extra) => ({ type: 'rectangle', x, y, width: w, height: h, ...S, ...extra });
   const ellipse = (x, y, w, h) => ({ type: 'ellipse', x, y, width: w, height: h, ...S });
@@ -203,7 +203,7 @@ npm run build -w @mathchois/client                # vite build
   템플릿 데이터: `{ key, name, category, build(ox, oy) }` 로 34종. 대표 정의(나머지는 같은 헬퍼로):
   - `t-chart`: `cols(2, ['', ''])` + 상단 제목 행 line(0,80,…).
   - `venn`: `frame(), ellipse(250,150,700,600), ellipse(650,150,700,600)`.
-  - `swot`: `frame(), line(800,0,800,900), line(0,450,1600,450), text(24,20,'S',48)…`.
+  - `swot`: `frame(), line(1600,0,1600,1800), line(0,900,3200,900), text(48,40,'S',96)…`.
   - `frayer`: SWOT 와 같은 4분할 + 중앙 `ellipse(600,350,400,200)` + 라벨(정의/특징/예/비예).
   - `number-line`: `arrow(100,450,1500,450)` 역방향 arrow 포함, 눈금 line 11개, text(-5…5).
   - `xy-graph`: 양방향 arrow 2개 + 점선 격자(10×10, dashed).
@@ -216,7 +216,7 @@ npm run build -w @mathchois/client                # vite build
   - `think-pair-share`: `cols(3, ['T 생각하기','P 짝과 나누기','S 공유하기'])`.
   - `pros-cons`: 2분할 + 상단 ":)" / ":(" 텍스트. `agree-disagree`: 4분할 + 중앙 rect. `which-side`: 2분할 + 점선 + 상단 제목 rect.
   삽입 시 `convertToExcalidrawElements(skeletons.map(offset(ox, oy)), { regenerateIds: true })` 후 모든 요소에 `groupIds: [instanceId]` 부여하는 `buildTemplateElements(key, ox, oy)` export.
-- [ ] **Step 3:** `TemplateThumb.jsx` — skeleton 을 **그대로 SVG 로** 그림(rect/ellipse/line/arrow/text 각각 `<rect>/<ellipse>/<line>/<text>`), `viewBox="0 0 1600 900"`, 폭 120px. 템플릿마다 PNG 를 두지 않아도 되고 템플릿 추가 시 자동 반영.
+- [ ] **Step 3:** `TemplateThumb.jsx` — skeleton 을 **그대로 SVG 로** 그림(rect/ellipse/line/arrow/text 각각 `<rect>/<ellipse>/<line>/<text>`), `viewBox="0 0 3200 1800"`, 폭 120px. 템플릿마다 PNG 를 두지 않아도 되고 템플릿 추가 시 자동 반영.
 - [ ] **Step 4:** `TemplatePickerDialog.jsx` props `{ onSelect(key), onClose, allowNone, title }` — 카테고리 탭(그래픽 오거나이저/분석/활동) + 썸네일 격자 + 이름. `allowNone` 이면 "없음(학생이 선택)" 항목. 바깥 클릭/ESC 로 닫기. 학생 최초 진입용 오버레이 모드(`variant="overlay"`): 상단 문구 "템플릿으로 시작하거나 아무 곳이나 클릭하여 닫으세요…".
 - [ ] **Step 5:** `npm test -w @mathchois/client`, `npm run lint`. Task 5 의 에디터 "변경" 버튼에 다이얼로그 연결 후 PATCH 저장 확인.
 
@@ -286,7 +286,7 @@ npm run build -w @mathchois/client                # vite build
 
 **Files:** Create `packages/client/src/hooks/useWhiteboardCollab.js`, `packages/client/src/lib/whiteboardImage.js`(+`.test.js`), `packages/client/src/lib/whiteboardExport.js`(+`.test.js`)
 
-- [ ] **Step 1:** `whiteboardExport.js` TDD: `getExportBounds(elements)` — 요소 없음 → 발표 영역 `{x:0,y:0,w:1600,h:900}`; 영역 안 → 영역; 밖으로 나가면 합집합(+ 40px 여백). 안내선 요소(`customData.guide`) 는 제외.
+- [ ] **Step 1:** `whiteboardExport.js` TDD: `getExportBounds(elements)` — 요소 없음 → 발표 영역 `{x:0,y:0,w:3200,h:1800}`; 영역 안 → 영역; 밖으로 나가면 합집합(+ 40px 여백). 안내선 요소(`customData.guide`) 는 제외.
 - [ ] **Step 2:** `whiteboardImage.js` TDD(순수 부분): `fileRefsToExcalidrawFiles(refs, dataUrlLoader)`, `pickNewFiles(files, knownIds)`; 축소는 `downscaleImage(file|dataURL, {maxEdge:1600, maxBytes:1_000_000})`(canvas, 브라우저 전용 — 테스트 제외, 품질 0.85 부터 0.1 씩 낮춰 상한 맞춤).
 - [ ] **Step 3:** `useWhiteboardCollab({ boardId, user, enabled, onInit, onRemoteElements, onScene, onLock, onPresence, onPointer, onFiles, onRejected })`:
   - `connectSocket()` 보장 → `wb:join` emit, 이벤트 바인딩, cleanup 에 `wb:leave` + off. 재연결(`socket.on('connect')`) 시 `wb:join` 재전송(기존 `joinRoom` 셋을 쓰지 않으므로 훅이 직접 처리).
@@ -300,13 +300,13 @@ npm run build -w @mathchois/client                # vite build
 
 - [ ] **Step 1:** `WhiteboardCanvas` props `{ boardId, user, isTeacher, readOnly(외부 강제), onAuthorChange?, onPresence?, topBarExtras?(교사 모둠 드롭다운 등), showStartTemplatePicker, onInitEmpty? }`:
   - `<Excalidraw langCode="ko-KR" excalidrawAPI={setApi} viewModeEnabled={readOnly || collab.readOnly} initialData={{ appState: { viewBackgroundColor: '#ffffff' } }} onChange={handleChange} onPointerUpdate={handlePointer} isCollaborating UIOptions={WB_UI_OPTIONS} renderTopRightUI={() => <WhiteboardTopBar …/>} />`. `WB_UI_OPTIONS = { canvasActions: { loadScene: false, saveToActiveFile: false, toggleTheme: false, clearCanvas: false, changeViewBackgroundColor: false /* 자체 피커 */ }, tools: { image: true } }`. 기존 `ALWAYS_HIDE_CSS` 는 **주입하지 않는다**(기본 UI 노출).
-  - `wb:init` → `restoreElements(elements, null)` + files 로드(`fetchAsDataUrl` → `addFiles`) → `updateScene({ elements, appState:{ viewBackgroundColor }, captureUpdate: CaptureUpdateAction.NEVER })` + `markKnown`. 안내선 요소(1600×900 점선 rect, `locked:true`, `customData:{guide:true}`, `opacity:30`) 를 **로컬에만** 추가하고 `sendElements` 에서 제외.
+  - `wb:init` → `restoreElements(elements, null)` + files 로드(`fetchAsDataUrl` → `addFiles`) → `updateScene({ elements, appState:{ viewBackgroundColor }, captureUpdate: CaptureUpdateAction.NEVER })` + `markKnown`. 안내선 요소(3200×1800 점선 rect, `locked:true`, `customData:{guide:true}`, `opacity:30`) 를 **로컬에만** 추가하고 `sendElements` 에서 제외.
   - `handleChange(elements, appState, files)` → readOnly 면 무시; `sendElements(elements.filter(not guide))`; 새 파일 감지 → `downscaleImage` → `api.upload` → `sendFiles`.
   - `wb:elements` 수신 → `reconcileElements(api.getSceneElementsIncludingDeleted(), remote, api.getAppState())` → `updateScene({ elements, captureUpdate: CaptureUpdateAction.NEVER })` → `markKnown(remote)`. 수신 요소의 `fileId` 가 미보유면 `files` 에서 ref 를 찾아 로드.
   - `wb:scene` → 전체 교체(안내선 유지). `wb:lock` → `setLocked`. `wb:pointer` → `updateScene({ collaborators })`(Map<socketId, {pointer:{x,y,tool}, button, username, color}>).
   - S펜: `useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef: {current:false}, baseStrokeWidthRef: {current:2} })` + `useScribbleErase({ excalidrawAPIRef, excludePrefixes: [] })` 를 **옵션 prop `penTouchHandling`(기본 true)** 으로 장착. 기본 툴바와 충돌(손가락 팬이 선택 도구와 겹침)이 확인되면 기본값을 false 로 내리고 Excalidraw `penMode` 자동 감지로 대체 — 이 판단은 Task 15 수동 E2E 에서.
   - 작성자: `onChange` 의 `appState.selectedElementIds` 1개면 해당 요소 `customData.authorName` 을 `onAuthorChange` 로 보고(교사만).
-- [ ] **Step 2:** `WhiteboardTopBar` — 바탕색 버튼(`BackgroundColorPicker`: 프리셋 `#ffffff #fff9db #e7f5ff #f1f3f5 #fff0f6 #ebfbee #fff4e6 #1e1e1e` + `<input type="color">`), 템플릿 버튼(`TemplatePickerDialog` → `buildTemplateElements(key, viewportCenterX-800, viewportCenterY-450)` → `updateScene({ elements:[...current, ...tpl], captureUpdate: IMMEDIATELY })`), 화면 맞춤(`api.scrollToContent(guideEl, { fitToViewport: true })`), 잠금 배지, 접속자 아바타(최대 5 + "+N"), `topBarExtras` 슬롯.
+- [ ] **Step 2:** `WhiteboardTopBar` — 바탕색 버튼(`BackgroundColorPicker`: 프리셋 `#ffffff #fff9db #e7f5ff #f1f3f5 #fff0f6 #ebfbee #fff4e6 #1e1e1e` + `<input type="color">`), 템플릿 버튼(`TemplatePickerDialog` → `buildTemplateElements(key, viewportCenterX-1600, viewportCenterY-900)` → `updateScene({ elements:[...current, ...tpl], captureUpdate: IMMEDIATELY })`), 화면 맞춤(`api.scrollToContent(guideEl, { fitToViewport: true })`), 잠금 배지, 접속자 아바타(최대 5 + "+N"), `topBarExtras` 슬롯.
 - [ ] **Step 3:** `showStartTemplatePicker` 가 true 이고 init 장면이 비어 있으면 오버레이 피커 → 선택 시 `POST apply-template` → `applied:false` 면 조용히 닫기(다른 사람이 먼저 적용).
 - [ ] **Step 4:** `npm run lint`, `npm run build -w @mathchois/client`. (화면 확인은 Task 12 에서.)
 
