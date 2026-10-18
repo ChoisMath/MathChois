@@ -10,6 +10,7 @@ const BoardTab      = lazy(() => import('../../components/board/BoardTab'));
 const AssignmentTab = lazy(() => import('../../components/assignment/AssignmentTab'));
 const ClassroomDashboard = lazy(() => import('../../components/dashboard/ClassroomDashboard'));
 const ClassroomVideoTab  = lazy(() => import('../../components/videos/ClassroomVideoTab'));
+const ClassroomGroupSettings = lazy(() => import('../../components/whiteboard/ClassroomGroupSettings'));
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors,
@@ -647,6 +648,11 @@ const ClassroomDetail = () => {
         {/* ── 학생 탭 ── */}
         {activeTab === 'students' && (
           <div>
+            {isTeacher && members.length > 0 && (
+              <Suspense fallback={<p className="text-gray-400 text-sm mb-4">모둠 설정 로딩 중...</p>}>
+                <ClassroomGroupSettings classroomId={id} members={members} />
+              </Suspense>
+            )}
             {members.length === 0 ? (
               <div className="border-2 border-dashed border-gray-200 rounded-xl h-40 flex flex-col items-center justify-center text-gray-400 text-sm gap-2">
                 <Users className="h-8 w-8" />

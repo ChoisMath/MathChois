@@ -27,6 +27,7 @@ import { dashboardRoutes } from './routes/dashboard.js';
 import { visualizationRoutes } from './routes/visualizations.js';
 import { videoRoutes } from './routes/videos.js';
 import { classroomVideoRoutes } from './routes/classroomVideos.js';
+import { classroomGroupRoutes } from './routes/classroomGroups.js';
 
 export function buildApp() {
   const app = Fastify({
@@ -107,6 +108,7 @@ export function buildApp() {
   app.register(visualizationRoutes);
   app.register(videoRoutes);
   app.register(classroomVideoRoutes);
+  app.register(classroomGroupRoutes);
 
   // ─── Global Error Handler ──────────────────────────
 
