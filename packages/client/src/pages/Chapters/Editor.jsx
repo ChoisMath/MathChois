@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Loader, Upload, Save, X, Video, Play, FileCode2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader, Upload, Save, X, Video, Play, FileCode2, Sparkles, Presentation, LayoutTemplate, ExternalLink } from 'lucide-react';
+import TemplatePickerDialog from '../../components/whiteboard/TemplatePickerDialog';
+import TemplateThumb from '../../components/whiteboard/TemplateThumb';
+import { getTemplate } from '../../lib/whiteboardTemplates';
 import ProblemPickerModal from '../../components/problems/ProblemPickerModal';
 import VisualizationPickerModal from '../../components/visualizations/VisualizationPickerModal';
 import VideoPickerModal from '../../components/videos/VideoPickerModal';
@@ -57,6 +60,10 @@ const ChapterEditor = () => {
   const [youtubeUrl, setYoutubeUrl]             = useState('');
   const [youtubeError, setYoutubeError]         = useState('');
   const [addingVideo, setAddingVideo]           = useState(false);
+
+  /* 화이트보드 */
+  const [addingWhiteboard, setAddingWhiteboard] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
   /* AI 코칭 문항 */
   const [showPicker, setShowPicker]   = useState(false);
@@ -307,6 +314,33 @@ const ChapterEditor = () => {
     setAddingVideo(false);
   };
 
+  const handleAddWhiteboard = async () => {
+    setAddingWhiteboard(true);
+    try {
+      const basePosition = pages.length > 0 ? Math.max(...pages.map((p) => p.position)) + 1 : 0;
+      const newPage = await api.post(`/api/chapters/${id}/pages`, { pageType: 'whiteboard', position: basePosition });
+      invalidatePagesCache(id);
+      await fetchData();
+      if (newPage) setSelectedPage(newPage);
+    } catch (err) {
+      alert(err.message ?? '화이트보드 페이지 추가에 실패했습니다.');
+    }
+    setAddingWhiteboard(false);
+  };
+
+  const handlePickTemplate = async (key) => {
+    setShowTemplatePicker(false);
+    if (!selectedPage) return;
+    try {
+      const updated = await api.patch(`/api/pages/${selectedPage.id}`, { whiteboardTemplate: key });
+      invalidatePagesCache(id);
+      setPages((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
+      setSelectedPage((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
+    } catch (err) {
+      alert(err.message ?? '기본 템플릿 저장에 실패했습니다.');
+    }
+  };
+
   const handlePickProblem = async (problem) => {
     setShowPicker(false);
     try {
@@ -455,6 +489,13 @@ const ChapterEditor = () => {
                 className="flex items-center gap-1 px-3 min-h-11 border rounded-md whitespace-nowrap">
                 <Sparkles size={16} /> AI 코칭
               </button>
+              <button
+                type="button" onClick={handleAddWhiteboard} disabled={uploading || addingWhiteboard}
+                title="화이트보드 페이지 추가 (모둠 공유 보드)"
+                className="inline-flex items-center justify-center p-2 border border-transparent rounded-md shadow-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
+              >
+                {addingWhiteboard ? <Loader className="animate-spin h-5 w-5" /> : <Presentation className="h-5 w-5" />}
+              </button>
             </>
           )}
         </div>
@@ -502,7 +543,46 @@ const ChapterEditor = () => {
         {/* Main — 선택된 페이지 미리보기 */}
         <div className="flex-1 bg-gray-50 rounded-lg shadow overflow-hidden p-4 relative">
           {selectedPage ? (
-            selectedPage.htmlUrl ? (
+            selectedPage.pageType === 'whiteboard' ? (
+              <div className="flex flex-col gap-4 p-3 h-full overflow-y-auto">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Presentation size={18} className="text-indigo-500" />
+                  <span className="font-medium whitespace-nowrap">화이트보드 (모둠 공유 보드)</span>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/teacher/classrooms/${chapter.classroomId}/chapters/${id}/whiteboard/${selectedPage.id}`)}
+                    className="inline-flex items-center gap-1 px-3 min-h-11 border rounded-md text-sm whitespace-nowrap bg-white hover:bg-gray-50 cursor-pointer"
+                  >
+                    <ExternalLink size={16} /> 교사 화면 열기
+                  </button>
+                </div>
+                <div className="bg-white rounded-lg border p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700">기본 템플릿</span>
+                    {!isLinked && (
+                      <button
+                        type="button" onClick={() => setShowTemplatePicker(true)}
+                        className="inline-flex items-center gap-1 px-3 min-h-9 border rounded-md text-sm whitespace-nowrap bg-white hover:bg-gray-50 cursor-pointer"
+                      >
+                        <LayoutTemplate size={16} /> 변경
+                      </button>
+                    )}
+                  </div>
+                  {selectedPage.whiteboardTemplate && getTemplate(selectedPage.whiteboardTemplate) ? (
+                    <div className="max-w-md">
+                      <div className="border rounded overflow-hidden"><TemplateThumb templateKey={selectedPage.whiteboardTemplate} /></div>
+                      <p className="text-sm text-gray-700 mt-2">{getTemplate(selectedPage.whiteboardTemplate).name}</p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">없음 — 학생이 빈 보드를 열 때 템플릿을 직접 고릅니다.</p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-3">
+                    모든 모둠 보드가 이 템플릿으로 시작합니다. 이미 내용이 있는 보드에는 적용되지 않습니다.
+                    모둠 배정·잠금·열람 허용은 교사 화면에서 설정합니다.
+                  </p>
+                </div>
+              </div>
+            ) : selectedPage.htmlUrl ? (
               <iframe
                 src={toolUrl(selectedPage.htmlUrl)}
                 sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
@@ -533,7 +613,7 @@ const ChapterEditor = () => {
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-gray-400">
               <p className="text-lg">페이지를 추가하세요</p>
-              <p className="text-sm mt-1">이미지, YouTube 영상, 영상자료, HTML 도구를 추가할 수 있습니다</p>
+              <p className="text-sm mt-1">이미지, YouTube 영상, 영상자료, HTML 도구, 화이트보드를 추가할 수 있습니다</p>
             </div>
           )}
         </div>
@@ -606,6 +686,17 @@ const ChapterEditor = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── 화이트보드 기본 템플릿 선택 ── */}
+      {showTemplatePicker && (
+        <TemplatePickerDialog
+          title="기본 템플릿 선택"
+          allowNone
+          currentKey={selectedPage?.whiteboardTemplate ?? null}
+          onSelect={handlePickTemplate}
+          onClose={() => setShowTemplatePicker(false)}
+        />
       )}
 
       {/* ── AI 코칭 문항 선택 모달 ── */}
