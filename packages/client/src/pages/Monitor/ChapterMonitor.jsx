@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, PenLine, Users, FileText, Download } from 'lucide-react';
+import { ArrowLeft, PenLine, Users, FileText, Download, Presentation } from 'lucide-react';
 import { api } from '../../lib/api';
 import { joinRoom, leaveRoom, getSocket } from '../../lib/socket';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
@@ -31,7 +31,8 @@ const ChapterMonitor = () => {
   const navigate = useNavigate();
 
   const [chapter, setChapter]         = useState(null);
-  const [pages, setPages]             = useState([]);
+  const [pages, setPages]             = useState([]);            // 필기 페이지 (화이트보드 제외)
+  const [whiteboardPages, setWhiteboardPages] = useState([]);  // 화이트보드 페이지 (모둠 공유 보드)
   const [members, setMembers]         = useState([]);
   const [notesSummary, setNotesSummary] = useState({});
   const [loading, setLoading]         = useState(true);
@@ -56,7 +57,9 @@ const ChapterMonitor = () => {
         ]);
 
         setChapter(chap);
-        setPages(pgs);
+        const all = pgs || [];
+        setPages(all.filter((p) => p.pageType !== 'whiteboard'));
+        setWhiteboardPages(all.map((p, i) => ({ ...p, index: i + 1 })).filter((p) => p.pageType === 'whiteboard'));
         setMembers((summaryData?.members || []).map((m) => ({
           studentId: m.studentId,
           profile: { id: m.studentId, name: m.name, avatarUrl: m.avatarUrl },
@@ -222,8 +225,24 @@ const ChapterMonitor = () => {
         </button>
       </div>
 
+      {/* 화이트보드 페이지 (모둠 공유 보드) */}
+      {whiteboardPages.length > 0 && (
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          <span className="text-sm text-gray-500 inline-flex items-center gap-1"><Presentation className="h-4 w-4 text-indigo-500" /> 화이트보드</span>
+          {whiteboardPages.map((p) => (
+            <button
+              key={p.id} type="button"
+              onClick={() => navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/whiteboard/${p.id}`)}
+              className="px-3 min-h-9 rounded-full border border-indigo-200 bg-indigo-50 text-indigo-800 text-sm hover:bg-indigo-100 cursor-pointer whitespace-nowrap"
+            >
+              {p.index}페이지 보드 열기
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* 페이지 없음 */}
-      {pages.length === 0 && (
+      {pages.length === 0 && whiteboardPages.length === 0 && (
         <div className="text-center py-12 bg-white rounded-lg shadow-sm">
           <FileText className="mx-auto h-12 w-12 text-gray-400" />
           <p className="mt-4 text-gray-500">이 챕터에 페이지가 없습니다.</p>
