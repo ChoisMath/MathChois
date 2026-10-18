@@ -1,7 +1,7 @@
 import { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { eq, and, or, inArray } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { env } from '../config/env.js';
 import { db } from '../config/database.js';
 import { chapters, pages, classrooms, classroomMembers, assignments, assignmentPages, classroomVideos } from '../db/schema.js';
@@ -12,6 +12,9 @@ import { registerCommentHandlers } from './handlers/comments.js';
 import { registerAssignmentHandlers } from './handlers/assignments.js';
 import { registerPresenceHandlers } from './handlers/presence.js';
 import { registerVideoHandlers } from './handlers/videos.js';
+import { registerWhiteboardHandlers, setWhiteboardLogger } from './handlers/whiteboard.js';
+import { getPageRelatedClassroomIds, getPageRelatedTeacherIds } from '../services/pageAccess.service.js';
+import { getBoardAccess } from '../services/whiteboard.service.js';
 
 let io: Server | null = null;
 
@@ -31,30 +34,8 @@ const ROOM_PATTERNS = {
   asnComments:  /^asn-comments:([\w-]+):([\w-]+)$/,
   asnWork:      /^asn-work:([\w-]+):([\w-]+)$/,
   video:        /^video:([\w-]+)$/,
+  whiteboard:   /^wb:([\w-]+)$/,
 };
-
-/** page → source chapter + linked chapters → 관련된 모든 classroomId 조회 */
-async function getPageRelatedClassroomIds(pageId: string): Promise<string[]> {
-  const page = await db.select({ chapterId: pages.chapterId })
-    .from(pages).where(eq(pages.id, pageId)).limit(1);
-  if (!page[0]) return [];
-  const sourceChapterId = page[0].chapterId;
-  // source 챕터 자체 + 이 source를 참조하는 linked 챕터들
-  const allChapters = await db.select({ classroomId: chapters.classroomId })
-    .from(chapters)
-    .where(or(eq(chapters.id, sourceChapterId), eq(chapters.sourceChapterId, sourceChapterId)));
-  return allChapters.map((c) => c.classroomId);
-}
-
-/** page → 관련된 모든 교실의 teacherId 배열 조회 */
-async function getPageRelatedTeacherIds(pageId: string): Promise<string[]> {
-  const classroomIds = await getPageRelatedClassroomIds(pageId);
-  if (classroomIds.length === 0) return [];
-  const rows = await db.select({ teacherId: classrooms.teacherId })
-    .from(classrooms)
-    .where(inArray(classrooms.id, classroomIds));
-  return [...new Set(rows.map((r) => r.teacherId))];
-}
 
 /** room 접근 권한 검증 */
 async function validateRoomAccess(user: TokenPayload, room: string): Promise<boolean> {
@@ -195,6 +176,13 @@ async function validateRoomAccess(user: TokenPayload, room: string): Promise<boo
     return false;
   }
 
+  // wb:{boardId} → 화이트보드 (정식 입장은 wb:join 이벤트 — 여기는 join-room 방어용)
+  m = room.match(ROOM_PATTERNS.whiteboard);
+  if (m) {
+    const access = await getBoardAccess(m[1], user);
+    return !!access?.canRead;
+  }
+
   return false; // 알 수 없는 room 패턴
 }
 
@@ -202,6 +190,7 @@ let log: FastifyBaseLogger;
 
 export function setupSocketIO(httpServer: HttpServer, logger: FastifyBaseLogger): Server {
   log = logger;
+  setWhiteboardLogger(logger);
   io = new Server(httpServer, {
     cors: {
       origin: env.NODE_ENV === 'production' ? false : 'http://localhost:3000',
@@ -272,6 +261,7 @@ export function setupSocketIO(httpServer: HttpServer, logger: FastifyBaseLogger)
     registerAssignmentHandlers(io!, socket, user);
     registerPresenceHandlers(io!, socket, user);
     registerVideoHandlers(io!, socket, user);
+    registerWhiteboardHandlers(io!, socket, user);
   });
 
   return io;

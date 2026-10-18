@@ -23,7 +23,11 @@ export function buildFrameAncestors(): string {
 }
 
 // 학생 업로드 허용 버킷
-const STUDENT_ALLOWED_BUCKETS = new Set(['submission-files', 'ai-coaching']);
+const STUDENT_ALLOWED_BUCKETS = new Set(['submission-files', 'ai-coaching', 'whiteboard-files']);
+
+// 화이트보드 이미지 버킷: 인라인 안전 래스터 이미지만, 2MB 이하 (교사 포함)
+const WHITEBOARD_BUCKET = 'whiteboard-files';
+const WHITEBOARD_MAX_BYTES = 2 * 1024 * 1024;
 
 // HTML 전용 버킷 (text/html 만 허용)
 const HTML_ONLY_BUCKETS = new Set(['chapter-tools', 'visualizations']);
@@ -145,6 +149,16 @@ export async function storageRoutes(app: FastifyInstance) {
       // chapter-tools 버킷은 HTML 파일만 허용
       if (HTML_ONLY_BUCKETS.has(bucket) && file.mimetype !== 'text/html') {
         return reply.status(400).send({ error: 'HTML 도구 버킷에는 .html 파일만 업로드할 수 있습니다.' });
+      }
+
+      // 화이트보드 이미지: 래스터 이미지만, 2MB 이하 (보드 JSON 에는 URL 만 저장)
+      if (bucket === WHITEBOARD_BUCKET) {
+        if (!INLINE_SAFE_IMAGE_RE.test(file.mimetype)) {
+          return reply.status(400).send({ error: '화이트보드에는 PNG/JPEG/GIF/WebP 이미지만 넣을 수 있습니다.' });
+        }
+        if (data.length > WHITEBOARD_MAX_BYTES) {
+          return reply.status(413).send({ error: '이미지는 2MB 이하여야 합니다.' });
+        }
       }
 
       const timestamp = Date.now();
