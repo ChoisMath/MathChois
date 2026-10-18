@@ -99,6 +99,13 @@ Beyond annotation, the teacher sidebar also has shared libraries: **문제은행
 `videos` + per-classroom `classroom_videos` with threaded `video_comments`; see
 `docs/superpowers/specs/2026-10-17-video-library-design.md`).
 
+- **⑥ Whiteboard (모둠 공유 보드)** — a `pages.page_type = 'whiteboard'` page gives every
+  classroom group its own shared Excalidraw board (`whiteboard_groups`, keyed by page + classroom +
+  group). Unlike ①–⑤ it syncs **per element** through `socket/handlers/whiteboard.ts` (room
+  `wb:{boardId}`, server-authoritative in-memory scene, merge rules in `shared/src/whiteboard/merge.ts`).
+  Client: `components/whiteboard/WhiteboardCanvas.jsx`, student `pages/Whiteboard/StudentWhiteboardViewer.jsx`,
+  teacher `pages/Whiteboard/TeacherWhiteboardPage.jsx` (grid / single + settings). Templates (34) in
+  `lib/whiteboardTemplates.js`. Spec: `docs/superpowers/specs/2026-10-18-whiteboard-design.md`.
 - Server handlers: notes ①②④ → `routes/notes.ts`; comments ③⑤ → `routes/comments.ts`.
   DB logic concentrated in `services/note.service.ts`.
 - Socket handlers: `socket/handlers/notes.ts` (①②), `comments.ts` (③), `assignments.ts` (④⑤).
@@ -115,7 +122,9 @@ Beyond annotation, the teacher sidebar also has shared libraries: **문제은행
 ### Data model (Drizzle: `packages/server/src/db/schema.ts`)
 
 Tables: `profiles`, `classrooms`, `classroom_members`, `chapters`, `pages`
-(`imageUrl`/`videoUrl`/**`htmlUrl`**/position), the 5 annotation tables above,
+(`imageUrl`/`videoUrl`/**`htmlUrl`**/`pageType`/`whiteboardTemplate`/position), the 5 annotation tables above,
+`classroom_groups`/`classroom_group_members` (default groups), `whiteboard_page_settings`/
+`whiteboard_groups`/`whiteboard_group_members` (shared boards),
 `posts`/`post_files`/`post_classrooms` (board), `assignments`/`assignment_pages`/
 `assignment_submissions`/`assignment_submission_files`. Migrations via Drizzle Kit;
 additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures the
@@ -129,10 +138,16 @@ additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures th
   `Content-Security-Policy: frame-ancestors` (app origin only) on `text/html` responses
   and strips helmet's `X-Frame-Options` via `reply.raw.removeHeader` (plain
   `reply.removeHeader` does not work on the raw response). See `routes/storage.ts`.
+- **Whiteboard sync is element-level, not document-level.** Never save a whole-scene
+  snapshot from a client for `whiteboard_groups`; apply remote elements with
+  `updateScene({ captureUpdate: CaptureUpdateAction.NEVER })` so they stay out of local undo.
+  Template application goes through `POST /api/whiteboards/groups/:gid/apply-template`, which
+  only succeeds on an empty board (the server never imports Excalidraw). The server keeps board
+  scenes in memory → single-instance deployment assumption.
 - **Pen/eraser input** is custom-handled: `hooks/useExcalidrawTouch.js`,
   `hooks/useScribbleErase.js` (S-Pen barrel button, scribble-to-erase, palm rejection).
 - File storage uses `VOLUME_PATH`; buckets: `chapter-pages`, `chapter-tools` (HTML only),
-  `visualizations` (HTML only), `videos` (teacher-only, uploaded through the streaming route
+  `visualizations` (HTML only), `whiteboard-files` (raster images ≤ 2MB, students allowed), `videos` (teacher-only, uploaded through the streaming route
   `POST /api/videos/upload`, not `/api/files/upload` which buffers whole files in memory),
   `submission-files`, post attachments. Served via `/api/files/*` as a stream with HTTP Range
   support (required for `<video>` seeking).

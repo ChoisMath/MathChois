@@ -156,4 +156,59 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
     )`;
   await pgClient`CREATE UNIQUE INDEX IF NOT EXISTS uq_video_comment_reads_cv_user ON video_comment_reads (classroom_video_id, user_id)`;
   log.info('startup migration: video_progress / video_comment_reads ensured');
+
+  // ─── 화이트보드 (모둠 공유 보드) ───
+  await pgClient`ALTER TABLE pages ADD COLUMN IF NOT EXISTS page_type text`;
+  await pgClient`ALTER TABLE pages ADD COLUMN IF NOT EXISTS whiteboard_template text`;
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS classroom_groups (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      classroom_id uuid NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE,
+      name text NOT NULL,
+      position integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_classroom_groups_classroom ON classroom_groups (classroom_id)`;
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS classroom_group_members (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      classroom_id uuid NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE,
+      group_id uuid NOT NULL REFERENCES classroom_groups(id) ON DELETE CASCADE,
+      student_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE
+    )`;
+  await pgClient`CREATE UNIQUE INDEX IF NOT EXISTS uq_classroom_group_members_classroom_student ON classroom_group_members (classroom_id, student_id)`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_classroom_group_members_group ON classroom_group_members (group_id)`;
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS whiteboard_page_settings (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      page_id uuid NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+      classroom_id uuid NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE,
+      allow_cross_group_view boolean NOT NULL DEFAULT false,
+      locked_all boolean NOT NULL DEFAULT false
+    )`;
+  await pgClient`CREATE UNIQUE INDEX IF NOT EXISTS uq_wb_settings_page_classroom ON whiteboard_page_settings (page_id, classroom_id)`;
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS whiteboard_groups (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      page_id uuid NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+      classroom_id uuid NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE,
+      name text NOT NULL,
+      position integer NOT NULL DEFAULT 0,
+      locked boolean NOT NULL DEFAULT false,
+      background_color text NOT NULL DEFAULT '#ffffff',
+      excalidraw_data jsonb,
+      prev_excalidraw_data jsonb,
+      scene_version integer NOT NULL DEFAULT 0,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_wb_groups_page_classroom ON whiteboard_groups (page_id, classroom_id)`;
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS whiteboard_group_members (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      group_id uuid NOT NULL REFERENCES whiteboard_groups(id) ON DELETE CASCADE,
+      student_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE
+    )`;
+  await pgClient`CREATE UNIQUE INDEX IF NOT EXISTS uq_wb_group_members_group_student ON whiteboard_group_members (group_id, student_id)`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_wb_group_members_student ON whiteboard_group_members (student_id)`;
+  log.info('startup migration: whiteboard tables ensured');
 }

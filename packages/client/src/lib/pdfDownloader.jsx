@@ -108,10 +108,10 @@ export function usePdfDownloader() {
         }
     };
 
-    const downloadMultiplePages = async (docTitle, pageDataList) => {
+    const downloadMultiplePages = async (docTitle, pageDataList, { orientation = 'portrait' } = {}) => {
         setIsDownloading(true);
         try {
-            const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const pdf = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
             const a4Width = pdf.internal.pageSize.getWidth();
             const a4Height = pdf.internal.pageSize.getHeight();
 
@@ -142,7 +142,7 @@ export function usePdfDownloader() {
 
                 const blob = await exportToBlob({
                     elements: finalElements,
-                    appState: { viewBackgroundColor: '#ffffff', exportBackground: true, exportWithDarkMode: false, exportPadding: 0 },
+                    appState: { viewBackgroundColor: pageDataList[i].backgroundColor || '#ffffff', exportBackground: true, exportWithDarkMode: false, exportPadding: 0 },
                     files: finalFiles,
                     maxWidthOrHeight: PDF_MAX_DIMENSION,
                     mimeType: "image/jpeg",

@@ -1,4 +1,5 @@
 import type { ExcalidrawData } from './excalidraw.js';
+import type { WhiteboardFileRef } from './models.js';
 
 // ─── Socket.IO Room 타입 ──────────────────────────
 
@@ -78,3 +79,63 @@ export interface PresenceEntry {
   pageId: string;
   joinedAt: string; // ISO string
 }
+
+// ─── Whiteboard (room `wb:{boardId}`) ───────────────
+
+export interface WbUser {
+  socketId: string;
+  userId: string;
+  name: string;
+  role: 'teacher' | 'student';
+}
+
+export interface WbJoinPayload { boardId: string }
+
+/** 서버 → 발신자: 입장 직후 전체 장면 */
+export interface WbInitPayload {
+  boardId: string;
+  elements: Record<string, unknown>[];
+  files: Record<string, WhiteboardFileRef>;
+  backgroundColor: string;
+  locked: boolean;
+  lockedAll: boolean;
+  /** 이 소켓이 편집할 수 없는지 (권한 또는 잠금) */
+  readOnly: boolean;
+  allowCrossGroupView: boolean;
+  users: WbUser[];
+}
+
+export interface WbElementsPayload { boardId: string; elements: Record<string, unknown>[] }
+
+export interface WbPointerPayload {
+  boardId: string;
+  x: number;
+  y: number;
+  tool: 'pointer' | 'laser';
+  button: 'up' | 'down';
+}
+
+export interface WbPointerBroadcast extends WbPointerPayload, WbUser {}
+
+export interface WbFilesPayload { boardId: string; files: Record<string, WhiteboardFileRef> }
+
+export interface WbBackgroundPayload { boardId: string; color: string }
+
+/** 서버 → room: 전체 장면 교체 (초기화 / 복원 / 템플릿 적용) */
+export interface WbScenePayload {
+  boardId: string;
+  elements: Record<string, unknown>[];
+  files: Record<string, WhiteboardFileRef>;
+  backgroundColor: string;
+  reason: 'reset' | 'restore' | 'template';
+}
+
+export interface WbLockPayload { boardId: string; locked: boolean; lockedAll: boolean }
+
+export interface WbSettingsPayload { pageId: string; classroomId: string; allowCrossGroupView: boolean; lockedAll: boolean }
+
+export interface WbPresencePayload { boardId: string; users: WbUser[] }
+
+export interface WbRejectedPayload { boardId: string; reason: 'locked' | 'forbidden' | 'invalid' }
+
+export interface WbRemovedPayload { boardId: string }

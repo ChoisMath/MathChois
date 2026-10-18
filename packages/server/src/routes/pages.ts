@@ -14,6 +14,9 @@ import {
 import { isLinkedChapter } from '../services/chapter.service.js';
 import { isValidPageVideoUrl, INVALID_VIDEO_URL_MESSAGE } from '../utils/videoUrl.js';
 
+/** 화이트보드 템플릿 key (클라이언트 lib/whiteboardTemplates.js 의 key 형식) */
+const templateKeySchema = z.string().regex(/^[a-z0-9-]+$/).max(40).nullable();
+
 export async function pageRoutes(app: FastifyInstance) {
 
   // ─── GET /api/chapters/:chapterId/pages — 페이지 목록 (linked 챕터는 source 페이지 반환) ──
@@ -58,17 +61,28 @@ export async function pageRoutes(app: FastifyInstance) {
     }
 
     // 단일 삽입
-    const { imageUrl, videoUrl, htmlUrl, aiProblemId, fromVisualizationId, position } = body as {
+    const { imageUrl, videoUrl, htmlUrl, aiProblemId, fromVisualizationId, pageType, whiteboardTemplate, position } = body as {
       imageUrl?: string; videoUrl?: string; htmlUrl?: string; aiProblemId?: string;
-      fromVisualizationId?: string; position?: number;
+      fromVisualizationId?: string; pageType?: string; whiteboardTemplate?: string | null; position?: number;
     };
-    if (!imageUrl && !videoUrl && !htmlUrl && !aiProblemId && !fromVisualizationId) {
-      return reply.status(400).send({ error: 'imageUrl, videoUrl, htmlUrl, aiProblemId, or fromVisualizationId is required' });
+    const isWhiteboard = pageType === 'whiteboard';
+    if (!imageUrl && !videoUrl && !htmlUrl && !aiProblemId && !fromVisualizationId && !isWhiteboard) {
+      return reply.status(400).send({ error: 'imageUrl, videoUrl, htmlUrl, aiProblemId, fromVisualizationId, or pageType=whiteboard is required' });
+    }
+    if (pageType != null && !isWhiteboard) {
+      return reply.status(400).send({ error: 'Unknown pageType' });
+    }
+    if (isWhiteboard && !templateKeySchema.safeParse(whiteboardTemplate ?? null).success) {
+      return reply.status(400).send({ error: 'Invalid whiteboardTemplate' });
     }
     if (videoUrl != null && !isValidPageVideoUrl(videoUrl)) {
       return reply.status(400).send({ error: INVALID_VIDEO_URL_MESSAGE });
     }
-    const page = await createPage({ chapterId, imageUrl, videoUrl, htmlUrl, aiProblemId, fromVisualizationId, position });
+    const page = await createPage({
+      chapterId, imageUrl, videoUrl, htmlUrl, aiProblemId, fromVisualizationId, position,
+      pageType: isWhiteboard ? 'whiteboard' : null,
+      whiteboardTemplate: isWhiteboard ? (whiteboardTemplate ?? null) : null,
+    });
     return reply.status(201).send(page);
   });
 
@@ -85,12 +99,21 @@ export async function pageRoutes(app: FastifyInstance) {
     return deleted;
   });
 
-  // ─── PATCH /api/pages/:id — 페이지 수정 (AI 문항 연결 변경) ──
-  app.patch<{ Params: { id: string }; Body: { aiProblemId?: string | null } }>('/api/pages/:id', {
+  // ─── PATCH /api/pages/:id — 페이지 수정 (AI 문항 연결 / 화이트보드 기본 템플릿) ──
+  app.patch<{ Params: { id: string }; Body: { aiProblemId?: string | null; whiteboardTemplate?: string | null } }>('/api/pages/:id', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
-    const { aiProblemId } = z.object({ aiProblemId: z.string().uuid().nullable().optional() }).parse(request.body);
-    const updated = await updatePage(request.params.id, { aiProblemId: aiProblemId ?? null });
+    const parsed = z.object({
+      aiProblemId: z.string().uuid().nullable().optional(),
+      whiteboardTemplate: templateKeySchema.optional(),
+    }).safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Invalid body' });
+    const { aiProblemId, whiteboardTemplate } = parsed.data;
+    const patch: { aiProblemId?: string | null; whiteboardTemplate?: string | null } = {};
+    if (aiProblemId !== undefined) patch.aiProblemId = aiProblemId ?? null;
+    if (whiteboardTemplate !== undefined) patch.whiteboardTemplate = whiteboardTemplate;
+    if (Object.keys(patch).length === 0) return reply.status(400).send({ error: 'Nothing to update' });
+    const updated = await updatePage(request.params.id, patch);
     if (!updated) return reply.status(404).send({ error: 'Page not found' });
     return updated;
   });

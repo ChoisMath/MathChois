@@ -26,6 +26,9 @@ export interface Chapter {
   sourceChapterId?: string | null;
 }
 
+/** 페이지 종류. null = 기존 이미지/영상/HTML/AI 문항 페이지(URL 필드로 판별) */
+export type PageType = 'whiteboard';
+
 export interface Page {
   id: string;
   chapterId: string;
@@ -34,6 +37,75 @@ export interface Page {
   htmlUrl: string | null;
   position: number;
   aiProblemId: string | null;
+  pageType: PageType | null;
+  /** 화이트보드 기본 템플릿 key (null = 학생이 선택) */
+  whiteboardTemplate: string | null;
+}
+
+// ─── Whiteboard (모둠 공유 보드) ─────────────────────
+
+/** 학급 기본 모둠 */
+export interface ClassroomGroup {
+  id: string;
+  classroomId: string;
+  name: string;
+  position: number;
+  studentIds: string[];
+}
+
+/** 보드에 삽입된 이미지 파일 참조 (dataURL 은 저장하지 않고 URL 만) */
+export interface WhiteboardFileRef {
+  id: string;
+  url: string;
+  mimeType: string;
+}
+
+/** whiteboard_groups.excalidraw_data JSONB */
+export interface WhiteboardSceneData {
+  elements: Record<string, unknown>[];
+  files: Record<string, WhiteboardFileRef>;
+}
+
+export interface WhiteboardMember {
+  studentId: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
+/** 페이지 × 학급 × 모둠 = 보드 1개 (장면 데이터는 포함하지 않음) */
+export interface WhiteboardGroup {
+  id: string;
+  pageId: string;
+  classroomId: string;
+  name: string;
+  position: number;
+  locked: boolean;
+  backgroundColor: string;
+  sceneVersion: number;
+  elementCount: number;
+  hasPrevious: boolean;
+  updatedAt: string | null;
+  members: WhiteboardMember[];
+}
+
+export interface WhiteboardPageSettings {
+  allowCrossGroupView: boolean;
+  lockedAll: boolean;
+}
+
+/** GET /api/whiteboards/page/:pageId 응답 */
+export interface WhiteboardPageView {
+  pageId: string;
+  classroomId: string;
+  templateKey: string | null;
+  /** 원본 챕터의 페이지를 소유한 교사인지 (기본 템플릿 변경 권한) */
+  isSourceChapter: boolean;
+  settings: WhiteboardPageSettings;
+  groups: WhiteboardGroup[];
+  /** 학생: 자신이 속한 모둠(보드) id */
+  myGroupId: string | null;
+  /** 교사: 어느 모둠에도 없는 학급 구성원 */
+  unassigned: WhiteboardMember[];
 }
 
 // ─── Notes & Comments ───────────────────────────────

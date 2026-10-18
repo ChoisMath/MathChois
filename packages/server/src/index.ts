@@ -1,6 +1,7 @@
 import { buildApp } from './app.js';
 import { env } from './config/env.js';
 import { setupSocketIO } from './socket/index.js';
+import { flushAllWhiteboards } from './socket/handlers/whiteboard.js';
 import { pgClient } from './config/database.js';
 import { runStartupMigrations } from './db/startupMigrate.js';
 
@@ -18,6 +19,8 @@ async function main() {
   // Graceful shutdown
   const shutdown = async () => {
     console.log('Shutting down gracefully...');
+    // 화이트보드 메모리 장면을 먼저 저장 (최대 2~10초 손실 방지)
+    await flushAllWhiteboards().catch((err) => console.error('whiteboard flush failed', err));
     await app.close();
     await pgClient.end();
     process.exit(0);
