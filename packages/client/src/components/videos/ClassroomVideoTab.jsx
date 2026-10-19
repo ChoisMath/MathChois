@@ -18,6 +18,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSortOrder } from '../../hooks/useSortOrder';
 import { sortItems, isManualOrder } from '../../lib/sortOrder';
 import { api } from '../../lib/api';
+import { CARD_GRID } from '../../lib/layout';
 
 /** 연결된 필기 챕터 칩 (교사·학생 공통) */
 function ChapterChip({ chapter }) {
@@ -303,7 +304,7 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={sortedItems.map((x) => x.id)} strategy={rectSortingStrategy}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className={CARD_GRID}>
               {sortedItems.map((cv) => (
                 <VideoCard key={cv.id} cv={cv} isTeacher={isTeacher} sortable={canReorder} progress={progressMap[cv.id]} unread={unreadMap[cv.id] ?? 0}
                   chapters={chapters}

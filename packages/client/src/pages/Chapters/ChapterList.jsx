@@ -76,7 +76,7 @@ const ChapterList = () => {
   if (loading) return <p className="text-gray-500">로딩 중...</p>;
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="w-full">
       <div className="flex items-center gap-3 mb-6">
         <Link to={`/teacher/classrooms/${classroomId}`} className="text-gray-400 hover:text-gray-600">
           <ArrowLeft className="h-5 w-5" />

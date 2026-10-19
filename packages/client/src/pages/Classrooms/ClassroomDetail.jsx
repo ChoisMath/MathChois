@@ -29,6 +29,7 @@ import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 import SortOrderSelect from '../../components/common/SortOrderSelect';
 import { useSortOrder } from '../../hooks/useSortOrder';
 import { sortItems, isManualOrder } from '../../lib/sortOrder';
+import { CARD_GRID } from '../../lib/layout';
 
 /* ─── 정렬 가능한 챕터 카드 ─── */
 function SortableChapterCard({ ch, isTeacher, sortable = isTeacher, onDelete, onCardClick, onDownloadPdf, downloadingId }) {
@@ -439,7 +440,7 @@ const ClassroomDetail = () => {
 
   return (
     <>
-      <div className="max-w-5xl mx-auto space-y-6">
+      <div className="w-full space-y-6">
 
         {/* ── 헤더 ── */}
         <div className="flex items-start justify-between gap-4">
@@ -607,7 +608,7 @@ const ClassroomDetail = () => {
                 items={sortedChapters.map((c) => c.id)}
                 strategy={rectSortingStrategy}
               >
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className={CARD_GRID}>
                   {sortedChapters.map((ch) => (
                     <SortableChapterCard
                       key={ch.id}
@@ -622,7 +623,7 @@ const ClassroomDetail = () => {
               </SortableContext>
             </DndContext>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className={CARD_GRID}>
               {sortedChapters.map((ch) => (
                 <SortableChapterCard
                   key={ch.id}

@@ -38,11 +38,11 @@ packages/
 │       │   ├── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay, HtmlToolOverlay
 │       │   └── whiteboard/     # WhiteboardCanvas(Excalidraw 기본 UI + 협업), WhiteboardTopBar, BackgroundColorPicker, TemplatePickerDialog, TemplateThumb(SVG 미리보기),
 │       │                       #   WhiteboardTile(격자 정적 썸네일), WhiteboardSettingsDrawer(교사 설정), GroupAssignmentPanel, ClassroomGroupSettings(학급 학생 탭 모둠 설정)
-│       ├── layouts/            # MainLayout(public), DashboardLayout(인증)
+│       ├── layouts/            # MainLayout(public), DashboardLayout(인증 — 데스크톱 ≥1024px 고정 사이드바(햄버거로 접기, `mc_sidebar_collapsed`), 그 아래는 오버레이; 본문 유동 폭 p-4/6/8)
 │       ├── pages/              # Home, Login, Classrooms, Chapters, Study, Monitor,
 │       │                       #   Assignment, Board, Admin, Problems(문제은행), Visualizations(시각화자료), Videos(영상자료 VideosPage + 학급 시청 ClassroomVideoWatch + 영상 2분할 필기 ClassroomVideoSplit), History(코칭기록),
 │       │                       #   Whiteboard(StudentWhiteboardViewer 학생 모둠 보드, TeacherWhiteboardPage 교사 격자/단일 + 설정) 등
-│       ├── hooks/              # useSortOrder(목록 정렬 순서 — 사용자별 localStorage), useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
+│       ├── hooks/              # useMediaQuery(matchMedia 구독), useSortOrder(목록 정렬 순서 — 사용자별 localStorage), useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
 │       │                       #   useScribbleErase(문지르기 지우개), useFreedrawSmoothing, usePenDiagnostics,
 │       │                       #   useWetInk(웻잉크 오버레이 — 펜 라이브 렌더), useOrientation(세로 화면 → 위/아래 분할),
 │       │                       #   useWhiteboardCollab(보드 1개 소켓 협업 — 변경 요소 100ms 스로틀 전송/포인터/파일), useWhiteboardGrid(교사 격자 — 소켓 하나로 N 보드 장면 유지)
@@ -60,6 +60,7 @@ packages/
 │                               #   swUpdate.js(PWA SW 자동 업데이트 — setupSwAutoUpdate),
 │                               #   linkify.js(게시판 본문 plain text의 URL → 자동 하이퍼링크 세그먼트),
 │                               #   sortOrder.js(학급 상세 [챕터]·[영상] 탭 정렬 — 최신순/등록순/교사 지정순, sortItems + localStorage 저장),
+│                               #   layout.js(CARD_GRID 카드 목록 반응형 열 규칙 1/2/3/4/5열 · DESKTOP_MEDIA_QUERY · SIDEBAR_COLLAPSED_KEY),
 │                               #   groupAssign.js(모둠 자동 배분/이동), whiteboardTemplates.js(템플릿 34종 skeleton, 3200×1800), whiteboardTemplateBuild.js(convertToExcalidrawElements + groupId),
 │                               #   whiteboardExport.js(발표 영역 안내선·범위 계산, 순수), whiteboardExportBrowser.js(썸네일/PNG/PDF — Excalidraw import), whiteboardImage.js(축소 업로드·파일 ref↔dataURL·커서 색) (*.test.js = Vitest)
 └── shared/src/

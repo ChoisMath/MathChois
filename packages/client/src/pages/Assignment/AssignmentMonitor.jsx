@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { CARD_GRID } from '../../lib/layout';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Users, Clock, Download, Paperclip } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -119,7 +120,7 @@ const AssignmentMonitor = () => {
   const graded      = Object.values(submissions).filter((s) => s.status === 'graded').length;
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="w-full">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
@@ -151,7 +152,7 @@ const AssignmentMonitor = () => {
           <p className="mt-4 text-gray-500">이 클래스룸에 학생이 없습니다.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className={CARD_GRID}>
           {members.map((m) => {
             const profile = m.student;
             const sub = submissions[m.studentId] || null;

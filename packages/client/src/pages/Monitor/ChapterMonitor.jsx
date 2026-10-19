@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { CARD_GRID } from '../../lib/layout';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, PenLine, Users, FileText, Download, Presentation } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -199,7 +200,7 @@ const ChapterMonitor = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="w-full">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
@@ -260,7 +261,7 @@ const ChapterMonitor = () => {
 
       {/* 학생 카드 그리드 */}
       {pages.length > 0 && members.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className={CARD_GRID}>
           {members.map((m) => {
             const profile = m.profile;
             const summary = notesSummary[m.studentId] || { pagesWithNotes: new Set(), updatedAt: null };

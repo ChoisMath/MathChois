@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { BookOpen, LogOut, Menu, Shield, Pencil, Check, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-const Navbar = ({ onToggleSidebar }) => {
+const Navbar = ({ onToggleSidebar, sidebarOpen = false }) => {
   const { profile, isAuthenticated, signOut, updateName } = useAuth();
   const navigate = useNavigate();
   const [editingName, setEditingName] = useState(false);
@@ -35,14 +35,16 @@ const Navbar = ({ onToggleSidebar }) => {
 
   return (
     <nav className="bg-white shadow-sm border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* 전폭 네비게이션 — 햄버거가 항상 화면 왼쪽 끝에 붙는다 (가운데 정렬 max-w 없음) */}
+      <div className="w-full pl-1 pr-3 sm:pl-2 sm:pr-4">
         <div className="flex justify-between h-16">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             {onToggleSidebar && (
               <button
                 onClick={onToggleSidebar}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors cursor-pointer"
-                aria-label="메뉴 열기"
+                className="p-2.5 min-w-11 min-h-11 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors cursor-pointer"
+                aria-label={sidebarOpen ? '메뉴 닫기' : '메뉴 열기'}
+                aria-expanded={sidebarOpen}
               >
                 <Menu className="h-5 w-5" />
               </button>
