@@ -9,6 +9,11 @@ export const SEEK_STEPS = [10, 20, 30, 60];
 export const PLAYBACK_RATES = [0.7, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5];
 export const VOLUME_STEP = 0.05;
 
+/** 세로 드래그 밝기 조절 범위(CSS filter: brightness) — 1 이 원본 */
+export const BRIGHTNESS_MIN = 0.2;
+export const BRIGHTNESS_MAX = 1.5;
+export const BRIGHTNESS_DEFAULT = 1;
+
 export const DEFAULT_SETTINGS = Object.freeze({
   seekStep: 10,
   playbackRate: 1.0,
@@ -114,6 +119,45 @@ export function saveResumePosition(key, currentTime, duration) {
     if (t < 3 || (d > 0 && d - t < 5)) ls.removeItem(POS_PREFIX + key);
     else ls.setItem(POS_PREFIX + key, String(Math.floor(t)));
   } catch { /* 무시 */ }
+}
+
+// ─── 길게 누른 뒤 드래그 제스처 ──────────────────────
+
+/** 드래그 방향이 확정되기 전까지 무시할 이동 거리(px) */
+export const GESTURE_AXIS_THRESHOLD = 8;
+
+/**
+ * 길게 누른 뒤의 첫 이동으로 제스처 축을 정한다.
+ * 임계값 미만이면 null(아직 미정), 가로가 세로 이상이면 'x'(시간 이동), 아니면 'y'(볼륨/밝기).
+ */
+export function decideGestureAxis(dx, dy, threshold = GESTURE_AXIS_THRESHOLD) {
+  const ax = Math.abs(Number(dx) || 0);
+  const ay = Math.abs(Number(dy) || 0);
+  if (Math.hypot(ax, ay) < threshold) return null;
+  return ax >= ay ? 'x' : 'y';
+}
+
+/**
+ * 세로 드래그가 시작된 위치가 화면의 어느 절반인지로 조절 대상을 정한다.
+ * 왼쪽 절반 → 'brightness', 오른쪽 절반(정중앙 포함) → 'volume'.
+ */
+export function verticalGestureKind(x, left, width) {
+  const w = Number(width) || 0;
+  if (w <= 0) return 'volume';
+  return (Number(x) || 0) - (Number(left) || 0) < w / 2 ? 'brightness' : 'volume';
+}
+
+/**
+ * 세로 드래그 거리 → 조절값. 위로 끌면(dy < 0) 커지고, 화면 높이만큼 끌면 (max - min) 전체가 바뀐다.
+ * 결과는 1% 단위로 반올림해 [min, max] 로 묶는다.
+ */
+export function dragToLevel(start, dy, height, min, max) {
+  const h = Number(height) || 0;
+  const span = max - min;
+  const base = clamp(Number(start) || 0, min, max);
+  if (h <= 0 || span <= 0) return base;
+  const next = base + (-(Number(dy) || 0) / h) * span;
+  return clamp(Math.round(next * 100) / 100, min, max);
 }
 
 /** 키보드 단축키를 무시해야 하는 타깃(입력 중)인지 */
