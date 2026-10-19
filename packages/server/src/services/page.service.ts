@@ -38,6 +38,8 @@ export async function createPage(data: {
   htmlUrl?: string | null;
   aiProblemId?: string | null;
   fromVisualizationId?: string | null;
+  pageType?: 'whiteboard' | null;
+  whiteboardTemplate?: string | null;
   position?: number;
 }) {
   let htmlUrl = data.htmlUrl ?? null;
@@ -71,6 +73,8 @@ export async function createPage(data: {
         videoUrl: data.videoUrl ?? null,
         htmlUrl: htmlUrl ?? null,
         aiProblemId: data.aiProblemId ?? null,
+        pageType: data.pageType ?? null,
+        whiteboardTemplate: data.pageType === 'whiteboard' ? (data.whiteboardTemplate ?? null) : null,
         position,
       })
       .returning();
@@ -85,8 +89,8 @@ export async function createPage(data: {
   }
 }
 
-/** 페이지 부분 수정 (현재는 aiProblemId 변경용) */
-export async function updatePage(id: string, patch: { aiProblemId?: string | null }) {
+/** 페이지 부분 수정 (aiProblemId / 화이트보드 기본 템플릿) */
+export async function updatePage(id: string, patch: { aiProblemId?: string | null; whiteboardTemplate?: string | null }) {
   const [row] = await db.update(pages).set(patch).where(eq(pages.id, id)).returning();
   return row ?? null;
 }

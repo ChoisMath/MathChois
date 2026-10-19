@@ -87,8 +87,17 @@ export async function classroomVideoRoutes(app: FastifyInstance) {
   app.patch<{ Params: { id: string } }>('/api/classroom-videos/:id', teacher, async (req, reply) => {
     const cv = await loadClassroomVideoOr404(req, reply, req.params.id);
     if (!cv) return;
-    const body = z.object({ note: z.string().nullable().optional() }).parse(req.body);
-    return svc.updateClassroomVideo(cv.id, { note: body.note ?? null });
+    const body = z.object({
+      note: z.string().nullable().optional(),
+      chapterId: z.string().uuid().nullable().optional(),
+    }).parse(req.body);
+    if (body.chapterId && !(await svc.isChapterInClassroom(body.chapterId, cv.classroomId))) {
+      return reply.status(400).send({ error: '이 학급의 챕터가 아닙니다.' });
+    }
+    const patch: svc.ClassroomVideoPatch = {};
+    if ('note' in body) patch.note = body.note ?? null;
+    if ('chapterId' in body) patch.chapterId = body.chapterId ?? null;
+    return svc.updateClassroomVideo(cv.id, patch);
   });
 
   app.delete<{ Params: { id: string } }>('/api/classroom-videos/:id', teacher, async (req, reply) => {
@@ -110,6 +119,11 @@ export async function classroomVideoRoutes(app: FastifyInstance) {
     const cv = await loadClassroomVideoOr404(req, reply, req.params.id);
     if (!cv) return;
     const body = progressBody.parse(req.body);
+    // 라이브러리 영상의 길이가 비어 있으면(등록 시 측정 실패 — 예: 브라우저가 못 여는 mov) 플레이어가 읽은 길이로 보강.
+    // 길이가 있어야 학생 시청률 바·교사 % 표시·완료 판정이 가능하다.
+    if (cv.video.durationSec == null && body.durationSec && body.durationSec > 0) {
+      await svc.backfillVideoDuration(cv.videoId, body.durationSec);
+    }
     return svc.upsertProgress(cv.id, req.user.sub, body);
   });
 

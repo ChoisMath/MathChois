@@ -1,6 +1,6 @@
 import { eq, and, asc, desc, sql, inArray, isNull } from 'drizzle-orm';
 import { db } from '../config/database.js';
-import { classroomVideos, videos, videoComments, classrooms, profiles, classroomMembers, videoProgress, videoCommentReads } from '../db/schema.js';
+import { classroomVideos, videos, videoComments, classrooms, chapters, profiles, classroomMembers, videoProgress, videoCommentReads } from '../db/schema.js';
 
 // ─── 학급 배정 ───────────────────────────────────────
 
@@ -27,9 +27,12 @@ const classroomVideoSelect = {
   videoId: classroomVideos.videoId,
   addedBy: classroomVideos.addedBy,
   note: classroomVideos.note,
+  chapterId: classroomVideos.chapterId,
   position: classroomVideos.position,
   createdAt: classroomVideos.createdAt,
   video: videoSelect,
+  // 필기 챕터(left join) — 연결이 없거나 챕터가 삭제되면 null
+  chapter: { id: chapters.id, title: chapters.title },
   // 루트 댓글 수(대댓글 제외). 비공개 스레드도 포함한 총수 — 카드 배지 용도.
   commentCount: sql<number>`(
     SELECT count(*)::int FROM video_comments vc
@@ -41,6 +44,7 @@ export async function listClassroomVideos(classroomId: string) {
   return db.select(classroomVideoSelect)
     .from(classroomVideos)
     .innerJoin(videos, eq(classroomVideos.videoId, videos.id))
+    .leftJoin(chapters, eq(classroomVideos.chapterId, chapters.id))
     .where(eq(classroomVideos.classroomId, classroomId))
     .orderBy(asc(classroomVideos.position), asc(classroomVideos.createdAt));
 }
@@ -49,6 +53,7 @@ export async function getClassroomVideoById(id: string) {
   const rows = await db.select(classroomVideoSelect)
     .from(classroomVideos)
     .innerJoin(videos, eq(classroomVideos.videoId, videos.id))
+    .leftJoin(chapters, eq(classroomVideos.chapterId, chapters.id))
     .where(eq(classroomVideos.id, id))
     .limit(1);
   return rows[0] ?? null;
@@ -89,9 +94,25 @@ export async function addClassroomVideo(classroomId: string, videoId: string, ad
   }
 }
 
-export async function updateClassroomVideo(id: string, patch: { note?: string | null }) {
-  await db.update(classroomVideos).set(patch).where(eq(classroomVideos.id, id));
+export type ClassroomVideoPatch = { note?: string | null; chapterId?: string | null };
+
+/** 전달된 키만 갱신한다(note 만 보내면 chapterId 는 유지). */
+export async function updateClassroomVideo(id: string, patch: ClassroomVideoPatch) {
+  const set: Partial<typeof classroomVideos.$inferInsert> = {};
+  if ('note' in patch) set.note = patch.note ?? null;
+  if ('chapterId' in patch) set.chapterId = patch.chapterId ?? null;
+  if (Object.keys(set).length > 0) {
+    await db.update(classroomVideos).set(set).where(eq(classroomVideos.id, id));
+  }
   return getClassroomVideoById(id);
+}
+
+/** chapterId 가 해당 학급의 챕터인지 — 다른 학급 챕터를 필기 챕터로 연결하는 것을 막는다. */
+export async function isChapterInClassroom(chapterId: string, classroomId: string) {
+  const [row] = await db.select({ id: chapters.id }).from(chapters)
+    .where(and(eq(chapters.id, chapterId), eq(chapters.classroomId, classroomId)))
+    .limit(1);
+  return !!row;
 }
 
 export async function reorderClassroomVideos(classroomId: string, ids: string[]) {
@@ -199,12 +220,12 @@ export async function removeComment(id: string) {
 
 // ─── 시청 기록 (video_progress) ──────────────────────
 
-/** 완료 판정 비율: 최대 도달 위치가 길이의 90% 이상이면 완료 */
-export const PROGRESS_COMPLETE_RATIO = 0.9;
+/** 완료 판정 비율: 최대 도달 위치가 길이의 80% 이상이면 학습 완료(교사 요청: 끝 인사 등을 건너뛰어도 완료로 인정) */
+export const PROGRESS_COMPLETE_RATIO = 0.8;
 
 function toProgressRow(r: {
   classroomVideoId: string; studentId: string; positionSec: number; maxPositionSec: number;
-  completed: boolean; updatedAt: Date;
+  completed: boolean; updatedAt: Date | string | null;
 }) {
   return {
     classroomVideoId: r.classroomVideoId,
@@ -212,7 +233,7 @@ function toProgressRow(r: {
     positionSec: r.positionSec,
     maxPositionSec: r.maxPositionSec,
     completed: r.completed,
-    updatedAt: r.updatedAt.toISOString(),
+    updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : (r.updatedAt ?? new Date().toISOString()),
   };
 }
 
@@ -227,7 +248,7 @@ export function progressPercent(maxPositionSec: number, durationSec: number | nu
  * 학생 시청 위치 upsert (classroomVideoId, studentId 유니크).
  * - positionSec: 현재 위치(그대로 덮어씀)
  * - maxPositionSec: 기존값과 새 값 중 큰 값
- * - completed: durationSec>0 이고 maxPositionSec >= 90% 면 true. 한 번 true 가 되면 유지.
+ * - completed: durationSec>0 이고 maxPositionSec >= 80%(PROGRESS_COMPLETE_RATIO) 면 true. 한 번 true 가 되면 유지.
  */
 export async function upsertProgress(
   classroomVideoId: string,
@@ -237,26 +258,41 @@ export async function upsertProgress(
   const positionSec = Math.max(0, Math.floor(input.positionSec));
   const durationSec = input.durationSec != null && input.durationSec > 0 ? Math.floor(input.durationSec) : 0;
   const threshold = durationSec > 0 ? durationSec * PROGRESS_COMPLETE_RATIO : null;
-  const insertCompleted = threshold != null && positionSec >= threshold;
 
-  const maxExpr = sql`GREATEST(${videoProgress.maxPositionSec}, ${positionSec})`;
-  const completedExpr = threshold != null
-    ? sql`(${videoProgress.completed} OR ${maxExpr} >= ${threshold})`
-    : sql`${videoProgress.completed}`;
+  // ON CONFLICT 에 의존하지 않는 단순 upsert(조회 → 갱신/삽입).
+  // 운영 DB 의 인덱스 상태와 무관하게 동작하고, 실패 시 DB 오류 문구를 사용자 메시지로 노출해 진단할 수 있게 한다.
+  try {
+    const existing = await getProgress(classroomVideoId, studentId);
+    if (existing) {
+      const maxPositionSec = Math.max(existing.maxPositionSec, positionSec);
+      const completed = existing.completed || (threshold != null && maxPositionSec >= threshold);
+      const [row] = await db.update(videoProgress)
+        .set({ positionSec, maxPositionSec, completed, updatedAt: new Date() })
+        .where(and(eq(videoProgress.classroomVideoId, classroomVideoId), eq(videoProgress.studentId, studentId)))
+        .returning();
+      return toProgressRow(row ?? { classroomVideoId, studentId, positionSec, maxPositionSec, completed, updatedAt: new Date() });
+    }
+    const completed = threshold != null && positionSec >= threshold;
+    const [row] = await db.insert(videoProgress)
+      .values({ classroomVideoId, studentId, positionSec, maxPositionSec: positionSec, completed })
+      .returning();
+    return toProgressRow(row ?? { classroomVideoId, studentId, positionSec, maxPositionSec: positionSec, completed, updatedAt: new Date() });
+  } catch (err: unknown) {
+    // drizzle 0.45 는 DB 오류를 DrizzleQueryError 로 감싸므로 cause 의 메시지를 우선 노출
+    const e = err as { message?: string; cause?: { message?: string; code?: string } };
+    const detail = e.cause?.message ?? e.message ?? String(err);
+    throw Object.assign(new Error(`video_progress upsert failed: ${detail}`), {
+      statusCode: 500,
+      publicMessage: `시청 기록 저장 오류: ${detail}`,
+    });
+  }
+}
 
-  const [row] = await db.insert(videoProgress)
-    .values({ classroomVideoId, studentId, positionSec, maxPositionSec: positionSec, completed: insertCompleted })
-    .onConflictDoUpdate({
-      target: [videoProgress.classroomVideoId, videoProgress.studentId],
-      set: {
-        positionSec,
-        maxPositionSec: maxExpr,
-        completed: completedExpr,
-        updatedAt: sql`now()`,
-      },
-    })
-    .returning();
-  return toProgressRow(row);
+/** videos.durationSec 이 비어 있을 때만 채운다(이미 값이 있으면 건드리지 않음). */
+export async function backfillVideoDuration(videoId: string, durationSec: number) {
+  await db.update(videos)
+    .set({ durationSec: Math.floor(durationSec), updatedAt: new Date() })
+    .where(and(eq(videos.id, videoId), isNull(videos.durationSec)));
 }
 
 export async function getProgress(classroomVideoId: string, studentId: string) {

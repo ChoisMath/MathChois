@@ -1,7 +1,7 @@
 import {
   pgTable, uuid, text, timestamp, integer, bigint, jsonb, unique, boolean, index, primaryKey,
 } from 'drizzle-orm/pg-core';
-import type { ExcalidrawData, ProblemFigure } from '@mathchois/shared';
+import type { ExcalidrawData, ProblemFigure, WhiteboardSceneData } from '@mathchois/shared';
 
 // ─── profiles ───────────────────────────────────────
 
@@ -67,6 +67,10 @@ export const pages = pgTable('pages', {
   htmlUrl: text('html_url'),
   position: integer('position').notNull().default(0),
   aiProblemId: uuid('ai_problem_id').references(() => problems.id, { onDelete: 'set null' }),
+  /** 'whiteboard' | null — null 이면 URL 필드로 종류 판별 */
+  pageType: text('page_type'),
+  /** 화이트보드 기본 템플릿 key (null = 학생 선택) */
+  whiteboardTemplate: text('whiteboard_template'),
 }, (t) => [
   index('idx_pages_chapter').on(t.chapterId),
 ]);
@@ -358,12 +362,15 @@ export const classroomVideos = pgTable('classroom_videos', {
   videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'restrict' }),
   addedBy: uuid('added_by').references(() => profiles.id, { onDelete: 'set null' }),
   note: text('note'),
+  // 필기 챕터: 학생이 영상 2분할 화면에서 옆에 놓고 필기할 같은 학급의 챕터(교사 설정). 챕터 삭제 시 연결만 해제.
+  chapterId: uuid('chapter_id').references(() => chapters.id, { onDelete: 'set null' }),
   position: integer('position').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
   unique('uq_classroom_videos_classroom_video').on(t.classroomId, t.videoId),
   index('idx_classroom_videos_classroom').on(t.classroomId, t.position),
   index('idx_classroom_videos_video').on(t.videoId),
+  index('idx_classroom_videos_chapter').on(t.chapterId),
 ]);
 
 // ─── video_comments (학급 영상 댓글/대댓글) ─────────
@@ -412,4 +419,67 @@ export const videoCommentReads = pgTable('video_comment_reads', {
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
   unique('uq_video_comment_reads_cv_user').on(t.classroomVideoId, t.userId),
+]);
+
+// ─── classroom_groups (학급 기본 모둠) ──────────────
+
+export const classroomGroups = pgTable('classroom_groups', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  classroomId: uuid('classroom_id').notNull().references(() => classrooms.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  position: integer('position').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  index('idx_classroom_groups_classroom').on(t.classroomId),
+]);
+
+export const classroomGroupMembers = pgTable('classroom_group_members', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  classroomId: uuid('classroom_id').notNull().references(() => classrooms.id, { onDelete: 'cascade' }),
+  groupId: uuid('group_id').notNull().references(() => classroomGroups.id, { onDelete: 'cascade' }),
+  studentId: uuid('student_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+}, (t) => [
+  // 학생은 학급당 한 모둠
+  unique('uq_classroom_group_members_classroom_student').on(t.classroomId, t.studentId),
+  index('idx_classroom_group_members_group').on(t.groupId),
+]);
+
+// ─── whiteboard_page_settings (페이지 × 학급 설정) ──
+
+export const whiteboardPageSettings = pgTable('whiteboard_page_settings', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  pageId: uuid('page_id').notNull().references(() => pages.id, { onDelete: 'cascade' }),
+  classroomId: uuid('classroom_id').notNull().references(() => classrooms.id, { onDelete: 'cascade' }),
+  allowCrossGroupView: boolean('allow_cross_group_view').notNull().default(false),
+  lockedAll: boolean('locked_all').notNull().default(false),
+}, (t) => [
+  unique('uq_wb_settings_page_classroom').on(t.pageId, t.classroomId),
+]);
+
+// ─── whiteboard_groups (페이지 × 학급 × 모둠 = 보드 1개) ──
+
+export const whiteboardGroups = pgTable('whiteboard_groups', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  pageId: uuid('page_id').notNull().references(() => pages.id, { onDelete: 'cascade' }),
+  classroomId: uuid('classroom_id').notNull().references(() => classrooms.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  position: integer('position').notNull().default(0),
+  locked: boolean('locked').notNull().default(false),
+  backgroundColor: text('background_color').notNull().default('#ffffff'),
+  excalidrawData: jsonb('excalidraw_data').$type<WhiteboardSceneData>(),
+  /** 직전 저장본 (되돌리기용) */
+  prevExcalidrawData: jsonb('prev_excalidraw_data').$type<WhiteboardSceneData>(),
+  sceneVersion: integer('scene_version').notNull().default(0),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  index('idx_wb_groups_page_classroom').on(t.pageId, t.classroomId),
+]);
+
+export const whiteboardGroupMembers = pgTable('whiteboard_group_members', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  groupId: uuid('group_id').notNull().references(() => whiteboardGroups.id, { onDelete: 'cascade' }),
+  studentId: uuid('student_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+}, (t) => [
+  unique('uq_wb_group_members_group_student').on(t.groupId, t.studentId),
+  index('idx_wb_group_members_student').on(t.studentId),
 ]);

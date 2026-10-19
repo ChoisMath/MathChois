@@ -1,7 +1,7 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Trash2, GripVertical, Play, FileCode2, Sparkles } from 'lucide-react';
+import { Trash2, GripVertical, Play, FileCode2, Sparkles, Presentation } from 'lucide-react';
 import { PageVideoThumb } from '../videos/PageVideo';
 
 const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage, isDeleting }) => {
@@ -38,7 +38,12 @@ const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage,
         <GripVertical className="h-3 w-3" />
       </div>
 
-      {page.htmlUrl ? (
+      {page.pageType === 'whiteboard' ? (
+        <div className="relative flex items-center justify-center bg-indigo-50 aspect-video">
+          <Presentation className="h-8 w-8 text-indigo-600" />
+          <span className="absolute bottom-1 inset-x-0 text-center text-[10px] text-indigo-700 font-medium">화이트보드</span>
+        </div>
+      ) : page.htmlUrl ? (
         <div className="relative flex items-center justify-center bg-emerald-50 aspect-video">
           <FileCode2 className="h-8 w-8 text-emerald-600" />
           <span className="absolute bottom-1 inset-x-0 text-center text-[10px] text-emerald-700 font-medium">HTML 도구</span>

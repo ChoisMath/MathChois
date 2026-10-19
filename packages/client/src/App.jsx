@@ -23,6 +23,7 @@ const ChapterEditor      = lazy(() => import('./pages/Chapters/Editor'));
 const StudyPageRouter    = lazy(() => import('./pages/Study/StudyPageRouter'));
 const TeacherStudyPageRouter = lazy(() => import('./pages/Study/TeacherStudyPageRouter'));
 const StudentWorkViewer  = lazy(() => import('./pages/Monitor/StudentWorkViewer'));
+const TeacherWhiteboardPage = lazy(() => import('./pages/Whiteboard/TeacherWhiteboardPage'));
 
 /* Phase 5 — 게시판 & 과제 */
 const TeacherBoard           = lazy(() => import('./pages/Board/TeacherBoard'));
@@ -39,6 +40,7 @@ const VisualizationsPage = lazy(() => import('./pages/Visualizations/Visualizati
 /* 영상자료 */
 const VideosPage          = lazy(() => import('./pages/Videos/VideosPage'));
 const ClassroomVideoWatch = lazy(() => import('./pages/Videos/ClassroomVideoWatch'));
+const ClassroomVideoSplit = lazy(() => import('./pages/Videos/ClassroomVideoSplit'));
 
 /* 코칭 기록 */
 const MyCoachingHistory     = lazy(() => import('./pages/History/MyCoachingHistory'));
@@ -150,6 +152,11 @@ function App() {
               path="/teacher/classrooms/:classroomId/chapters/:chapterId/study/page/:pageId"
               element={<TeacherStudyPageRouter />}
             />
+            {/* 화이트보드(모둠 공유 보드) 교사 화면 — 격자/단일 (전체화면) */}
+            <Route
+              path="/teacher/classrooms/:classroomId/chapters/:chapterId/whiteboard/:pageId"
+              element={<TeacherWhiteboardPage />}
+            />
             {/* Phase 5 — 학생 과제 필기 확인 (전체화면) */}
             <Route
               path="/teacher/classrooms/:classroomId/assignments/:assignmentId/monitor/:studentId"
@@ -174,6 +181,8 @@ function App() {
             </Route>
             {/* StudyViewer: 전체화면 레이아웃, DashboardLayout 제외 */}
             <Route path="/student/study/:chapterId/page/:pageId" element={<StudyPageRouter />} />
+            {/* 영상 2분할 필기(영상 + 연결 챕터 StudyViewer): 전체화면 레이아웃, DashboardLayout 제외 */}
+            <Route path="/student/classrooms/:classroomId/videos/:cvId/split" element={<ClassroomVideoSplit />} />
             {/* Phase 5 — 학생 과제 필기 (전체화면) */}
             <Route
               path="/student/assignments/:assignmentId/page/:pageId"

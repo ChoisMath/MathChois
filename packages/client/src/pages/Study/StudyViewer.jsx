@@ -343,9 +343,33 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
   );
 }
 
+/* ─────────── 사이드바 페이지 항목 (라우트 모드: Link / 임베드 모드: button) ─────────── */
+function SidebarItem({ embedded, to, onSelect, className, children, ref }) {
+  if (embedded) {
+    return (
+      <button type="button" ref={ref} onClick={onSelect} className={className}>
+        {children}
+      </button>
+    );
+  }
+  return (
+    <Link ref={ref} to={to} className={className}>
+      {children}
+    </Link>
+  );
+}
+
 /* ─────────── 메인 컴포넌트 ─────────── */
-const StudyViewer = () => {
-  const { chapterId, pageId } = useParams();
+/**
+ * 학생 필기 뷰어 ①.
+ * - 기본(라우트) 모드: `/student/study/:chapterId/page/:pageId` 의 params 로 동작, 페이지 이동은 navigate.
+ * - 임베드 모드(`embedded`): 영상 2분할 화면 등 다른 화면 안에 들어갈 때. chapterId/pageId 를 props 로 받고,
+ *   페이지 이동은 `onNavigatePage(pageId)`, 뒤로가기는 `onExit()` 로 호출측에 맡긴다(라우트가 바뀌지 않아 옆의 영상이 유지됨).
+ */
+const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigatePage, onExit, embedded = false } = {}) => {
+  const params = useParams();
+  const chapterId = chapterIdProp ?? params.chapterId;
+  const pageId    = pageIdProp ?? params.pageId;
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -361,6 +385,16 @@ const StudyViewer = () => {
   const [showTeacherNotesModal, setShowTeacherNotesModal] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const { isDownloading, downloadPage, downloadMultiplePages } = usePdfDownloader();
+
+  /* 페이지 이동/나가기 — 임베드 모드면 호출측 콜백, 아니면 라우트 이동 */
+  const goToPage = useCallback((pid, opts) => {
+    if (embedded) onNavigatePage?.(pid);
+    else navigate(`/student/study/${chapterId}/page/${pid}`, opts);
+  }, [embedded, onNavigatePage, navigate, chapterId]);
+  const exitViewer = useCallback(() => {
+    if (embedded) onExit?.();
+    else navigate(`/student/classrooms/${chapter?.classroomId}`);
+  }, [embedded, onExit, navigate, chapter?.classroomId]);
 
   const containerRef          = useRef(null);
   const saveTimerRef          = useRef(null);
@@ -536,14 +570,14 @@ const StudyViewer = () => {
             teacherCommentFilesRef.current = commentData.files;
           }
         } else {
-          navigate(`/student/study/${chapterId}/page/${pgs[0].id}`, { replace: true });
+          goToPage(pgs[0].id, { replace: true });
           return;
         }
       }
       setLoading(false);
     };
     fetchData();
-  }, [chapterId, pageId, navigate, user]);
+  }, [chapterId, pageId, goToPage, user]);
 
   /* ── 학생 접속 상태(Presence) 전송 ── */
   useEffect(() => {
@@ -911,20 +945,21 @@ const StudyViewer = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className={`flex items-center justify-center bg-gray-50 ${embedded ? 'h-full' : 'min-h-screen'}`}>
         <p className="text-gray-500">로딩 중...</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
+    <div className="flex flex-col bg-gray-100" style={{ height: embedded ? '100%' : '100vh' }}>
 
       {/* ── 내비게이션 바 ── */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate(`/student/classrooms/${chapter?.classroomId}`)}
+            onClick={exitViewer}
+            title={embedded ? '영상으로 돌아가기' : '학급으로 돌아가기'}
             className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer">
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -1010,7 +1045,7 @@ const StudyViewer = () => {
 
           {/* 이전/다음 페이지 */}
           <button
-            onClick={() => prevPage && navigate(`/student/study/${chapterId}/page/${prevPage.id}`)}
+            onClick={() => prevPage && goToPage(prevPage.id)}
             disabled={!prevPage}
             title="이전 페이지"
             className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer">
@@ -1022,7 +1057,7 @@ const StudyViewer = () => {
             </span>
           )}
           <button
-            onClick={() => nextPage && navigate(`/student/study/${chapterId}/page/${nextPage.id}`)}
+            onClick={() => nextPage && goToPage(nextPage.id)}
             disabled={!nextPage}
             title="다음 페이지"
             className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer">
@@ -1081,11 +1116,14 @@ const StudyViewer = () => {
             </div>
             <div className="space-y-2 p-2">
               {pages.map((pg, idx) => (
-                <Link
+                // 임베드 모드에서는 라우트를 바꾸지 않도록 <Link> 대신 <button>
+                <SidebarItem
                   key={pg.id}
+                  embedded={embedded}
                   ref={pg.id === currentPage?.id ? activeSidebarItemRef : null}
                   to={`/student/study/${chapterId}/page/${pg.id}`}
-                  className={`relative block rounded-md overflow-hidden transition-colors ${
+                  onSelect={() => goToPage(pg.id)}
+                  className={`relative block w-full text-left rounded-md overflow-hidden transition-colors cursor-pointer ${
                     pg.id === currentPage?.id ? 'border-4 border-blue-500' : 'border-4 border-transparent hover:border-gray-300'
                   }`}
                 >
@@ -1106,7 +1144,7 @@ const StudyViewer = () => {
                   <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
                     {idx + 1}
                   </div>
-                </Link>
+                </SidebarItem>
               ))}
             </div>
           </div>
@@ -1171,8 +1209,8 @@ const StudyViewer = () => {
         </div>
         )}
         <PageNavOverlay
-          onPrev={() => prevPage && navigate(`/student/study/${chapterId}/page/${prevPage.id}`)}
-          onNext={() => nextPage && navigate(`/student/study/${chapterId}/page/${nextPage.id}`)}
+          onPrev={() => prevPage && goToPage(prevPage.id)}
+          onNext={() => nextPage && goToPage(nextPage.id)}
           hasPrev={!!prevPage}
           hasNext={!!nextPage}
         />

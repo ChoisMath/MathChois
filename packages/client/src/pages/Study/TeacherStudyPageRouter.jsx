@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import TeacherStudyViewer from './TeacherStudyViewer';
 import TeacherCoachingReview from './TeacherCoachingReview';
+import TeacherWhiteboardPage from '../Whiteboard/TeacherWhiteboardPage';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 
 /** 교사 필기 라우트: AI 코칭 페이지면 TeacherCoachingReview(학생별 코칭), 아니면 TeacherStudyViewer */
@@ -28,6 +29,9 @@ export default function TeacherStudyPageRouter() {
 
   if (loading) {
     return <div className="flex items-center justify-center" style={{ height: '100dvh' }}><p className="text-gray-500">로딩 중...</p></div>;
+  }
+  if (state.page?.pageType === 'whiteboard') {
+    return <TeacherWhiteboardPage />;
   }
   if (state.page?.aiProblemId) {
     const base = `/teacher/classrooms/${classroomId}/chapters/${chapterId}/study/page`;
