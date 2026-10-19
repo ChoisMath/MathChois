@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
-  Play, Pause, Volume2, VolumeX, Settings, Maximize, Minimize, SkipBack, SkipForward, Check,
+  Play, Pause, Volume2, VolumeX, Settings, Maximize, Minimize, SkipBack, SkipForward, Check, Sun,
 } from 'lucide-react';
 import {
   SEEK_STEPS, PLAYBACK_RATES, VOLUME_STEP,
+  BRIGHTNESS_MIN, BRIGHTNESS_MAX, BRIGHTNESS_DEFAULT,
   loadSettings, saveSettings, stepRate, formatRate, formatTime, clamp,
   loadResumePosition, saveResumePosition, isTypingTarget,
+  decideGestureAxis, verticalGestureKind, dragToLevel,
 } from '../../lib/videoPlayer';
 
 /** onProgress 최소 호출 간격(ms) — 서버 분당 요청 제한 보호 */
@@ -31,6 +33,8 @@ const PROGRESS_REPORT_INTERVAL_MS = 10000;
  *
  * 단축키: ←/→ 설정된 초만큼 이동, ↑/↓ 볼륨, Space/K 재생·정지, M 음소거, F 전체화면,
  *        , / . 배속 내림/올림, 0~9 해당 % 위치. ⚙ 설정: 이동 시간(10/20/30/60초)·배속(0.7~2.5×).
+ * 제스처: 탭 재생·정지, 더블탭 좌/우 절반 = 뒤로/앞으로, 길게 누른 뒤 드래그 —
+ *        좌우 = 시간 이동(스크럽), 상하 = 화면 왼쪽 절반에서 밝기 / 오른쪽 절반에서 볼륨.
  */
 export default function VideoPlayer({
   src, poster, title, storageKey, autoPlay = false, hotkeys = true, initialPosition = 0, onProgress,
@@ -78,6 +82,11 @@ export default function VideoPlayer({
     v.volume = settings.volume;
     v.muted = settings.muted;
   }, [settings]);
+
+  /** 화면 밝기(CSS filter: brightness). 기기 밝기가 아니라 영상만 어둡게/밝게 — 이 플레이어 안에서만 유지(저장 안 함). */
+  const [brightness, setBrightness] = useState(BRIGHTNESS_DEFAULT);
+  const brightnessRef = useRef(brightness);
+  useEffect(() => { brightnessRef.current = brightness; }, [brightness]);
 
   /* ── 화면 피드백 오버레이 ── */
   const showFlash = useCallback((text) => {
@@ -271,17 +280,32 @@ export default function VideoPlayer({
   const pausedByClickRef = useRef(false);
   useEffect(() => () => clearTimeout(tapTimerRef.current), []);
 
-  /* ── 길게 누른 뒤 좌우 드래그 = 스크럽(미세·장거리 이동) ──
-     400ms 이상 누르면 스크럽 모드로 들어가고, 드래그 거리에 따라 비선형으로 이동한다:
-     delta = sign · (|dx| / 폭)^1.6 · 영상 길이 → 짧은 드래그는 몇 초(미세), 화면 끝까지 끌면 영상 끝까지(장거리).
-     스크럽 중에는 일시정지하고 미리보기 위치를 보여 주며, 떼면 원래 재생 상태로 복귀한다. */
+  /* ── 길게 누른 뒤 드래그 제스처 ──
+     400ms 이상 누르면 제스처 모드로 들어가고, 그 뒤 첫 이동 방향으로 종류를 정한다(`decideGestureAxis`).
+     · 좌우 = 스크럽(시간 이동): delta = sign · (|dx| / 폭)^1.6 · 영상 길이 → 짧은 드래그는 몇 초(미세),
+       화면 끝까지 끌면 영상 끝까지(장거리). 스크럽 중에는 일시정지하고 미리보기 위치를 보여 주며, 떼면 복귀한다.
+     · 상하 = 누른 위치가 화면 왼쪽 절반이면 밝기, 오른쪽 절반이면 볼륨(`verticalGestureKind`).
+       위로 끌면 커지고 화면 높이만큼 끌면 전체 범위가 바뀐다(`dragToLevel`). 재생은 건드리지 않는다.
+     <video> 는 `touch-action: pan-y` 라 평소엔 세로 스크롤이 되므로, 제스처 모드에 들어간 뒤의 touchmove 만
+     non-passive 리스너에서 preventDefault 해 상하 드래그가 페이지 스크롤로 새지 않게 한다. */
   const SCRUB_HOLD_MS = 400;
   const SCRUB_EXP = 1.6;
-  const pressRef = useRef(null);      // { id, x, y, timer }
+  const pressRef = useRef(null);      // { id, x, y, timer, held }
   const scrubRef = useRef(null);      // { startTime, width, wasPlaying, lastApply }
-  const [scrub, setScrub] = useState(null); // { target, delta } 오버레이용
+  const levelRef = useRef(null);      // { kind: 'volume'|'brightness', start, height, value }
+  // 오버레이용: { kind: 'pending' } | { kind: 'scrub', target, delta } | { kind: 'volume'|'brightness', value }
+  const [gesture, setGesture] = useState(null);
 
   useEffect(() => () => clearTimeout(pressRef.current?.timer), []);
+
+  // 제스처 모드 중에는 터치 스크롤을 막는다(React 의 onTouchMove 는 passive 라 preventDefault 가 안 먹음).
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const block = (e) => { if (pressRef.current?.held && e.cancelable) e.preventDefault(); };
+    v.addEventListener('touchmove', block, { passive: false });
+    return () => v.removeEventListener('touchmove', block);
+  }, []);
 
   const onVideoPointerDown = (e) => {
     if (e.button != null && e.button !== 0) return;
@@ -290,80 +314,137 @@ export default function VideoPlayer({
     clearTimeout(pressRef.current?.timer);
     const target = e.currentTarget;
     const id = e.pointerId;
-    pressRef.current = {
-      id, x: e.clientX, y: e.clientY,
+    const press = {
+      id, x: e.clientX, y: e.clientY, held: false,
       timer: setTimeout(() => {
-        // 길게 누름 확정 → 스크럽 시작
+        // 길게 누름 확정 → 제스처 모드(방향은 첫 이동으로 결정)
+        press.held = true;
         clearTimeout(tapTimerRef.current);
         tapTimerRef.current = null;
         lastTapRef.current = 0;
         try { target.setPointerCapture(id); } catch { /* ignore */ }
-        scrubRef.current = {
-          startTime: v.currentTime,
-          width: target.getBoundingClientRect().width || 1,
-          wasPlaying: !v.paused,
-          lastApply: 0,
-        };
-        v.pause();
         try { navigator.vibrate?.(15); } catch { /* ignore */ }
-        setScrub({ target: v.currentTime, delta: 0 });
+        setGesture({ kind: 'pending' });
         setControlsVisible(true);
       }, SCRUB_HOLD_MS),
     };
+    pressRef.current = press;
+  };
+
+  const startScrub = (v, target) => {
+    scrubRef.current = {
+      startTime: v.currentTime,
+      width: target.getBoundingClientRect().width || 1,
+      wasPlaying: !v.paused,
+      lastApply: 0,
+    };
+    v.pause();
+    setGesture({ kind: 'scrub', target: v.currentTime, delta: 0 });
+  };
+
+  const startLevel = (press, target) => {
+    const rect = target.getBoundingClientRect();
+    const kind = verticalGestureKind(press.x, rect.left, rect.width);
+    const s = settingsRef.current;
+    const start = kind === 'volume' ? (s.muted ? 0 : s.volume) : brightnessRef.current;
+    levelRef.current = { kind, start, height: rect.height || 1 };
+    setGesture({ kind, value: start });
+  };
+
+  const applyLevel = (dy) => {
+    const lv = levelRef.current;
+    if (!lv) return lv;
+    if (lv.kind === 'volume') {
+      const volume = dragToLevel(lv.start, dy, lv.height, 0, 1);
+      if (volume !== settingsRef.current.volume || settingsRef.current.muted !== (volume === 0)) {
+        updateSettings({ volume, muted: volume === 0 });
+      }
+      lv.value = volume;
+      setGesture({ kind: 'volume', value: volume });
+      return lv;
+    }
+    const value = dragToLevel(lv.start, dy, lv.height, BRIGHTNESS_MIN, BRIGHTNESS_MAX);
+    lv.value = value;
+    setBrightness(value);
+    setGesture({ kind: 'brightness', value });
+    return lv;
+  };
+
+  const scrubTarget = (v, sc, dx) => {
+    const ratio = Math.min(1, Math.abs(dx) / sc.width);
+    return clamp(sc.startTime + Math.sign(dx) * Math.pow(ratio, SCRUB_EXP) * v.duration, 0, v.duration);
   };
 
   const onVideoPointerMove = (e) => {
     const v = videoRef.current;
     const press = pressRef.current;
     if (!v || !press || press.id !== e.pointerId) return;
-    const sc = scrubRef.current;
-    if (!sc) {
+    const dx = e.clientX - press.x;
+    const dy = e.clientY - press.y;
+    if (!press.held) {
       // 아직 길게 누름 전: 손가락이 움직이면(스크롤 등) 길게 누름 취소
-      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) {
+      if (Math.hypot(dx, dy) > 10) {
         clearTimeout(press.timer);
         pressRef.current = null;
       }
       return;
     }
-    const dx = e.clientX - press.x;
-    const ratio = Math.min(1, Math.abs(dx) / sc.width);
-    const delta = Math.sign(dx) * Math.pow(ratio, SCRUB_EXP) * v.duration;
-    const target = clamp(sc.startTime + delta, 0, v.duration);
-    const now = Date.now();
-    if (now - sc.lastApply > 80) {
-      sc.lastApply = now;
-      v.currentTime = target;
-      setCurrentTime(target);
+    if (!scrubRef.current && !levelRef.current) {
+      const axis = decideGestureAxis(dx, dy);
+      if (!axis) return;
+      if (axis === 'x') startScrub(v, e.currentTarget);
+      else startLevel(press, e.currentTarget);
     }
-    setScrub({ target, delta: target - sc.startTime });
+    const sc = scrubRef.current;
+    if (sc) {
+      const target = scrubTarget(v, sc, dx);
+      const now = Date.now();
+      if (now - sc.lastApply > 80) {
+        sc.lastApply = now;
+        v.currentTime = target;
+        setCurrentTime(target);
+      }
+      setGesture({ kind: 'scrub', target, delta: target - sc.startTime });
+      return;
+    }
+    applyLevel(dy);
   };
 
-  const finishScrub = (e) => {
+  /** 길게 누름 제스처 종료. 제스처 모드였으면 true(탭으로 처리하지 않는다). */
+  const finishGesture = (e) => {
     const v = videoRef.current;
     const press = pressRef.current;
     if (press && press.id === e.pointerId) {
       clearTimeout(press.timer);
       pressRef.current = null;
     }
-    const sc = scrubRef.current;
-    if (!sc || !v) return false;
-    scrubRef.current = null;
+    if (!press?.held || !v) return false;
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-    const dx = e.clientX - (press?.x ?? e.clientX);
-    const ratio = Math.min(1, Math.abs(dx) / sc.width);
-    const target = clamp(sc.startTime + Math.sign(dx) * Math.pow(ratio, SCRUB_EXP) * v.duration, 0, v.duration);
-    v.currentTime = target;
-    setCurrentTime(target);
-    setScrub(null);
-    if (sc.wasPlaying) v.play().catch(() => {});
-    const d = target - sc.startTime;
-    showFlash(`${formatTime(target)} (${d >= 0 ? '+' : '−'}${formatTime(Math.abs(d))})`);
+    const sc = scrubRef.current;
+    const lv = levelRef.current;
+    scrubRef.current = null;
+    levelRef.current = null;
+    setGesture(null);
+    // pointercancel(브라우저가 제스처를 가져감)은 좌표가 비어 올 수 있어 마지막 적용값으로 마무리한다.
+    const cancelled = e.type === 'pointercancel';
+    if (sc) {
+      const target = cancelled ? v.currentTime : scrubTarget(v, sc, e.clientX - press.x);
+      v.currentTime = target;
+      setCurrentTime(target);
+      if (sc.wasPlaying) v.play().catch(() => {});
+      const d = target - sc.startTime;
+      showFlash(`${formatTime(target)} (${d >= 0 ? '+' : '−'}${formatTime(Math.abs(d))})`);
+    } else if (lv) {
+      const value = cancelled ? (lv.value ?? lv.start) : applyLevel(e.clientY - press.y).value;
+      setGesture(null);
+      showFlash(`${lv.kind === 'volume' ? '볼륨' : '밝기'} ${Math.round(value * 100)}%`);
+    }
     revealControls();
     return true;
   };
 
   const onVideoPointerUp = (e) => {
-    if (finishScrub(e)) return; // 스크럽으로 끝난 제스처는 탭으로 처리하지 않는다
+    if (finishGesture(e)) return; // 길게 누름 제스처로 끝났으면 탭으로 처리하지 않는다
     if (e.button != null && e.button !== 0) return;
     const v = videoRef.current;
     if (!v) return;
@@ -465,7 +546,11 @@ export default function VideoPlayer({
         src={src}
         poster={poster || undefined}
         className={`w-full h-full ${fill ? 'object-contain' : ''}`}
-        style={{ WebkitTouchCallout: 'none', touchAction: 'pan-y pinch-zoom' }}
+        style={{
+          WebkitTouchCallout: 'none',
+          touchAction: 'pan-y pinch-zoom',
+          filter: brightness !== BRIGHTNESS_DEFAULT ? `brightness(${brightness})` : undefined,
+        }}
         playsInline
         autoPlay={autoPlay}
         preload="metadata"
@@ -476,7 +561,7 @@ export default function VideoPlayer({
         onPointerDown={onVideoPointerDown}
         onPointerMove={onVideoPointerMove}
         onPointerUp={onVideoPointerUp}
-        onPointerCancel={finishScrub}
+        onPointerCancel={finishGesture}
         onLoadedMetadata={onLoadedMetadata}
         onTimeUpdate={onTimeUpdate}
         onProgress={onBuffered}
@@ -486,21 +571,50 @@ export default function VideoPlayer({
         onError={() => setError('영상을 불러올 수 없습니다. 파일이 삭제되었거나 브라우저가 지원하지 않는 형식입니다.')}
       />
 
-      {/* 스크럽(길게 누른 뒤 드래그) 오버레이 */}
-      {scrub && (
+      {/* 길게 누른 뒤 드래그 제스처 오버레이 */}
+      {gesture?.kind === 'pending' && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="px-3 py-1.5 rounded-full bg-black/60 text-white/90 text-xs">
+            좌우: 시간 이동 · 상하: 왼쪽 밝기 / 오른쪽 볼륨
+          </span>
+        </div>
+      )}
+      {gesture?.kind === 'scrub' && (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1">
           <span className="px-4 py-2 rounded-full bg-black/70 text-white text-xl font-semibold tabular-nums">
-            {formatTime(scrub.target)}
-            <span className={`ml-2 text-base ${scrub.delta >= 0 ? 'text-green-300' : 'text-orange-300'}`}>
-              {scrub.delta >= 0 ? '+' : '−'}{formatTime(Math.abs(scrub.delta))}
+            {formatTime(gesture.target)}
+            <span className={`ml-2 text-base ${gesture.delta >= 0 ? 'text-green-300' : 'text-orange-300'}`}>
+              {gesture.delta >= 0 ? '+' : '−'}{formatTime(Math.abs(gesture.delta))}
             </span>
           </span>
           <span className="px-2 py-0.5 rounded bg-black/50 text-white/80 text-[11px]">좌우로 드래그하여 이동 · 짧게 끌면 미세 이동</span>
         </div>
       )}
+      {(gesture?.kind === 'volume' || gesture?.kind === 'brightness') && (() => {
+        const isVol = gesture.kind === 'volume';
+        const min = isVol ? 0 : BRIGHTNESS_MIN;
+        const max = isVol ? 1 : BRIGHTNESS_MAX;
+        const pct = Math.round(((gesture.value - min) / (max - min)) * 100);
+        const Icon = isVol ? (gesture.value === 0 ? VolumeX : Volume2) : Sun;
+        return (
+          <div className={`pointer-events-none absolute inset-y-0 ${isVol ? 'right-0' : 'left-0'} w-1/2 flex items-center justify-center`}>
+            <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-black/70 text-white">
+              <Icon className="h-6 w-6 shrink-0" />
+              <div className="flex flex-col gap-1.5 min-w-[7rem]">
+                <span className="text-sm font-semibold tabular-nums">
+                  {isVol ? '볼륨' : '밝기'} {Math.round(gesture.value * 100)}%
+                </span>
+                <div className="h-1.5 w-full rounded-full bg-white/25 overflow-hidden">
+                  <div className="h-full rounded-full bg-white" style={{ width: `${clamp(pct, 0, 100)}%` }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 중앙 피드백 */}
-      {flash && !scrub && (
+      {flash && !gesture && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="px-4 py-2 rounded-full bg-black/60 text-white text-lg font-semibold">{flash}</span>
         </div>
