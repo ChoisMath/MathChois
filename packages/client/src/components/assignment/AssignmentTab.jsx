@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { CARD_GRID } from '../../lib/layout';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, ClipboardList, Clock, Trophy, Users, Loader, X, Download, Edit2 } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -255,7 +256,7 @@ const AssignmentTab = ({ classroomId, isTeacher, onUnsubmittedCount }) => {
             : <><ClipboardList className="h-8 w-8" /><span>등록된 과제가 없습니다.</span></>}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className={CARD_GRID}>
           {assignments.map((asn) => {
             const sub = submissions[asn.id] || null;
             const { bg, text, label } = statusStyle(sub?.status);

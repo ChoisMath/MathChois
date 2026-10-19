@@ -24,6 +24,7 @@ export interface Chapter {
   description: string | null;
   position: number;
   sourceChapterId?: string | null;
+  createdAt?: string | null;
 }
 
 /** 페이지 종류. null = 기존 이미지/영상/HTML/AI 문항 페이지(URL 필드로 판별) */

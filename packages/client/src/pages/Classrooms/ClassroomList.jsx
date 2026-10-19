@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { CARD_GRID } from '../../lib/layout';
 import { Plus, Users, ArrowRight, Loader, X } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
@@ -62,7 +63,7 @@ const ClassroomList = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="w-full">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">클래스룸</h1>
         {isTeacher && (
@@ -83,7 +84,7 @@ const ClassroomList = () => {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
+        <div className={CARD_GRID}>
           {classrooms.map((classroom) => (
             <Link key={classroom.id} to={`${prefix}/classrooms/${classroom.id}`} className="block hover:no-underline">
               <div className="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-shadow">

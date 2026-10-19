@@ -33,16 +33,16 @@ packages/
 │   └── src/
 │       ├── App.jsx             # 라우팅 정의
 │       ├── contexts/AuthContext.jsx
-│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem, SplitPane(2분할 컨테이너 — 손잡이 드래그/키보드로 비율 조정, 드래그 중 투명 오버레이), FileDropZone — 클릭/드래그 앤 드롭 파일 선택 영역), problems/(ProblemPickerModal), coaching/(CoachingHistoryView, AttemptStack), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal),
+│       ├── components/         # ProtectedRoute, Navbar, assignment/, board/, common/(ProblemView, CoachingPanel, SortablePageItem, SplitPane(2분할 컨테이너 — 손잡이 드래그/키보드로 비율 조정, 드래그 중 투명 오버레이), FileDropZone — 클릭/드래그 앤 드롭 파일 선택 영역, SortOrderSelect — 정렬 순서 선택), problems/(ProblemPickerModal), coaching/(CoachingHistoryView, AttemptStack), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal),
 │       │                       #   videos/(VideoPlayer, VideoPreviewModal, VideoForm, VideoPickerModal, ClassroomVideoTab, VideoComments)
 │       │   ├── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay, HtmlToolOverlay
 │       │   └── whiteboard/     # WhiteboardCanvas(Excalidraw 기본 UI + 협업), WhiteboardTopBar, BackgroundColorPicker, TemplatePickerDialog, TemplateThumb(SVG 미리보기),
 │       │                       #   WhiteboardTile(격자 정적 썸네일), WhiteboardSettingsDrawer(교사 설정), GroupAssignmentPanel, ClassroomGroupSettings(학급 학생 탭 모둠 설정)
-│       ├── layouts/            # MainLayout(public), DashboardLayout(인증)
+│       ├── layouts/            # MainLayout(public), DashboardLayout(인증 — 데스크톱 ≥1024px 고정 사이드바(햄버거로 접기, `mc_sidebar_collapsed`), 그 아래는 오버레이; 본문 유동 폭 p-4/6/8)
 │       ├── pages/              # Home, Login, Classrooms, Chapters, Study, Monitor,
 │       │                       #   Assignment, Board, Admin, Problems(문제은행), Visualizations(시각화자료), Videos(영상자료 VideosPage + 학급 시청 ClassroomVideoWatch + 영상 2분할 필기 ClassroomVideoSplit), History(코칭기록),
 │       │                       #   Whiteboard(StudentWhiteboardViewer 학생 모둠 보드, TeacherWhiteboardPage 교사 격자/단일 + 설정) 등
-│       ├── hooks/              # useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
+│       ├── hooks/              # useMediaQuery(matchMedia 구독), useSortOrder(목록 정렬 순서 — 사용자별 localStorage), useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
 │       │                       #   useScribbleErase(문지르기 지우개), useFreedrawSmoothing, usePenDiagnostics,
 │       │                       #   useWetInk(웻잉크 오버레이 — 펜 라이브 렌더), useOrientation(세로 화면 → 위/아래 분할),
 │       │                       #   useWhiteboardCollab(보드 1개 소켓 협업 — 변경 요소 100ms 스로틀 전송/포인터/파일), useWhiteboardGrid(교사 격자 — 소켓 하나로 N 보드 장면 유지)
@@ -59,6 +59,8 @@ packages/
 │                               #   splitLayout.js(영상 2분할 — 비율/영상 위치 `mc_video_split`, 마지막 페이지 `mc_video_split_page:<cv>`, ratioFromPointer/stepRatio),
 │                               #   swUpdate.js(PWA SW 자동 업데이트 — setupSwAutoUpdate),
 │                               #   linkify.js(게시판 본문 plain text의 URL → 자동 하이퍼링크 세그먼트),
+│                               #   sortOrder.js(학급 상세 [챕터]·[영상] 탭 정렬 — 최신순/등록순/교사 지정순, sortItems + localStorage 저장),
+│                               #   layout.js(CARD_GRID 카드 목록 반응형 열 규칙 1/2/3/4/5열 · DESKTOP_MEDIA_QUERY · SIDEBAR_COLLAPSED_KEY),
 │                               #   groupAssign.js(모둠 자동 배분/이동), whiteboardTemplates.js(템플릿 34종 skeleton, 3200×1800), whiteboardTemplateBuild.js(convertToExcalidrawElements + groupId),
 │                               #   whiteboardExport.js(발표 영역 안내선·범위 계산, 순수), whiteboardExportBrowser.js(썸네일/PNG/PDF — Excalidraw import), whiteboardImage.js(축소 업로드·파일 ref↔dataURL·커서 색) (*.test.js = Vitest)
 └── shared/src/
@@ -197,7 +199,7 @@ packages/
 | dashboard | routes/dashboard.ts | `GET /dashboard/classrooms/:classroomId`(authenticate + requireRole('teacher') + isClassroomOwner 403). 집계 전용 — 학생×챕터 코칭 정답률·필기 진도 + 반 요약. 정답·해설 select 제외(카운트만) |
 | visualizations | routes/visualizations.ts | `GET /visualizations`(목록 — 텍스트 q + subject/major/minorUnit 필터 + 페이지네이션, 기본 전체 공유, `mine=1`이면 본인 것만), `GET /visualizations/facets`, `GET/:id`, `POST`(등록), `PATCH/:id`·`DELETE/:id`(소유자 403 가드 — 삭제 시 원본 파일도 제거). 모두 teacher |
 | videos | routes/videos.ts | 모두 teacher. `POST /videos/upload?kind=video\|thumbnail`(**스트리밍 업로드** — 디스크 직접 기록, 영상 2GB/썸네일 5MB, mp4/webm/mov, 초과 413), `GET /videos`(목록 q/subject/majorUnit/minorUnit/`mine=1`/페이지네이션 + createdByName), `GET /videos/facets`, `GET /videos/:id`, `GET /videos/:id/usage`(배정 학급), `POST /videos`, `PATCH /videos/:id`(소유자/관리자, 파일 교체 시 이전 파일 정리), `DELETE /videos/:id`(소유자/관리자 — **학급 배정 중이면 409 + usage**, `?force=1` 이면 트랜잭션으로 모든 배정 해제 후 삭제, 파일·썸네일 삭제) |
-| classroomVideos | routes/classroomVideos.ts | 시청 기록: `PUT/GET /classroom-videos/:id/progress`(학생), `GET /classroom-videos/:id/progress/summary`(교사), `GET /classrooms/:cid/videos/progress`(학생 본인 맵/교사 통계 맵). 미읽음: `POST /classroom-videos/:id/seen`, `GET /classrooms/:cid/videos/unread`, `GET /videos/unread`(역할별 학급 합계). 교실 소유 교사/소속 학생 가드. `GET /classrooms/:cid/videos`, `POST`(교사 — `{videoId, note}`, 중복 409), `PATCH /classrooms/:cid/videos/reorder`(`{ids}`), `GET /classroom-videos/:id`(상세 + classroom + siblings), `PATCH`(note·**chapterId**(필기 챕터 — 같은 학급 챕터가 아니면 400, 전달된 키만 갱신), 응답에 `chapter:{id,title}|null` left join)·`DELETE`(교사 — 댓글 cascade). 댓글: `GET /classroom-videos/:id/comments`(학생은 공개 + 본인 비공개 스레드만), `POST`(`content/parentId/isPrivate/timestampSec` — 대댓글은 루트 공개범위 상속, 깊이 1, 타인 비공개 스레드 403), `PATCH /video-comments/:id`(작성자), `DELETE /video-comments/:id`(작성자 또는 교실 소유 교사). 쓰기 후 socket `video:{cvId}` 에 `video-comment:changed` |
+| classroomVideos | routes/classroomVideos.ts | 시청 기록: `PUT/GET /classroom-videos/:id/progress`(학생), `GET /classroom-videos/:id/progress/summary`(교사), `GET /classrooms/:cid/videos/progress`(학생 본인 맵/교사 통계 맵). 미읽음: `POST /classroom-videos/:id/seen`, `GET /classrooms/:cid/videos/unread`, `GET /videos/unread`(역할별 학급 합계). 교실 소유 교사/소속 학생 가드. `GET /classrooms/:cid/videos`, `POST`(교사 — `{videoId, note}`, 중복 409, 새 배정은 position 0 + 기존 shift → 맨 위), `PATCH /classrooms/:cid/videos/reorder`(`{ids}`), `GET /classroom-videos/:id`(상세 + classroom + siblings), `PATCH`(note·**chapterId**(필기 챕터 — 같은 학급 챕터가 아니면 400, 전달된 키만 갱신), 응답에 `chapter:{id,title}|null` left join)·`DELETE`(교사 — 댓글 cascade). 댓글: `GET /classroom-videos/:id/comments`(학생은 공개 + 본인 비공개 스레드만), `POST`(`content/parentId/isPrivate/timestampSec` — 대댓글은 루트 공개범위 상속, 깊이 1, 타인 비공개 스레드 403), `PATCH /video-comments/:id`(작성자), `DELETE /video-comments/:id`(작성자 또는 교실 소유 교사). 쓰기 후 socket `video:{cvId}` 에 `video-comment:changed` |
 | classroomGroups | routes/classroomGroups.ts | 학급 기본 모둠. `GET /classrooms/:id/groups`(소유 교사/소속 학생), `PUT`(교사 — `{groups:[{id?,name,position,studentIds[]}]}` 전체 교체, 누락 id 삭제, 학생당 한 모둠), `POST /classrooms/:id/groups/auto`(`{count}` 가입순 셔플 균등 배분) |
 | whiteboards | routes/whiteboards.ts | 모두 `?classroomId=` 로 (페이지, 학급) 접근 검증(교사 = 학급 소유 && 페이지 관련, 학생 = 소속 && 관련). `GET /whiteboards/page/:pageId`(보드 지연 생성 + 뷰: settings/groups(구성원·elementCount·hasPrevious)/myGroupId(학생)/unassigned(교사)/templateKey/isSourceChapter), `PUT /whiteboards/page/:pageId/groups`(교사 — 페이지별 배정 교체, 삭제된 모둠 보드는 메모리 폐기 + `wb:removed`), `PATCH /whiteboards/page/:pageId/settings`(`allowCrossGroupView`/`lockedAll` → `wb:settings`/`wb:lock`), `GET /whiteboards/groups/:gid`(장면 — 메모리 우선), `PATCH /whiteboards/groups/:gid`(`name`/`locked` → `wb:lock`), `POST /whiteboards/groups/:gid/reset`·`/restore-previous`(교사 — `wb:scene`), `POST /whiteboards/groups/:gid/apply-template`(쓰기 권한자 — 살아있는 요소 0개일 때만 `{applied:true}`) |
 | health | app.ts | `GET /api/health` (DB ping) |
@@ -208,7 +210,7 @@ packages/
 | `profiles` | — | googleId/email unique, role, isAdmin, authMethod(google\|email), passwordHash |
 | `classrooms` | teacherId→profiles | classCode unique |
 | `classroom_members` | classroomId, studentId | (classroom, student) unique |
-| `chapters` | classroomId, sourceChapterId(self) | position, sourceChapterId(복제 출처) |
+| `chapters` | classroomId, sourceChapterId(self) | position, sourceChapterId(복제 출처), createdAt(최신순/등록순 정렬용 — startupMigrate 가 보강). 새 챕터는 position 0 에 삽입되고 기존 챕터는 +1 shift(새 항목이 맨 위) |
 | `pages` | chapterId, aiProblemId→problems(set null) | imageUrl / videoUrl / **htmlUrl**(HTML 도구) / position / **pageType**('whiteboard' \| null) / **whiteboardTemplate**(기본 템플릿 key). `aiProblemId` 설정 시 배경 없는 AI 코칭 페이지 |
 | `student_notes` ① | studentId, pageId | (student, page) unique, excalidrawData |
 | `classroom_groups` / `classroom_group_members` | classroomId→classrooms(cascade) / groupId(cascade), studentId(cascade) | 학급 기본 모둠. name/position. (classroom, student) unique — 학생은 학급당 한 모둠 |

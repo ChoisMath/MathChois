@@ -10,6 +10,10 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
   await pgClient`ALTER TABLE pages ADD COLUMN IF NOT EXISTS html_url text`;
   log.info('startup migration: pages.html_url ensured');
 
+  // 챕터 최신순/등록순 정렬용. 기존 행은 now() 로 채워지며 동률은 position 으로 보조 정렬된다.
+  await pgClient`ALTER TABLE chapters ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()`;
+  log.info('startup migration: chapters.created_at ensured');
+
   await pgClient`
     CREATE TABLE IF NOT EXISTS problems (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

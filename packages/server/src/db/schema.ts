@@ -50,6 +50,8 @@ export const chapters = pgTable('chapters', {
   description: text('description'),
   position: integer('position').notNull().default(0),
   sourceChapterId: uuid('source_chapter_id').references((): any => chapters.id, { onDelete: 'set null' }),
+  // 최신순/등록순 정렬 기준. 컬럼 도입 이전 행은 startupMigrate 시점의 now() 로 채워진다(동률 → position 으로 보조 정렬).
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
   index('idx_chapters_classroom').on(t.classroomId),
   index('idx_chapters_source').on(t.sourceChapterId),

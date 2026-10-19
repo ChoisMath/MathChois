@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Users, LogIn, LayoutList, Loader, BookMarked, History, LayoutTemplate, Clapperboard } from 'lucide-react';
 import Navbar from '../components/Navbar';
@@ -6,6 +6,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../lib/api';
 import { subscribeSidebarRefresh } from '../lib/sidebarRefresh';
 import { getVideoUnreadTotals } from '../lib/videos';
+import { useMediaQuery } from '../hooks/useMediaQuery';
+import { DESKTOP_MEDIA_QUERY, SIDEBAR_COLLAPSED_KEY } from '../lib/layout';
 
 const EMPTY_UNREAD = { byClassroom: {}, total: 0 };
 
@@ -289,50 +291,80 @@ function TeacherSidebar() {
   );
 }
 
-/* ── 메인 레이아웃 ── */
+function loadCollapsed() {
+  try { return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'; } catch { return false; }
+}
+
+/* ── 메인 레이아웃 ──
+ * 데스크톱(≥1024px): 사이드바가 왼쪽에 고정(docked)되고 햄버거로 접었다 펼친다(접힘 상태는 localStorage 유지).
+ * 태블릿/모바일(<1024px): 햄버거로 오버레이 사이드바를 연다. 본문은 남은 폭을 전부 사용(유동).
+ */
 const DashboardLayout = () => {
   const { profile } = useAuth();
   const isTeacher = profile?.role === 'teacher';
   const location = useLocation();
+  const isDesktop = useMediaQuery(DESKTOP_MEDIA_QUERY);
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [overlayOpen, setOverlayOpen] = useState(false);          // 태블릿/모바일 오버레이
+  const [collapsed, setCollapsed] = useState(loadCollapsed);      // 데스크톱 고정 사이드바 접힘
 
-  /* 페이지 이동 시 모바일 사이드바 자동 닫기 */
+  const toggleSidebar = useCallback(() => {
+    if (isDesktop) {
+      setCollapsed((v) => {
+        const next = !v;
+        try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+        return next;
+      });
+    } else {
+      setOverlayOpen((v) => !v);
+    }
+  }, [isDesktop]);
+
+  /* 페이지 이동 시 오버레이 자동 닫기 */
   useEffect(() => {
     // eslint-disable-next-line
-    setSidebarOpen(false);
+    setOverlayOpen(false);
   }, [location.pathname]);
+
+  const showDocked = isDesktop && !collapsed;
+  const sidebar = isTeacher ? <TeacherSidebar /> : <StudentSidebar />;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <Navbar onToggleSidebar={() => setSidebarOpen((v) => !v)} />
-      <div className="flex flex-1">
-        {/* 모바일/데스크톱 공용 사이드바 오버레이 */}
-        {sidebarOpen && (
+      <Navbar onToggleSidebar={toggleSidebar} sidebarOpen={isDesktop ? showDocked : overlayOpen} />
+      <div className="flex flex-1 min-h-0">
+        {/* 데스크톱 고정 사이드바 */}
+        {showDocked && (
+          <aside className="w-64 shrink-0 bg-white border-r border-gray-200 overflow-y-auto sticky top-0 self-start max-h-dvh">
+            {sidebar}
+          </aside>
+        )}
+
+        {/* 태블릿/모바일 오버레이 사이드바 — 데스크톱 폭에서는 렌더하지 않는다(고정 사이드바가 대신 보임) */}
+        {!isDesktop && overlayOpen && (
           <>
-            {/* 배경 딤 */}
             <div
               className="fixed inset-0 z-40 bg-black/40"
-              onClick={() => setSidebarOpen(false)}
+              onClick={() => setOverlayOpen(false)}
             />
-            {/* 사이드바 패널 */}
             <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl overflow-y-auto">
               <div className="flex items-center justify-between px-4 h-16 border-b border-gray-200">
                 <span className="text-lg font-bold text-gray-900">메뉴</span>
                 <button
-                  onClick={() => setSidebarOpen(false)}
-                  className="p-2 text-gray-400 hover:text-gray-600 rounded-md cursor-pointer"
+                  onClick={() => setOverlayOpen(false)}
+                  className="p-2 min-w-11 min-h-11 text-gray-400 hover:text-gray-600 rounded-md cursor-pointer"
                   aria-label="메뉴 닫기"
                 >
                   ✕
                 </button>
               </div>
-              {isTeacher ? <TeacherSidebar /> : <StudentSidebar />}
+              {sidebar}
             </aside>
           </>
         )}
 
-        <main className="flex-1 p-8">
+        {/* 본문 — 유동 폭. min-w-0 으로 그리드/표가 부모를 밀어내지 않게 한다. 여백: 모바일 16 · 태블릿 24 · 데스크톱 32px */}
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>

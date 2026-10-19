@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Users, BookOpen, Copy, Check, Trash2, FileText,
@@ -26,13 +26,17 @@ import { refreshSidebar } from '../../lib/sidebarRefresh';
 import { getClassroomVideoUnread } from '../../lib/videos';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
+import SortOrderSelect from '../../components/common/SortOrderSelect';
+import { useSortOrder } from '../../hooks/useSortOrder';
+import { sortItems, isManualOrder } from '../../lib/sortOrder';
+import { CARD_GRID } from '../../lib/layout';
 
 /* ─── 정렬 가능한 챕터 카드 ─── */
-function SortableChapterCard({ ch, isTeacher, onDelete, onCardClick, onDownloadPdf, downloadingId }) {
+function SortableChapterCard({ ch, isTeacher, sortable = isTeacher, onDelete, onCardClick, onDownloadPdf, downloadingId }) {
   const {
     attributes, listeners, setNodeRef,
     transform, transition, isDragging,
-  } = useSortable({ id: ch.id });
+  } = useSortable({ id: ch.id, disabled: !sortable });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -54,8 +58,8 @@ function SortableChapterCard({ ch, isTeacher, onDelete, onCardClick, onDownloadP
     >
       {/* 제목 행 */}
       <div className="flex items-start gap-2">
-        {/* 드래그 핸들 (교사 전용) */}
-        {isTeacher && (
+        {/* 드래그 핸들 (교사 전용, 교사 지정순에서만) */}
+        {sortable && (
           <button
             {...attributes}
             {...listeners}
@@ -162,6 +166,11 @@ const ClassroomDetail = () => {
   const [importing, setImporting]                 = useState(false);
 
   const [activeTab, setActiveTab]   = useState('chapters'); // 'chapters' | 'board' | 'assignments' | 'videos' | 'students' | 'dashboard'
+
+  /* 챕터 정렬 순서(최신순/등록순/교사 지정순) — 사용자별 localStorage 유지. 드래그 정렬은 교사 지정순에서만 */
+  const [chapterSort, setChapterSort] = useSortOrder('chapters', user?.id);
+  const sortedChapters = useMemo(() => sortItems(chapters, chapterSort), [chapters, chapterSort]);
+  const canReorder = isTeacher && isManualOrder(chapterSort);
 
   const [deleteTarget, setDeleteTarget]         = useState(null);
   const [showDeleteClassroom, setShowDeleteClassroom] = useState(false);
@@ -340,11 +349,10 @@ const ClassroomDetail = () => {
     if (!newTitle.trim()) return;
     setCreating(true);
     try {
-      const maxPos = chapters.length > 0 ? Math.max(...chapters.map((c) => c.position)) + 1 : 0;
+      /* position 은 서버가 정한다 — 새 챕터는 맨 앞(0)에 들어가고 기존 챕터는 뒤로 밀린다 */
       await api.post(`/api/classrooms/${id}/chapters`, {
         title:       newTitle.trim(),
         description: newDesc.trim() || null,
-        position:    maxPos,
       });
       setNewTitle(''); setNewDesc(''); setShowCreateModal(false); fetchData();
     } catch (err) {
@@ -381,17 +389,19 @@ const ClassroomDetail = () => {
 
   /* ── 챕터 순서 변경 ── */
   const handleDragEnd = async ({ active, over }) => {
-    if (!over || active.id === over.id) return;
-    const oldIdx = chapters.findIndex((c) => c.id === active.id);
-    const newIdx = chapters.findIndex((c) => c.id === over.id);
-    const newOrder = arrayMove(chapters, oldIdx, newIdx);
+    if (!canReorder || !over || active.id === over.id) return;
+    const oldIdx = sortedChapters.findIndex((c) => c.id === active.id);
+    const newIdx = sortedChapters.findIndex((c) => c.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const newOrder = arrayMove(sortedChapters, oldIdx, newIdx).map((ch, i) => ({ ...ch, position: i }));
     setChapters(newOrder); // optimistic update
     try {
       await api.put('/api/chapters/reorder', {
-        items: newOrder.map((ch, i) => ({ id: ch.id, position: i })),
+        items: newOrder.map((ch) => ({ id: ch.id, position: ch.position })),
       });
     } catch (err) {
       console.error('[ClassroomDetail] 순서 변경 오류:', err);
+      fetchData();
     }
   };
 
@@ -430,7 +440,7 @@ const ClassroomDetail = () => {
 
   return (
     <>
-      <div className="max-w-5xl mx-auto space-y-6">
+      <div className="w-full space-y-6">
 
         {/* ── 헤더 ── */}
         <div className="flex items-start justify-between gap-4">
@@ -568,6 +578,15 @@ const ClassroomDetail = () => {
         {activeTab === 'chapters' && (
         <div>
 
+          {chapters.length > 0 && (
+            <div className="flex items-center justify-end gap-3 mb-3">
+              {isTeacher && !canReorder && (
+                <span className="text-xs text-gray-400">드래그 정렬은 ‘교사 지정순’에서 가능합니다</span>
+              )}
+              <SortOrderSelect value={chapterSort} onChange={setChapterSort} />
+            </div>
+          )}
+
           {chapters.length === 0 ? (
             <div
               onClick={isTeacher ? () => setShowCreateModal(true) : undefined}
@@ -586,15 +605,16 @@ const ClassroomDetail = () => {
               onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={chapters.map((c) => c.id)}
+                items={sortedChapters.map((c) => c.id)}
                 strategy={rectSortingStrategy}
               >
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {chapters.map((ch) => (
+                <div className={CARD_GRID}>
+                  {sortedChapters.map((ch) => (
                     <SortableChapterCard
                       key={ch.id}
                       ch={ch}
                       isTeacher={true}
+                      sortable={canReorder}
                       onDelete={setDeleteTarget}
                       onCardClick={handleCardClick}
                     />
@@ -603,8 +623,8 @@ const ClassroomDetail = () => {
               </SortableContext>
             </DndContext>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {chapters.map((ch) => (
+            <div className={CARD_GRID}>
+              {sortedChapters.map((ch) => (
                 <SortableChapterCard
                   key={ch.id}
                   ch={ch}
