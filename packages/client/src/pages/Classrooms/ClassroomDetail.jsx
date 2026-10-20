@@ -30,6 +30,8 @@ import SortOrderSelect from '../../components/common/SortOrderSelect';
 import { useSortOrder } from '../../hooks/useSortOrder';
 import { sortItems, isManualOrder } from '../../lib/sortOrder';
 import { CARD_GRID } from '../../lib/layout';
+import { resolveClassroomColor, colorVars } from '../../lib/classroomColor';
+import ClassroomColorPicker from '../../components/classrooms/ClassroomColorPicker';
 
 /* ─── 정렬 가능한 챕터 카드 ─── */
 function SortableChapterCard({ ch, isTeacher, sortable = isTeacher, onDelete, onCardClick, onDownloadPdf, downloadingId }) {
@@ -151,6 +153,10 @@ const ClassroomDetail = () => {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput]     = useState('');
   const [savingName, setSavingName]   = useState(false);
+
+  const [colorOpen, setColorOpen]     = useState(false);
+  const [savingColor, setSavingColor] = useState(false);
+  const [colorError, setColorError]   = useState('');
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createTab, setCreateTab]   = useState('new'); // 'new' | 'import'
@@ -308,6 +314,31 @@ const ClassroomDetail = () => {
     setEditingName(false);
   };
 
+  /* ── 표지 색 변경: 먼저 바꿔 보이고, 저장에 실패하면 이전 색으로 되돌린다 ── */
+  const toggleColorPicker = () => {
+    setColorError('');
+    setColorOpen((v) => !v);
+  };
+
+  const handleColorChange = async (color) => {
+    if (savingColor) return;
+    if (color === resolveClassroomColor(classroom)) { setColorOpen(false); return; }
+    const prevColor = classroom.color;
+    setSavingColor(true);
+    setColorError('');
+    setClassroom((prev) => ({ ...prev, color }));
+    try {
+      await api.patch(`/api/classrooms/${id}`, { color });
+      setColorOpen(false);
+      refreshSidebar();
+    } catch (err) {
+      console.error('[ClassroomDetail] 표지 색 변경 오류:', err);
+      setClassroom((prev) => ({ ...prev, color: prevColor }));
+      setColorError('표지 색을 바꾸지 못했어요. 다시 시도해 주세요.');
+    }
+    setSavingColor(false);
+  };
+
   const handleNameKeyDown = (e) => {
     if (e.key === 'Enter')  { e.preventDefault(); handleNameSave(); }
     if (e.key === 'Escape') { setEditingName(false); }
@@ -444,7 +475,7 @@ const ClassroomDetail = () => {
 
         {/* ── 헤더 ── */}
         <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
+          <div className="classroom-head flex-1 min-w-0" style={colorVars(resolveClassroomColor(classroom))}>
             <div className="flex items-center gap-2 flex-wrap">
               {isTeacher && editingName ? (
                 <input
@@ -493,6 +524,34 @@ const ClassroomDetail = () => {
                   {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                 </button>
                 <span className="text-xs text-gray-400">학생에게 공유하세요</span>
+              </div>
+            )}
+
+            {isTeacher && (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={toggleColorPicker}
+                  aria-expanded={colorOpen}
+                  className="color-toggle"
+                >
+                  <i aria-hidden="true" />
+                  표지 색 바꾸기
+                </button>
+                {colorOpen && (
+                  <div className="mt-3">
+                    <p id="classroom-color-label" className="text-sm text-[#56627c] mb-2">표지 색</p>
+                    <ClassroomColorPicker
+                      value={resolveClassroomColor(classroom)}
+                      onChange={handleColorChange}
+                      disabled={savingColor}
+                      labelId="classroom-color-label"
+                    />
+                    {colorError && (
+                      <p className="text-sm text-red-700 mt-2" role="alert">{colorError}</p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

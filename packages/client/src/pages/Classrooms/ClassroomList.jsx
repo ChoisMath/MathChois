@@ -9,7 +9,8 @@ import '@fontsource/gaegu/400.css';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { refreshSidebar } from '../../lib/sidebarRefresh';
-import { assignClassroomColors, resolveClassroomColor, colorVars } from '../../lib/classroomColor';
+import { assignClassroomColors, resolveClassroomColor, colorVars, pickLeastUsedColor } from '../../lib/classroomColor';
+import ClassroomColorPicker from '../../components/classrooms/ClassroomColorPicker';
 import '../../components/classrooms/classrooms.css';
 
 const ClassroomList = () => {
@@ -22,6 +23,7 @@ const ClassroomList = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newName, setNewName] = useState('');
+  const [newColor, setNewColor] = useState(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
 
@@ -42,13 +44,21 @@ const ClassroomList = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key]);
 
+  // 창을 열 때마다 이 교사가 가장 적게 쓴 색으로 시작한다
+  const openCreateModal = () => {
+    setNewName('');
+    setNewColor(pickLeastUsedColor(classrooms));
+    setCreateError('');
+    setShowCreateModal(true);
+  };
+
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!newName.trim()) return;
     setCreating(true);
     setCreateError('');
     try {
-      await api.post('/api/classrooms', { name: newName.trim() });
+      await api.post('/api/classrooms', { name: newName.trim(), color: newColor });
       setNewName('');
       setShowCreateModal(false);
       fetchClassrooms();
@@ -78,7 +88,7 @@ const ClassroomList = () => {
           <h1 className="title">내 클래스룸</h1>
         </div>
         {isTeacher && (
-          <button type="button" onClick={() => setShowCreateModal(true)} className="new-btn cursor-pointer">
+          <button type="button" onClick={openCreateModal} className="new-btn cursor-pointer">
             <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
             새 학급
           </button>
@@ -95,7 +105,7 @@ const ClassroomList = () => {
               : '왼쪽 메뉴에서 선생님께 받은 참여 코드를 입력하세요.'}
           </p>
           {isTeacher && (
-            <button type="button" onClick={() => setShowCreateModal(true)} className="new-btn mt-2 cursor-pointer">
+            <button type="button" onClick={openCreateModal} className="new-btn mt-2 cursor-pointer">
               <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
               첫 학급 만들기
             </button>
@@ -145,6 +155,15 @@ const ClassroomList = () => {
               placeholder="예: 2학년 3반 수학"
               className="field w-full px-4 py-2.5 rounded-lg mb-4"
             />
+            <p id="new-classroom-color-label" className="text-sm text-[#56627c] mb-2">표지 색</p>
+            <div className="mb-4">
+              <ClassroomColorPicker
+                value={newColor}
+                onChange={setNewColor}
+                disabled={creating}
+                labelId="new-classroom-color-label"
+              />
+            </div>
             {createError && (
               <p className="text-sm text-red-600 mb-3" role="alert">{createError}</p>
             )}

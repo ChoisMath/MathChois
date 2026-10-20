@@ -101,7 +101,40 @@
 .classroom-modal .field { border: 1px solid #c9d4ee; }
 .classroom-modal .field:focus { outline: none; border-color: #2453a6; box-shadow: 0 0 0 3px rgba(36, 83, 166, .18); }
 
+/* 학급 색 고르기(새 학급 창·학급 상세) */
+.color-picker { display: flex; flex-wrap: wrap; gap: 10px; }
+.color-swatch {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 3px solid #fff; background: var(--swatch);
+  box-shadow: 0 0 0 1px #d6deec;
+  display: grid; place-items: center; color: var(--swatch-deep);
+  cursor: pointer; transition: box-shadow .15s ease, transform .15s ease;
+}
+.color-swatch svg { opacity: 0; }
+.color-swatch[aria-pressed='true'] { box-shadow: 0 0 0 3px #1c2b4a; }
+.color-swatch[aria-pressed='true'] svg { opacity: 1; }
+.color-swatch:hover:not(:disabled) { transform: scale(1.06); }
+.color-swatch:focus-visible { outline: 3px solid #2453a6; outline-offset: 4px; }
+.color-swatch:disabled { cursor: progress; opacity: .6; }
+
+/* 학급 상세 제목 줄: 학급 색 띠 + 옅은 배경 */
+.classroom-head {
+  padding: 12px 16px; border-radius: 12px;
+  background: var(--nb-tint); border-left: 6px solid var(--nb-cover);
+}
+.color-toggle {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 14px; border-radius: 999px;
+  background: #fff; border: 1px solid #d6deec;
+  font-size: 13px; font-weight: 500; color: #1c2b4a; cursor: pointer;
+}
+.color-toggle:hover { background: #f4f7fc; }
+.color-toggle:focus-visible { outline: 3px solid #2453a6; outline-offset: 3px; }
+.color-toggle i { width: 14px; height: 14px; border-radius: 50%; background: var(--nb-cover); display: block; }
+
 @media (prefers-reduced-motion: reduce) {
+  .color-swatch { transition: none; }
+  .color-swatch:hover:not(:disabled) { transform: none; }
   .notebook, .classrooms .new-btn { transition: none; }
   .notebook-link:hover .notebook, .notebook-link:active .notebook { transform: none; }
 }
