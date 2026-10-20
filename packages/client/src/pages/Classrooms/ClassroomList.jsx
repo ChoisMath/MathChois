@@ -9,7 +9,7 @@ import '@fontsource/gaegu/400.css';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { refreshSidebar } from '../../lib/sidebarRefresh';
-import { assignClassroomColors } from '../../lib/classroomColor';
+import { assignClassroomColors, resolveClassroomColor, colorVars } from '../../lib/classroomColor';
 import '../../components/classrooms/classrooms.css';
 
 const ClassroomList = () => {
@@ -60,7 +60,7 @@ const ClassroomList = () => {
     setCreating(false);
   };
 
-  const colors = useMemo(() => assignClassroomColors(classrooms), [classrooms]);
+  const auto = useMemo(() => assignClassroomColors(classrooms), [classrooms]);
 
   const getMemberCount = (classroom) => {
     return classroom.memberCount ?? 0;
@@ -107,7 +107,8 @@ const ClassroomList = () => {
             <Link
               key={classroom.id}
               to={`${prefix}/classrooms/${classroom.id}`}
-              className={`notebook-link nb-${colors.get(classroom.id)}`}
+              className="notebook-link"
+              style={colorVars(resolveClassroomColor(classroom, auto))}
             >
               <div className="notebook">
                 <div className="notebook-label">

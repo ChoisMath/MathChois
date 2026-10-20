@@ -1,6 +1,7 @@
 /*
  * 클래스룸 목록 — 모눈 노트 위의 공책 표지 (디자인 논의: 시안 A, 학급 색 자동 배정).
- * 학급 색 6가지: --nb-cover(표지) / --nb-deep(이름표 글씨·학생 수) — 이름표·칩 위 글씨는 모두 4.5:1 이상.
+ * 학급 색: --nb-cover(표지) / --nb-deep(이름표 글씨·학생 수) 는 링크의 인라인 style 로 들어온다(lib/classroomColor.js colorVars).
+ * 이름표·칩 위 글씨는 모두 4.5:1 이상.
  */
 .classrooms {
   --paper: #f8fafd;
@@ -37,13 +38,6 @@
 .classrooms :focus-visible { outline: 3px solid var(--pen); outline-offset: 4px; }
 
 /* ── 공책 표지 ── */
-.nb-coral    { --nb-cover: #f2836b; --nb-deep: #a63b24; }
-.nb-mustard  { --nb-cover: #f2b544; --nb-deep: #7d5200; }
-.nb-sage     { --nb-cover: #8fc28a; --nb-deep: #2c6537; }
-.nb-sky      { --nb-cover: #6fa8dc; --nb-deep: #1d5893; }
-.nb-lavender { --nb-cover: #a78bda; --nb-deep: #563a99; }
-.nb-rose     { --nb-cover: #ee8ab1; --nb-deep: #932a56; }
-
 .notebook {
   position: relative;
   display: grid; grid-template-rows: 1fr auto; gap: 12px;
