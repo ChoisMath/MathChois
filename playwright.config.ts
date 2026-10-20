@@ -30,6 +30,11 @@ export default defineConfig({
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
+
+    /* Claude Code cloud sessions: use the preinstalled Chromium (exported by .claude/hooks/session-start.sh). */
+    launchOptions: process.env.PW_CHROMIUM_EXECUTABLE
+      ? { executablePath: process.env.PW_CHROMIUM_EXECUTABLE }
+      : {},
   },
 
   /* Configure projects for major browsers */

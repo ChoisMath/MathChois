@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PROJECT_DIR:-.}/.claude/mcp/launch.mjs", "playwright"]
+    },
+    "chrome-devtools": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PROJECT_DIR:-.}/.claude/mcp/launch.mjs", "chrome-devtools"]
+    }
+  }
+}

@@ -6,23 +6,21 @@
       "Bash(npm list:*)"
     ]
   },
-  "mcpServers": {
-    "playwright": {
-      "command": "cmd",
-      "args": [
-        "/c",
-        "npx",
-        "@playwright/mcp@latest"
-      ]
-    },
-    "chrome-devtools": {
-      "command": "cmd",
-      "args": [
-        "/c",
-        "npx",
-        "chrome-devtools-mcp@latest"
-      ]
-    }
+  "enabledMcpjsonServers": [
+    "playwright",
+    "chrome-devtools"
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
   },
   "enabledPlugins": {
     "skill-creator@claude-plugins-official": true
