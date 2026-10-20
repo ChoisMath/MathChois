@@ -115,12 +115,12 @@ export default function WhiteboardSettingsDrawer({
               <div className="bg-white border rounded-lg p-3 space-y-2">
                 <p className="text-xs text-gray-500">선택한 모둠: <span className="font-medium text-gray-800">{selected.name}</span></p>
                 <div className="flex flex-wrap gap-2">
-                  <IconButton icon={ImageDown} label="PNG" disabled={busy} onClick={() => onExportPng(selected)} />
-                  <IconButton icon={FileDown} label="PDF" disabled={busy} onClick={() => onExportPdf([selected])} />
-                  <IconButton icon={Files} label="전체 모둠 PDF" disabled={busy} onClick={() => onExportPdf(view.groups)} />
+                  <IconButton icon={ImageDown} label="PNG로 저장" disabled={busy} onClick={() => onExportPng(selected)} />
+                  <IconButton icon={FileDown} label="PDF로 저장" disabled={busy} onClick={() => onExportPdf([selected])} />
+                  <IconButton icon={Files} label="전체 모둠 PDF로 저장" disabled={busy} onClick={() => onExportPdf(view.groups)} />
                   <IconButton
                     icon={Undo2} disabled={busy || !selected.hasPrevious} onClick={() => onRestore(selected)}
-                    label={selected.hasPrevious ? '직전 저장본으로 되돌리기' : '되돌릴 직전 상태가 없습니다'}
+                    label="직전 저장본으로 되돌리기"
                   />
                   <IconButton icon={Eraser} label="초기화" variant="danger" disabled={busy} onClick={() => onReset(selected)} />
                 </div>

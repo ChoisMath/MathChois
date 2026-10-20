@@ -142,7 +142,7 @@ export default function TeacherCoachingReview({ classroomId, pages, currentPage,
                       {s.used} / {s.limit}회
                     </span>
                   </button>
-                  <IconButton icon={RotateCcw} label="리셋" onClick={() => handleReset(s.studentId)} busy={resettingId === s.studentId} />
+                  <IconButton icon={RotateCcw} label={`${s.name || '학생'} 코칭 횟수 리셋`} busyLabel="리셋 중" onClick={() => handleReset(s.studentId)} busy={resettingId === s.studentId} />
                 </div>
                 {open && (
                   <div className="border-t p-2">
