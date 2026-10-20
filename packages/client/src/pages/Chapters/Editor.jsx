@@ -409,12 +409,7 @@ const ChapterEditor = () => {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="text-gray-400 hover:text-gray-600 cursor-pointer"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
+          <IconButton icon={ArrowLeft} label="뒤로" onClick={() => navigate(-1)} />
           {editingTitle ? (
             <input
               autoFocus

@@ -310,10 +310,7 @@ const AssignmentEditor = () => {
     <div>
       {/* 헤더 */}
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate(`/teacher/classrooms/${classroomId}`)}
-          className="text-gray-400 hover:text-gray-600 cursor-pointer">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
+        <IconButton icon={ArrowLeft} label="학급으로 돌아가기" onClick={() => navigate(`/teacher/classrooms/${classroomId}`)} />
         <h1 className="text-xl font-bold text-gray-900">과제 편집</h1>
       </div>
 

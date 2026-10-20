@@ -104,7 +104,7 @@ function TeacherNotesModal({ page, onClose }) {
               label="PDF 다운로드"
               className="py-1 px-2 text-xs"
             />
-            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer">
+            <button onClick={onClose} aria-label="교사 필기 닫기" title="교사 필기 닫기" className="p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -743,6 +743,7 @@ const AssignmentStudyViewer = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate(assignment?.classroomId ? `/student/classrooms/${assignment.classroomId}?tab=assignments` : '/student/classrooms')}
+            aria-label="과제 목록으로 돌아가기" title="과제 목록으로 돌아가기"
             className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer">
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -850,6 +851,8 @@ const AssignmentStudyViewer = () => {
 
           {drawMode && !isLocked && !currentPage?.videoUrl && (
             <button onClick={() => setToolbarCollapsed((v) => !v)}
+              aria-label={toolbarCollapsed ? '필기 도구 펼치기' : '필기 도구 접기'}
+              title={toolbarCollapsed ? '필기 도구 펼치기' : '필기 도구 접기'}
               className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 cursor-pointer">
               {toolbarCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
             </button>
@@ -858,6 +861,7 @@ const AssignmentStudyViewer = () => {
           <button
             onClick={() => prevPage && navigate(`/student/assignments/${assignmentId}/page/${prevPage.id}`)}
             disabled={!prevPage}
+            aria-label="이전 페이지" title="이전 페이지"
             className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer">
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -869,11 +873,13 @@ const AssignmentStudyViewer = () => {
           <button
             onClick={() => nextPage && navigate(`/student/assignments/${assignmentId}/page/${nextPage.id}`)}
             disabled={!nextPage}
+            aria-label="다음 페이지" title="다음 페이지"
             className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer">
             <ChevronRight className="h-4 w-4" />
           </button>
 
           <button onClick={() => setSidebarOpen((v) => !v)}
+            aria-label="페이지 목록" title="페이지 목록"
             className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer">
             <Menu className="h-5 w-5" />
           </button>
@@ -921,7 +927,7 @@ const AssignmentStudyViewer = () => {
           <div ref={sidebarScrollRef} className="w-44 bg-white border-r overflow-y-auto flex-shrink-0">
             <div className="px-3 py-2 border-b flex items-center justify-between">
               <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">페이지</span>
-              <button onClick={() => setSidebarOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+              <button onClick={() => setSidebarOpen(false)} aria-label="페이지 목록 닫기" title="페이지 목록 닫기" className="text-gray-400 hover:text-gray-600 cursor-pointer">
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>

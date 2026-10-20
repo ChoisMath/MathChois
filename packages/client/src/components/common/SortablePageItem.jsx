@@ -33,6 +33,8 @@ const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage,
       <div
         {...attributes}
         {...listeners}
+        aria-label="순서 바꾸기 (끌어서 이동)"
+        title="순서 바꾸기 (끌어서 이동)"
         className="absolute top-1 left-1 p-1 bg-black/40 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10"
       >
         <GripVertical className="h-3 w-3" />
@@ -83,6 +85,8 @@ const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage,
       </div>
       <button
         type="button"
+        aria-label="페이지 삭제"
+        title="페이지 삭제"
         className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer disabled:opacity-50 z-10"
         onClick={(e) => {
           e.stopPropagation();

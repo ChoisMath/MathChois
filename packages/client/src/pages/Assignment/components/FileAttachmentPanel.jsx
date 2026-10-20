@@ -42,6 +42,7 @@ export default function FileAttachmentPanel({
           <span className="text-xs text-gray-400">{formatFileSize(f.fileSize)}</span>
           {!readOnly && (
             <button onClick={() => onRemoveExisting(f.id)}
+              aria-label={`${f.fileName} 첨부 빼기`} title="첨부 빼기"
               className="p-0.5 text-gray-400 hover:text-red-500 cursor-pointer">
               <X className="h-4 w-4" />
             </button>
@@ -56,6 +57,7 @@ export default function FileAttachmentPanel({
           <span className="text-sm text-blue-700 truncate flex-1">{f.name}</span>
           <span className="text-xs text-blue-400">{formatFileSize(f.size)}</span>
           <button onClick={() => onRemoveNew(idx)}
+            aria-label={`${f.name} 첨부 빼기`} title="첨부 빼기"
             className="p-0.5 text-gray-400 hover:text-red-500 cursor-pointer">
             <X className="h-4 w-4" />
           </button>
@@ -68,6 +70,7 @@ export default function FileAttachmentPanel({
           <input ref={fileInputRef} type="file" multiple
             onChange={onFileAdd} className="hidden" />
           <button onClick={() => fileInputRef.current?.click()}
+            aria-label="파일 추가" title="파일 추가"
             className="mt-1 flex items-center justify-center p-2 w-full border border-dashed border-gray-300 rounded-md text-gray-500 hover:border-purple-300 hover:text-purple-500 cursor-pointer">
             <Plus className="h-5 w-5" />
           </button>
