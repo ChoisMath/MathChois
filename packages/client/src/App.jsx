@@ -100,8 +100,9 @@ function App() {
           {/* Public Routes (no layout) */}
           <Route path="/reset-password/:token" element={<ResetPassword />} />
           <Route path="/verify-email/:token" element={<VerifyEmail />} />
+          {/* 첫 화면은 자체 로고가 있어 상단 바 없이 */}
+          <Route path="/" element={<Home />} />
           <Route element={<MainLayout />}>
-            <Route path="/" element={<Home />} />
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="/choose-role" element={<ChooseRole />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />

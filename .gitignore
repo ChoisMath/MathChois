@@ -77,3 +77,7 @@ local-storage/
 
 # Drizzle (drizzle-kit generated output; schema.ts is source of truth, applied via db:push + startupMigrate)
 drizzle/
+
+# Python bytecode (e.g. .claude/skills/*/scripts)
+__pycache__/
+*.pyc

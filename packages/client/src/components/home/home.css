@@ -1,0 +1,132 @@
+/*
+ * 첫 화면(로그인) — 모눈 노트 · 잉크 네이비.
+ * 디자인 논의: 시안 A-1 (Google 버튼만 남색 파스텔), 모션 A(필기 장면, 첫 방문 1회) + C(버튼·꼭짓점 반응).
+ */
+.home {
+  --paper: #f8fafd;
+  --rule: #dde6f2;
+  --rule-strong: #b9c6da;
+  --ink: #1c2b4a;
+  --soft: #56627c;
+  --pen: #2453a6;
+  --red: #d9372b;
+  --note: #fde9e7;
+  --note-ink: #8e2119;
+  --pastel: #dce4f6;
+  --pastel-hover: #d2dcf3;
+  --pastel-line: #b4c2e2;
+  --cell: 24px;  /* Home 이 장면 너비 / 20 으로 덮어써 모눈과 좌표평면 칸을 맞춘다 */
+  --gx: 0px;
+  --gy: 0px;
+  --sans: 'IBM Plex Sans KR', 'Noto Sans KR', system-ui, sans-serif;
+  --hand: 'Gaegu', 'Nanum Pen Script', cursive;
+
+  font-family: var(--sans);
+  color: var(--ink);
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--rule) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+  background-size: var(--cell) var(--cell);
+  background-position: var(--gx) var(--gy);
+}
+.home .hand { font-family: var(--hand); }
+
+/* Google 버튼 (남색 파스텔) — C 모션: 손을 올리면 떠오르고 누르면 눌림 */
+.home .google-btn {
+  background: var(--pastel);
+  border: 1px solid var(--pastel-line);
+  color: var(--ink);
+  transition: transform .15s ease, box-shadow .2s ease, background-color .2s ease;
+}
+.home .google-btn:hover { background: var(--pastel-hover); box-shadow: 0 6px 16px -6px rgba(28, 43, 74, .28); transform: translateY(-1px); }
+.home .google-btn:active { transform: scale(.97); box-shadow: none; }
+.home .google-btn:disabled { opacity: .6; transform: none; }
+
+.home .field {
+  background: #fff;
+  border: 1px solid #c9d4ee;
+  color: var(--ink);
+}
+.home .field:focus { outline: none; border-color: var(--pen); box-shadow: 0 0 0 3px rgba(36, 83, 166, .18); }
+.home .primary-btn { background: var(--ink); color: #fff; transition: background-color .2s ease, transform .15s ease; }
+.home .primary-btn:hover { background: #142039; }
+.home .primary-btn:active { transform: scale(.98); }
+.home :focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
+
+/* ── 수업 한 장면 (20 × 23 칸) ── */
+.lesson {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 20 / 23;
+  container-type: inline-size;
+  pointer-events: none;
+}
+.lesson-plane { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.lesson path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.lesson .axes path { stroke: #7c89a3; stroke-width: .07; }
+.lesson .axes text { font-family: var(--sans); font-size: .52px; fill: #6b7790; }
+.lesson .axes .lbl { font-size: .62px; font-style: italic; }
+.lesson-plane .student path { stroke: var(--pen); stroke-width: .14; opacity: .9; }
+.lesson-plane .student .dash { stroke-dasharray: .41 .32; stroke-width: .1; }
+.lesson-plane .student circle { fill: var(--pen); }
+.lesson-plane .student text { font-family: var(--hand); font-size: .95px; fill: var(--pen); }
+.lesson-plane .teacher path { stroke: var(--red); stroke-width: .155; }
+.lesson-plane .teacher .dot { fill: var(--red); }
+.lesson-plane .teacher text { font-family: var(--hand); font-weight: 700; font-size: .9px; fill: var(--red); }
+.lesson-plane .hit { fill: transparent; pointer-events: all; cursor: pointer; }
+
+.lesson-card {
+  position: absolute; top: 0; left: 3%; width: 82%;
+  background: #fff; color: #1f2430;
+  border-radius: 1.4cqw;
+  padding: 3.6cqw 4.4cqw 2.4cqw;
+  box-shadow: 0 1.4cqw 5cqw -2cqw rgba(0, 0, 0, .18), 0 1px 2px rgba(0, 0, 0, .08);
+  transform: rotate(-2deg);
+}
+.lesson-tag { font-size: 2.3cqw; font-weight: 700; color: var(--pen); letter-spacing: .02em; }
+.lesson-q { margin: .8cqw 0 0; font-size: 2.75cqw; line-height: 1.55; }
+.lesson-ink { display: block; width: 100%; height: auto; margin-top: 1.2cqw; overflow: visible; }
+.lesson-ink .student text { font-family: var(--hand); fill: var(--pen); }
+.lesson-ink .teacher text { font-family: var(--hand); font-weight: 700; fill: var(--red); }
+.lesson-ink .teacher path { stroke: var(--red); }
+
+.lesson-sticky {
+  position: absolute; right: 0; top: 60cqw; width: 25cqw;
+  padding: 2cqw 2.4cqw;
+  background: var(--note); color: var(--note-ink);
+  font-family: var(--hand); font-size: 3.1cqw; line-height: 1.25;
+  transform: rotate(3deg);
+  box-shadow: 0 .8cqw 2.4cqw rgba(0, 0, 0, .15);
+  border-radius: 2px;
+}
+.lesson-sticky small { display: block; font-family: var(--sans); font-size: 1.8cqw; opacity: .75; margin-bottom: .4cqw; }
+
+/* ── 모션 A: 필기 장면 (약 4초, 기본 상태는 완성된 그림) ── */
+.lesson .draw { stroke-dasharray: 1; }
+.lesson[data-play] .draw  { animation: lesson-draw var(--dur, .4s) cubic-bezier(.45, 0, .25, 1) var(--d, 0s) both; }
+.lesson[data-play] .write { animation: lesson-write var(--dur, .3s) linear var(--d, 0s) both; }
+.lesson[data-play] .fade  { animation: lesson-fade .25s ease-out var(--d, 0s) both; }
+.lesson[data-play] .pop   { transform-box: fill-box; transform-origin: center; animation: lesson-pop .3s cubic-bezier(.2, .8, .2, 1.3) var(--d, 0s) both; }
+.lesson[data-play] .lesson-sticky { animation: lesson-stick .4s cubic-bezier(.2, .8, .2, 1.1) 3.7s both; }
+.lesson .s-graph .dash { --d: 1.2s; }
+.lesson .s-graph path.draw { --d: 1.3s; --dur: .5s; }
+.lesson .s-graph .pop { --d: 1.75s; }
+.lesson .t-graph .strike { --d: 2.65s; --dur: .15s; }
+.lesson .t-graph .curve { --d: 2.8s; --dur: .55s; }
+.lesson .t-graph .dot { --d: 3.35s; }
+.lesson .t-graph .vertex { --d: 3.4s; --dur: .2s; }
+.lesson .t-graph text { --d: 3.55s; }
+/* 모션 C: 꼭짓점을 누르면 동그라미를 다시 그림 (재생 여부와 무관) */
+.lesson .vertex.replay { animation: lesson-draw .35s cubic-bezier(.45, 0, .25, 1) both; }
+
+/* opacity 도 함께: 시작 전 둥근 선 끝(cap)이 점으로 비치지 않게 */
+@keyframes lesson-draw  { from { stroke-dashoffset: 1; opacity: 0; } 4% { opacity: 1; } to { stroke-dashoffset: 0; opacity: 1; } }
+@keyframes lesson-write { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes lesson-fade  { from { opacity: 0; } }
+@keyframes lesson-pop   { from { opacity: 0; transform: scale(.4); } }
+@keyframes lesson-stick { from { opacity: 0; transform: translateY(-4cqw) rotate(10deg); } to { opacity: 1; transform: rotate(3deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .lesson *, .lesson .lesson-sticky, .home .google-btn { animation: none !important; transition: none !important; }
+}
