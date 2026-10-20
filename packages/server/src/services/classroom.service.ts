@@ -1,4 +1,5 @@
 import { eq, and, count, desc, ne, inArray } from 'drizzle-orm';
+import type { ClassroomColor } from '@mathchois/shared';
 import { db } from '../config/database.js';
 import { classrooms, classroomMembers, profiles, chapters, pages, assignments, assignmentPages } from '../db/schema.js';
 
@@ -23,6 +24,7 @@ export async function getTeacherClassrooms(teacherId: string) {
       teacherId: classrooms.teacherId,
       classCode: classrooms.classCode,
       createdAt: classrooms.createdAt,
+      color: classrooms.color,
       memberCount: count(classroomMembers.id),
     })
     .from(classrooms)
@@ -54,6 +56,7 @@ export async function getStudentClassrooms(studentId: string) {
       teacherId: classrooms.teacherId,
       classCode: classrooms.classCode,
       createdAt: classrooms.createdAt,
+      color: classrooms.color,
       memberCount: count(classroomMembers.id),
     })
     .from(classrooms)
@@ -76,7 +79,7 @@ export async function getClassroomById(id: string) {
 }
 
 /** 교실 생성 */
-export async function createClassroom(teacherId: string, name: string) {
+export async function createClassroom(teacherId: string, name: string, color?: ClassroomColor) {
   // 코드 충돌 방지: 최대 5회 시도
   for (let i = 0; i < 5; i++) {
     try {
@@ -86,6 +89,7 @@ export async function createClassroom(teacherId: string, name: string) {
           name,
           teacherId,
           classCode: generateClassCode(),
+          color,
         })
         .returning();
       return created;
@@ -98,7 +102,7 @@ export async function createClassroom(teacherId: string, name: string) {
 }
 
 /** 교실 수정 */
-export async function updateClassroom(id: string, data: { name?: string }) {
+export async function updateClassroom(id: string, data: { name?: string; color?: ClassroomColor }) {
   const [updated] = await db
     .update(classrooms)
     .set(data)

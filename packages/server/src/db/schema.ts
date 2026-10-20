@@ -26,6 +26,8 @@ export const classrooms = pgTable('classrooms', {
   teacherId: uuid('teacher_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
   classCode: text('class_code').unique().notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  // 학급 색(shared CLASSROOM_COLORS 중 하나). null 이면 클라이언트가 자동 색을 쓴다.
+  color: text('color'),
 });
 
 // ─── classroom_members ──────────────────────────────
