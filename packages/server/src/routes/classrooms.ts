@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { isClassroomColor, pickLeastUsedColor } from '@mathchois/shared';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import {
@@ -36,15 +37,21 @@ export async function classroomRoutes(app: FastifyInstance) {
   // ─── POST /api/classrooms — 교실 생성 ────────
 
   app.post<{
-    Body: { name: string };
+    Body: { name: string; color?: string };
   }>('/api/classrooms', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
-    const { name } = request.body;
+    const { name, color } = request.body;
     if (!name?.trim()) {
       return reply.status(400).send({ error: 'Name is required' });
     }
-    const classroom = await createClassroom(request.user.sub, name.trim());
+    // color 가 null/undefined 면 "안 보냄"으로 보고 검증하지 않는다
+    if (color != null && !isClassroomColor(color)) {
+      return reply.status(400).send({ error: 'Invalid color' });
+    }
+    // 색을 안 보내면 이 교사의 학급에서 가장 덜 쓰인 색
+    const finalColor = color ?? pickLeastUsedColor(await getTeacherClassrooms(request.user.sub));
+    const classroom = await createClassroom(request.user.sub, name.trim(), finalColor);
     return reply.status(201).send(classroom);
   });
 
@@ -92,7 +99,7 @@ export async function classroomRoutes(app: FastifyInstance) {
 
   app.patch<{
     Params: { id: string };
-    Body: { name?: string };
+    Body: { name?: string; color?: string };
   }>('/api/classrooms/:id', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
@@ -100,7 +107,22 @@ export async function classroomRoutes(app: FastifyInstance) {
     if (!isOwner) {
       return reply.status(403).send({ error: 'Not the classroom owner' });
     }
-    const updated = await updateClassroom(request.params.id, request.body);
+    // 본문 통째 전달 금지 — teacherId·classCode 등은 무시하고 name/color 만 반영
+    const { name, color } = request.body ?? {};
+    if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
+      return reply.status(400).send({ error: 'Name is required' });
+    }
+    if (color !== undefined && !isClassroomColor(color)) {
+      return reply.status(400).send({ error: 'Invalid color' });
+    }
+    const patch = {
+      ...(name !== undefined && { name: name.trim() }),
+      ...(color !== undefined && { color }),
+    };
+    if (Object.keys(patch).length === 0) {
+      return reply.status(400).send({ error: 'Nothing to update' });
+    }
+    const updated = await updateClassroom(request.params.id, patch);
     if (!updated) {
       return reply.status(404).send({ error: 'Classroom not found' });
     }

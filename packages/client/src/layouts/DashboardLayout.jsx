@@ -1,11 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Users, LogIn, LayoutList, Loader, BookMarked, History, LayoutTemplate, Clapperboard } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Users, Loader, BookMarked, History, LayoutTemplate, Clapperboard, LayoutList, X } from 'lucide-react';
 import Navbar from '../components/Navbar';
+import BrandMark from '../components/shell/BrandMark';
+import { SideTab, ClassTab } from '../components/shell/SideTab';
+import '../components/shell/shell.css';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../lib/api';
 import { subscribeSidebarRefresh } from '../lib/sidebarRefresh';
 import { getVideoUnreadTotals } from '../lib/videos';
+import { assignClassroomColors, resolveClassroomColor } from '../lib/classroomColor';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { DESKTOP_MEDIA_QUERY, SIDEBAR_COLLAPSED_KEY } from '../lib/layout';
 
@@ -15,12 +19,32 @@ const EMPTY_UNREAD = { byClassroom: {}, total: 0 };
 function UnreadBadge({ count, title }) {
   if (!(count > 0)) return null;
   return (
-    <span
-      className="ml-auto flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full leading-none shrink-0"
-      title={title ?? `새 영상 댓글 ${count}개`}
-    >
+    <span className="shell-badge" title={title ?? `새 영상 댓글 ${count}개`}>
       {count}
     </span>
+  );
+}
+
+/** 학급 탭 목록 — 목록 전체로 자동 색을 배정하고, 저장된 색이 있으면 그것을 쓴다. */
+function ClassTabList({ classrooms, basePath, pathname, videoUnread }) {
+  const autoColors = useMemo(() => assignClassroomColors(classrooms), [classrooms]);
+  return (
+    <ul className="shell-side-list">
+      {classrooms.map((cls) => {
+        const to = `${basePath}/${cls.id}`;
+        return (
+          <li key={cls.id}>
+            <ClassTab
+              to={to}
+              classroom={cls}
+              color={resolveClassroomColor(cls, autoColors)}
+              active={pathname.startsWith(to)}
+              badge={<UnreadBadge count={videoUnread.byClassroom?.[cls.id]} />}
+            />
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -80,90 +104,55 @@ function StudentSidebar() {
   };
 
   return (
-    <div className="p-4 flex flex-col gap-5">
-      <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-        학생 워크스페이스
-      </h2>
+    <div className="shell-side-inner">
+      <h2 className="shell-side-title">학생 워크스페이스</h2>
 
       {/* ① 클래스 참여 폼 */}
-      <div>
-        <p className="text-xs font-medium text-gray-500 mb-2">클래스 참여</p>
-        <form onSubmit={handleJoin} className="flex flex-col gap-2">
+      <form onSubmit={handleJoin} className="shell-join">
+        <label htmlFor="join-code" className="shell-join-label">선생님께 받은 참여 코드</label>
+        <div className="shell-join-row">
           <input
+            id="join-code"
             type="text"
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-            placeholder="클래스 코드 6자리"
+            placeholder="코드 6자리"
             maxLength={6}
-            className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 font-mono tracking-widest"
+            autoComplete="off"
+            className="shell-join-input"
           />
           <button
             type="submit"
             disabled={joining || joinCode.length < 6}
-            title="참여하기"
-            className="flex items-center justify-center p-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 cursor-pointer"
+            className="shell-join-btn"
           >
-            {joining ? <Loader className="h-5 w-5 animate-spin" /> : <LogIn className="h-5 w-5" />}
+            {joining ? <Loader className="h-5 w-5 animate-spin" aria-label="참여 중" /> : '참여'}
           </button>
-          {joinError && (
-            <p className="text-xs text-red-600">{joinError}</p>
-          )}
-        </form>
-      </div>
-
-      <div className="w-full h-px bg-gray-100" />
-
-      {/* ② 참여 중인 클래스 목록 */}
-      <div>
-        <Link
-          to="/student/classrooms"
-          className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors mb-2 ${
-            location.pathname === '/student/classrooms'
-              ? 'bg-blue-50 text-blue-700'
-              : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
-          }`}
-        >
-          <Users className={`mr-2 h-4 w-4 ${location.pathname === '/student/classrooms' ? 'text-blue-500' : 'text-gray-400'}`} />
-          내 클래스룸
-        </Link>
-        <Link
-          to="/student/coaching-history"
-          className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors mb-2 ${
-            location.pathname.startsWith('/student/coaching-history')
-              ? 'bg-blue-50 text-blue-700'
-              : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
-          }`}
-        >
-          <History className={`mr-2 h-4 w-4 ${location.pathname.startsWith('/student/coaching-history') ? 'text-blue-500' : 'text-gray-400'}`} />
-          내 풀이 기록
-        </Link>
-
-        {classrooms.length === 0 ? (
-          <p className="text-xs text-gray-400 px-3">참여한 클래스가 없습니다.</p>
-        ) : (
-          <ul className="space-y-0.5">
-            {classrooms.map((cls) => {
-              const to = `/student/classrooms/${cls.id}`;
-              const isActive = location.pathname.startsWith(to);
-              return (
-                <li key={cls.id}>
-                  <Link
-                    to={to}
-                    className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${
-                      isActive
-                        ? 'bg-blue-50 text-blue-700 font-medium'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="truncate">{cls.name}</span>
-                    <UnreadBadge count={videoUnread.byClassroom?.[cls.id]} />
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+        </div>
+        {joinError && (
+          <p className="shell-join-error" role="alert">{joinError}</p>
         )}
-      </div>
+      </form>
+
+      {/* ② 메뉴 + 참여 중인 클래스 목록 */}
+      <SideTab to="/student/classrooms" icon={Users} active={location.pathname === '/student/classrooms'}>
+        내 클래스룸
+      </SideTab>
+      <SideTab to="/student/coaching-history" icon={History} active={location.pathname.startsWith('/student/coaching-history')}>
+        내 풀이 기록
+      </SideTab>
+
+      <h2 className="shell-side-title is-sub">학급</h2>
+      {classrooms.length === 0 ? (
+        <p className="shell-side-empty">참여한 클래스가 없습니다.</p>
+      ) : (
+        <ClassTabList
+          classrooms={classrooms}
+          basePath="/student/classrooms"
+          pathname={location.pathname}
+          videoUnread={videoUnread}
+        />
+      )}
     </div>
   );
 }
@@ -190,103 +179,41 @@ function TeacherSidebar() {
   }, [user?.id, refreshKey]);
 
   return (
-    <div className="p-4 flex flex-col gap-5">
-      <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-        교사 워크스페이스
-      </h2>
+    <div className="shell-side-inner">
+      <h2 className="shell-side-title">교사 워크스페이스</h2>
 
-      <div>
-        {/* 게시판 */}
-        <Link
-          to="/teacher/board"
-          className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors mb-1 ${
-            location.pathname.startsWith('/teacher/board')
-              ? 'bg-blue-50 text-blue-700'
-              : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
-          }`}
-        >
-          <LayoutList className={`mr-2 h-4 w-4 ${location.pathname.startsWith('/teacher/board') ? 'text-blue-500' : 'text-gray-400'}`} />
-          게시판
-        </Link>
+      <SideTab to="/teacher/board" icon={LayoutList} active={location.pathname.startsWith('/teacher/board')}>
+        게시판
+      </SideTab>
+      <SideTab to="/teacher/problems" icon={BookMarked} active={location.pathname.startsWith('/teacher/problems')}>
+        문제은행
+      </SideTab>
+      <SideTab to="/teacher/visualizations" icon={LayoutTemplate} active={location.pathname.startsWith('/teacher/visualizations')}>
+        시각화자료
+      </SideTab>
+      <SideTab
+        to="/teacher/videos"
+        icon={Clapperboard}
+        active={location.pathname.startsWith('/teacher/videos')}
+        badge={<UnreadBadge count={videoUnread.total} title={`학급 영상에 새 댓글 ${videoUnread.total}개`} />}
+      >
+        영상자료
+      </SideTab>
+      <SideTab to="/teacher/classrooms" icon={Users} active={location.pathname === '/teacher/classrooms'}>
+        내 클래스룸
+      </SideTab>
 
-        {/* 문제은행 */}
-        <Link
-          to="/teacher/problems"
-          className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors mb-1 ${
-            location.pathname.startsWith('/teacher/problems')
-              ? 'bg-blue-50 text-blue-700'
-              : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
-          }`}
-        >
-          <BookMarked className={`mr-2 h-4 w-4 ${location.pathname.startsWith('/teacher/problems') ? 'text-blue-500' : 'text-gray-400'}`} />
-          문제은행
-        </Link>
-
-        {/* 시각화자료 */}
-        <Link
-          to="/teacher/visualizations"
-          className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors mb-1 ${
-            location.pathname.startsWith('/teacher/visualizations')
-              ? 'bg-blue-50 text-blue-700'
-              : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
-          }`}
-        >
-          <LayoutTemplate className={`mr-2 h-4 w-4 ${location.pathname.startsWith('/teacher/visualizations') ? 'text-blue-500' : 'text-gray-400'}`} />
-          시각화자료
-        </Link>
-
-        {/* 영상자료 */}
-        <Link
-          to="/teacher/videos"
-          className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors mb-1 ${
-            location.pathname.startsWith('/teacher/videos')
-              ? 'bg-blue-50 text-blue-700'
-              : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
-          }`}
-        >
-          <Clapperboard className={`mr-2 h-4 w-4 ${location.pathname.startsWith('/teacher/videos') ? 'text-blue-500' : 'text-gray-400'}`} />
-          영상자료
-          <UnreadBadge count={videoUnread.total} title={`학급 영상에 새 댓글 ${videoUnread.total}개`} />
-        </Link>
-
-        <Link
-          to="/teacher/classrooms"
-          className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors mb-2 ${
-            location.pathname === '/teacher/classrooms'
-              ? 'bg-blue-50 text-blue-700'
-              : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
-          }`}
-        >
-          <Users className={`mr-2 h-4 w-4 ${location.pathname === '/teacher/classrooms' ? 'text-blue-500' : 'text-gray-400'}`} />
-          내 클래스룸
-        </Link>
-
-        {classrooms.length === 0 ? (
-          <p className="text-xs text-gray-400 px-3">생성한 클래스가 없습니다.</p>
-        ) : (
-          <ul className="space-y-0.5">
-            {classrooms.map((cls) => {
-              const to = `/teacher/classrooms/${cls.id}`;
-              const isActive = location.pathname.startsWith(to);
-              return (
-                <li key={cls.id}>
-                  <Link
-                    to={to}
-                    className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${
-                      isActive
-                        ? 'bg-blue-50 text-blue-700 font-medium'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="truncate">{cls.name}</span>
-                    <UnreadBadge count={videoUnread.byClassroom?.[cls.id]} />
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+      <h2 className="shell-side-title is-sub">학급</h2>
+      {classrooms.length === 0 ? (
+        <p className="shell-side-empty">생성한 클래스가 없습니다.</p>
+      ) : (
+        <ClassTabList
+          classrooms={classrooms}
+          basePath="/teacher/classrooms"
+          pathname={location.pathname}
+          videoUnread={videoUnread}
+        />
+      )}
     </div>
   );
 }
@@ -330,13 +257,15 @@ const DashboardLayout = () => {
   const sidebar = isTeacher ? <TeacherSidebar /> : <StudentSidebar />;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-[#f8fafd] flex flex-col">
       <Navbar onToggleSidebar={toggleSidebar} sidebarOpen={isDesktop ? showDocked : overlayOpen} />
       <div className="flex flex-1 min-h-0">
-        {/* 데스크톱 고정 사이드바 */}
+        {/* 데스크톱 고정 사이드바 — 바깥은 본문 높이만큼 늘어나(배경이 바닥까지), 안쪽이 화면에 붙어 스크롤된다(상단 바 64px 제외 높이). 폭은 px — 루트 글자 크기(12/14/18px)에 따라 변하지 않게 */}
         {showDocked && (
-          <aside className="w-64 shrink-0 bg-white border-r border-gray-200 overflow-y-auto sticky top-0 self-start max-h-dvh">
-            {sidebar}
+          <aside className="shell-side w-[280px] shrink-0">
+            <div className="sticky top-0 max-h-[calc(100dvh-64px)] overflow-y-auto">
+              {sidebar}
+            </div>
           </aside>
         )}
 
@@ -347,15 +276,18 @@ const DashboardLayout = () => {
               className="fixed inset-0 z-40 bg-black/40"
               onClick={() => setOverlayOpen(false)}
             />
-            <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl overflow-y-auto">
-              <div className="flex items-center justify-between px-4 h-16 border-b border-gray-200">
-                <span className="text-lg font-bold text-gray-900">메뉴</span>
+            <aside className="shell-side fixed inset-y-0 left-0 z-50 w-[280px] max-w-[85vw] shadow-xl overflow-y-auto">
+              <div className="shell-overlay-head">
+                <span className="shell-overlay-title">
+                  <BrandMark className="h-6 w-6" onDark />
+                  메뉴
+                </span>
                 <button
                   onClick={() => setOverlayOpen(false)}
-                  className="p-2 min-w-11 min-h-11 text-gray-400 hover:text-gray-600 rounded-md cursor-pointer"
+                  className="shell-iconbtn"
                   aria-label="메뉴 닫기"
                 >
-                  ✕
+                  <X className="h-5 w-5" aria-hidden="true" />
                 </button>
               </div>
               {sidebar}
@@ -363,8 +295,9 @@ const DashboardLayout = () => {
           </>
         )}
 
-        {/* 본문 — 유동 폭. min-w-0 으로 그리드/표가 부모를 밀어내지 않게 한다. 여백: 모바일 16 · 태블릿 24 · 데스크톱 32px */}
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">
+        {/* 본문 — 종이색, 유동 폭. min-w-0 으로 그리드/표가 부모를 밀어내지 않게 한다. 여백: 모바일 1 · 태블릿 1.5 · 데스크톱 2rem(shell.css, 기존 p-4/p-6/p-8 과 같음).
+            flex 컬럼으로 만들지 않는다: 자식 페이지의 `mx-auto max-w-*` 가 내용 폭으로 줄어들기 때문. 남는 높이는 --shell-main-fill 로 채운다. */}
+        <main className="shell-main flex-1 min-w-0">
           <Outlet />
         </main>
       </div>

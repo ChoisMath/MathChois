@@ -1,4 +1,5 @@
 import type { FastifyBaseLogger } from 'fastify';
+import { assignClassroomColors } from '@mathchois/shared';
 import { pgClient } from '../config/database.js';
 
 /**
@@ -215,4 +216,35 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
   await pgClient`CREATE UNIQUE INDEX IF NOT EXISTS uq_wb_group_members_group_student ON whiteboard_group_members (group_id, student_id)`;
   await pgClient`CREATE INDEX IF NOT EXISTS idx_wb_group_members_student ON whiteboard_group_members (student_id)`;
   log.info('startup migration: whiteboard tables ensured');
+
+  await pgClient`ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS color text`;
+  await backfillClassroomColors(log);
+}
+
+/**
+ * 색이 없는(color IS NULL) 학급만 교사별로 채운다. 이미 저장된 색은 바꾸지 않고 사용 수에 반영한다.
+ * 재실행 안전: UPDATE ... AND color IS NULL. 실패해도 부팅은 계속한다.
+ */
+async function backfillClassroomColors(log: FastifyBaseLogger): Promise<void> {
+  let filled = 0;
+  try {
+    const teachers = await pgClient<{ teacher_id: string }[]>`
+      SELECT DISTINCT teacher_id FROM classrooms WHERE color IS NULL`;
+    for (const { teacher_id: teacherId } of teachers) {
+      const rooms = await pgClient<{ id: string; created_at: Date | null; color: string | null }[]>`
+        SELECT id, created_at, color FROM classrooms WHERE teacher_id = ${teacherId}`;
+      const assigned = assignClassroomColors(rooms.map((r) => ({ id: r.id, createdAt: r.created_at, color: r.color })));
+      for (const room of rooms) {
+        if (room.color) continue;
+        const color = assigned.get(room.id);
+        if (!color) continue;
+        const res = await pgClient`UPDATE classrooms SET color = ${color} WHERE id = ${room.id} AND color IS NULL`;
+        filled += res.count;
+      }
+    }
+  } catch (err) {
+    log.warn({ err }, 'startup migration: classrooms.color backfill failed (continuing)');
+    return;
+  }
+  log.info(`startup migration: classrooms.color ensured (filled ${filled})`);
 }

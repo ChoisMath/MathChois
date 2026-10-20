@@ -9,7 +9,8 @@ import '@fontsource/gaegu/400.css';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { refreshSidebar } from '../../lib/sidebarRefresh';
-import { assignClassroomColors } from '../../lib/classroomColor';
+import { assignClassroomColors, resolveClassroomColor, colorVars, pickLeastUsedColor } from '../../lib/classroomColor';
+import ClassroomColorPicker from '../../components/classrooms/ClassroomColorPicker';
 import '../../components/classrooms/classrooms.css';
 
 const ClassroomList = () => {
@@ -22,6 +23,7 @@ const ClassroomList = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newName, setNewName] = useState('');
+  const [newColor, setNewColor] = useState(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
 
@@ -42,13 +44,21 @@ const ClassroomList = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key]);
 
+  // 창을 열 때마다 이 교사가 가장 적게 쓴 색으로 시작한다
+  const openCreateModal = () => {
+    setNewName('');
+    setNewColor(pickLeastUsedColor(classrooms));
+    setCreateError('');
+    setShowCreateModal(true);
+  };
+
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!newName.trim()) return;
     setCreating(true);
     setCreateError('');
     try {
-      await api.post('/api/classrooms', { name: newName.trim() });
+      await api.post('/api/classrooms', { name: newName.trim(), color: newColor ?? undefined });
       setNewName('');
       setShowCreateModal(false);
       fetchClassrooms();
@@ -60,7 +70,7 @@ const ClassroomList = () => {
     setCreating(false);
   };
 
-  const colors = useMemo(() => assignClassroomColors(classrooms), [classrooms]);
+  const auto = useMemo(() => assignClassroomColors(classrooms), [classrooms]);
 
   const getMemberCount = (classroom) => {
     return classroom.memberCount ?? 0;
@@ -78,7 +88,7 @@ const ClassroomList = () => {
           <h1 className="title">내 클래스룸</h1>
         </div>
         {isTeacher && (
-          <button type="button" onClick={() => setShowCreateModal(true)} className="new-btn cursor-pointer">
+          <button type="button" onClick={openCreateModal} className="new-btn cursor-pointer">
             <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
             새 학급
           </button>
@@ -95,7 +105,7 @@ const ClassroomList = () => {
               : '왼쪽 메뉴에서 선생님께 받은 참여 코드를 입력하세요.'}
           </p>
           {isTeacher && (
-            <button type="button" onClick={() => setShowCreateModal(true)} className="new-btn mt-2 cursor-pointer">
+            <button type="button" onClick={openCreateModal} className="new-btn mt-2 cursor-pointer">
               <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
               첫 학급 만들기
             </button>
@@ -107,7 +117,8 @@ const ClassroomList = () => {
             <Link
               key={classroom.id}
               to={`${prefix}/classrooms/${classroom.id}`}
-              className={`notebook-link nb-${colors.get(classroom.id)}`}
+              className="notebook-link"
+              style={colorVars(resolveClassroomColor(classroom, auto))}
             >
               <div className="notebook">
                 <div className="notebook-label">
@@ -133,8 +144,8 @@ const ClassroomList = () => {
         <div className="classroom-modal fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <form onSubmit={handleCreate} className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
             <p className="hand text-[18px] leading-none text-[#2453a6]">새 공책 한 권</p>
-            <h2 className="text-lg font-bold mt-1 mb-4">새 학급 만들기</h2>
-            <label htmlFor="new-classroom-name" className="block text-sm text-[#56627c] mb-1">학급 이름</label>
+            <h2 className="text-[18px] font-bold mt-1 mb-4">새 학급 만들기</h2>
+            <label htmlFor="new-classroom-name" className="block text-[14px] text-[#56627c] mb-1">학급 이름</label>
             <input
               id="new-classroom-name"
               autoFocus
@@ -144,14 +155,23 @@ const ClassroomList = () => {
               placeholder="예: 2학년 3반 수학"
               className="field w-full px-4 py-2.5 rounded-lg mb-4"
             />
+            <p id="new-classroom-color-label" className="text-[14px] text-[#56627c] mb-2">표지 색</p>
+            <div className="mb-4">
+              <ClassroomColorPicker
+                value={newColor}
+                onChange={setNewColor}
+                disabled={creating}
+                labelId="new-classroom-color-label"
+              />
+            </div>
             {createError && (
-              <p className="text-sm text-red-600 mb-3" role="alert">{createError}</p>
+              <p className="text-[14px] text-red-600 mb-3" role="alert">{createError}</p>
             )}
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => { setShowCreateModal(false); setCreateError(''); }}
-                className="inline-flex items-center gap-1 min-h-11 px-4 text-[#56627c] hover:text-[#1c2b4a] hover:bg-gray-100 rounded-full cursor-pointer"
+                className="inline-flex items-center gap-1 min-h-11 px-4 text-[15px] text-[#56627c] hover:text-[#1c2b4a] hover:bg-gray-100 rounded-full cursor-pointer"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
                 취소
@@ -159,7 +179,7 @@ const ClassroomList = () => {
               <button
                 type="submit"
                 disabled={creating || !newName.trim()}
-                className="inline-flex items-center gap-1.5 min-h-11 px-5 bg-[#1c2b4a] text-white rounded-full hover:bg-[#142039] disabled:opacity-50 cursor-pointer"
+                className="inline-flex items-center gap-1.5 min-h-11 px-5 text-[15px] bg-[#1c2b4a] text-white rounded-full hover:bg-[#142039] disabled:opacity-50 cursor-pointer"
               >
                 {creating ? <Loader className="animate-spin h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
                 {creating ? '만드는 중...' : '만들기'}

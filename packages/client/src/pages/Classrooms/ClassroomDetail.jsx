@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Users, BookOpen, Copy, Check, Trash2, FileText,
@@ -30,6 +30,8 @@ import SortOrderSelect from '../../components/common/SortOrderSelect';
 import { useSortOrder } from '../../hooks/useSortOrder';
 import { sortItems, isManualOrder } from '../../lib/sortOrder';
 import { CARD_GRID } from '../../lib/layout';
+import { resolveClassroomColor, colorVars } from '../../lib/classroomColor';
+import ClassroomColorPicker from '../../components/classrooms/ClassroomColorPicker';
 
 /* ─── 정렬 가능한 챕터 카드 ─── */
 function SortableChapterCard({ ch, isTeacher, sortable = isTeacher, onDelete, onCardClick, onDownloadPdf, downloadingId }) {
@@ -152,6 +154,10 @@ const ClassroomDetail = () => {
   const [nameInput, setNameInput]     = useState('');
   const [savingName, setSavingName]   = useState(false);
 
+  const [savingColor, setSavingColor] = useState(false);
+  const [colorError, setColorError]   = useState('');
+  const idRef = useRef(id); // 저장이 끝났을 때 아직 같은 학급 화면인지 확인용
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createTab, setCreateTab]   = useState('new'); // 'new' | 'import'
   const [newTitle, setNewTitle]     = useState('');
@@ -237,6 +243,13 @@ const ClassroomDetail = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  /* 다른 학급으로 이동하면 표지 색 오류와 저장 중 표시를 지운다 */
+  useEffect(() => {
+    idRef.current = id;
+    setColorError('');
+    setSavingColor(false);
+  }, [id]);
+
   /* 가져오기 탭 전환 시 다른 클래스 목록 로드 */
   useEffect(() => {
     if (createTab !== 'import' || !user) return;
@@ -306,6 +319,26 @@ const ClassroomDetail = () => {
     }
     setSavingName(false);
     setEditingName(false);
+  };
+
+  /* ── 표지 색 변경: 먼저 바꿔 보이고, 저장에 실패하면 이전 색으로 되돌린다 ── */
+  const handleColorChange = async (color) => {
+    if (savingColor) return;
+    if (color === resolveClassroomColor(classroom)) return;
+    const prevColor = classroom.color;
+    const targetId = id; // 저장 중에 다른 학급으로 옮겨도 이 학급만 되돌린다
+    setSavingColor(true);
+    setColorError('');
+    setClassroom((prev) => ({ ...prev, color }));
+    try {
+      await api.patch(`/api/classrooms/${targetId}`, { color });
+      refreshSidebar();
+    } catch (err) {
+      console.error('[ClassroomDetail] 표지 색 변경 오류:', err);
+      setClassroom((prev) => (prev?.id === targetId ? { ...prev, color: prevColor } : prev));
+      if (idRef.current === targetId) setColorError('표지 색을 바꾸지 못했어요. 다시 시도해 주세요.');
+    }
+    if (idRef.current === targetId) setSavingColor(false); // 다른 학급으로 옮겼다면 이미 초기화됨
   };
 
   const handleNameKeyDown = (e) => {
@@ -442,7 +475,8 @@ const ClassroomDetail = () => {
     <>
       <div className="w-full space-y-6">
 
-        {/* ── 헤더 ── */}
+        {/* ── 헤더 (학급 색 띠 + 옅은 배경) ── */}
+        <div className="classroom-head" style={colorVars(resolveClassroomColor(classroom))}>
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -473,7 +507,7 @@ const ClassroomDetail = () => {
                   onClick={() => setShowCode((v) => !v)}
                   title={showCode ? '코드 숨기기' : '클래스 코드 보기'}
                   className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-                    showCode ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'
+                    showCode ? 'bg-blue-100 text-blue-600' : 'text-[#56627c] hover:text-[#1c2b4a]'
                   }`}
                 >
                   <Hash className="h-4 w-4" />
@@ -488,11 +522,11 @@ const ClassroomDetail = () => {
                 </span>
                 <button
                   onClick={handleCopyCode} title="코드 복사"
-                  className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+                  className="p-1.5 text-[#56627c] hover:text-[#1c2b4a] transition-colors cursor-pointer"
                 >
                   {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                 </button>
-                <span className="text-xs text-gray-400">학생에게 공유하세요</span>
+                <span className="text-xs text-[#56627c]">학생에게 공유하세요</span>
               </div>
             )}
 
@@ -519,7 +553,7 @@ const ClassroomDetail = () => {
                 )}
                 <button
                   onClick={() => setShowDeleteClassroom(true)} title="클래스룸 삭제"
-                  className="p-2 text-gray-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors cursor-pointer"
+                  className="p-2 text-[#56627c] hover:text-red-600 rounded-md hover:bg-white/70 transition-colors cursor-pointer"
                 >
                   <Trash2 className="h-5 w-5" />
                 </button>
@@ -533,6 +567,23 @@ const ClassroomDetail = () => {
               </button>
             )}
           </div>
+        </div>
+
+        {/* 교사: 색 동그라미만 누르면 바로 바뀐다(글자 없음) */}
+        {isTeacher && (
+          <div className="mt-1">
+            <ClassroomColorPicker
+              size="sm"
+              ariaLabel="표지 색"
+              value={resolveClassroomColor(classroom)}
+              onChange={handleColorChange}
+              disabled={savingColor}
+            />
+            {colorError && (
+              <p className="text-[14px] text-red-700 mt-1" role="alert">{colorError}</p>
+            )}
+          </div>
+        )}
         </div>
 
         {/* ── 탭 네비게이션 ── */}

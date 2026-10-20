@@ -134,6 +134,8 @@ Tables: `profiles`, `classrooms`, `classroom_members`, `chapters`, `pages`
 `assignment_submissions`/`assignment_submission_files`. Migrations via Drizzle Kit;
 additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures the
 `pages.html_url` column).
+`classrooms.color` — one of six named colors (coral/mustard/sage/sky/lavender/rose); backfilled at boot by
+`startupMigrate`; rules in `@mathchois/shared` `classroom/color.ts`.
 
 ## Gotchas / non-obvious patterns
 

@@ -1,61 +1,36 @@
 /**
- * 학급 색 — 클래스룸 목록의 공책 표지 색.
+ * 학급 색 — 목록 공책 표지·사이드바 탭·상단 바가 함께 쓰는 색.
  *
- * 지금은 자동 배정한다(assignClassroomColors). 교사가 직접 고르는 기능은 사이드바·상단 바
- * 리디자인(2단계)에서 DB 칸과 함께 추가할 예정.
- * 실제 색 값은 components/classrooms/classrooms.css 의 `.nb-<색>` 에 있다.
+ * 색 목록과 배정 규칙(고유 색, 자동 배정, 가장 적게 쓴 색)은 서버와 같은 코드를 쓰도록
+ * @mathchois/shared 에 있고, 여기서는 그것을 다시 내보내며 화면용 색 값만 더한다.
  */
+import { CLASSROOM_COLORS, classroomColor, isClassroomColor } from '@mathchois/shared';
 
-export const CLASSROOM_COLORS = ['coral', 'mustard', 'sage', 'sky', 'lavender', 'rose'];
+export {
+  CLASSROOM_COLORS, classroomColor, assignClassroomColors, pickLeastUsedColor, isClassroomColor,
+} from '@mathchois/shared';
 
-/** FNV-1a 32bit — 짧은 문자열을 고르게 섞는다 */
-function hash(str) {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < str.length; i += 1) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  // murmur3 fmix32 — 끝자리만 다른 id 들도 색이 고르게 갈리도록 비트를 한 번 더 섞는다
-  h ^= h >>> 16;
-  h = Math.imul(h, 0x85ebca6b);
-  h ^= h >>> 13;
-  h = Math.imul(h, 0xc2b2ae35);
-  h ^= h >>> 16;
-  return h >>> 0;
-}
-
-export function classroomColor(id) {
-  if (!id) return CLASSROOM_COLORS[0];
-  return CLASSROOM_COLORS[hash(String(id)) % CLASSROOM_COLORS.length];
-}
-
-const time = (v) => {
-  const t = v ? new Date(v).getTime() : 0;
-  return Number.isFinite(t) ? t : 0;
+/** cover=표지·탭 색, tint=옅은 배경, deep=그 위 글씨(4.5:1 이상), label=이름 */
+export const COLOR_STYLES = {
+  coral:    { cover: '#f2836b', tint: '#fde3dc', deep: '#a63b24', label: '코랄' },
+  mustard:  { cover: '#f2b544', tint: '#fcefc7', deep: '#7d5200', label: '머스터드' },
+  sage:     { cover: '#8fc28a', tint: '#dff0dc', deep: '#2c6537', label: '세이지' },
+  sky:      { cover: '#6fa8dc', tint: '#dcebfa', deep: '#1d5893', label: '하늘' },
+  lavender: { cover: '#a78bda', tint: '#ece4fa', deep: '#563a99', label: '라벤더' },
+  rose:     { cover: '#ee8ab1', tint: '#fbe1ec', deep: '#932a56', label: '로즈' },
 };
 
 /**
- * 목록 전체에 색을 정한다 → Map(id → 색).
- * 만든 순서(createdAt, 같으면 id)대로 각 학급의 고유 색(classroomColor)을 쓰되, 그 색을 이미 더 많이 썼으면
- * 고유 색부터 순서대로 돌며 가장 적게 쓴 색으로 넘긴다. 그래서 6개까지는 모두 다른 색이고,
- * 새 학급이 생겨도 앞서 만든 학급의 색은 바뀌지 않는다(학급이 지워지면 그 뒤 학급 색이 바뀔 수 있다).
+ * 학급의 색을 정한다: 저장된 유효한 색 → 자동 배정 Map → 고유 색.
+ * 색이 없거나(구 서버 응답) 알 수 없는 값("red")이어도 화면이 깨지지 않게 한다.
  */
-export function assignClassroomColors(classrooms) {
-  const ordered = [...(classrooms || [])].sort(
-    (a, b) => time(a.createdAt) - time(b.createdAt) || String(a.id).localeCompare(String(b.id)),
-  );
-  const used = Object.fromEntries(CLASSROOM_COLORS.map((c) => [c, 0]));
-  const result = new Map();
-  for (const room of ordered) {
-    const least = Math.min(...Object.values(used));
-    const start = CLASSROOM_COLORS.indexOf(classroomColor(room.id));
-    let color = CLASSROOM_COLORS[start];
-    for (let k = 0; k < CLASSROOM_COLORS.length; k += 1) {
-      const candidate = CLASSROOM_COLORS[(start + k) % CLASSROOM_COLORS.length];
-      if (used[candidate] === least) { color = candidate; break; }
-    }
-    used[color] += 1;
-    result.set(room.id, color);
-  }
-  return result;
+export function resolveClassroomColor(classroom, autoMap) {
+  if (isClassroomColor(classroom?.color)) return classroom.color;
+  return autoMap?.get(classroom?.id) ?? classroomColor(classroom?.id);
+}
+
+/** 인라인 style 용 CSS 변수 */
+export function colorVars(color) {
+  const s = isClassroomColor(color) ? COLOR_STYLES[color] : COLOR_STYLES[CLASSROOM_COLORS[0]];
+  return { '--nb-cover': s.cover, '--nb-tint': s.tint, '--nb-deep': s.deep };
 }
