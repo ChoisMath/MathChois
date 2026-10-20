@@ -1,7 +1,7 @@
 /**
  * 학급 색 — 클래스룸 목록·사이드바의 공책 표지 색. 서버(부팅 채움·생성 기본값)와 클라이언트가 같은 규칙을 쓴다.
  *
- * 실제 색 값은 client 의 components/classrooms/classrooms.css 의 `.nb-<색>` 에 있다.
+ * 실제 색 값은 client 의 lib/classroomColor.js 의 `COLOR_STYLES` 에 있고, `colorVars` 가 인라인 CSS 변수로 적용한다.
  */
 
 export const CLASSROOM_COLORS = ['coral', 'mustard', 'sage', 'sky', 'lavender', 'rose'] as const;

@@ -31,6 +31,6 @@ export function resolveClassroomColor(classroom, autoMap) {
 
 /** 인라인 style 용 CSS 변수 */
 export function colorVars(color) {
-  const s = COLOR_STYLES[color] || COLOR_STYLES[CLASSROOM_COLORS[0]];
+  const s = isClassroomColor(color) ? COLOR_STYLES[color] : COLOR_STYLES[CLASSROOM_COLORS[0]];
   return { '--nb-cover': s.cover, '--nb-tint': s.tint, '--nb-deep': s.deep };
 }

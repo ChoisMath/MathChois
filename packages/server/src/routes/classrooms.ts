@@ -45,7 +45,8 @@ export async function classroomRoutes(app: FastifyInstance) {
     if (!name?.trim()) {
       return reply.status(400).send({ error: 'Name is required' });
     }
-    if (color !== undefined && !isClassroomColor(color)) {
+    // color 가 null/undefined 면 "안 보냄"으로 보고 검증하지 않는다
+    if (color != null && !isClassroomColor(color)) {
       return reply.status(400).send({ error: 'Invalid color' });
     }
     // 색을 안 보내면 이 교사의 학급에서 가장 덜 쓰인 색

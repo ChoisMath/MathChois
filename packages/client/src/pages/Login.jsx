@@ -99,7 +99,7 @@ const Login = () => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] bg-gray-50 p-4">
+    <div className="flex flex-col items-center justify-center min-h-[calc(100dvh-64px)] bg-gray-50 p-4">
       <div className="text-center max-w-md w-full mx-auto">
         <div className="flex justify-center mb-6">
           <BookOpen className="h-20 w-20 text-blue-600" />

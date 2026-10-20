@@ -62,13 +62,13 @@ img.shell-avatar { object-fit: cover; }
 .shell-who { display: none; align-items: center; gap: 2px; min-width: 0; }
 @media (min-width: 640px) { .shell-who { display: flex; } }
 .shell-who-text { display: grid; line-height: 1.25; min-width: 0; }
-.shell-who-name { font-size: 14px; font-weight: 500; color: #fff; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell-who-name { font-size: 14px; font-weight: 500; color: #fff; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell-who-role { font-size: 11px; color: #aebbd6; }
 
 /* 이름 편집 — 입력은 흰 배경 유지 */
 .shell-who-edit { display: flex; align-items: center; gap: 2px; }
 .shell-name-input {
-  width: 7rem; height: 36px; padding: 0 8px; border-radius: 8px;
+  width: 112px; height: 36px; padding: 0 8px; border-radius: 8px;
   background: #fff; color: var(--shell-ink); border: 1px solid #c9d4ee; font-size: 14px;
 }
 .shell-name-input:focus-visible { outline: 3px solid #f2b544; outline-offset: 1px; }
@@ -126,7 +126,7 @@ img.shell-avatar { object-fit: cover; }
   font-size: 14px; font-weight: 500; color: #34415c;
   transition: background-color .15s ease;
 }
-.shell-tab:hover { background: rgba(36, 83, 166, .08); }
+@media (hover: hover) { .shell-tab:hover { background: rgba(36, 83, 166, .08); } }
 .shell-tab-icon { flex-shrink: 0; color: #56627c; }
 .shell-tab-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell-tab.is-active {
@@ -163,7 +163,7 @@ img.shell-avatar { object-fit: cover; }
   border: 1px solid #c9d4ee; background: #fff; color: #1c2b4a;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; letter-spacing: .12em;
 }
-.shell-join-input::placeholder { letter-spacing: 0; font-family: var(--shell-sans); color: #8893ab; }
+.shell-join-input::placeholder { letter-spacing: 0; font-family: var(--shell-sans); color: #6b7690; }
 .shell-join-btn {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
   min-width: 52px; height: 44px; padding: 0 10px; border-radius: 8px;

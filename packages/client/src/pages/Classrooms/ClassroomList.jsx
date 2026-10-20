@@ -58,7 +58,7 @@ const ClassroomList = () => {
     setCreating(true);
     setCreateError('');
     try {
-      await api.post('/api/classrooms', { name: newName.trim(), color: newColor });
+      await api.post('/api/classrooms', { name: newName.trim(), color: newColor ?? undefined });
       setNewName('');
       setShowCreateModal(false);
       fetchClassrooms();

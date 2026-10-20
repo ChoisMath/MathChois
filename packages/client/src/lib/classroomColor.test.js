@@ -84,6 +84,11 @@ describe('COLOR_STYLES / colorVars', () => {
     expect(colorVars('rose')).toEqual({ '--nb-cover': '#ee8ab1', '--nb-tint': '#fbe1ec', '--nb-deep': '#932a56' });
   });
 
+  it('colorVars 는 알 수 없는 값("constructor" 등)이면 첫 색(코랄)으로 돌아간다', () => {
+    expect(colorVars('constructor')).toEqual(colorVars('coral'));
+    expect(colorVars('constructor')['--nb-cover']).toBe('#f2836b');
+  });
+
   it('여섯 색 모두 cover/tint/deep/label 을 가진다', () => {
     for (const c of CLASSROOM_COLORS) {
       expect(COLOR_STYLES[c]).toEqual({

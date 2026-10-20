@@ -67,6 +67,7 @@
 - `ClassroomColorPicker` 컴포넌트: 여섯 개의 44px 원 버튼(`aria-pressed`, `aria-label`=색 이름, 선택 표시 체크), `role="group"` + 라벨 "표지 색".
 - 새 학급 만들기 창(`ClassroomList`): 이름 아래에 색 원. 처음 선택값 = 교사 학급 중 가장 적게 쓴 색(`pickLeastUsedColor`).
 - 학급 상세(`ClassroomDetail`) 제목 영역: 왼쪽에 학급 색 띠(교사·학생 공통). 교사에게 "표지 색 바꾸기" 버튼 → 누르면 색 원이 펼쳐지고, 고르면 바로 저장(`PATCH`) 후 접힌다. 저장 실패 시 원래 색으로 되돌리고 오류를 표시.
+  - 변경(사용자 요청): 구현 후 사용자 요청으로 "표지 색 바꾸기" 토글을 없애고, 교사 헤더에 작은 색 원(`ClassroomColorPicker size="sm"`, 보이는 30px·누르는 영역 44px, 그룹 `aria-label="표지 색"`)을 항상 보이게 했다. 누르면 바로 저장하며 접힘 단계는 없다.
 
 ### 공통 색 모듈
 

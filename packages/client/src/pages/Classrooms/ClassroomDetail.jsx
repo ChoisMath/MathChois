@@ -243,10 +243,11 @@ const ClassroomDetail = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  /* 다른 학급으로 이동하면 표지 색 오류를 지운다 */
+  /* 다른 학급으로 이동하면 표지 색 오류와 저장 중 표시를 지운다 */
   useEffect(() => {
     idRef.current = id;
     setColorError('');
+    setSavingColor(false);
   }, [id]);
 
   /* 가져오기 탭 전환 시 다른 클래스 목록 로드 */
@@ -337,7 +338,7 @@ const ClassroomDetail = () => {
       setClassroom((prev) => (prev?.id === targetId ? { ...prev, color: prevColor } : prev));
       if (idRef.current === targetId) setColorError('표지 색을 바꾸지 못했어요. 다시 시도해 주세요.');
     }
-    setSavingColor(false);
+    if (idRef.current === targetId) setSavingColor(false); // 다른 학급으로 옮겼다면 이미 초기화됨
   };
 
   const handleNameKeyDown = (e) => {
@@ -506,7 +507,7 @@ const ClassroomDetail = () => {
                   onClick={() => setShowCode((v) => !v)}
                   title={showCode ? '코드 숨기기' : '클래스 코드 보기'}
                   className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-                    showCode ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'
+                    showCode ? 'bg-blue-100 text-blue-600' : 'text-[#56627c] hover:text-[#1c2b4a]'
                   }`}
                 >
                   <Hash className="h-4 w-4" />
@@ -521,11 +522,11 @@ const ClassroomDetail = () => {
                 </span>
                 <button
                   onClick={handleCopyCode} title="코드 복사"
-                  className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+                  className="p-1.5 text-[#56627c] hover:text-[#1c2b4a] transition-colors cursor-pointer"
                 >
                   {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                 </button>
-                <span className="text-xs text-gray-400">학생에게 공유하세요</span>
+                <span className="text-xs text-[#56627c]">학생에게 공유하세요</span>
               </div>
             )}
 
@@ -552,7 +553,7 @@ const ClassroomDetail = () => {
                 )}
                 <button
                   onClick={() => setShowDeleteClassroom(true)} title="클래스룸 삭제"
-                  className="p-2 text-gray-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors cursor-pointer"
+                  className="p-2 text-[#56627c] hover:text-red-600 rounded-md hover:bg-white/70 transition-colors cursor-pointer"
                 >
                   <Trash2 className="h-5 w-5" />
                 </button>
