@@ -104,7 +104,7 @@ export default function CoachingHistoryView({ fetchHistory, showTeacherNotes = f
                       <div>
                         <IconButton
                           icon={showImageId === a.id ? EyeOff : Eye}
-                          label={showImageId === a.id ? '필기 이미지 숨기기' : '필기 이미지 보기'}
+                          label="필기 이미지 보기"
                           aria-pressed={showImageId === a.id}
                           onClick={() => setShowImageId(showImageId === a.id ? null : a.id)}
                         />

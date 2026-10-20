@@ -62,7 +62,7 @@ function CommentComposer({
           ) : (
             <button type="button" onClick={() => setTimestampSec(null)}
               className="inline-flex items-center gap-1 px-2 min-h-9 border rounded text-xs bg-blue-50 border-blue-200 text-blue-700"
-              title="클릭하면 첨부 해제">
+              title="클릭하면 첨부 해제" aria-label={`첨부한 시각 ${formatTime(timestampSec)} 빼기`}>
               <Clock className="h-3.5 w-3.5" /> {formatTime(timestampSec)} <X className="h-3 w-3" aria-hidden="true" />
             </button>
           )

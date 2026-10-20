@@ -42,5 +42,6 @@ describe('IconButton', () => {
     expect(html).toContain('href="/x"');
     expect(html).toContain('aria-disabled="true"');
     expect(html).not.toContain('type=');
+    expect(html).toContain('tabindex="-1"');
   });
 });

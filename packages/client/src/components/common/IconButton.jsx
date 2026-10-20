@@ -32,10 +32,12 @@ export default function IconButton({
     .filter(Boolean)
     .join(' ');
 
+  // 링크 등은 disabled 속성이 없으므로 포커스·클릭·Enter 이동을 직접 막는다(rest 뒤에 두어 덮어쓰지 못하게)
   return (
     <Component
-      {...(isButton ? { type: 'button', disabled: disabled || busy } : { 'aria-disabled': disabled || busy || undefined })}
+      {...(isButton && { type: 'button', disabled: disabled || busy })}
       {...rest}
+      {...(!isButton && (disabled || busy) && { 'aria-disabled': true, tabIndex: -1, onClick: (e) => e.preventDefault() })}
       className={classes}
       title={name}
       aria-label={name}

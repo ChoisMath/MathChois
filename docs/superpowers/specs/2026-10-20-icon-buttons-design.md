@@ -108,3 +108,17 @@
 - `IconButton` 단위 테스트(이름·busy·variant·as=Link).
 - Playwright(빌드 + 모의 API): 단계마다 해당 화면 1280·375 캡처, 페이지 오류 0, 가로 스크롤 없음,
   이름 없는 `<button>` 수 측정(접근 가능한 이름이 빈 버튼 0 — `DrawingToolbar` 제외).
+
+## 구현 중 확정된 변경(리뷰 반영)
+
+- `IconButton` 에 `size="lg"`(72px 선택 타일) 추가 — 영상 넣기 방식 고르기(YouTube 링크 / 영상자료)에 사용. 아이콘만 표시(사용자 승인).
+- "…됨"(이미 배정·삽입됨) 상태는 `CircleCheck` + `disabled` 로 일반 `Check` 와 구분.
+- 영상 댓글 등록·답글 등록은 `Send`, 댓글 수정 저장은 `Save`.
+- 검색 버튼은 ghost. 영상자료 표의 미리보기·수정·삭제 칸은 오른쪽 고정(sticky).
+- 챕터 편집 도구 모음의 "AI 코칭"은 이웃 버튼(36px) 모양을 유지한 채 글자만 빼고 이름을 붙였다.
+- 필기 뷰어(StudyViewer·Assignment*Viewer 등)·FileAttachmentPanel·SortablePageItem·PenDiagnosticsOverlay 의 아이콘 버튼은
+  크기·위치를 유지하고 `aria-label` + `title` 만 붙였다.
+- 모둠 보드 상단 바는 휴대폰에서 44px 버튼이 잘리지 않도록 `min-h-[44px]`.
+- 챕터 모니터의 "{n}페이지 보드 열기" 칩은 페이지 번호가 유일한 구분이라 글자 유지.
+- `as`(링크 등)로 쓴 버튼이 `disabled`/`busy` 이면 `aria-disabled` + `tabIndex=-1` + 클릭 막음.
+- 토글(필기 이미지 보기)은 이름을 고정하고 `aria-pressed` 로 상태를 알린다.

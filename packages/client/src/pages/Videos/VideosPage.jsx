@@ -119,7 +119,7 @@ export default function VideosPage() {
             {result.items.map((v) => {
               const own = v.createdBy === user?.id;
               return (
-                <tr key={v.id} className="border-t hover:bg-blue-50">
+                <tr key={v.id} className="group border-t hover:bg-blue-50">
                   <td className="px-2 py-1">
                     <button onClick={() => setPreview(v)} className="block w-20 aspect-video bg-gray-100 rounded overflow-hidden" title="미리보기">
                       {v.thumbnailUrl
@@ -139,7 +139,7 @@ export default function VideosPage() {
                   <td className="px-3 py-2 whitespace-nowrap">{v.createdByName}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{(v.createdAt || '').slice(0, 10)}</td>
                   {/* 수정·삭제가 표 가로 스크롤 밖으로 밀리지 않도록 오른쪽에 고정 */}
-                  <td className="px-1 py-1 whitespace-nowrap sticky right-0 bg-white z-10 shadow-[-6px_0_6px_-6px_rgba(0,0,0,.15)]">
+                  <td className="px-1 py-1 whitespace-nowrap sticky right-0 bg-white group-hover:bg-blue-50 z-10 shadow-[-6px_0_6px_-6px_rgba(0,0,0,.15)]">
                     <span className="flex">
                       <IconButton icon={Eye} label="미리보기" size="sm" onClick={() => setPreview(v)} />
                       {(own || user?.isAdmin) && (
