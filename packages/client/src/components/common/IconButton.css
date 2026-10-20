@@ -24,6 +24,12 @@
 .icon-btn--sm .icon-btn-face { width: 36px; height: 36px; border-radius: 10px; }
 .icon-btn--sm .icon-btn-face svg { width: 18px; height: 18px; }
 
+/* 큰 선택 타일(영상 넣기 방식 고르기 등): 72px */
+.icon-btn--lg { width: 72px; height: 72px; }
+.icon-btn--lg .icon-btn-face { width: 72px; height: 72px; border-radius: 16px; }
+.icon-btn--lg .icon-btn-face svg { width: 28px; height: 28px; }
+.icon-btn--lg.icon-btn--ghost .icon-btn-face { border: 1px solid #d3d9e6; }
+
 .icon-btn--primary .icon-btn-face { background: #1c2b4a; color: #fff; }
 .icon-btn--danger-solid .icon-btn-face { background: #d32f2f; color: #fff; }
 

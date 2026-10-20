@@ -22,6 +22,12 @@ describe('IconButton', () => {
     expect(html).toContain('type="submit"');
   });
 
+  it('size=lg 는 큰 타일 클래스를 붙인다', () => {
+    const html = render({ size: 'lg' });
+    expect(html).toContain('icon-btn--lg');
+    expect(html).not.toContain('icon-btn--sm');
+  });
+
   it('busy 면 busyLabel 로 이름을 바꾸고 누름을 막는다', () => {
     const html = render({ busy: true, busyLabel: '삭제 중...' });
     expect(html).toContain('aria-label="삭제 중..."');

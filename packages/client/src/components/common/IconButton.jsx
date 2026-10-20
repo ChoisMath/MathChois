@@ -9,7 +9,7 @@ import './IconButton.css';
  * @param {import('react').ComponentType<{className?: string}>} props.icon lucide 아이콘
  * @param {string} props.label 버튼 이름
  * @param {'ghost'|'primary'|'danger'|'danger-solid'} [props.variant='ghost']
- * @param {'md'|'sm'} [props.size='md'] sm 은 보이는 크기만 36px(누르는 영역은 44px 유지)
+ * @param {'md'|'sm'|'lg'} [props.size='md'] sm 은 보이는 크기만 36px(누르는 영역은 44px 유지), lg 는 72px 선택 타일
  * @param {boolean} [props.busy] 진행 중 — 돌아가는 아이콘을 보이고 누름을 막는다
  * @param {string} [props.busyLabel] 진행 중 이름(예: '만드는 중...')
  * @param {import('react').ElementType} [props.as='button'] `Link`·`a` 등
@@ -28,7 +28,7 @@ export default function IconButton({
 }) {
   const name = busy && busyLabel ? busyLabel : label;
   const isButton = Component === 'button';
-  const classes = ['icon-btn', `icon-btn--${variant}`, size === 'sm' && 'icon-btn--sm', className]
+  const classes = ['icon-btn', `icon-btn--${variant}`, size !== 'md' && `icon-btn--${size}`, className]
     .filter(Boolean)
     .join(' ');
 

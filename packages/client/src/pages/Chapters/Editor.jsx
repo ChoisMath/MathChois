@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Loader, Upload, Save, X, Video, Play, FileCode2, Sparkles, Presentation, LayoutTemplate, ExternalLink } from 'lucide-react';
+import IconButton from '../../components/common/IconButton';
+import { ArrowLeft, Plus, Trash2, Loader, Upload, Save, X, Video, Play, FileCode2, Sparkles, Presentation, LayoutTemplate, ExternalLink, Link, Clapperboard, Replace } from 'lucide-react';
 import TemplatePickerDialog from '../../components/whiteboard/TemplatePickerDialog';
 import TemplateThumb from '../../components/whiteboard/TemplateThumb';
 import { getTemplate } from '../../lib/whiteboardTemplates';
@@ -485,9 +486,10 @@ const ChapterEditor = () => {
                 <FileCode2 className="h-5 w-5" />
               </button>
               <button type="button" onClick={() => { setPickerMode('add'); setShowPicker(true); }}
-                title="AI 코칭 문항 추가"
-                className="flex items-center gap-1 px-3 min-h-11 border rounded-md whitespace-nowrap">
-                <Sparkles size={16} /> AI 코칭
+                title="AI 코칭 문항 추가" aria-label="AI 코칭 문항 추가"
+                className="inline-flex items-center justify-center p-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
+              >
+                <Sparkles className="h-5 w-5" />
               </button>
               <button
                 type="button" onClick={handleAddWhiteboard} disabled={uploading || addingWhiteboard}
@@ -548,24 +550,16 @@ const ChapterEditor = () => {
                 <div className="flex items-center gap-2 flex-wrap">
                   <Presentation size={18} className="text-indigo-500" />
                   <span className="font-medium whitespace-nowrap">화이트보드 (모둠 공유 보드)</span>
-                  <button
-                    type="button"
+                  <IconButton
+                    icon={ExternalLink} label="교사 화면 열기"
                     onClick={() => navigate(`/teacher/classrooms/${chapter.classroomId}/chapters/${id}/whiteboard/${selectedPage.id}`)}
-                    className="inline-flex items-center gap-1 px-3 min-h-11 border rounded-md text-sm whitespace-nowrap bg-white hover:bg-gray-50 cursor-pointer"
-                  >
-                    <ExternalLink size={16} /> 교사 화면 열기
-                  </button>
+                  />
                 </div>
                 <div className="bg-white rounded-lg border p-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-gray-700">기본 템플릿</span>
                     {!isLinked && (
-                      <button
-                        type="button" onClick={() => setShowTemplatePicker(true)}
-                        className="inline-flex items-center gap-1 px-3 min-h-9 border rounded-md text-sm whitespace-nowrap bg-white hover:bg-gray-50 cursor-pointer"
-                      >
-                        <LayoutTemplate size={16} /> 변경
-                      </button>
+                      <IconButton icon={LayoutTemplate} label="템플릿 변경" onClick={() => setShowTemplatePicker(true)} />
                     )}
                   </div>
                   {selectedPage.whiteboardTemplate && getTemplate(selectedPage.whiteboardTemplate) ? (
@@ -598,8 +592,7 @@ const ChapterEditor = () => {
                 <div className="flex items-center gap-2">
                   <Sparkles size={16} className="text-indigo-500" />
                   <span className="font-medium whitespace-nowrap">AI 코칭 문항</span>
-                  <button onClick={() => { setPickerMode('change'); setShowPicker(true); }}
-                    className="px-3 min-h-11 border rounded-md text-sm whitespace-nowrap">문제 변경</button>
+                  <IconButton icon={Replace} label="문제 변경" onClick={() => { setPickerMode('change'); setShowPicker(true); }} />
                 </div>
                 {aiPreview && <ProblemView latex={aiPreview.problemLatex} figures={aiPreview.figures} />}
               </div>
@@ -624,22 +617,18 @@ const ChapterEditor = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowVideoChoice(false)}>
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-gray-900 mb-3">영상 페이지 추가</h2>
-            <div className="flex flex-col gap-2">
-              <button
+            <div className="grid grid-cols-2 gap-4 justify-items-center py-2">
+              <IconButton
+                size="lg" icon={Link} label="YouTube 링크"
                 onClick={() => { setShowVideoChoice(false); setShowYouTubeModal(true); setYoutubeUrl(''); setYoutubeError(''); }}
-                className="w-full min-h-11 px-4 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 cursor-pointer whitespace-nowrap"
-              >
-                YouTube 링크
-              </button>
-              <button
+              />
+              <IconButton
+                size="lg" icon={Clapperboard} label="영상자료에서 선택"
                 onClick={() => { setShowVideoChoice(false); setShowVideoPicker(true); }}
-                className="w-full min-h-11 px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer whitespace-nowrap"
-              >
-                영상자료에서 선택
-              </button>
+              />
             </div>
             <div className="flex justify-end mt-4">
-              <button onClick={() => setShowVideoChoice(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">취소</button>
+              <IconButton icon={X} label="취소" onClick={() => setShowVideoChoice(false)} />
             </div>
           </div>
         </div>
@@ -675,14 +664,12 @@ const ChapterEditor = () => {
               </div>
             )}
             <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setShowYouTubeModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">취소</button>
-              <button
+              <IconButton icon={X} label="취소" onClick={() => setShowYouTubeModal(false)} />
+              <IconButton
+                icon={Plus} label="추가" variant="primary"
                 onClick={handleAddYouTube}
-                disabled={addingVideo}
-                className="px-4 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 disabled:opacity-50 cursor-pointer"
-              >
-                {addingVideo ? '추가 중...' : '추가'}
-              </button>
+                busy={addingVideo} busyLabel="추가 중..."
+              />
             </div>
           </div>
         </div>
@@ -727,17 +714,13 @@ const ChapterEditor = () => {
                 <p className="text-sm text-gray-500 mb-4">
                   {exportTargetIds.size}개 클래스에 챕터가 추가되었습니다.
                 </p>
-                <button onClick={() => setShowExportModal(false)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 cursor-pointer">
-                  닫기
-                </button>
+                <IconButton icon={X} label="닫기" onClick={() => setShowExportModal(false)} />
               </div>
             ) : exportClassrooms.length === 0 ? (
               <>
                 <p className="text-sm text-gray-400 py-4 text-center">내보낼 수 있는 다른 클래스가 없습니다.</p>
                 <div className="flex justify-end">
-                  <button onClick={() => setShowExportModal(false)}
-                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">닫기</button>
+                  <IconButton icon={X} label="닫기" onClick={() => setShowExportModal(false)} />
                 </div>
               </>
             ) : (

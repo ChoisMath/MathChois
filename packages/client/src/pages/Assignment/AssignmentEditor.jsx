@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Loader, Save, Upload, X, Video } from 'lucide-react';
+import IconButton from '../../components/common/IconButton';
+import { ArrowLeft, Plus, Trash2, Loader, Save, Upload, X, Video, Link, Clapperboard } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -440,22 +441,18 @@ const AssignmentEditor = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowVideoChoice(false)}>
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-gray-900 mb-3">영상 페이지 추가</h2>
-            <div className="flex flex-col gap-2">
-              <button
+            <div className="grid grid-cols-2 gap-4 justify-items-center py-2">
+              <IconButton
+                size="lg" icon={Link} label="YouTube 링크"
                 onClick={() => { setShowVideoChoice(false); setShowYouTubeModal(true); setYoutubeUrl(''); setYoutubeError(''); }}
-                className="w-full min-h-11 px-4 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 cursor-pointer whitespace-nowrap"
-              >
-                YouTube 링크
-              </button>
-              <button
+              />
+              <IconButton
+                size="lg" icon={Clapperboard} label="영상자료에서 선택"
                 onClick={() => { setShowVideoChoice(false); setShowVideoPicker(true); }}
-                className="w-full min-h-11 px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer whitespace-nowrap"
-              >
-                영상자료에서 선택
-              </button>
+              />
             </div>
             <div className="flex justify-end mt-4">
-              <button onClick={() => setShowVideoChoice(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">취소</button>
+              <IconButton icon={X} label="취소" onClick={() => setShowVideoChoice(false)} />
             </div>
           </div>
         </div>
@@ -491,14 +488,12 @@ const AssignmentEditor = () => {
               </div>
             )}
             <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setShowYouTubeModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">취소</button>
-              <button
+              <IconButton icon={X} label="취소" onClick={() => setShowYouTubeModal(false)} />
+              <IconButton
+                icon={Plus} label="추가" variant="primary"
                 onClick={handleAddYouTube}
-                disabled={addingVideo}
-                className="px-4 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 disabled:opacity-50 cursor-pointer"
-              >
-                {addingVideo ? '추가 중...' : '추가'}
-              </button>
+                busy={addingVideo} busyLabel="추가 중..."
+              />
             </div>
           </div>
         </div>
@@ -519,17 +514,13 @@ const AssignmentEditor = () => {
                 <p className="text-sm text-gray-500 mb-4">
                   {exportTargetIds.size}개 클래스에 과제가 추가되었습니다.
                 </p>
-                <button onClick={() => setShowExportModal(false)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 cursor-pointer">
-                  닫기
-                </button>
+                <IconButton icon={X} label="닫기" onClick={() => setShowExportModal(false)} />
               </div>
             ) : exportClassrooms.length === 0 ? (
               <>
                 <p className="text-sm text-gray-400 py-4 text-center">내보낼 수 있는 다른 클래스가 없습니다.</p>
                 <div className="flex justify-end">
-                  <button onClick={() => setShowExportModal(false)}
-                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">닫기</button>
+                  <IconButton icon={X} label="닫기" onClick={() => setShowExportModal(false)} />
                 </div>
               </>
             ) : (
