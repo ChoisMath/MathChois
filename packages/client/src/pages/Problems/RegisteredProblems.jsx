@@ -67,7 +67,7 @@ export default function RegisteredProblems() {
         <input className="border rounded px-2 py-1 text-sm flex-1 min-w-40" placeholder="키워드 검색"
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && fetchList(1)} />
-        <IconButton icon={Search} label="검색" variant="primary" onClick={() => fetchList(1)} />
+        <IconButton icon={Search} label="검색" onClick={() => fetchList(1)} />
       </div>
 
       <p className="text-xs text-gray-500">{loading ? '불러오는 중…' : `총 ${result.total}개`}</p>

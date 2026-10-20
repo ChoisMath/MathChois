@@ -34,10 +34,10 @@
 .icon-btn--danger-solid .icon-btn-face { background: #d32f2f; color: #fff; }
 
 @media (hover: hover) {
-  .icon-btn--ghost:hover .icon-btn-face { background: rgba(28, 43, 74, .08); color: #1c2b4a; }
-  .icon-btn--primary:hover .icon-btn-face { background: #142039; }
-  .icon-btn--danger:hover .icon-btn-face { background: #fdecea; color: #c62828; }
-  .icon-btn--danger-solid:hover .icon-btn-face { background: #b71c1c; }
+  .icon-btn--ghost:not(:disabled):hover .icon-btn-face { background: rgba(28, 43, 74, .08); color: #1c2b4a; }
+  .icon-btn--primary:not(:disabled):hover .icon-btn-face { background: #142039; }
+  .icon-btn--danger:not(:disabled):hover .icon-btn-face { background: #fdecea; color: #c62828; }
+  .icon-btn--danger-solid:not(:disabled):hover .icon-btn-face { background: #b71c1c; }
 }
 .icon-btn--ghost:active .icon-btn-face { background: rgba(28, 43, 74, .12); color: #1c2b4a; }
 .icon-btn--danger:active .icon-btn-face { background: #fdecea; color: #c62828; }
@@ -45,7 +45,8 @@
 .icon-btn:focus-visible { outline: none; }
 .icon-btn:focus-visible .icon-btn-face { outline: 3px solid #2453a6; outline-offset: 2px; }
 
-.icon-btn:disabled,
+/* 버튼은 disabled 로 누름이 막히므로 이름표(title)는 그대로 보이게 둔다. 링크 등은 aria-disabled 로 막는다. */
+.icon-btn:disabled { cursor: default; opacity: .5; }
 .icon-btn[aria-disabled='true'] { cursor: default; opacity: .5; pointer-events: none; }
 .icon-btn[aria-busy='true'] { opacity: .7; }
 

@@ -226,7 +226,7 @@ export default function ClassroomVideoWatch() {
               <IconButton
                 as={Link}
                 to={`${base}/classrooms/${classroomId}/videos/${detail.id}/split${splitPage ? `?page=${encodeURIComponent(splitPage)}` : ''}`}
-                icon={Columns2} label="2분할로 필기하며 보기" />
+                icon={Columns2} label={`2분할로 필기하며 보기 · ${detail.chapter.title}`} />
             ))}
           </div>
 

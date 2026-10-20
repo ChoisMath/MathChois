@@ -98,7 +98,7 @@ export default function VideosPage() {
         <input className="border rounded px-2 min-h-11 text-sm flex-1 min-w-40" placeholder="제목·설명 검색"
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && fetchList(1)} />
-        <IconButton icon={Search} label="검색" variant="primary" onClick={() => fetchList(1)} />
+        <IconButton icon={Search} label="검색" onClick={() => fetchList(1)} />
       </div>
 
       <p className="text-xs text-gray-500">{loading ? '불러오는 중…' : `총 ${result.total}개`}</p>
@@ -109,7 +109,7 @@ export default function VideosPage() {
             <tr className="bg-gray-100">
               {['', '제목', '과목', '대단원', '소단원', '길이', '용량', '등록자', '등록일', ''].map((h, i) => (
                 <th key={h || i}
-                  className={`px-3 py-2 text-left whitespace-nowrap sticky top-0 bg-gray-100 z-20 ${i === 1 ? 'left-0 z-30' : ''}`}>
+                  className={`px-3 py-2 text-left whitespace-nowrap sticky top-0 bg-gray-100 z-20 ${i === 1 ? 'left-0 z-30' : ''} ${i === 9 ? 'right-0 z-30' : ''}`}>
                   {h}
                 </th>
               ))}
@@ -138,8 +138,9 @@ export default function VideosPage() {
                   <td className="px-3 py-2 whitespace-nowrap tabular-nums">{v.fileSize != null ? formatBytes(v.fileSize) : ''}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{v.createdByName}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{(v.createdAt || '').slice(0, 10)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <span className="flex gap-1">
+                  {/* 수정·삭제가 표 가로 스크롤 밖으로 밀리지 않도록 오른쪽에 고정 */}
+                  <td className="px-1 py-1 whitespace-nowrap sticky right-0 bg-white z-10 shadow-[-6px_0_6px_-6px_rgba(0,0,0,.15)]">
+                    <span className="flex">
                       <IconButton icon={Eye} label="미리보기" size="sm" onClick={() => setPreview(v)} />
                       {(own || user?.isAdmin) && (
                         <>
