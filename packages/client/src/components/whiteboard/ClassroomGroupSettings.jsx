@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Loader, Save, Users } from 'lucide-react';
+import { Save, Users } from 'lucide-react';
 import { api } from '../../lib/api';
+import IconButton from '../common/IconButton';
 import GroupAssignmentPanel from './GroupAssignmentPanel';
 
 /**
@@ -63,12 +64,7 @@ export default function ClassroomGroupSettings({ classroomId, members }) {
           <Users className="h-4 w-4 text-indigo-500" /> 모둠 설정
           <span className="text-xs font-normal text-gray-400">화이트보드 페이지의 기본 모둠</span>
         </h3>
-        <button
-          type="button" onClick={handleSave} disabled={!dirty || saving}
-          className="inline-flex items-center gap-1 px-3 min-h-9 rounded-md text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 cursor-pointer whitespace-nowrap"
-        >
-          {saving ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} 저장
-        </button>
+        <IconButton icon={Save} label="저장" variant="primary" onClick={handleSave} disabled={!dirty} busy={saving} />
       </div>
       {error && <p className="text-sm text-red-500 mb-2">{error}</p>}
       {groups === null ? (

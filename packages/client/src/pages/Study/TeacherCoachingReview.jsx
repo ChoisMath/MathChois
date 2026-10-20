@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Sparkles, Menu, RotateCcw, Loader } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Sparkles, Menu, RotateCcw } from 'lucide-react';
+import IconButton from '../../components/common/IconButton';
 import { PageVideoThumb } from '../../components/videos/PageVideo';
 import ProblemView from '../../components/common/ProblemView';
 import AttemptStack from '../../components/coaching/AttemptStack';
@@ -141,10 +142,7 @@ export default function TeacherCoachingReview({ classroomId, pages, currentPage,
                       {s.used} / {s.limit}회
                     </span>
                   </button>
-                  <button onClick={() => handleReset(s.studentId)} disabled={resettingId === s.studentId}
-                    className="flex min-h-11 items-center gap-1 rounded-md border px-3 text-sm text-gray-600 disabled:opacity-50 whitespace-nowrap">
-                    {resettingId === s.studentId ? <Loader size={14} className="animate-spin" /> : <RotateCcw size={14} />} 리셋
-                  </button>
+                  <IconButton icon={RotateCcw} label="리셋" onClick={() => handleReset(s.studentId)} busy={resettingId === s.studentId} />
                 </div>
                 {open && (
                   <div className="border-t p-2">

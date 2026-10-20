@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Trash2, Shuffle, AlertTriangle } from 'lucide-react';
+import IconButton from '../common/IconButton';
 import { moveStudent, groupKey, unassignedStudents, findGroupKeyOf } from '../../lib/groupAssign';
 
 /**
@@ -53,25 +54,17 @@ export default function GroupAssignmentPanel({
                 onChange={(e) => setAutoCount(Math.max(1, Math.min(30, Number(e.target.value) || 1)))}
                 className="w-16 border rounded-md px-2 py-1 text-sm"
               />
-              <button
-                type="button"
+              <IconButton
+                icon={Shuffle} label="자동 배분"
                 onClick={() => {
                   if (groups.some((g) => g.studentIds.length > 0) &&
                       !window.confirm('현재 배정을 지우고 자동으로 다시 배분합니다. 계속할까요?')) return;
                   onAuto(autoCount);
                 }}
-                className="inline-flex items-center gap-1 px-3 min-h-9 border rounded-md text-sm bg-white hover:bg-gray-50 cursor-pointer whitespace-nowrap"
-              >
-                <Shuffle className="h-4 w-4" /> 자동 배분
-              </button>
+              />
             </div>
           )}
-          <button
-            type="button" onClick={handleAddGroup}
-            className="inline-flex items-center gap-1 px-3 min-h-9 border rounded-md text-sm bg-white hover:bg-gray-50 cursor-pointer whitespace-nowrap"
-          >
-            <Plus className="h-4 w-4" /> 모둠 추가
-          </button>
+          <IconButton icon={Plus} label="모둠 추가" onClick={handleAddGroup} />
           {unassigned.length > 0 && (
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 text-xs font-medium">
               <AlertTriangle className="h-3.5 w-3.5" /> 미배정 {unassigned.length}명

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
 import { getToggles, setToggle, subscribeToggles } from '../../lib/penToggles';
 import { usePenDiagnostics } from '../../hooks/usePenDiagnostics';
 
@@ -30,7 +31,9 @@ export default function PenDiagnosticsOverlay({ containerRef }) {
         <label>pendingMs
           <input type="number" className="w-12 text-black ml-1" value={toggles.pendingDiscardMs}
             onChange={(e) => setToggle('pendingDiscardMs', parseInt(e.target.value, 10) || 0)} /></label>
-        <button className="underline" onClick={() => setToggle('diagnostics', false)}>닫기</button>
+        <button type="button" title="닫기" aria-label="닫기" className="inline-flex items-center" onClick={() => setToggle('diagnostics', false)}>
+          <X className="h-3.5 w-3.5" />
+        </button>
       </div>
       <div onClick={(ev) => { try { navigator.clipboard?.writeText(dump); } catch { /* clipboard 불가 무시 */ } ev.stopPropagation(); }}>
         {dump || '(이벤트 대기...)'}

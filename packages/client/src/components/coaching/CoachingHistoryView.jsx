@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { Search, Eye, EyeOff, ChevronLeft, ChevronRight } from 'lucide-react';
+import IconButton from '../common/IconButton';
 import ProblemView from '../common/ProblemView';
 import CoachingPanel from '../common/CoachingPanel';
 
@@ -53,7 +55,7 @@ export default function CoachingHistoryView({ fetchHistory, showTeacherNotes = f
         <span className="text-gray-400">~</span>
         <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
           className="border rounded px-2 min-h-11 text-sm w-[7.5rem] shrink-0" />
-        <button onClick={() => load(1)} className="px-3 min-h-11 bg-blue-600 text-white rounded-md text-sm whitespace-nowrap">조회</button>
+        <IconButton icon={Search} label="조회" onClick={() => load(1)} />
       </div>
 
       <p className="text-xs text-gray-500">{loading ? '불러오는 중…' : `총 ${result.total}건`}</p>
@@ -100,10 +102,12 @@ export default function CoachingHistoryView({ fetchHistory, showTeacherNotes = f
                     <CoachingPanel attempt={a} showTeacherNotes={showTeacherNotes} />
                     {a.workImageUrl && (
                       <div>
-                        <button onClick={() => setShowImageId(showImageId === a.id ? null : a.id)}
-                          className="text-xs text-gray-500 underline">
-                          {showImageId === a.id ? '필기 이미지 숨기기' : '필기 이미지 보기'}
-                        </button>
+                        <IconButton
+                          icon={showImageId === a.id ? EyeOff : Eye}
+                          label={showImageId === a.id ? '필기 이미지 숨기기' : '필기 이미지 보기'}
+                          aria-pressed={showImageId === a.id}
+                          onClick={() => setShowImageId(showImageId === a.id ? null : a.id)}
+                        />
                         {showImageId === a.id && <img src={a.workImageUrl} alt="필기" className="mt-2 max-w-full rounded border" />}
                       </div>
                     )}
@@ -118,11 +122,9 @@ export default function CoachingHistoryView({ fetchHistory, showTeacherNotes = f
       {/* 페이지네이션 */}
       {result.total > result.pageSize && (
         <div className="flex gap-2 justify-center">
-          <button disabled={result.page <= 1} onClick={() => load(result.page - 1)}
-            className="px-3 min-h-11 border rounded disabled:opacity-40 whitespace-nowrap">이전</button>
+          <IconButton icon={ChevronLeft} label="이전" disabled={result.page <= 1} onClick={() => load(result.page - 1)} />
           <span className="px-2 text-sm flex items-center">{result.page} / {totalPages}</span>
-          <button disabled={result.page >= totalPages} onClick={() => load(result.page + 1)}
-            className="px-3 min-h-11 border rounded disabled:opacity-40 whitespace-nowrap">다음</button>
+          <IconButton icon={ChevronRight} label="다음" disabled={result.page >= totalPages} onClick={() => load(result.page + 1)} />
         </div>
       )}
     </div>

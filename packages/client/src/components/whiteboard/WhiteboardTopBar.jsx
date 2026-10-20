@@ -1,4 +1,5 @@
 import { LayoutTemplate, Maximize2, Lock, Users, PenLine } from 'lucide-react';
+import IconButton from '../common/IconButton';
 import BackgroundColorPicker from './BackgroundColorPicker';
 
 /**
@@ -14,22 +15,12 @@ export default function WhiteboardTopBar({
 }) {
   const lockText = lockedAll ? '전체 잠금' : locked ? '편집 잠금' : null;
   return (
-    <div className="flex items-center gap-2 px-2 h-12 bg-white border-b shadow-sm shrink-0 overflow-x-auto hidden-scroll">
+    <div className="flex items-center gap-2 px-2 h-12 min-h-[44px] bg-white border-b shadow-sm shrink-0 overflow-x-auto hidden-scroll">
       <div className="flex items-center gap-2 shrink-0">{left}</div>
       <div className="flex items-center gap-1.5 shrink-0">
         <BackgroundColorPicker value={backgroundColor} onChange={onBackgroundChange} disabled={readOnly} />
-        <button
-          type="button" onClick={onInsertTemplate} disabled={readOnly} title="템플릿 삽입"
-          className="inline-flex items-center gap-1 px-2 min-h-9 rounded-md border bg-white hover:bg-gray-50 disabled:opacity-40 cursor-pointer text-sm whitespace-nowrap"
-        >
-          <LayoutTemplate className="h-4 w-4" /> 템플릿
-        </button>
-        <button
-          type="button" onClick={onFit} title="발표 영역에 맞추기"
-          className="inline-flex items-center gap-1 px-2 min-h-9 rounded-md border bg-white hover:bg-gray-50 cursor-pointer text-sm whitespace-nowrap"
-        >
-          <Maximize2 className="h-4 w-4" /> 화면 맞춤
-        </button>
+        <IconButton icon={LayoutTemplate} label="템플릿 삽입" onClick={onInsertTemplate} disabled={readOnly} />
+        <IconButton icon={Maximize2} label="화면 맞춤" onClick={onFit} />
       </div>
       {lockText && (
         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-medium shrink-0">
