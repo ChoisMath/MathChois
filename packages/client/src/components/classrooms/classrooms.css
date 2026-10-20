@@ -24,7 +24,7 @@
   padding: 28px clamp(16px, 3vw, 36px) 36px;
 
   /* 화면 바닥까지 채운다(DashboardLayout 본문이 주는 --shell-main-fill). 내용이 더 길면 그대로 늘어난다(안쪽 스크롤 없음) */
-  min-height: var(--shell-main-fill, 0px);
+  min-height: var(--shell-main-fill, 0px); /* 0px 는 DashboardLayout 밖에서 쓸 때의 대체값 */
   display: flex; flex-direction: column;
 }
 /* 카드 목록은 줄 높이를 늘리지 않고 위에 붙는다 */

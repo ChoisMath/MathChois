@@ -130,7 +130,7 @@ function StudentSidebar() {
           </button>
         </div>
         {joinError && (
-          <p className="shell-join-error">{joinError}</p>
+          <p className="shell-join-error" role="alert">{joinError}</p>
         )}
       </form>
 
@@ -260,10 +260,10 @@ const DashboardLayout = () => {
     <div className="min-h-screen bg-[#f8fafd] flex flex-col">
       <Navbar onToggleSidebar={toggleSidebar} sidebarOpen={isDesktop ? showDocked : overlayOpen} />
       <div className="flex flex-1 min-h-0">
-        {/* 데스크톱 고정 사이드바 — 바깥은 본문 높이만큼 늘어나(배경이 바닥까지), 안쪽이 화면에 붙어 스크롤된다 */}
+        {/* 데스크톱 고정 사이드바 — 바깥은 본문 높이만큼 늘어나(배경이 바닥까지), 안쪽이 화면에 붙어 스크롤된다(상단 바 64px 제외 높이). 폭은 px — 루트 글자 크기(12/14/18px)에 따라 변하지 않게 */}
         {showDocked && (
-          <aside className="shell-side w-64 shrink-0">
-            <div className="sticky top-0 max-h-dvh overflow-y-auto">
+          <aside className="shell-side w-[280px] shrink-0">
+            <div className="sticky top-0 max-h-[calc(100dvh-64px)] overflow-y-auto">
               {sidebar}
             </div>
           </aside>
@@ -276,7 +276,7 @@ const DashboardLayout = () => {
               className="fixed inset-0 z-40 bg-black/40"
               onClick={() => setOverlayOpen(false)}
             />
-            <aside className="shell-side fixed inset-y-0 left-0 z-50 w-64 shadow-xl overflow-y-auto">
+            <aside className="shell-side fixed inset-y-0 left-0 z-50 w-[280px] max-w-[85vw] shadow-xl overflow-y-auto">
               <div className="shell-overlay-head">
                 <span className="shell-overlay-title">
                   <BrandMark className="h-6 w-6" onDark />
