@@ -124,23 +124,30 @@
   .color-picker { grid-template-columns: repeat(3, 44px); justify-content: start; column-gap: 16px; }
 }
 
+/* size="sm": 누르는 칸은 44px 그대로, 보이는 원만 30px (학급 상세 헤더) */
+.color-picker--sm { justify-content: start; column-gap: 4px; max-width: none; }
+.color-picker--sm .color-swatch { position: relative; border: 0; background: transparent; box-shadow: none; }
+.color-picker--sm .color-swatch::before {
+  content: ''; position: absolute; inset: 7px; border-radius: 50%;
+  background: var(--swatch); border: 2px solid #fff; box-shadow: 0 0 0 1px #d6deec;
+  transition: box-shadow .15s ease;
+}
+.color-picker--sm .color-swatch[aria-pressed='true'] { box-shadow: none; }
+.color-picker--sm .color-swatch[aria-pressed='true']::before { box-shadow: 0 0 0 2px #1c2b4a; }
+.color-picker--sm .color-swatch svg { position: relative; width: 16px; height: 16px; }
+.color-picker--sm .color-swatch:focus-visible { outline-offset: 0; }
+@container (max-width: 263px) {
+  .color-picker--sm { column-gap: 16px; }
+}
+
 /* 학급 상세 제목 줄: 학급 색 띠 + 옅은 배경 */
 .classroom-head {
   padding: 12px 16px; border-radius: 12px;
   background: var(--nb-tint); border-left: 6px solid var(--nb-cover);
 }
-.color-toggle {
-  display: inline-flex; align-items: center; gap: 8px;
-  min-height: 44px; padding: 0 14px; border-radius: 999px;
-  background: #fff; border: 1px solid #d6deec;
-  font-size: 14px; font-weight: 500; color: #1c2b4a; cursor: pointer;
-}
-.color-toggle:hover { background: #f4f7fc; }
-.color-toggle:focus-visible { outline: 3px solid #2453a6; outline-offset: 3px; }
-.color-toggle i { width: 14px; height: 14px; border-radius: 50%; background: var(--nb-cover); display: block; }
 
 @media (prefers-reduced-motion: reduce) {
-  .color-swatch { transition: none; }
+  .color-swatch, .color-picker--sm .color-swatch::before { transition: none; }
   .color-swatch:hover:not([aria-disabled='true']) { transform: none; }
   .notebook, .classrooms .new-btn { transition: none; }
   .notebook-link:hover .notebook, .notebook-link:active .notebook { transform: none; }

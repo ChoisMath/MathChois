@@ -154,10 +154,8 @@ const ClassroomDetail = () => {
   const [nameInput, setNameInput]     = useState('');
   const [savingName, setSavingName]   = useState(false);
 
-  const [colorOpen, setColorOpen]     = useState(false);
   const [savingColor, setSavingColor] = useState(false);
   const [colorError, setColorError]   = useState('');
-  const colorToggleRef = useRef(null);
   const idRef = useRef(id); // 저장이 끝났을 때 아직 같은 학급 화면인지 확인용
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -245,10 +243,9 @@ const ClassroomDetail = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  /* 다른 학급으로 이동하면 표지 색 펼침·오류를 닫는다 */
+  /* 다른 학급으로 이동하면 표지 색 오류를 지운다 */
   useEffect(() => {
     idRef.current = id;
-    setColorOpen(false);
     setColorError('');
   }, [id]);
 
@@ -324,14 +321,9 @@ const ClassroomDetail = () => {
   };
 
   /* ── 표지 색 변경: 먼저 바꿔 보이고, 저장에 실패하면 이전 색으로 되돌린다 ── */
-  const toggleColorPicker = () => {
-    setColorError('');
-    setColorOpen((v) => !v);
-  };
-
   const handleColorChange = async (color) => {
     if (savingColor) return;
-    if (color === resolveClassroomColor(classroom)) { setColorOpen(false); return; }
+    if (color === resolveClassroomColor(classroom)) return;
     const prevColor = classroom.color;
     const targetId = id; // 저장 중에 다른 학급으로 옮겨도 이 학급만 되돌린다
     setSavingColor(true);
@@ -340,10 +332,6 @@ const ClassroomDetail = () => {
     try {
       await api.patch(`/api/classrooms/${targetId}`, { color });
       refreshSidebar();
-      if (idRef.current === targetId) {
-        setColorOpen(false);
-        colorToggleRef.current?.focus(); // 펼침이 닫히며 사라진 원 대신 버튼으로 포커스를 돌린다
-      }
     } catch (err) {
       console.error('[ClassroomDetail] 표지 색 변경 오류:', err);
       setClassroom((prev) => (prev?.id === targetId ? { ...prev, color: prevColor } : prev));
@@ -486,9 +474,10 @@ const ClassroomDetail = () => {
     <>
       <div className="w-full space-y-6">
 
-        {/* ── 헤더 ── */}
+        {/* ── 헤더 (학급 색 띠 + 옅은 배경) ── */}
+        <div className="classroom-head" style={colorVars(resolveClassroomColor(classroom))}>
         <div className="flex items-start justify-between gap-4">
-          <div className="classroom-head flex-1 min-w-0" style={colorVars(resolveClassroomColor(classroom))}>
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               {isTeacher && editingName ? (
                 <input
@@ -540,36 +529,6 @@ const ClassroomDetail = () => {
               </div>
             )}
 
-            {isTeacher && (
-              <div className="mt-2">
-                <button
-                  ref={colorToggleRef}
-                  type="button"
-                  onClick={toggleColorPicker}
-                  aria-expanded={colorOpen}
-                  aria-controls="classroom-color-picker"
-                  className="color-toggle"
-                >
-                  <i aria-hidden="true" />
-                  표지 색 바꾸기
-                </button>
-                {colorOpen && (
-                  <div id="classroom-color-picker" className="mt-3">
-                    <p id="classroom-color-label" className="text-[14px] text-[#56627c] mb-2">표지 색</p>
-                    <ClassroomColorPicker
-                      value={resolveClassroomColor(classroom)}
-                      onChange={handleColorChange}
-                      disabled={savingColor}
-                      labelId="classroom-color-label"
-                    />
-                    {colorError && (
-                      <p className="text-[14px] text-red-700 mt-2" role="alert">{colorError}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -607,6 +566,23 @@ const ClassroomDetail = () => {
               </button>
             )}
           </div>
+        </div>
+
+        {/* 교사: 색 동그라미만 누르면 바로 바뀐다(글자 없음) */}
+        {isTeacher && (
+          <div className="mt-1">
+            <ClassroomColorPicker
+              size="sm"
+              ariaLabel="표지 색"
+              value={resolveClassroomColor(classroom)}
+              onChange={handleColorChange}
+              disabled={savingColor}
+            />
+            {colorError && (
+              <p className="text-[14px] text-red-700 mt-1" role="alert">{colorError}</p>
+            )}
+          </div>
+        )}
         </div>
 
         {/* ── 탭 네비게이션 ── */}
