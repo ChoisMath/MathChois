@@ -1,4 +1,5 @@
 import type { ExcalidrawData } from './excalidraw.js';
+import type { ClassroomColor } from '../classroom/color.js';
 
 // ─── Core ───────────────────────────────────────────
 
@@ -7,6 +8,8 @@ export interface Classroom {
   name: string;
   teacherId: string;
   classCode: string;
+  /** 공책 표지 색. 구 데이터·구 서버 응답이면 null → 자동 배정 */
+  color: ClassroomColor | null;
   createdAt: string;
 }
 
