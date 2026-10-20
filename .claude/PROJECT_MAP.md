@@ -39,7 +39,7 @@ packages/
 │       │   └── whiteboard/     # WhiteboardCanvas(Excalidraw 기본 UI + 협업), WhiteboardTopBar, BackgroundColorPicker, TemplatePickerDialog, TemplateThumb(SVG 미리보기),
 │       │                       #   WhiteboardTile(격자 정적 썸네일), WhiteboardSettingsDrawer(교사 설정), GroupAssignmentPanel, ClassroomGroupSettings(학급 학생 탭 모둠 설정)
 │       ├── layouts/            # MainLayout(public), DashboardLayout(인증 — 데스크톱 ≥1024px 고정 사이드바(햄버거로 접기, `mc_sidebar_collapsed`), 그 아래는 오버레이; 본문 유동 폭 p-4/6/8)
-│       ├── pages/              # Home(첫 화면·로그인 — 상단 바 없음, 모눈 노트 디자인 + components/home/LessonScene 필기 장면), Login, Classrooms, Chapters, Study, Monitor,
+│       ├── pages/              # Home(첫 화면·로그인 — 상단 바 없음, 모눈 노트 디자인 + components/home/LessonScene 필기 장면), Login, Classrooms(목록 = 모눈 노트 위 공책 표지 카드, components/classrooms/classrooms.css), Chapters, Study, Monitor,
 │       │                       #   Assignment, Board, Admin, Problems(문제은행), Visualizations(시각화자료), Videos(영상자료 VideosPage + 학급 시청 ClassroomVideoWatch + 영상 2분할 필기 ClassroomVideoSplit), History(코칭기록),
 │       │                       #   Whiteboard(StudentWhiteboardViewer 학생 모둠 보드, TeacherWhiteboardPage 교사 격자/단일 + 설정) 등
 │       ├── hooks/              # useMediaQuery(matchMedia 구독), useSortOrder(목록 정렬 순서 — 사용자별 localStorage), useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
@@ -59,6 +59,7 @@ packages/
 │                               #   splitLayout.js(영상 2분할 — 비율/영상 위치 `mc_video_split`, 마지막 페이지 `mc_video_split_page:<cv>`, ratioFromPointer/stepRatio),
 │                               #   swUpdate.js(PWA SW 자동 업데이트 — setupSwAutoUpdate),
 │                               #   homeIntro.js(첫 화면 필기 장면 모션 — 브라우저당 첫 방문 1회, `mc_home_intro_played`, 동작 줄이기 시 생략),
+│                               #   classroomColor.js(클래스룸 공책 표지 색 6가지 자동 배정 — 만든 순서대로 고유 색, 겹치면 덜 쓴 색. 교사 선택은 2단계 예정),
 │                               #   linkify.js(게시판 본문 plain text의 URL → 자동 하이퍼링크 세그먼트),
 │                               #   sortOrder.js(학급 상세 [챕터]·[영상] 탭 정렬 — 최신순/등록순/교사 지정순, sortItems + localStorage 저장),
 │                               #   layout.js(CARD_GRID 카드 목록 반응형 열 규칙 1/2/3/4/5열 · DESKTOP_MEDIA_QUERY · SIDEBAR_COLLAPSED_KEY),

@@ -1,0 +1,106 @@
+/*
+ * 클래스룸 목록 — 모눈 노트 위의 공책 표지 (디자인 논의: 시안 A, 학급 색 자동 배정).
+ * 학급 색 6가지: --nb-cover(표지) / --nb-deep(이름표 글씨·학생 수) — 이름표·칩 위 글씨는 모두 4.5:1 이상.
+ */
+.classrooms {
+  --paper: #f8fafd;
+  --rule: #e3eaf4;
+  --ink: #1c2b4a;
+  --soft: #56627c;
+  --pen: #2453a6;
+  --sans: 'IBM Plex Sans KR', 'Noto Sans KR', system-ui, sans-serif;
+  --hand: 'Gaegu', 'Nanum Pen Script', cursive;
+
+  font-family: var(--sans);
+  color: var(--ink);
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--rule) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+  background-size: 24px 24px;
+  border: 1px solid #e3e8f1;
+  border-radius: 16px;
+  padding: 28px clamp(16px, 3vw, 36px) 36px;
+}
+.classrooms .hand { font-family: var(--hand); }
+.classrooms .kicker { font-family: var(--hand); font-size: 20px; line-height: 1; color: var(--pen); }
+.classrooms .title { margin: 4px 0 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.3; }
+
+.classrooms .new-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 18px; border-radius: 999px;
+  background: var(--ink); color: #fff; font-size: 15px; font-weight: 500;
+  transition: background-color .2s ease, transform .15s ease;
+}
+.classrooms .new-btn:hover { background: #142039; }
+.classrooms .new-btn:active { transform: scale(.97); }
+.classrooms :focus-visible { outline: 3px solid var(--pen); outline-offset: 4px; }
+
+/* ── 공책 표지 ── */
+.nb-coral    { --nb-cover: #f2836b; --nb-deep: #a63b24; }
+.nb-mustard  { --nb-cover: #f2b544; --nb-deep: #7d5200; }
+.nb-sage     { --nb-cover: #8fc28a; --nb-deep: #2c6537; }
+.nb-sky      { --nb-cover: #6fa8dc; --nb-deep: #1d5893; }
+.nb-lavender { --nb-cover: #a78bda; --nb-deep: #563a99; }
+.nb-rose     { --nb-cover: #ee8ab1; --nb-deep: #932a56; }
+
+.notebook {
+  position: relative;
+  display: grid; grid-template-rows: 1fr auto; gap: 12px;
+  min-height: 180px;
+  padding: 18px 18px 16px 34px;
+  border-radius: 6px 14px 14px 6px;
+  background: var(--nb-cover);
+  box-shadow: 0 10px 22px -14px rgba(28, 43, 74, .55), inset -6px 0 0 rgba(0, 0, 0, .05);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+/* 제본 띠 */
+.notebook::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 18px; border-radius: 6px 0 0 6px; background: rgba(0, 0, 0, .14); }
+.notebook::after { content: ''; position: absolute; left: 18px; top: 0; bottom: 0; width: 2px; background: rgba(255, 255, 255, .35); }
+.notebook-label {
+  align-self: center;
+  display: grid; gap: 2px;
+  padding: 12px 14px;
+  background: #fff; border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
+  min-width: 0;
+}
+.notebook-label .sub { font-family: var(--hand); font-size: 16px; line-height: 1; color: var(--nb-deep); }
+.notebook-label .name { font-size: 18px; font-weight: 700; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
+.notebook-label .code { font-size: 12px; color: var(--soft); }
+.notebook-label .code b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 500; letter-spacing: .08em; }
+.notebook-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #fff; }
+.notebook-count {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 999px;
+  background: rgba(255, 255, 255, .92); color: var(--nb-deep);
+  font-size: 13px; font-weight: 500;
+}
+.notebook-link { display: block; height: 100%; border-radius: 14px; color: inherit; }
+.notebook-link .notebook { height: 100%; }
+.notebook-link:hover { text-decoration: none; }
+.notebook-link:hover .notebook {
+  transform: translateY(-3px) rotate(-.6deg);
+  box-shadow: 0 16px 26px -14px rgba(28, 43, 74, .6), inset -6px 0 0 rgba(0, 0, 0, .05);
+}
+.notebook-link:active .notebook { transform: translateY(-1px) scale(.99); }
+
+/* 빈 화면: 표지 없는 빈 공책 */
+.notebook-empty {
+  display: grid; justify-items: center; gap: 10px; text-align: center;
+  padding: 40px 20px;
+  border: 2px dashed #c9d4ee; border-radius: 14px;
+  background: rgba(255, 255, 255, .7);
+}
+.notebook-empty .hand { font-size: 24px; color: var(--pen); line-height: 1.1; }
+.notebook-empty p { margin: 0; color: var(--soft); font-size: 15px; }
+
+/* 학급 만들기 창 */
+.classroom-modal { font-family: var(--sans, 'IBM Plex Sans KR', system-ui, sans-serif); color: #1c2b4a; }
+.classroom-modal .field { border: 1px solid #c9d4ee; }
+.classroom-modal .field:focus { outline: none; border-color: #2453a6; box-shadow: 0 0 0 3px rgba(36, 83, 166, .18); }
+
+@media (prefers-reduced-motion: reduce) {
+  .notebook, .classrooms .new-btn { transition: none; }
+  .notebook-link:hover .notebook, .notebook-link:active .notebook { transform: none; }
+}
