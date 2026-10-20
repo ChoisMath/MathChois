@@ -506,7 +506,9 @@ const ClassroomDetail = () => {
               {isTeacher && (
                 <button
                   onClick={() => setShowCode((v) => !v)}
-                  title={showCode ? '코드 숨기기' : '클래스 코드 보기'}
+                  title={showCode ? '코드·표지 색 숨기기' : '클래스 코드·표지 색 보기'}
+                  aria-label={showCode ? '코드·표지 색 숨기기' : '클래스 코드·표지 색 보기'}
+                  aria-expanded={showCode}
                   className={`p-1.5 rounded-md transition-colors cursor-pointer ${
                     showCode ? 'bg-blue-100 text-blue-600' : 'text-[#56627c] hover:text-[#1c2b4a]'
                   }`}
@@ -570,16 +572,18 @@ const ClassroomDetail = () => {
           </div>
         </div>
 
-        {/* 교사: 색 동그라미만 누르면 바로 바뀐다(글자 없음) */}
-        {isTeacher && (
+        {/* 교사: '#'을 누르면 코드와 함께 색 동그라미가 나타나고, 누르면 바로 바뀐다(글자 없음) */}
+        {isTeacher && (showCode || colorError) && (
           <div className="mt-1">
-            <ClassroomColorPicker
-              size="sm"
-              ariaLabel="표지 색"
-              value={resolveClassroomColor(classroom)}
-              onChange={handleColorChange}
-              disabled={savingColor}
-            />
+            {showCode && (
+              <ClassroomColorPicker
+                size="sm"
+                ariaLabel="표지 색"
+                value={resolveClassroomColor(classroom)}
+                onChange={handleColorChange}
+                disabled={savingColor}
+              />
+            )}
             {colorError && (
               <p className="text-[14px] text-red-700 mt-1" role="alert">{colorError}</p>
             )}
