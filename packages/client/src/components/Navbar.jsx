@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, LogOut, Menu, Shield, Pencil, Check, X } from 'lucide-react';
+import { LogOut, Menu, Shield, Pencil, Check, X } from 'lucide-react';
+import '@fontsource/ibm-plex-sans-kr/400.css';
+import '@fontsource/ibm-plex-sans-kr/500.css';
+import '@fontsource/ibm-plex-sans-kr/700.css';
 import { useAuth } from '../contexts/AuthContext';
+import BrandMark from './shell/BrandMark';
+import './shell/shell.css';
+
+const ROLE_LABEL = { teacher: '선생님', student: '학생' };
 
 const Navbar = ({ onToggleSidebar, sidebarOpen = false }) => {
   const { profile, isAuthenticated, signOut, updateName } = useAuth();
@@ -34,111 +41,114 @@ const Navbar = ({ onToggleSidebar, sidebarOpen = false }) => {
   };
 
   return (
-    <nav className="bg-white shadow-sm border-b border-gray-200">
+    <nav className="shell-top">
       {/* 전폭 네비게이션 — 햄버거가 항상 화면 왼쪽 끝에 붙는다 (가운데 정렬 max-w 없음) */}
-      <div className="w-full pl-1 pr-3 sm:pl-2 sm:pr-4">
-        <div className="flex justify-between h-16">
-          <div className="flex items-center gap-1 sm:gap-2">
-            {onToggleSidebar && (
-              <button
-                onClick={onToggleSidebar}
-                className="p-2.5 min-w-11 min-h-11 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors cursor-pointer"
-                aria-label={sidebarOpen ? '메뉴 닫기' : '메뉴 열기'}
-                aria-expanded={sidebarOpen}
-              >
-                <Menu className="h-5 w-5" />
-              </button>
-            )}
-            <Link to="/" className="flex-shrink-0 flex items-center gap-2">
-              <BookOpen className="h-8 w-8 text-blue-600" />
-              <span className="text-xl font-bold text-gray-900">ChoisClass</span>
-            </Link>
-          </div>
-          <div className="flex items-center">
-            {isAuthenticated && (
-              <div className="flex items-center gap-3">
-                {profile?.isAdmin && (
-                  <Link
-                    to="/admin"
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition-colors"
-                  >
-                    <Shield className="h-4 w-4" />
-                    <span className="hidden sm:inline">관리자 패널</span>
-                  </Link>
-                )}
-                {profile?.avatarUrl ? (
-                  <img
-                    src={profile.avatarUrl}
-                    alt={profile.name}
-                    className="h-8 w-8 rounded-full"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : profile && (
-                  <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-sm font-medium text-blue-700">
-                    {(profile.name || '?')[0]}
-                  </div>
-                )}
+      <div className="shell-top-inner">
+        <div className="shell-top-l">
+          {onToggleSidebar && (
+            <button
+              onClick={onToggleSidebar}
+              className="shell-iconbtn"
+              aria-label={sidebarOpen ? '메뉴 닫기' : '메뉴 열기'}
+              aria-expanded={sidebarOpen}
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          )}
+          <Link to="/" className="shell-brand">
+            <BrandMark className="h-7 w-7" onDark />
+            <span>ChoisClass</span>
+          </Link>
+        </div>
+        <div className="shell-top-r">
+          {isAuthenticated && (
+            <>
+              {profile?.isAdmin && (
+                <Link to="/admin" className="shell-admin" aria-label="관리자 패널">
+                  <Shield className="h-4 w-4" />
+                  <span className="shell-admin-text">관리자 패널</span>
+                </Link>
+              )}
+              {profile?.avatarUrl ? (
+                <img
+                  src={profile.avatarUrl}
+                  alt={profile.name}
+                  className="shell-avatar"
+                  referrerPolicy="no-referrer"
+                />
+              ) : profile && (
+                <div className="shell-avatar" aria-hidden="true">
+                  {(profile.name || '?')[0]}
+                </div>
+              )}
 
-                {/* 이름 표시/편집 */}
-                <div className="hidden sm:flex items-center gap-1">
-                  {editingName ? (
-                    <>
-                      <input
-                        type="text"
-                        value={nameValue}
-                        onChange={e => setNameValue(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') handleSaveName();
-                          if (e.key === 'Escape') setEditingName(false);
-                        }}
-                        className="text-sm border border-blue-300 rounded px-2 py-0.5 w-24 focus:ring-blue-500 focus:border-blue-500"
-                        autoFocus
-                        disabled={saving}
-                      />
-                      <button
-                        onClick={handleSaveName}
-                        disabled={saving}
-                        className="p-0.5 text-green-600 hover:bg-green-50 rounded cursor-pointer"
-                        title="저장"
-                      >
-                        <Check className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setEditingName(false)}
-                        className="p-0.5 text-gray-400 hover:bg-gray-100 rounded cursor-pointer"
-                        title="취소"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </>
-                  ) : (
-                    <div className="group flex items-center gap-1">
-                      <span className="text-sm font-medium text-gray-700">
-                        {profile?.name}
-                      </span>
-                      {profile?.authMethod === 'email' && (
-                        <button
-                          onClick={startEditName}
-                          className="p-0.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="이름 변경"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
+              {/* 이름 표시/편집 */}
+              <div className="shell-who">
+                {editingName ? (
+                  <div className="shell-who-edit">
+                    <input
+                      type="text"
+                      value={nameValue}
+                      onChange={e => setNameValue(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleSaveName();
+                        if (e.key === 'Escape') setEditingName(false);
+                      }}
+                      className="shell-name-input"
+                      aria-label="이름"
+                      autoFocus
+                      disabled={saving}
+                    />
+                    <button
+                      onClick={handleSaveName}
+                      disabled={saving}
+                      className="shell-minibtn"
+                      title="저장"
+                      aria-label="저장"
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setEditingName(false)}
+                      className="shell-minibtn"
+                      title="취소"
+                      aria-label="취소"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="shell-who-text">
+                      <span className="shell-who-name">{profile?.name}</span>
+                      {ROLE_LABEL[profile?.role] && (
+                        <span className="shell-who-role">{ROLE_LABEL[profile.role]}</span>
                       )}
                     </div>
-                  )}
-                </div>
-
-                <button
-                  onClick={handleLogout}
-                  title="로그아웃"
-                  className="flex items-center justify-center p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors cursor-pointer"
-                >
-                  <LogOut className="h-5 w-5" />
-                </button>
+                    {profile?.authMethod === 'email' && (
+                      <button
+                        onClick={startEditName}
+                        className="shell-minibtn shell-pencil"
+                        title="이름 변경"
+                        aria-label="이름 변경"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
-            )}
-          </div>
+
+              <button
+                onClick={handleLogout}
+                title="로그아웃"
+                aria-label="로그아웃"
+                className="shell-iconbtn"
+              >
+                <LogOut className="h-5 w-5" />
+              </button>
+            </>
+          )}
         </div>
       </div>
     </nav>

@@ -1,0 +1,90 @@
+/*
+ * 앱 틀(상단 바 + 사이드바) 공용 스타일 — 디자인 시안 B (남색 상단 바 + 색 인덱스 탭).
+ * 색: 상단 바 #1c2b4a / 보조 글자 #aebbd6 / 아이콘 #c9d4ee / 아바타 #f2b544 / 사이드바 #eef2f8 / 종이 #f8fafd / 펜 #2453a6.
+ * 누르는 영역은 모두 44px 이상.
+ */
+.shell-top {
+  --shell-ink: #1c2b4a;
+  --shell-sans: 'IBM Plex Sans KR', 'Noto Sans KR', system-ui, sans-serif;
+
+  background: var(--shell-ink);
+  color: #fff;
+  font-family: var(--shell-sans);
+}
+.shell-top-inner {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  height: 64px; padding: 0 12px 0 4px;
+}
+@media (min-width: 640px) { .shell-top-inner { padding: 0 18px 0 8px; } }
+.shell-top-l, .shell-top-r { display: flex; align-items: center; gap: 6px; min-width: 0; }
+@media (min-width: 640px) { .shell-top-r { gap: 10px; } }
+
+.shell-top :focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+
+/* 아이콘 버튼(메뉴·로그아웃) */
+.shell-iconbtn {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 44px; height: 44px; border-radius: 12px;
+  color: #c9d4ee; cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+.shell-iconbtn:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+
+/* 로고 */
+.shell-brand {
+  display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0;
+  min-height: 44px; padding: 0 6px; border-radius: 10px;
+  color: #fff; font-size: 18px; font-weight: 700; letter-spacing: -.01em;
+}
+
+/* 관리자 패널 링크 */
+.shell-admin {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px; min-width: 44px; padding: 0 12px; justify-content: center;
+  border-radius: 12px; background: #fcefc7; color: #7d5200;
+  font-size: 14px; font-weight: 500;
+  transition: background-color .15s ease;
+}
+.shell-admin:hover { background: #f8e3a6; }
+.shell-admin:focus-visible { outline-color: #fcefc7; }
+.shell-admin-text { display: none; }
+@media (min-width: 640px) { .shell-admin-text { display: inline; } }
+
+/* 아바타 */
+.shell-avatar {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: #f2b544; color: var(--shell-ink); font-size: 14px; font-weight: 700;
+}
+img.shell-avatar { object-fit: cover; }
+
+/* 이름 + 역할 */
+.shell-who { display: none; align-items: center; gap: 2px; min-width: 0; }
+@media (min-width: 640px) { .shell-who { display: flex; } }
+.shell-who-text { display: grid; line-height: 1.25; min-width: 0; }
+.shell-who-name { font-size: 14px; font-weight: 500; color: #fff; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell-who-role { font-size: 11px; color: #aebbd6; }
+
+/* 이름 편집 — 입력은 흰 배경 유지 */
+.shell-who-edit { display: flex; align-items: center; gap: 2px; }
+.shell-name-input {
+  width: 7rem; height: 36px; padding: 0 8px; border-radius: 8px;
+  background: #fff; color: var(--shell-ink); border: 1px solid #c9d4ee; font-size: 14px;
+}
+.shell-name-input:focus-visible { outline: 3px solid #f2b544; outline-offset: 1px; }
+.shell-minibtn {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 44px; height: 44px; border-radius: 10px;
+  color: #c9d4ee; cursor: pointer;
+  transition: background-color .15s ease, color .15s ease, opacity .15s ease;
+}
+.shell-minibtn:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+.shell-minibtn:disabled { opacity: .5; cursor: default; }
+/* 연필은 이름에 마우스를 올리거나 키보드 포커스가 들어올 때 드러난다(터치 기기는 항상 보임) */
+.shell-pencil { opacity: 0; }
+@media (hover: none) { .shell-pencil { opacity: 1; } }
+.shell-who:hover .shell-pencil, .shell-pencil:focus-visible { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-iconbtn, .shell-admin, .shell-minibtn { transition: none; }
+}
