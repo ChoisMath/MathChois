@@ -13,6 +13,7 @@ import {
   joinClassroomByCode,
   removeClassroomMember,
   isClassroomOwner,
+  canAccessClassroom,
   getClassroomImageUrls,
   findSharedClassroomImageUrls,
 } from '../services/classroom.service.js';
@@ -78,14 +79,22 @@ export async function classroomRoutes(app: FastifyInstance) {
 
   // ─── GET /api/classrooms/:id — 교실 상세 ─────
 
+  // 소유 교사 또는 소속 학생만 조회 가능. 참가 코드(classCode)는 교사에게만 반환
+  // (학생은 이미 참가했으므로 불필요 — 다른 학생에게 재유출 방지)
+
   app.get<{ Params: { id: string } }>('/api/classrooms/:id', {
     preHandler: [authenticate],
   }, async (request, reply) => {
+    if (!(await canAccessClassroom(request.params.id, request.user))) {
+      return reply.status(403).send({ error: 'Access denied' });
+    }
     const classroom = await getClassroomById(request.params.id);
     if (!classroom) {
       return reply.status(404).send({ error: 'Classroom not found' });
     }
-    return classroom;
+    if (request.user.role === 'teacher') return classroom;
+    const { classCode: _classCode, ...rest } = classroom;
+    return rest;
   });
 
   // ─── PATCH /api/classrooms/:id — 교실 수정 ───
@@ -184,7 +193,10 @@ export async function classroomRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { id: string } }>('/api/classrooms/:id/members', {
     preHandler: [authenticate],
-  }, async (request) => {
+  }, async (request, reply) => {
+    if (!(await canAccessClassroom(request.params.id, request.user))) {
+      return reply.status(403).send({ error: 'Access denied' });
+    }
     return getClassroomMembers(request.params.id);
   });
 

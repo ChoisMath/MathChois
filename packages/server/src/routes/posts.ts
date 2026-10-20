@@ -11,6 +11,7 @@ import {
   deletePost,
   isPostOwner,
 } from '../services/post.service.js';
+import { canAccessClassroom } from '../services/classroom.service.js';
 import { urlToStoragePath, removeFile, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
 
 export async function postRoutes(app: FastifyInstance) {
@@ -31,7 +32,10 @@ export async function postRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { cid: string } }>('/api/classrooms/:cid/posts', {
     preHandler: [authenticate],
-  }, async (request) => {
+  }, async (request, reply) => {
+    if (!(await canAccessClassroom(request.params.cid, request.user))) {
+      return reply.status(403).send({ error: 'Access denied' });
+    }
     return getPostsByClassroom(request.params.cid);
   });
 

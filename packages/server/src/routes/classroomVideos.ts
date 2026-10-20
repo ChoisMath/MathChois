@@ -2,17 +2,15 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
-import { isClassroomOwner, isClassroomMember } from '../services/classroom.service.js';
+import { isClassroomOwner, canAccessClassroom as canAccessClassroomFor } from '../services/classroom.service.js';
 import { getVideoById } from '../services/video.service.js';
 import * as svc from '../services/classroomVideo.service.js';
 import { getIO } from '../socket/index.js';
 import { emitVideoCommentChanged } from '../socket/handlers/videos.js';
 
 /** 교실 소유 교사 또는 소속 학생인지 — 학급 영상/댓글 공통 접근 가드 */
-async function canAccessClassroom(req: FastifyRequest, classroomId: string): Promise<boolean> {
-  if (req.user.role === 'teacher') return isClassroomOwner(classroomId, req.user.sub);
-  if (req.user.role === 'student') return isClassroomMember(classroomId, req.user.sub);
-  return false;
+function canAccessClassroom(req: FastifyRequest, classroomId: string): Promise<boolean> {
+  return canAccessClassroomFor(classroomId, req.user);
 }
 
 async function loadClassroomVideoOr404(req: FastifyRequest, reply: FastifyReply, id: string) {

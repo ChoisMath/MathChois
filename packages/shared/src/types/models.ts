@@ -6,7 +6,8 @@ export interface Classroom {
   id: string;
   name: string;
   teacherId: string;
-  classCode: string;
+  /** 참가 코드 — 교사(소유자) 응답에만 포함, 학생 응답에서는 생략 */
+  classCode?: string;
   createdAt: string;
 }
 

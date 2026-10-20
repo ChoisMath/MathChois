@@ -13,7 +13,7 @@ import {
   isLinkedChapter,
 } from '../services/chapter.service.js';
 import { getPageImageUrls, findSharedImageUrls } from '../services/page.service.js';
-import { isClassroomOwner } from '../services/classroom.service.js';
+import { isClassroomOwner, canAccessClassroom } from '../services/classroom.service.js';
 import { removeFile, urlToStoragePath, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
 
 export async function chapterRoutes(app: FastifyInstance) {
@@ -22,7 +22,10 @@ export async function chapterRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { cid: string } }>('/api/classrooms/:cid/chapters', {
     preHandler: [authenticate],
-  }, async (request) => {
+  }, async (request, reply) => {
+    if (!(await canAccessClassroom(request.params.cid, request.user))) {
+      return reply.status(403).send({ error: 'Access denied' });
+    }
     return getChaptersByClassroom(request.params.cid);
   });
 

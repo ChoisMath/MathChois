@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
-import { isClassroomOwner, isClassroomMember } from '../services/classroom.service.js';
+import { isClassroomOwner, canAccessClassroom } from '../services/classroom.service.js';
 import {
   getClassroomGroups, replaceClassroomGroups, autoDistributeClassroomGroups,
 } from '../services/classroomGroup.service.js';
@@ -24,9 +24,7 @@ export async function classroomGroupRoutes(app: FastifyInstance) {
     preHandler: [authenticate],
   }, async (request, reply) => {
     const { id } = request.params;
-    const { sub, role } = request.user;
-    const ok = role === 'teacher' ? await isClassroomOwner(id, sub) : await isClassroomMember(id, sub);
-    if (!ok) return reply.status(403).send({ error: 'Access denied' });
+    if (!(await canAccessClassroom(id, request.user))) return reply.status(403).send({ error: 'Access denied' });
     return getClassroomGroups(id);
   });
 

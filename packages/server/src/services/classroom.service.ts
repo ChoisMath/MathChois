@@ -34,7 +34,7 @@ export async function getTeacherClassrooms(teacherId: string) {
   return rows;
 }
 
-/** 학생 교실 목록 (멤버 수 포함) */
+/** 학생 교실 목록 (멤버 수 포함) — 참가 코드(classCode)는 교사 전용이라 제외 */
 export async function getStudentClassrooms(studentId: string) {
   // 학생이 속한 교실 ID 먼저 가져오기
   const memberRows = await db
@@ -52,7 +52,6 @@ export async function getStudentClassrooms(studentId: string) {
       id: classrooms.id,
       name: classrooms.name,
       teacherId: classrooms.teacherId,
-      classCode: classrooms.classCode,
       createdAt: classrooms.createdAt,
       memberCount: count(classroomMembers.id),
     })
@@ -272,4 +271,14 @@ export async function isClassroomMember(classroomId: string, studentId: string):
     )
     .limit(1);
   return rows.length > 0;
+}
+
+/** 교실 소유 교사 또는 소속 학생인지 — 교실 단위 조회 공통 접근 가드 */
+export async function canAccessClassroom(
+  classroomId: string,
+  user: { sub: string; role: string | null },
+): Promise<boolean> {
+  if (user.role === 'teacher') return isClassroomOwner(classroomId, user.sub);
+  if (user.role === 'student') return isClassroomMember(classroomId, user.sub);
+  return false;
 }

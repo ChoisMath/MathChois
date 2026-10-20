@@ -26,7 +26,7 @@ import {
   getSubmissionFileUrls,
   getSubmissionFileUrlsByAssignment,
 } from '../services/assignment.service.js';
-import { isClassroomOwner } from '../services/classroom.service.js';
+import { isClassroomOwner, canAccessClassroom } from '../services/classroom.service.js';
 import { removeFile, urlToStoragePath, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
 import { getIO } from '../socket/index.js';
 import { emitSubmissionUpdated } from '../socket/handlers/assignments.js';
@@ -38,7 +38,10 @@ export async function assignmentRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { cid: string } }>('/api/classrooms/:cid/assignments', {
     preHandler: [authenticate],
-  }, async (request) => {
+  }, async (request, reply) => {
+    if (!(await canAccessClassroom(request.params.cid, request.user))) {
+      return reply.status(403).send({ error: 'Access denied' });
+    }
     return getAssignmentsByClassroom(request.params.cid);
   });
 
