@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { CARD_GRID } from '../../lib/layout';
-import { Plus, Users, ArrowRight, Loader, X } from 'lucide-react';
+import { Plus, Users, ArrowRight, X } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import '@fontsource/ibm-plex-sans-kr/400.css';
 import '@fontsource/ibm-plex-sans-kr/500.css';
@@ -11,6 +11,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { refreshSidebar } from '../../lib/sidebarRefresh';
 import { assignClassroomColors, resolveClassroomColor, colorVars, pickLeastUsedColor } from '../../lib/classroomColor';
 import ClassroomColorPicker from '../../components/classrooms/ClassroomColorPicker';
+import IconButton from '../../components/common/IconButton';
 import '../../components/classrooms/classrooms.css';
 
 const ClassroomList = () => {
@@ -88,10 +89,7 @@ const ClassroomList = () => {
           <h1 className="title">내 클래스룸</h1>
         </div>
         {isTeacher && (
-          <button type="button" onClick={openCreateModal} className="new-btn cursor-pointer">
-            <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
-            새 학급
-          </button>
+          <IconButton icon={Plus} label="새 학급" variant="primary" onClick={openCreateModal} />
         )}
       </div>
 
@@ -168,22 +166,20 @@ const ClassroomList = () => {
               <p className="text-[14px] text-red-600 mb-3" role="alert">{createError}</p>
             )}
             <div className="flex justify-end gap-2">
-              <button
-                type="button"
+              <IconButton
+                icon={X}
+                label="취소"
                 onClick={() => { setShowCreateModal(false); setCreateError(''); }}
-                className="inline-flex items-center gap-1 min-h-11 px-4 text-[15px] text-[#56627c] hover:text-[#1c2b4a] hover:bg-gray-100 rounded-full cursor-pointer"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-                취소
-              </button>
-              <button
+              />
+              <IconButton
+                icon={Plus}
+                label="만들기"
+                variant="primary"
                 type="submit"
-                disabled={creating || !newName.trim()}
-                className="inline-flex items-center gap-1.5 min-h-11 px-5 text-[15px] bg-[#1c2b4a] text-white rounded-full hover:bg-[#142039] disabled:opacity-50 cursor-pointer"
-              >
-                {creating ? <Loader className="animate-spin h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
-                {creating ? '만드는 중...' : '만들기'}
-              </button>
+                disabled={!newName.trim()}
+                busy={creating}
+                busyLabel="만드는 중..."
+              />
             </div>
           </form>
         </div>

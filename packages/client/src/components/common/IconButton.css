@@ -1,0 +1,49 @@
+/*
+ * 공통 아이콘 버튼 — 누르는 영역 44px, 아이콘 20px.
+ * ghost(기본) · primary(남색) · danger(목록 줄 삭제) · danger-solid(확인 창 삭제).
+ * html 루트 글자 크기가 화면 폭마다 바뀌므로 크기는 px 로만 쓴다.
+ */
+.icon-btn {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 44px; height: 44px; padding: 0;
+  border: 0; border-radius: 12px; background: transparent;
+  color: #56627c; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.icon-btn-face {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: 12px;
+  transition: background-color .15s ease, color .15s ease;
+}
+.icon-btn-face svg { width: 20px; height: 20px; }
+.icon-btn-spin { animation: icon-btn-spin 1s linear infinite; }
+@keyframes icon-btn-spin { to { transform: rotate(360deg); } }
+
+/* 촘촘한 표 줄: 보이는 크기만 36px, 누르는 영역은 44px 그대로 */
+.icon-btn--sm .icon-btn-face { width: 36px; height: 36px; border-radius: 10px; }
+.icon-btn--sm .icon-btn-face svg { width: 18px; height: 18px; }
+
+.icon-btn--primary .icon-btn-face { background: #1c2b4a; color: #fff; }
+.icon-btn--danger-solid .icon-btn-face { background: #d32f2f; color: #fff; }
+
+@media (hover: hover) {
+  .icon-btn--ghost:hover .icon-btn-face { background: rgba(28, 43, 74, .08); color: #1c2b4a; }
+  .icon-btn--primary:hover .icon-btn-face { background: #142039; }
+  .icon-btn--danger:hover .icon-btn-face { background: #fdecea; color: #c62828; }
+  .icon-btn--danger-solid:hover .icon-btn-face { background: #b71c1c; }
+}
+.icon-btn--ghost:active .icon-btn-face { background: rgba(28, 43, 74, .12); color: #1c2b4a; }
+.icon-btn--danger:active .icon-btn-face { background: #fdecea; color: #c62828; }
+
+.icon-btn:focus-visible { outline: none; }
+.icon-btn:focus-visible .icon-btn-face { outline: 3px solid #2453a6; outline-offset: 2px; }
+
+.icon-btn:disabled,
+.icon-btn[aria-disabled='true'] { cursor: default; opacity: .5; pointer-events: none; }
+.icon-btn[aria-busy='true'] { opacity: .7; }
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn-face { transition: none; }
+  .icon-btn-spin { animation-duration: 2.5s; }
+}
