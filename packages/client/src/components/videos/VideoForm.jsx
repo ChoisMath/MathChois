@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Film, Image as ImageIcon, ImagePlus } from 'lucide-react';
+import { Camera, Film, Image as ImageIcon, ImagePlus, Plus, Save, X } from 'lucide-react';
 import {
   uploadVideoFile, createVideo, updateVideo, probeVideoDuration, captureVideoThumbnail,
   formatBytes, formatDuration,
 } from '../../lib/videos';
 import { fileNameFromUrl } from '../../lib/fileAccept';
 import FileDropZone from '../common/FileDropZone';
+import IconButton from '../common/IconButton';
 
 const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024; // 서버 한도와 동일 (2GB)
 const MAX_THUMB_BYTES = 5 * 1024 * 1024;        // 서버 한도와 동일 (5MB)
@@ -274,15 +275,10 @@ export default function VideoForm({ initial = null, onSaved, onCancel }) {
           preview={thumbPreviewNode}
           actions={({ open }) => (
             <>
-              <button type="button" onClick={open} disabled={saving || probing}
-                className="inline-flex items-center gap-1 px-2 min-h-9 border rounded bg-white text-xs text-gray-700 whitespace-nowrap disabled:opacity-50">
-                <ImagePlus className="h-3.5 w-3.5" /> {isCustomThumb || thumbPreview ? '썸네일 교체' : '이미지 선택'}
-              </button>
+              <IconButton icon={ImagePlus} label={isCustomThumb || thumbPreview ? '썸네일 교체' : '이미지 선택'}
+                size="sm" onClick={open} disabled={saving || probing} />
               {captureSource && (
-                <button type="button" onClick={recapture} disabled={saving || probing}
-                  className="inline-flex items-center gap-1 px-2 min-h-9 border rounded bg-white text-xs text-gray-700 whitespace-nowrap disabled:opacity-50">
-                  <Camera className="h-3.5 w-3.5" /> 다른 장면으로
-                </button>
+                <IconButton icon={Camera} label="다른 장면으로" size="sm" onClick={recapture} disabled={saving || probing} />
               )}
             </>
           )}
@@ -323,13 +319,10 @@ export default function VideoForm({ initial = null, onSaved, onCancel }) {
 
       <div className="flex gap-2 justify-end">
         {onCancel && (
-          <button type="button" onClick={onCancel} disabled={saving}
-            className="px-3 min-h-11 border rounded whitespace-nowrap disabled:opacity-50">취소</button>
+          <IconButton icon={X} label="취소" onClick={onCancel} disabled={saving} />
         )}
-        <button type="submit" disabled={saving || probing}
-          className="px-4 min-h-11 bg-emerald-600 text-white rounded disabled:opacity-50 whitespace-nowrap">
-          {saving ? '업로드 중…' : (isEdit ? '수정' : '등록')}
-        </button>
+        <IconButton type="submit" icon={isEdit ? Save : Plus} variant="primary" label={isEdit ? '수정' : '등록'}
+          busy={saving} busyLabel="업로드 중…" disabled={probing} />
       </div>
     </form>
   );

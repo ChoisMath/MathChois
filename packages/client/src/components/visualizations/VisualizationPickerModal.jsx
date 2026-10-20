@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Plus, Check, X } from 'lucide-react';
 import { listVisualizations, getFacets } from '../../lib/visualizations';
 import VisualizationForm from './VisualizationForm';
+import IconButton from '../common/IconButton';
 
 const FILTER_FIELDS = [
   ['subject', '과목'], ['majorUnit', '대단원'], ['minorUnit', '소단원'],
@@ -32,10 +34,9 @@ export default function VisualizationPickerModal({ onSelect, onClose }) {
           <h3 className="font-bold whitespace-nowrap">{mode === 'list' ? '시각화자료 선택' : '새 HTML 등록'}</h3>
           <div className="flex items-center gap-2">
             {mode === 'list' && (
-              <button onClick={() => setMode('register')}
-                className="px-3 min-h-11 bg-emerald-600 text-white rounded text-sm whitespace-nowrap">새html등록</button>
+              <IconButton icon={Plus} label="새 html 등록" onClick={() => setMode('register')} />
             )}
-            <button onClick={onClose} className="min-h-11 min-w-11 shrink-0 flex items-center justify-center">✕</button>
+            <IconButton icon={X} label="닫기" onClick={onClose} />
           </div>
         </div>
 
@@ -68,8 +69,7 @@ export default function VisualizationPickerModal({ onSelect, onClose }) {
                 <div key={v.id} className="border rounded-md p-2">
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <span className="font-medium whitespace-nowrap truncate">{v.title}</span>
-                    <button onClick={() => onSelect(v)}
-                      className="px-3 min-h-11 bg-blue-600 text-white rounded text-sm whitespace-nowrap">삽입</button>
+                    <IconButton icon={Check} label="삽입" variant="primary" size="sm" onClick={() => onSelect(v)} />
                   </div>
                   <p className="text-xs text-gray-500 whitespace-nowrap truncate">
                     {[v.subject, v.majorUnit, v.minorUnit].filter(Boolean).join(' · ')}

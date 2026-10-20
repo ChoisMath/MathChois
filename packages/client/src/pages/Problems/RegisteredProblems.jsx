@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Search, Pencil, Trash2, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import ProblemView from '../../components/common/ProblemView';
+import IconButton from '../../components/common/IconButton';
 import ProblemRegister from './ProblemRegister';
 import { listProblems, getFacets, deleteProblem } from '../../lib/problems';
 
@@ -65,7 +67,7 @@ export default function RegisteredProblems() {
         <input className="border rounded px-2 py-1 text-sm flex-1 min-w-40" placeholder="키워드 검색"
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && fetchList(1)} />
-        <button onClick={() => fetchList(1)} className="px-3 py-1 bg-blue-600 text-white rounded text-sm whitespace-nowrap">검색</button>
+        <IconButton icon={Search} label="검색" variant="primary" onClick={() => fetchList(1)} />
       </div>
 
       <p className="text-xs text-gray-500">{loading ? '불러오는 중…' : `총 ${result.total}개`}</p>
@@ -97,9 +99,9 @@ export default function RegisteredProblems() {
                 <td className="px-3 py-2 whitespace-nowrap">{(p.createdAt || '').slice(0, 10)}</td>
                 <td className="px-3 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                   {canManage(p) && (
-                    <span className="flex gap-3">
-                      <button className="text-blue-600 inline-flex items-center min-h-11 px-2 whitespace-nowrap" onClick={() => setEditing(p)}>수정</button>
-                      <button className="text-red-600 inline-flex items-center min-h-11 px-2 whitespace-nowrap" onClick={() => handleDelete(p)}>삭제</button>
+                    <span className="flex gap-1">
+                      <IconButton icon={Pencil} label="수정" size="sm" onClick={() => setEditing(p)} />
+                      <IconButton icon={Trash2} label="삭제" variant="danger" size="sm" onClick={() => handleDelete(p)} />
                     </span>
                   )}
                 </td>
@@ -111,12 +113,10 @@ export default function RegisteredProblems() {
 
       {/* 페이지네이션 */}
       {result.total > result.pageSize && (
-        <div className="flex gap-2 justify-center">
-          <button disabled={result.page <= 1} onClick={() => fetchList(result.page - 1)}
-            className="px-3 min-h-11 border rounded disabled:opacity-40 whitespace-nowrap">이전</button>
+        <div className="flex gap-2 justify-center items-center">
+          <IconButton icon={ChevronLeft} label="이전" disabled={result.page <= 1} onClick={() => fetchList(result.page - 1)} />
           <span className="px-2 py-1 text-sm flex items-center">{result.page} / {Math.ceil(result.total / result.pageSize)}</span>
-          <button disabled={result.page >= Math.ceil(result.total / result.pageSize)} onClick={() => fetchList(result.page + 1)}
-            className="px-3 min-h-11 border rounded disabled:opacity-40 whitespace-nowrap">다음</button>
+          <IconButton icon={ChevronRight} label="다음" disabled={result.page >= Math.ceil(result.total / result.pageSize)} onClick={() => fetchList(result.page + 1)} />
         </div>
       )}
 
@@ -126,7 +126,7 @@ export default function RegisteredProblems() {
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90dvh] overflow-y-auto p-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-2">
               <h3 className="font-bold whitespace-nowrap">{detail.title || '(제목 없음)'}</h3>
-              <button onClick={() => setDetail(null)} className="min-h-11 min-w-11 flex items-center justify-center">✕</button>
+              <IconButton icon={X} label="닫기" onClick={() => setDetail(null)} />
             </div>
             <ProblemView latex={detail.problemLatex} figures={detail.figures} />
             {detail.originalImageUrl && (

@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Plus, Search, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { listVisualizations, getFacets, deleteVisualization } from '../../lib/visualizations';
 import VisualizationForm from '../../components/visualizations/VisualizationForm';
+import IconButton from '../../components/common/IconButton';
 import { toolUrl } from '../../lib/toolUrl';
 
 const FILTER_FIELDS = [
@@ -53,8 +55,7 @@ export default function VisualizationsPage() {
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-bold whitespace-nowrap">시각화자료</h2>
-        <button onClick={() => setEditing('new')}
-          className="px-3 min-h-11 bg-emerald-600 text-white rounded text-sm whitespace-nowrap">새 html 등록</button>
+        <IconButton icon={Plus} label="새 html 등록" variant="primary" onClick={() => setEditing('new')} />
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -69,7 +70,7 @@ export default function VisualizationsPage() {
         <input className="border rounded px-2 min-h-11 text-sm flex-1 min-w-40" placeholder="제목·설명 검색"
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && fetchList(1)} />
-        <button onClick={() => fetchList(1)} className="px-3 min-h-11 bg-blue-600 text-white rounded text-sm whitespace-nowrap">검색</button>
+        <IconButton icon={Search} label="검색" variant="primary" onClick={() => fetchList(1)} />
       </div>
 
       <p className="text-xs text-gray-500">{loading ? '불러오는 중…' : `총 ${result.total}개`}</p>
@@ -96,10 +97,10 @@ export default function VisualizationsPage() {
                 <td className="px-3 py-2 whitespace-nowrap max-w-60 truncate">{v.description}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{(v.createdAt || '').slice(0, 10)}</td>
                 <td className="px-3 py-2 whitespace-nowrap">
-                  <span className="flex gap-2">
-                    <button className="text-gray-600 inline-flex items-center min-h-11 px-2 whitespace-nowrap" onClick={() => setPreview(v)}>미리보기</button>
-                    <button className="text-blue-600 inline-flex items-center min-h-11 px-2 whitespace-nowrap" onClick={() => setEditing(v)}>수정</button>
-                    <button className="text-red-600 inline-flex items-center min-h-11 px-2 whitespace-nowrap" onClick={() => handleDelete(v)}>삭제</button>
+                  <span className="flex gap-1">
+                    <IconButton icon={Eye} label="미리보기" size="sm" onClick={() => setPreview(v)} />
+                    <IconButton icon={Pencil} label="수정" size="sm" onClick={() => setEditing(v)} />
+                    <IconButton icon={Trash2} label="삭제" variant="danger" size="sm" onClick={() => handleDelete(v)} />
                   </span>
                 </td>
               </tr>
@@ -109,12 +110,10 @@ export default function VisualizationsPage() {
       </div>
 
       {result.total > result.pageSize && (
-        <div className="flex gap-2 justify-center">
-          <button disabled={result.page <= 1} onClick={() => fetchList(result.page - 1)}
-            className="px-3 min-h-11 border rounded disabled:opacity-40 whitespace-nowrap">이전</button>
+        <div className="flex gap-2 justify-center items-center">
+          <IconButton icon={ChevronLeft} label="이전" disabled={result.page <= 1} onClick={() => fetchList(result.page - 1)} />
           <span className="px-2 py-1 text-sm flex items-center">{result.page} / {Math.ceil(result.total / result.pageSize)}</span>
-          <button disabled={result.page >= Math.ceil(result.total / result.pageSize)} onClick={() => fetchList(result.page + 1)}
-            className="px-3 min-h-11 border rounded disabled:opacity-40 whitespace-nowrap">다음</button>
+          <IconButton icon={ChevronRight} label="다음" disabled={result.page >= Math.ceil(result.total / result.pageSize)} onClick={() => fetchList(result.page + 1)} />
         </div>
       )}
 
@@ -123,7 +122,7 @@ export default function VisualizationsPage() {
           <div className="bg-white rounded-lg w-full max-w-4xl h-[85dvh] flex flex-col p-3" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-2">
               <h3 className="font-bold whitespace-nowrap truncate">{preview.title}</h3>
-              <button onClick={() => setPreview(null)} className="min-h-11 min-w-11 flex items-center justify-center">✕</button>
+              <IconButton icon={X} label="닫기" onClick={() => setPreview(null)} />
             </div>
             <iframe src={toolUrl(preview.htmlUrl)}
               sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"

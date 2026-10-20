@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { FileCode2 } from 'lucide-react';
+import { FileCode2, Plus, Save, X } from 'lucide-react';
 import { uploadVisualizationHtml, createVisualization, updateVisualization } from '../../lib/visualizations';
 import { fileNameFromUrl } from '../../lib/fileAccept';
 import FileDropZone from '../common/FileDropZone';
+import IconButton from '../common/IconButton';
 
 const ACCEPT = '.html,.htm,text/html';
 
@@ -109,13 +110,10 @@ export default function VisualizationForm({ initial = null, onSaved, onCancel })
 
       <div className="flex gap-2 justify-end">
         {onCancel && (
-          <button type="button" onClick={onCancel} disabled={saving}
-            className="px-3 min-h-11 border rounded whitespace-nowrap disabled:opacity-50">취소</button>
+          <IconButton icon={X} label="취소" onClick={onCancel} disabled={saving} />
         )}
-        <button type="submit" disabled={saving}
-          className="px-4 min-h-11 bg-emerald-600 text-white rounded disabled:opacity-50 whitespace-nowrap">
-          {saving ? '저장 중…' : (isEdit ? '수정' : '등록')}
-        </button>
+        <IconButton type="submit" icon={isEdit ? Save : Plus} variant="primary" label={isEdit ? '수정' : '등록'}
+          busy={saving} busyLabel="저장 중…" />
       </div>
     </form>
   );
