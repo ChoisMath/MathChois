@@ -47,6 +47,11 @@ npm run db:studio -w @mathchois/server    # Drizzle Studio
 The Vite dev server (port 3000) proxies `/api` and `/socket.io` to the backend on
 port 3001 — start both. E2E tests use Playwright (`@playwright/test`) in `packages/client`.
 
+Claude Code tooling: project MCP servers (`playwright`, `chrome-devtools`) live in `.mcp.json`
+and start through `.claude/mcp/launch.mjs` (cross-platform; adds headless/Chromium flags in cloud
+sessions). Cloud sessions run `.claude/hooks/session-start.sh` (npm install + Chromium env).
+Project skills are committed under `.claude/skills/`. Details in `.claude/PROJECT_MAP.md`.
+
 ## Environment Variables
 
 Server env lives in **`packages/server/.env`** (validated by `src/config/env.ts` with zod):
