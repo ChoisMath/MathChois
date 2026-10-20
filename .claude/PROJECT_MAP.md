@@ -303,7 +303,7 @@ packages/
 - **`.mcp.json`** — 프로젝트 MCP 서버(`playwright`, `chrome-devtools`). `command: node` + `.claude/mcp/launch.mjs <server>`로 띄움 → Windows(`cmd /c` 불필요)·Linux·클라우드 공용. 버전은 launch.mjs에 고정(업그레이드 시 함께 수정).
   클라우드(`CLAUDE_CODE_REMOTE=true`)에서는 headless + `/opt/pw-browsers/chromium` + `--no-sandbox` + `--isolated`를 자동 추가.
 - **`.claude/hooks/session-start.sh`** — SessionStart 훅(클라우드 세션 전용): `npm install` → `PW_CHROMIUM_EXECUTABLE` 내보내기(`playwright.config.ts`의 `launchOptions.executablePath`가 사용) → MCP 패키지 npx 캐시 예열.
-- **`.claude/skills/`** — 저장소에 커밋된 프로젝트 스킬(클라우드 세션에서도 로드): `using-superpowers`·`brainstorming`·`systematic-debugging`(obra/superpowers @bb92a77), `ui-ux-pro-max`(nextlevelbuilder, `uipro init --ai claude` 산출물, Python 3 검색 스크립트), `web-design-guidelines`(vercel-labs/agent-skills), `frontend-design`(anthropics/skills). 각 폴더에 원본 LICENSE 포함.
+- **`.claude/skills/`** — 저장소에 커밋된 프로젝트 스킬(클라우드 세션에서도 로드): `ui-ux-pro-max`(nextlevelbuilder, `uipro init --ai claude` 산출물, Python 3 검색 스크립트), `web-design-guidelines`(vercel-labs/agent-skills), `frontend-design`(anthropics/skills). 각 폴더에 원본 LICENSE 포함. superpowers·design 스킬은 claude.ai 계정 플러그인(`superpowers:*`, `design:*`)으로 동기화되므로 저장소에 두지 않음.
 
 ## 문서 / 상세 참조
 - **`docs/superpowers/e2e-checklist.md`** — 라이브 E2E 점검 가이드(#1 문항등록·#2 문제은행·#3 페이지 코칭·#4 기록 조회·#5 대시보드). 실제 DB + Gemini 환경에서의 수동 검증 절차(사전 env 포함).
