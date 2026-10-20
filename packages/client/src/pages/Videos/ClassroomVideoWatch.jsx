@@ -12,6 +12,7 @@ import { loadSplitPage } from '../../lib/splitLayout';
 import VideoPlayer from '../../components/videos/VideoPlayer';
 import VideoComments from '../../components/videos/VideoComments';
 import CollapsibleSection from '../../components/videos/CollapsibleSection';
+import IconButton from '../../components/common/IconButton';
 
 function formatWatchedAt(iso) {
   if (!iso) return '';
@@ -222,12 +223,10 @@ export default function ClassroomVideoWatch() {
                 <BookOpen className="h-3.5 w-3.5 shrink-0" /><span className="truncate">필기 챕터 · {detail.chapter.title}</span>
               </Link>
             ) : (
-              <Link
+              <IconButton
+                as={Link}
                 to={`${base}/classrooms/${classroomId}/videos/${detail.id}/split${splitPage ? `?page=${encodeURIComponent(splitPage)}` : ''}`}
-                className="shrink-0 inline-flex items-center gap-1.5 min-h-9 px-3 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
-                title={`"${detail.chapter.title}" 챕터를 옆에 놓고 필기하며 보기`}>
-                <Columns2 className="h-4 w-4" /> 2분할로 필기하며 보기
-              </Link>
+                icon={Columns2} label={`2분할로 필기하며 보기 · ${detail.chapter.title}`} />
             ))}
           </div>
 

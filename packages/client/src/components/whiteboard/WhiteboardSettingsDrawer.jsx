@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { X, Save, Loader, Lock, Unlock, Eye, EyeOff, LayoutTemplate, RotateCcw, Trash2, Image, FileDown } from 'lucide-react';
+import { X, Save, Lock, Unlock, Eye, EyeOff, LayoutTemplate, Undo2, Eraser, ImageDown, FileDown, Files } from 'lucide-react';
+import IconButton from '../common/IconButton';
 import GroupAssignmentPanel from './GroupAssignmentPanel';
 import TemplatePickerDialog from './TemplatePickerDialog';
 import TemplateThumb from './TemplateThumb';
@@ -77,10 +78,7 @@ export default function WhiteboardSettingsDrawer({
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-700">기본 템플릿</h3>
               {view.isSourceChapter ? (
-                <button type="button" onClick={() => setTplPicker(true)} disabled={busy}
-                  className="inline-flex items-center gap-1 px-2.5 min-h-9 border rounded-md text-sm bg-white hover:bg-gray-50 cursor-pointer disabled:opacity-50">
-                  <LayoutTemplate className="h-4 w-4" /> 변경
-                </button>
+                <IconButton icon={LayoutTemplate} label="템플릿 변경" onClick={() => setTplPicker(true)} disabled={busy} />
               ) : (
                 <span className="text-xs text-gray-400">원본 챕터에서만 변경</span>
               )}
@@ -117,27 +115,14 @@ export default function WhiteboardSettingsDrawer({
               <div className="bg-white border rounded-lg p-3 space-y-2">
                 <p className="text-xs text-gray-500">선택한 모둠: <span className="font-medium text-gray-800">{selected.name}</span></p>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" disabled={busy} onClick={() => onExportPng(selected)}
-                    className="inline-flex items-center gap-1 px-2.5 min-h-9 border rounded-md text-sm bg-white hover:bg-gray-50 cursor-pointer disabled:opacity-50">
-                    <Image className="h-4 w-4" /> PNG
-                  </button>
-                  <button type="button" disabled={busy} onClick={() => onExportPdf([selected])}
-                    className="inline-flex items-center gap-1 px-2.5 min-h-9 border rounded-md text-sm bg-white hover:bg-gray-50 cursor-pointer disabled:opacity-50">
-                    <FileDown className="h-4 w-4" /> PDF
-                  </button>
-                  <button type="button" disabled={busy} onClick={() => onExportPdf(view.groups)}
-                    className="inline-flex items-center gap-1 px-2.5 min-h-9 border rounded-md text-sm bg-white hover:bg-gray-50 cursor-pointer disabled:opacity-50">
-                    <FileDown className="h-4 w-4" /> 전체 모둠 PDF
-                  </button>
-                  <button type="button" disabled={busy || !selected.hasPrevious} onClick={() => onRestore(selected)}
-                    title={selected.hasPrevious ? '직전 저장본으로 되돌리기' : '되돌릴 직전 상태가 없습니다'}
-                    className="inline-flex items-center gap-1 px-2.5 min-h-9 border rounded-md text-sm bg-white hover:bg-gray-50 cursor-pointer disabled:opacity-50">
-                    <RotateCcw className="h-4 w-4" /> 직전 상태로
-                  </button>
-                  <button type="button" disabled={busy} onClick={() => onReset(selected)}
-                    className="inline-flex items-center gap-1 px-2.5 min-h-9 border border-red-200 text-red-600 rounded-md text-sm bg-white hover:bg-red-50 cursor-pointer disabled:opacity-50">
-                    <Trash2 className="h-4 w-4" /> 초기화
-                  </button>
+                  <IconButton icon={ImageDown} label="PNG로 저장" disabled={busy} onClick={() => onExportPng(selected)} />
+                  <IconButton icon={FileDown} label="PDF로 저장" disabled={busy} onClick={() => onExportPdf([selected])} />
+                  <IconButton icon={Files} label="전체 모둠 PDF로 저장" disabled={busy} onClick={() => onExportPdf(view.groups)} />
+                  <IconButton
+                    icon={Undo2} disabled={busy || !selected.hasPrevious} onClick={() => onRestore(selected)}
+                    label="직전 저장본으로 되돌리기"
+                  />
+                  <IconButton icon={Eraser} label="초기화" variant="danger" disabled={busy} onClick={() => onReset(selected)} />
                 </div>
               </div>
             )}
@@ -147,10 +132,7 @@ export default function WhiteboardSettingsDrawer({
           <section className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-700">이 페이지의 모둠 배정</h3>
-              <button type="button" disabled={!dirty || busy} onClick={() => onSaveGroups(groups)}
-                className="inline-flex items-center gap-1 px-3 min-h-9 rounded-md text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 cursor-pointer">
-                {busy ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} 저장
-              </button>
+              <IconButton icon={Save} label="저장" variant="primary" disabled={!dirty} busy={busy} onClick={() => onSaveGroups(groups)} />
             </div>
             <p className="text-xs text-gray-400">학급 기본 모둠과 별개로 이 페이지에만 적용됩니다. 모둠을 삭제하면 그 보드 내용도 삭제됩니다.</p>
             <GroupAssignmentPanel

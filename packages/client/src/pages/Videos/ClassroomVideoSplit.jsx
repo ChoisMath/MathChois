@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowLeftRight, ChevronLeft, ChevronRight, Maximize, Minimize, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowLeftRight, ChevronLeft, ChevronRight, ExternalLink, Maximize, Minimize, Sparkles } from 'lucide-react';
 import { getClassroomVideo, getVideoProgress, reportVideoProgress } from '../../lib/videos';
 import ProgressSaveStatus from '../../components/videos/ProgressSaveStatus';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { loadSplitSettings, saveSplitSettings, loadSplitPage, saveSplitPage } from '../../lib/splitLayout';
 import { useOrientation } from '../../hooks/useOrientation';
 import SplitPane from '../../components/common/SplitPane';
+import IconButton from '../../components/common/IconButton';
 import VideoPlayer from '../../components/videos/VideoPlayer';
 import VideoComments from '../../components/videos/VideoComments';
 import CollapsibleSection from '../../components/videos/CollapsibleSection';
@@ -19,19 +20,10 @@ function AiPagePlaceholder({ chapterId, pageId, index, total, onPrev, onNext }) 
       <Sparkles className="h-8 w-8 text-indigo-500" />
       <p className="text-sm font-semibold text-indigo-900">AI 코칭 페이지 ({index + 1} / {total})</p>
       <p className="text-xs text-indigo-700">AI 코칭 페이지는 전체 화면에서 풀 수 있어요. 분할 화면에서는 다른 페이지로 넘겨 필기하세요.</p>
-      <Link to={`/student/study/${chapterId}/page/${pageId}`}
-        className="inline-flex items-center min-h-9 px-3 rounded-md bg-indigo-600 text-white text-sm hover:bg-indigo-700">
-        전체 화면으로 열기
-      </Link>
+      <IconButton as={Link} to={`/student/study/${chapterId}/page/${pageId}`} icon={ExternalLink} label="전체 화면으로 열기" />
       <div className="flex gap-2 mt-2">
-        <button type="button" onClick={onPrev} disabled={!onPrev}
-          className="inline-flex items-center gap-1 min-h-9 px-3 rounded-md border border-indigo-200 bg-white text-sm text-indigo-800 disabled:opacity-40 cursor-pointer">
-          <ChevronLeft className="h-4 w-4" /> 이전 페이지
-        </button>
-        <button type="button" onClick={onNext} disabled={!onNext}
-          className="inline-flex items-center gap-1 min-h-9 px-3 rounded-md border border-indigo-200 bg-white text-sm text-indigo-800 disabled:opacity-40 cursor-pointer">
-          다음 페이지 <ChevronRight className="h-4 w-4" />
-        </button>
+        <IconButton icon={ChevronLeft} label="이전 페이지" onClick={onPrev} disabled={!onPrev} />
+        <IconButton icon={ChevronRight} label="다음 페이지" onClick={onNext} disabled={!onNext} />
       </div>
     </div>
   );
@@ -233,10 +225,7 @@ export default function ClassroomVideoSplit() {
     >
       {!isFull && (
         <div className="h-12 bg-white border-b flex items-center justify-between gap-2 px-2 sm:px-3 shrink-0">
-          <button type="button" onClick={goBack}
-            className="inline-flex items-center gap-1 min-h-9 px-2 rounded-md text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 cursor-pointer">
-            <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">영상으로 돌아가기</span>
-          </button>
+          <IconButton icon={ArrowLeft} label="영상으로 돌아가기" onClick={goBack} />
           <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900 text-center" title={v.title}>
             {v.title}
             <span className="ml-2 text-xs font-normal text-gray-500">· {detail.chapter.title}</span>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Lock, Reply, Pencil, Trash2, Clock, MessageSquare } from 'lucide-react';
+import { Lock, Reply, Pencil, Trash2, Clock, MessageSquare, Save, Send, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { subscribeToRoom } from '../../lib/socket';
 import {
@@ -7,6 +7,7 @@ import {
 } from '../../lib/videos';
 import { refreshSidebar } from '../../lib/sidebarRefresh';
 import { formatTime } from '../../lib/videoPlayer';
+import IconButton from '../common/IconButton';
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -56,16 +57,13 @@ function CommentComposer({
       <div className="flex flex-wrap items-center gap-2">
         {allowTimestamp && (
           timestampSec == null ? (
-            <button type="button"
-              onClick={() => setTimestampSec(Math.floor(getCurrentTime?.() ?? 0))}
-              className="inline-flex items-center gap-1 px-2 min-h-9 border rounded text-xs text-gray-700 hover:bg-gray-50">
-              <Clock className="h-3.5 w-3.5" /> 현재 시각 첨부
-            </button>
+            <IconButton icon={Clock} label="현재 시각 첨부" size="sm"
+              onClick={() => setTimestampSec(Math.floor(getCurrentTime?.() ?? 0))} />
           ) : (
             <button type="button" onClick={() => setTimestampSec(null)}
               className="inline-flex items-center gap-1 px-2 min-h-9 border rounded text-xs bg-blue-50 border-blue-200 text-blue-700"
-              title="클릭하면 첨부 해제">
-              <Clock className="h-3.5 w-3.5" /> {formatTime(timestampSec)} ✕
+              title="클릭하면 첨부 해제" aria-label={`첨부한 시각 ${formatTime(timestampSec)} 빼기`}>
+              <Clock className="h-3.5 w-3.5" /> {formatTime(timestampSec)} <X className="h-3 w-3" aria-hidden="true" />
             </button>
           )
         )}
@@ -77,12 +75,10 @@ function CommentComposer({
         )}
         <div className="flex-1" />
         {onCancel && (
-          <button type="button" onClick={onCancel} className="px-3 min-h-9 border rounded text-xs">취소</button>
+          <IconButton icon={X} label="취소" size="sm" onClick={onCancel} />
         )}
-        <button type="submit" disabled={busy || !content.trim()}
-          className="px-3 min-h-9 bg-blue-600 text-white rounded text-xs disabled:opacity-50">
-          {busy ? '저장 중…' : submitLabel}
-        </button>
+        <IconButton type="submit" icon={submitLabel === '수정' ? Save : Send} variant="primary" size="sm"
+          label={submitLabel} busy={busy} busyLabel="저장 중…" disabled={!content.trim()} />
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
     </form>
@@ -139,19 +135,13 @@ function CommentItem({ c, isRoot, canModerate, myId, onReply, onEdit, onDelete, 
         {!editing && (
           <div className="flex items-center gap-1 mt-1 -ml-1">
             {isRoot && onReply && (
-              <button onClick={() => onReply(c)} className="inline-flex items-center gap-1 px-2 min-h-8 rounded text-xs text-gray-500 hover:bg-gray-100">
-                <Reply className="h-3.5 w-3.5" /> 답글
-              </button>
+              <IconButton icon={Reply} label="답글" size="sm" onClick={() => onReply(c)} />
             )}
             {mine && (
-              <button onClick={() => setEditing(true)} className="inline-flex items-center gap-1 px-2 min-h-8 rounded text-xs text-gray-500 hover:bg-gray-100">
-                <Pencil className="h-3.5 w-3.5" /> 수정
-              </button>
+              <IconButton icon={Pencil} label="수정" size="sm" onClick={() => setEditing(true)} />
             )}
             {(mine || canModerate) && (
-              <button onClick={() => onDelete(c)} className="inline-flex items-center gap-1 px-2 min-h-8 rounded text-xs text-red-500 hover:bg-red-50">
-                <Trash2 className="h-3.5 w-3.5" /> 삭제
-              </button>
+              <IconButton icon={Trash2} label="삭제" variant="danger" size="sm" onClick={() => onDelete(c)} />
             )}
           </div>
         )}

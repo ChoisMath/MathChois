@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import IconButton from '../../components/common/IconButton';
 import { ArrowLeft, Paperclip, X, Loader, Plus, Save, Send } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -212,10 +213,7 @@ const BoardPostEditor = () => {
     <div className="max-w-2xl mx-auto">
       {/* 헤더 */}
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate('/teacher/board')}
-          className="text-gray-400 hover:text-gray-600 cursor-pointer">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
+        <IconButton icon={ArrowLeft} label="게시판으로 돌아가기" onClick={() => navigate('/teacher/board')} />
         <h1 className="text-xl font-bold text-gray-900">
           {postId ? '게시글 수정' : '새 게시글'}
         </h1>
@@ -263,10 +261,7 @@ const BoardPostEditor = () => {
                 {f.fileName}
               </a>
               <span className="text-xs text-gray-400">{(f.fileSize / 1024).toFixed(0)}KB</span>
-              <button type="button" onClick={() => handleRemoveExistingFile(f.id)}
-                className="p-0.5 text-gray-400 hover:text-red-500 cursor-pointer">
-                <X className="h-4 w-4" />
-              </button>
+              <IconButton icon={X} label={`${f.fileName} 첨부 빼기`} variant="danger" size="sm" onClick={() => handleRemoveExistingFile(f.id)} />
             </div>
           ))}
 
@@ -276,10 +271,7 @@ const BoardPostEditor = () => {
               <Paperclip className="h-4 w-4 text-blue-400 flex-shrink-0" />
               <span className="text-sm text-blue-700 truncate flex-1">{f.name}</span>
               <span className="text-xs text-blue-400">{(f.size / 1024).toFixed(0)}KB</span>
-              <button type="button" onClick={() => handleRemoveNewFile(idx)}
-                className="p-0.5 text-gray-400 hover:text-red-500 cursor-pointer">
-                <X className="h-4 w-4" />
-              </button>
+              <IconButton icon={X} label={`${f.name} 첨부 빼기`} variant="danger" size="sm" onClick={() => handleRemoveNewFile(idx)} />
             </div>
           ))}
 

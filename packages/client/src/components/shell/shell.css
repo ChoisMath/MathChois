@@ -164,14 +164,6 @@ img.shell-avatar { object-fit: cover; }
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; letter-spacing: .12em;
 }
 .shell-join-input::placeholder { letter-spacing: 0; font-family: var(--shell-sans); color: #6b7690; }
-.shell-join-btn {
-  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-  min-width: 52px; height: 44px; padding: 0 10px; border-radius: 8px;
-  font-size: 14px; font-weight: 700; color: var(--shell-pen); cursor: pointer;
-  transition: background-color .15s ease;
-}
-.shell-join-btn:hover:not(:disabled) { background: rgba(36, 83, 166, .08); }
-.shell-join-btn:disabled { color: #8893ab; cursor: default; }
 .shell-join-error { margin: 6px 0 0; font-size: 12px; color: #b42318; }
 
 /* 사이드바 뱃지(영상 댓글 미읽음) */
@@ -190,5 +182,5 @@ img.shell-avatar { object-fit: cover; }
 .shell-overlay-head :focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .shell-tab, .shell-class, .shell-join-btn { transition: none; }
+  .shell-tab, .shell-class { transition: none; }
 }

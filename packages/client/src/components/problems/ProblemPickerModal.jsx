@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
+import { ArrowLeft, Check, X } from 'lucide-react';
 import ProblemView from '../common/ProblemView';
+import IconButton from '../common/IconButton';
 import { listProblems, getFacets } from '../../lib/problems';
 
 const FILTER_FIELDS = [
@@ -31,12 +33,10 @@ export default function ProblemPickerModal({ onSelect, onClose }) {
         {detail ? (
           <>
             <div className="flex items-center justify-between gap-2 mb-2">
-              <button onClick={() => setDetail(null)} aria-label="문항 목록으로"
-                className="min-h-11 min-w-11 shrink-0 flex items-center justify-center text-xl">←</button>
+              <IconButton icon={ArrowLeft} label="문항 목록으로" onClick={() => setDetail(null)} />
               <h3 className="font-bold whitespace-nowrap overflow-hidden text-ellipsis flex-1 text-center"
                 title={detail.title || '(제목 없음)'}>{detail.title || '(제목 없음)'}</h3>
-              <button onClick={() => onSelect(detail)}
-                className="px-4 min-h-11 shrink-0 bg-blue-600 text-white rounded text-sm whitespace-nowrap">선택</button>
+              <IconButton icon={Check} label="선택" variant="primary" onClick={() => onSelect(detail)} />
             </div>
 
             <div className="flex-1 overflow-y-auto">
@@ -58,7 +58,7 @@ export default function ProblemPickerModal({ onSelect, onClose }) {
           <>
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-bold whitespace-nowrap">문항 선택</h3>
-              <button onClick={onClose} className="min-h-11 min-w-11 shrink-0 flex items-center justify-center">✕</button>
+              <IconButton icon={X} label="닫기" onClick={onClose} />
             </div>
 
             <div className="flex flex-wrap gap-2 mb-2">

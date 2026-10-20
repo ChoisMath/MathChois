@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
+import { X } from 'lucide-react';
 import VideoPlayer from './VideoPlayer';
 import CollapsibleSection from './CollapsibleSection';
+import IconButton from '../common/IconButton';
 import { formatDuration, formatBytes } from '../../lib/videos';
 
 /** 라이브러리 [미리보기] 모달 — 학급 시청 화면과 같은 VideoPlayer 를 쓴다. */
@@ -26,7 +28,7 @@ export default function VideoPreviewModal({ video, onClose }) {
               {[meta, formatDuration(video.durationSec), formatBytes(video.fileSize)].filter(Boolean).join(' · ')}
             </p>
           </div>
-          <button onClick={onClose} className="min-h-11 min-w-11 shrink-0 flex items-center justify-center" aria-label="닫기">✕</button>
+          <IconButton icon={X} label="닫기" onClick={onClose} />
         </div>
         <div className="overflow-y-auto px-3 pb-3 min-h-0">
           <div className="shrink-0">

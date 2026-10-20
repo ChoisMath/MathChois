@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Loader, Upload, Wand2, Image as ImageIcon, X } from 'lucide-react';
+import { Loader, Upload, Sparkles, Save, Image as ImageIcon, X } from 'lucide-react';
 import ProblemView from '../../components/common/ProblemView';
+import IconButton from '../../components/common/IconButton';
 import { validateFigures } from '../../lib/problemContent';
 import {
   ocrProblem, ocrMarkscheme, generateSolution,
@@ -146,10 +147,7 @@ export default function ProblemRegister({ initial, onSaved }) {
                     onChange={(e) => uploadFigure(fig.idx, e.target.files?.[0])} />
                 </label>
                 {fig.imageUrl && (
-                  <button type="button" onClick={() => clearFigure(fig.idx)}
-                    className="flex items-center gap-1 px-2 py-1 border border-gray-200 rounded text-xs text-red-600 whitespace-nowrap min-h-11">
-                    <X className="h-3 w-3" /> 제거
-                  </button>
+                  <IconButton icon={X} label="제거" variant="danger" size="sm" onClick={() => clearFigure(fig.idx)} />
                 )}
               </div>
             ))}
@@ -174,11 +172,8 @@ export default function ProblemRegister({ initial, onSaved }) {
             <span className="whitespace-nowrap">마크스킴 이미지</span>
             <input type="file" accept="image/*" className="hidden" disabled={!!busy} onChange={handleMarkscheme} />
           </label>
-          <button onClick={handleGenerateSolution} disabled={!!busy}
-            className="flex items-center gap-1 px-3 py-2 border rounded-md disabled:opacity-50">
-            {busy === 'solution' ? <Loader className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-            <span className="whitespace-nowrap">AI 정답·해설 생성</span>
-          </button>
+          <IconButton icon={Sparkles} label="AI 정답·해설 생성" busy={busy === 'solution'} busyLabel="AI 정답·해설 생성 중…"
+            onClick={handleGenerateSolution} disabled={!!busy} />
           {form.solutionSource && <span className="text-xs text-gray-500">출처: {form.solutionSource}</span>}
         </div>
         <input className="border rounded px-3 py-2" placeholder="정답"
@@ -188,10 +183,8 @@ export default function ProblemRegister({ initial, onSaved }) {
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <button onClick={handleSave} disabled={!!busy || !form.problemLatex}
-          className="px-4 py-2 bg-green-600 text-white rounded-md disabled:opacity-50 w-fit">
-          {busy === 'save' ? '저장 중…' : (initial ? '수정 저장' : '문항 저장')}
-        </button>
+        <IconButton icon={Save} variant="primary" label={initial ? '수정 저장' : '문항 저장'} busy={busy === 'save'} busyLabel="저장 중…"
+          onClick={handleSave} disabled={!!busy || !form.problemLatex} />
       </div>
 
       {/* 우: 미리보기 */}

@@ -8,6 +8,7 @@ import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { useWhiteboardGrid } from '../../hooks/useWhiteboardGrid';
 import { buildTemplateElements } from '../../lib/whiteboardTemplateBuild';
 import { exportBoardPng, boardsToPdfPages } from '../../lib/whiteboardExportBrowser';
+import IconButton from '../../components/common/IconButton';
 import PageNavOverlay from '../../components/study/PageNavOverlay';
 import WhiteboardCanvas from '../../components/whiteboard/WhiteboardCanvas';
 import WhiteboardTile from '../../components/whiteboard/WhiteboardTile';
@@ -176,10 +177,7 @@ export default function TeacherWhiteboardPage() {
   const right = (
     <>
       {busy && <Loader className="h-4 w-4 animate-spin text-gray-400" />}
-      <button type="button" onClick={() => setDrawer(true)} title="설정"
-        className="inline-flex items-center gap-1 px-2 min-h-9 rounded-md border bg-white hover:bg-gray-50 cursor-pointer text-sm">
-        <Settings className="h-4 w-4" /> 설정
-      </button>
+      <IconButton icon={Settings} label="설정" onClick={() => setDrawer(true)} />
     </>
   );
 
@@ -187,7 +185,7 @@ export default function TeacherWhiteboardPage() {
     <div className="relative flex flex-col bg-gray-100" style={{ height: '100dvh' }}>
       {mode === 'grid' ? (
         <>
-          <div className="flex items-center gap-2 px-2 h-12 bg-white border-b shadow-sm shrink-0">
+          <div className="flex items-center gap-2 px-2 h-12 min-h-[44px] bg-white border-b shadow-sm shrink-0">
             {left}
             <span className="font-medium text-sm text-gray-800 truncate">{chapter?.title}</span>
             <span className="text-xs text-gray-400">{view.groups.length}개 모둠</span>

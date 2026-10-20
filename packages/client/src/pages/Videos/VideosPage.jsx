@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Clapperboard } from 'lucide-react';
+import { Clapperboard, Plus, Search, Eye, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { listVideos, getVideoFacets, deleteVideo, formatDuration, formatBytes } from '../../lib/videos';
+import IconButton from '../../components/common/IconButton';
 import VideoForm from '../../components/videos/VideoForm';
 import VideoPreviewModal from '../../components/videos/VideoPreviewModal';
 
@@ -74,8 +75,7 @@ export default function VideosPage() {
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-bold whitespace-nowrap flex items-center gap-2"><Clapperboard className="h-5 w-5 text-blue-600" />영상자료</h2>
-        <button onClick={() => setEditing('new')}
-          className="px-3 min-h-11 bg-emerald-600 text-white rounded text-sm whitespace-nowrap">새 영상 등록</button>
+        <IconButton icon={Plus} label="새 영상 등록" variant="primary" onClick={() => setEditing('new')} />
       </div>
 
       <div className="flex flex-wrap gap-2 items-center">
@@ -98,7 +98,7 @@ export default function VideosPage() {
         <input className="border rounded px-2 min-h-11 text-sm flex-1 min-w-40" placeholder="제목·설명 검색"
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && fetchList(1)} />
-        <button onClick={() => fetchList(1)} className="px-3 min-h-11 bg-blue-600 text-white rounded text-sm whitespace-nowrap">검색</button>
+        <IconButton icon={Search} label="검색" onClick={() => fetchList(1)} />
       </div>
 
       <p className="text-xs text-gray-500">{loading ? '불러오는 중…' : `총 ${result.total}개`}</p>
@@ -109,7 +109,7 @@ export default function VideosPage() {
             <tr className="bg-gray-100">
               {['', '제목', '과목', '대단원', '소단원', '길이', '용량', '등록자', '등록일', ''].map((h, i) => (
                 <th key={h || i}
-                  className={`px-3 py-2 text-left whitespace-nowrap sticky top-0 bg-gray-100 z-20 ${i === 1 ? 'left-0 z-30' : ''}`}>
+                  className={`px-3 py-2 text-left whitespace-nowrap sticky top-0 bg-gray-100 z-20 ${i === 1 ? 'left-0 z-30' : ''} ${i === 9 ? 'right-0 z-30' : ''}`}>
                   {h}
                 </th>
               ))}
@@ -119,7 +119,7 @@ export default function VideosPage() {
             {result.items.map((v) => {
               const own = v.createdBy === user?.id;
               return (
-                <tr key={v.id} className="border-t hover:bg-blue-50">
+                <tr key={v.id} className="group border-t hover:bg-blue-50">
                   <td className="px-2 py-1">
                     <button onClick={() => setPreview(v)} className="block w-20 aspect-video bg-gray-100 rounded overflow-hidden" title="미리보기">
                       {v.thumbnailUrl
@@ -138,13 +138,14 @@ export default function VideosPage() {
                   <td className="px-3 py-2 whitespace-nowrap tabular-nums">{v.fileSize != null ? formatBytes(v.fileSize) : ''}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{v.createdByName}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{(v.createdAt || '').slice(0, 10)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <span className="flex gap-2">
-                      <button className="text-gray-600 inline-flex items-center min-h-11 px-2 whitespace-nowrap" onClick={() => setPreview(v)}>미리보기</button>
+                  {/* 수정·삭제가 표 가로 스크롤 밖으로 밀리지 않도록 오른쪽에 고정 */}
+                  <td className="px-1 py-1 whitespace-nowrap sticky right-0 bg-white group-hover:bg-blue-50 z-10 shadow-[-6px_0_6px_-6px_rgba(0,0,0,.15)]">
+                    <span className="flex">
+                      <IconButton icon={Eye} label="미리보기" size="sm" onClick={() => setPreview(v)} />
                       {(own || user?.isAdmin) && (
                         <>
-                          <button className="text-blue-600 inline-flex items-center min-h-11 px-2 whitespace-nowrap" onClick={() => setEditing(v)}>수정</button>
-                          <button className="text-red-600 inline-flex items-center min-h-11 px-2 whitespace-nowrap" onClick={() => handleDelete(v)}>삭제</button>
+                          <IconButton icon={Pencil} label="수정" size="sm" onClick={() => setEditing(v)} />
+                          <IconButton icon={Trash2} label="삭제" variant="danger" size="sm" onClick={() => handleDelete(v)} />
                         </>
                       )}
                     </span>
@@ -160,12 +161,10 @@ export default function VideosPage() {
       </div>
 
       {result.total > result.pageSize && (
-        <div className="flex gap-2 justify-center">
-          <button disabled={result.page <= 1} onClick={() => fetchList(result.page - 1)}
-            className="px-3 min-h-11 border rounded disabled:opacity-40 whitespace-nowrap">이전</button>
+        <div className="flex gap-2 justify-center items-center">
+          <IconButton icon={ChevronLeft} label="이전" disabled={result.page <= 1} onClick={() => fetchList(result.page - 1)} />
           <span className="px-2 py-1 text-sm flex items-center">{result.page} / {Math.ceil(result.total / result.pageSize)}</span>
-          <button disabled={result.page >= Math.ceil(result.total / result.pageSize)} onClick={() => fetchList(result.page + 1)}
-            className="px-3 min-h-11 border rounded disabled:opacity-40 whitespace-nowrap">다음</button>
+          <IconButton icon={ChevronRight} label="다음" disabled={result.page >= Math.ceil(result.total / result.pageSize)} onClick={() => fetchList(result.page + 1)} />
         </div>
       )}
 

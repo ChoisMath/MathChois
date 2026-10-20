@@ -233,6 +233,8 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
             <button
               onClick={() => hasPrev && setCurrentPageIndex((i) => i - 1)}
               disabled={!hasPrev}
+              aria-label="이전 페이지"
+              title="이전 페이지"
               className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -243,6 +245,8 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
             <button
               onClick={() => hasNext && setCurrentPageIndex((i) => i + 1)}
               disabled={!hasNext}
+              aria-label="다음 페이지"
+              title="다음 페이지"
               className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer"
             >
               <ChevronRight className="h-4 w-4" />
@@ -255,7 +259,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
             >
               <Menu className="h-4 w-4" />
             </button>
-            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer">
+            <button onClick={onClose} aria-label="교사 필기 닫기" title="교사 필기 닫기" className="p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer">
               <X className="h-5 w-5" />
             </button>
           </div>

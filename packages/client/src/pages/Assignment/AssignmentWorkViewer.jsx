@@ -494,6 +494,7 @@ const AssignmentWorkViewer = () => {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(`/teacher/classrooms/${classroomId}/assignments/${assignmentId}/monitor`)}
+            aria-label="제출 현황으로 돌아가기" title="제출 현황으로 돌아가기"
             className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -634,12 +635,15 @@ const AssignmentWorkViewer = () => {
 
           {commentMode && !currentPage?.videoUrl && (
             <button onClick={() => setToolbarCollapsed((v) => !v)}
+              aria-label={toolbarCollapsed ? '필기 도구 펼치기' : '필기 도구 접기'}
+              title={toolbarCollapsed ? '필기 도구 펼치기' : '필기 도구 접기'}
               className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 cursor-pointer">
               {toolbarCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
             </button>
           )}
 
           <button onClick={() => goPage(currentPageIndex - 1)} disabled={currentPageIndex === 0}
+            aria-label="이전 페이지" title="이전 페이지"
             className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer">
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -649,11 +653,13 @@ const AssignmentWorkViewer = () => {
             </span>
           )}
           <button onClick={() => goPage(currentPageIndex + 1)} disabled={currentPageIndex >= pages.length - 1}
+            aria-label="다음 페이지" title="다음 페이지"
             className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer">
             <ChevronRight className="h-4 w-4" />
           </button>
 
           <button onClick={() => setSidebarOpen((v) => !v)}
+            aria-label="페이지 목록" title="페이지 목록"
             className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer">
             {sidebarOpen ? <ChevronRight className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -698,7 +704,7 @@ const AssignmentWorkViewer = () => {
           <div ref={sidebarScrollRef} className="w-44 bg-white border-r overflow-y-auto flex-shrink-0">
             <div className="px-3 py-2 border-b flex items-center justify-between">
               <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">페이지</span>
-              <button onClick={() => setSidebarOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+              <button onClick={() => setSidebarOpen(false)} aria-label="페이지 목록 닫기" title="페이지 목록 닫기" className="text-gray-400 hover:text-gray-600 cursor-pointer">
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>

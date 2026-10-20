@@ -3,8 +3,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Users, BookOpen, Copy, Check, Trash2, FileText,
   Plus, Hash, ChevronDown, ChevronUp, Edit2, GripVertical,
-  Newspaper, ClipboardList, LogOut, Loader, X, Save, Download, BarChart3, Clapperboard
+  Newspaper, ClipboardList, LogOut, Loader, X, Save, Download, BarChart3, Clapperboard, History
 } from 'lucide-react';
+import IconButton from '../../components/common/IconButton';
 
 const BoardTab      = lazy(() => import('../../components/board/BoardTab'));
 const AssignmentTab = lazy(() => import('../../components/assignment/AssignmentTab'));
@@ -746,15 +747,14 @@ const ClassroomDetail = () => {
                       <p className="text-xs text-gray-400 truncate">{m.student?.email}</p>
                     </div>
                     {isTeacher && (
-                      <button
+                      <IconButton
+                        icon={History}
+                        label="코칭 기록"
                         onClick={() => navigate(
                           `/teacher/classrooms/${id}/students/${m.studentId}/coaching-history`,
                           { state: { studentName: m.student?.name } },
                         )}
-                        className="px-3 min-h-11 border rounded-md text-sm whitespace-nowrap shrink-0 hover:bg-gray-50"
-                      >
-                        코칭 기록
-                      </button>
+                      />
                     )}
                   </div>
                 ))}

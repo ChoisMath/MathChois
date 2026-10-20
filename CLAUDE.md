@@ -151,6 +151,9 @@ additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures th
   Template application goes through `POST /api/whiteboards/groups/:gid/apply-template`, which
   only succeeds on an empty board (the server never imports Excalidraw). The server keeps board
   scenes in memory → single-instance deployment assumption.
+- **Icon-only buttons** use `components/common/IconButton.jsx` (`label` → `title` + `aria-label`, 44px hit area,
+  variants ghost/primary/danger/danger-solid). Icon dictionary and keep-text rules:
+  `docs/superpowers/specs/2026-10-20-icon-buttons-design.md`. `DrawingToolbar` keeps its own buttons.
 - **Pen/eraser input** is custom-handled: `hooks/useExcalidrawTouch.js`,
   `hooks/useScribbleErase.js` (S-Pen barrel button, scribble-to-erase, palm rejection).
 - File storage uses `VOLUME_PATH`; buckets: `chapter-pages`, `chapter-tools` (HTML only),

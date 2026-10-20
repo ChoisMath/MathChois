@@ -14,6 +14,7 @@ import {
 } from '../../lib/videos';
 import VideoPickerModal from './VideoPickerModal';
 import SortOrderSelect from '../common/SortOrderSelect';
+import IconButton from '../common/IconButton';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSortOrder } from '../../hooks/useSortOrder';
 import { sortItems, isManualOrder } from '../../lib/sortOrder';
@@ -283,10 +284,7 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
           )}
           {items.length > 0 && <SortOrderSelect value={sortOrder} onChange={setSortOrder} />}
           {isTeacher && (
-            <button onClick={() => setShowPicker(true)}
-              className="inline-flex items-center gap-1.5 px-3 min-h-11 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 cursor-pointer">
-              <Plus className="h-4 w-4" /> 영상 추가
-            </button>
+            <IconButton icon={Plus} label="영상 추가" variant="primary" onClick={() => setShowPicker(true)} />
           )}
         </div>
       )}

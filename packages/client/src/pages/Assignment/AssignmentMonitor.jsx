@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { CARD_GRID } from '../../lib/layout';
 import { useParams, useNavigate } from 'react-router-dom';
+import IconButton from '../../components/common/IconButton';
 import { ArrowLeft, Users, Clock, Download, Paperclip } from 'lucide-react';
 import { api } from '../../lib/api';
 import { subscribeToRoom } from '../../lib/socket';
@@ -124,12 +125,7 @@ const AssignmentMonitor = () => {
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate(`/teacher/classrooms/${classroomId}`)}
-            className="p-1.5 text-gray-400 hover:text-gray-600 cursor-pointer"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
+          <IconButton icon={ArrowLeft} label="학급으로 돌아가기" onClick={() => navigate(`/teacher/classrooms/${classroomId}`)} />
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{assignment?.title} — 제출 현황</h1>
             {assignment?.deadline && (

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Users, Loader, BookMarked, History, LayoutTemplate, Clapperboard, LayoutList, X } from 'lucide-react';
+import { Users, BookMarked, History, LayoutTemplate, Clapperboard, LayoutList, X, ArrowRight } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import BrandMark from '../components/shell/BrandMark';
 import { SideTab, ClassTab } from '../components/shell/SideTab';
+import IconButton from '../components/common/IconButton';
 import '../components/shell/shell.css';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../lib/api';
@@ -121,13 +122,15 @@ function StudentSidebar() {
             autoComplete="off"
             className="shell-join-input"
           />
-          <button
+          <IconButton
+            icon={ArrowRight}
+            label="참여"
+            variant="primary"
             type="submit"
-            disabled={joining || joinCode.length < 6}
-            className="shell-join-btn"
-          >
-            {joining ? <Loader className="h-5 w-5 animate-spin" aria-label="참여 중" /> : '참여'}
-          </button>
+            disabled={joinCode.length < 6}
+            busy={joining}
+            busyLabel="참여 중"
+          />
         </div>
         {joinError && (
           <p className="shell-join-error" role="alert">{joinError}</p>
