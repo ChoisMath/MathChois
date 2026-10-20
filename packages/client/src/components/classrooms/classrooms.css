@@ -98,24 +98,31 @@
 
 /* 학급 만들기 창 */
 .classroom-modal { font-family: var(--sans, 'IBM Plex Sans KR', system-ui, sans-serif); color: #1c2b4a; }
-.classroom-modal .field { border: 1px solid #c9d4ee; }
+.classroom-modal .field { border: 1px solid #c9d4ee; font-size: 16px; } /* 16px 미만이면 iOS 가 입력칸에 확대한다 */
 .classroom-modal .field:focus { outline: none; border-color: #2453a6; box-shadow: 0 0 0 3px rgba(36, 83, 166, .18); }
 
-/* 학급 색 고르기(새 학급 창·학급 상세) */
-.color-picker { display: flex; flex-wrap: wrap; gap: 10px; }
+/* 학급 색 고르기(새 학급 창·학급 상세). 넓으면 6개 한 줄(최대 324px), 컨테이너가 264px 보다 좁으면 3×2 */
+.color-picker-wrap { container-type: inline-size; }
+.color-picker {
+  display: grid; grid-template-columns: repeat(6, 44px); justify-content: space-between;
+  gap: 12px 0; max-width: 324px;
+}
 .color-swatch {
   width: 44px; height: 44px; border-radius: 50%;
   border: 3px solid #fff; background: var(--swatch);
   box-shadow: 0 0 0 1px #d6deec;
-  display: grid; place-items: center; color: var(--swatch-deep);
+  display: grid; place-items: center; color: #1c2b4a; /* 여섯 표지 색 위에서 4.5:1 이상 */
   cursor: pointer; transition: box-shadow .15s ease, transform .15s ease;
 }
 .color-swatch svg { opacity: 0; }
 .color-swatch[aria-pressed='true'] { box-shadow: 0 0 0 3px #1c2b4a; }
 .color-swatch[aria-pressed='true'] svg { opacity: 1; }
-.color-swatch:hover:not(:disabled) { transform: scale(1.06); }
-.color-swatch:focus-visible { outline: 3px solid #2453a6; outline-offset: 4px; }
-.color-swatch:disabled { cursor: progress; opacity: .6; }
+.color-swatch:hover:not([aria-disabled='true']) { transform: scale(1.06); }
+.color-swatch:focus-visible { outline: 3px solid #2453a6; outline-offset: 2px; }
+.color-swatch[aria-disabled='true'] { cursor: progress; opacity: .6; }
+@container (max-width: 263px) {
+  .color-picker { grid-template-columns: repeat(3, 44px); justify-content: start; column-gap: 16px; }
+}
 
 /* 학급 상세 제목 줄: 학급 색 띠 + 옅은 배경 */
 .classroom-head {
@@ -126,7 +133,7 @@
   display: inline-flex; align-items: center; gap: 8px;
   min-height: 44px; padding: 0 14px; border-radius: 999px;
   background: #fff; border: 1px solid #d6deec;
-  font-size: 13px; font-weight: 500; color: #1c2b4a; cursor: pointer;
+  font-size: 14px; font-weight: 500; color: #1c2b4a; cursor: pointer;
 }
 .color-toggle:hover { background: #f4f7fc; }
 .color-toggle:focus-visible { outline: 3px solid #2453a6; outline-offset: 3px; }
@@ -134,7 +141,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .color-swatch { transition: none; }
-  .color-swatch:hover:not(:disabled) { transform: none; }
+  .color-swatch:hover:not([aria-disabled='true']) { transform: none; }
   .notebook, .classrooms .new-btn { transition: none; }
   .notebook-link:hover .notebook, .notebook-link:active .notebook { transform: none; }
 }

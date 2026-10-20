@@ -144,8 +144,8 @@ const ClassroomList = () => {
         <div className="classroom-modal fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <form onSubmit={handleCreate} className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
             <p className="hand text-[18px] leading-none text-[#2453a6]">새 공책 한 권</p>
-            <h2 className="text-lg font-bold mt-1 mb-4">새 학급 만들기</h2>
-            <label htmlFor="new-classroom-name" className="block text-sm text-[#56627c] mb-1">학급 이름</label>
+            <h2 className="text-[18px] font-bold mt-1 mb-4">새 학급 만들기</h2>
+            <label htmlFor="new-classroom-name" className="block text-[14px] text-[#56627c] mb-1">학급 이름</label>
             <input
               id="new-classroom-name"
               autoFocus
@@ -155,7 +155,7 @@ const ClassroomList = () => {
               placeholder="예: 2학년 3반 수학"
               className="field w-full px-4 py-2.5 rounded-lg mb-4"
             />
-            <p id="new-classroom-color-label" className="text-sm text-[#56627c] mb-2">표지 색</p>
+            <p id="new-classroom-color-label" className="text-[14px] text-[#56627c] mb-2">표지 색</p>
             <div className="mb-4">
               <ClassroomColorPicker
                 value={newColor}
@@ -165,13 +165,13 @@ const ClassroomList = () => {
               />
             </div>
             {createError && (
-              <p className="text-sm text-red-600 mb-3" role="alert">{createError}</p>
+              <p className="text-[14px] text-red-600 mb-3" role="alert">{createError}</p>
             )}
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => { setShowCreateModal(false); setCreateError(''); }}
-                className="inline-flex items-center gap-1 min-h-11 px-4 text-[#56627c] hover:text-[#1c2b4a] hover:bg-gray-100 rounded-full cursor-pointer"
+                className="inline-flex items-center gap-1 min-h-11 px-4 text-[15px] text-[#56627c] hover:text-[#1c2b4a] hover:bg-gray-100 rounded-full cursor-pointer"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
                 취소
@@ -179,7 +179,7 @@ const ClassroomList = () => {
               <button
                 type="submit"
                 disabled={creating || !newName.trim()}
-                className="inline-flex items-center gap-1.5 min-h-11 px-5 bg-[#1c2b4a] text-white rounded-full hover:bg-[#142039] disabled:opacity-50 cursor-pointer"
+                className="inline-flex items-center gap-1.5 min-h-11 px-5 text-[15px] bg-[#1c2b4a] text-white rounded-full hover:bg-[#142039] disabled:opacity-50 cursor-pointer"
               >
                 {creating ? <Loader className="animate-spin h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
                 {creating ? '만드는 중...' : '만들기'}

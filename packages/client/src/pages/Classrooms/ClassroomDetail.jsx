@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Users, BookOpen, Copy, Check, Trash2, FileText,
@@ -157,6 +157,8 @@ const ClassroomDetail = () => {
   const [colorOpen, setColorOpen]     = useState(false);
   const [savingColor, setSavingColor] = useState(false);
   const [colorError, setColorError]   = useState('');
+  const colorToggleRef = useRef(null);
+  const idRef = useRef(id); // 저장이 끝났을 때 아직 같은 학급 화면인지 확인용
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createTab, setCreateTab]   = useState('new'); // 'new' | 'import'
@@ -243,6 +245,13 @@ const ClassroomDetail = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  /* 다른 학급으로 이동하면 표지 색 펼침·오류를 닫는다 */
+  useEffect(() => {
+    idRef.current = id;
+    setColorOpen(false);
+    setColorError('');
+  }, [id]);
+
   /* 가져오기 탭 전환 시 다른 클래스 목록 로드 */
   useEffect(() => {
     if (createTab !== 'import' || !user) return;
@@ -324,17 +333,21 @@ const ClassroomDetail = () => {
     if (savingColor) return;
     if (color === resolveClassroomColor(classroom)) { setColorOpen(false); return; }
     const prevColor = classroom.color;
+    const targetId = id; // 저장 중에 다른 학급으로 옮겨도 이 학급만 되돌린다
     setSavingColor(true);
     setColorError('');
     setClassroom((prev) => ({ ...prev, color }));
     try {
-      await api.patch(`/api/classrooms/${id}`, { color });
-      setColorOpen(false);
+      await api.patch(`/api/classrooms/${targetId}`, { color });
       refreshSidebar();
+      if (idRef.current === targetId) {
+        setColorOpen(false);
+        colorToggleRef.current?.focus(); // 펼침이 닫히며 사라진 원 대신 버튼으로 포커스를 돌린다
+      }
     } catch (err) {
       console.error('[ClassroomDetail] 표지 색 변경 오류:', err);
-      setClassroom((prev) => ({ ...prev, color: prevColor }));
-      setColorError('표지 색을 바꾸지 못했어요. 다시 시도해 주세요.');
+      setClassroom((prev) => (prev?.id === targetId ? { ...prev, color: prevColor } : prev));
+      if (idRef.current === targetId) setColorError('표지 색을 바꾸지 못했어요. 다시 시도해 주세요.');
     }
     setSavingColor(false);
   };
@@ -530,17 +543,19 @@ const ClassroomDetail = () => {
             {isTeacher && (
               <div className="mt-2">
                 <button
+                  ref={colorToggleRef}
                   type="button"
                   onClick={toggleColorPicker}
                   aria-expanded={colorOpen}
+                  aria-controls="classroom-color-picker"
                   className="color-toggle"
                 >
                   <i aria-hidden="true" />
                   표지 색 바꾸기
                 </button>
                 {colorOpen && (
-                  <div className="mt-3">
-                    <p id="classroom-color-label" className="text-sm text-[#56627c] mb-2">표지 색</p>
+                  <div id="classroom-color-picker" className="mt-3">
+                    <p id="classroom-color-label" className="text-[14px] text-[#56627c] mb-2">표지 색</p>
                     <ClassroomColorPicker
                       value={resolveClassroomColor(classroom)}
                       onChange={handleColorChange}
@@ -548,7 +563,7 @@ const ClassroomDetail = () => {
                       labelId="classroom-color-label"
                     />
                     {colorError && (
-                      <p className="text-sm text-red-700 mt-2" role="alert">{colorError}</p>
+                      <p className="text-[14px] text-red-700 mt-2" role="alert">{colorError}</p>
                     )}
                   </div>
                 )}
