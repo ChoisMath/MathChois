@@ -22,7 +22,13 @@
   border: 1px solid #e3e8f1;
   border-radius: 16px;
   padding: 28px clamp(16px, 3vw, 36px) 36px;
+
+  /* 화면 바닥까지 채운다(DashboardLayout 본문이 주는 --shell-main-fill). 내용이 더 길면 그대로 늘어난다(안쪽 스크롤 없음) */
+  min-height: var(--shell-main-fill, 0px);
+  display: flex; flex-direction: column;
 }
+/* 카드 목록은 줄 높이를 늘리지 않고 위에 붙는다 */
+.classrooms > * { flex-shrink: 0; }
 .classrooms .hand { font-family: var(--hand); }
 .classrooms .kicker { font-family: var(--hand); font-size: 20px; line-height: 1; color: var(--pen); }
 .classrooms .title { margin: 4px 0 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.3; }
@@ -81,7 +87,8 @@
 
 /* 빈 화면: 표지 없는 빈 공책 */
 .notebook-empty {
-  display: grid; justify-items: center; gap: 10px; text-align: center;
+  flex: 1 1 auto; /* 카드의 남는 높이를 채우고 내용은 세로 가운데 */
+  display: grid; justify-items: center; align-content: center; gap: 10px; text-align: center;
   padding: 40px 20px;
   border: 2px dashed #c9d4ee; border-radius: 14px;
   background: rgba(255, 255, 255, .7);

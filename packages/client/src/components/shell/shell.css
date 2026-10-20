@@ -88,3 +88,107 @@ img.shell-avatar { object-fit: cover; }
 @media (prefers-reduced-motion: reduce) {
   .shell-iconbtn, .shell-admin, .shell-minibtn { transition: none; }
 }
+
+/* ── 사이드바 (색 인덱스 탭) ──
+ * 배경 #eef2f8, 오른쪽 테두리 없음. 선택된 탭은 종이색(#f8fafd)이라 본문과 한 장처럼 이어진다.
+ */
+.shell-side {
+  --shell-paper: #f8fafd;
+  --shell-pen: #2453a6;
+  --shell-sans: 'IBM Plex Sans KR', 'Noto Sans KR', system-ui, sans-serif;
+
+  background: #eef2f8;
+  font-family: var(--shell-sans);
+  color: #1c2b4a;
+}
+.shell-side-inner { padding: 16px 0 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+.shell-side-title {
+  margin: 0 0 8px 8px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: #56627c;
+}
+.shell-side-title.is-sub { margin-top: 14px; }
+.shell-side-empty { margin: 0 14px 0 8px; font-size: 12px; color: #56627c; }
+.shell-side-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+
+/* 본문 — 종이색. --shell-main-fill = 상단 바(64px)와 위아래 여백을 뺀 남는 화면 높이(목록 카드가 바닥까지 닿게) */
+.shell-main {
+  --shell-main-pad: 1rem;
+  --shell-main-fill: calc(100dvh - 64px - 2 * var(--shell-main-pad));
+  background: #f8fafd; padding: var(--shell-main-pad);
+}
+@media (min-width: 640px) { .shell-main { --shell-main-pad: 1.5rem; } }
+@media (min-width: 1024px) { .shell-main { --shell-main-pad: 2rem; } }
+
+/* 메뉴 탭 */
+.shell-tab {
+  display: flex; align-items: center; gap: 10px; min-height: 44px; min-width: 0;
+  padding: 0 12px; border-radius: 10px 0 0 10px;
+  font-size: 14px; font-weight: 500; color: #34415c;
+  transition: background-color .15s ease;
+}
+.shell-tab:hover { background: rgba(36, 83, 166, .08); }
+.shell-tab-icon { flex-shrink: 0; color: #56627c; }
+.shell-tab-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell-tab.is-active {
+  background: var(--shell-paper); font-weight: 700; color: #1c2b4a;
+  box-shadow: inset -2px 0 0 var(--shell-pen);
+}
+.shell-tab.is-active .shell-tab-icon { color: var(--shell-pen); }
+
+/* 학급 탭 */
+.shell-class {
+  display: flex; align-items: center; gap: 8px; min-height: 44px; min-width: 0;
+  padding: 0 12px; margin-right: 14px;
+  background: var(--nb-tint); border-left: 5px solid var(--nb-cover);
+  border-radius: 4px 10px 10px 4px;
+  font-size: 14px; color: #1c2b4a;
+  transition: margin-right .15s ease, background-color .15s ease;
+}
+.shell-class:hover { margin-right: 6px; }
+.shell-class.is-active {
+  margin-right: 0; background: var(--shell-paper); font-weight: 700;
+  border-radius: 4px 0 0 4px;
+}
+.shell-side :focus-visible { outline: 3px solid var(--shell-pen); outline-offset: -3px; }
+
+/* 학생 참여 코드 카드 */
+.shell-join {
+  margin: 0 14px 12px 0; padding: 12px; background: #fff; border-radius: 10px;
+  border: 1px solid #dde4f0;
+}
+.shell-join-label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 500; color: #56627c; }
+.shell-join-row { display: flex; gap: 6px; }
+.shell-join-input {
+  flex: 1; min-width: 0; height: 44px; padding: 0 10px; border-radius: 8px;
+  border: 1px solid #c9d4ee; background: #fff; color: #1c2b4a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; letter-spacing: .12em;
+}
+.shell-join-input::placeholder { letter-spacing: 0; font-family: var(--shell-sans); color: #8893ab; }
+.shell-join-btn {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  min-width: 52px; height: 44px; padding: 0 10px; border-radius: 8px;
+  font-size: 14px; font-weight: 700; color: var(--shell-pen); cursor: pointer;
+  transition: background-color .15s ease;
+}
+.shell-join-btn:hover:not(:disabled) { background: rgba(36, 83, 166, .08); }
+.shell-join-btn:disabled { color: #8893ab; cursor: default; }
+.shell-join-error { margin: 6px 0 0; font-size: 12px; color: #b42318; }
+
+/* 사이드바 뱃지(영상 댓글 미읽음) */
+.shell-badge {
+  margin-left: auto; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9999px;
+  background: #d9372b; color: #fff; font-size: 10px; font-weight: 700; line-height: 1;
+}
+
+/* 덮개 메뉴 머리 */
+.shell-overlay-head {
+  display: flex; align-items: center; justify-content: space-between; height: 64px; padding: 0 8px 0 16px;
+  background: #1c2b4a; color: #fff;
+}
+.shell-overlay-title { display: inline-flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 700; }
+.shell-overlay-head :focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-tab, .shell-class, .shell-join-btn { transition: none; }
+}
