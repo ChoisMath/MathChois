@@ -160,6 +160,78 @@ export function dragToLevel(start, dy, height, min, max) {
   return clamp(Math.round(next * 100) / 100, min, max);
 }
 
+// ─── 스크럽 중 탐색 스케줄러 ──────────────────────
+
+/** 같은 목표로 다시 탐색하지 않을 최소 간격(초) */
+export const SCRUB_MIN_STEP_SEC = 0.25;
+/** seeked 가 이 시간(ms) 안에 오지 않으면 막혔다고 보고 다음 탐색을 그냥 보낸다 */
+export const SCRUB_STALL_MS = 1200;
+
+/**
+ * 스크럽(좌우 드래그) 중 프레임이 실제로 갱신되도록 탐색을 한 번에 하나만 보낸다.
+ *
+ * HTML 표준의 seeking 알고리즘은 이전 탐색이 끝나기(seeked) 전에 currentTime 을 다시 쓰면 진행 중인 탐색을
+ * 취소한다. 드래그마다 currentTime 을 대입하면 네트워크(Range 요청)·디코딩 지연이 그 간격보다 길 때 어떤
+ * 프레임도 완료되지 못해 화면이 멈춘 채 숫자만 바뀐다. → 탐색 중이면 최신 목표만 기억해 두고, seeked 가 오면
+ * 그 목표로 다시 보낸다. 스크럽 중에는 가능한 브라우저(Safari/Firefox)에서 키프레임 단위 `fastSeek` 로 빠르게
+ * 근처 프레임을 보여 주고, `finish()` 에서 정확한 위치로 마무리한다(Chrome 은 fastSeek 미지원 → currentTime).
+ *
+ * @param video HTMLVideoElement (seeking, currentTime, fastSeek?, add/removeEventListener)
+ * @returns { request(target) → boolean(실제로 보냈는지), finish(target), dispose() }
+ */
+export function createScrubSeeker(video, { minStep = SCRUB_MIN_STEP_SEC, stallMs = SCRUB_STALL_MS, now = Date.now } = {}) {
+  let inFlight = false;
+  let sentAt = 0;
+  let lastSent = null;   // 마지막으로 보낸 목표
+  let pending = null;    // 탐색 중에 들어온 최신 목표
+  let attached = true;
+
+  const send = (t) => {
+    inFlight = true;
+    sentAt = now();
+    lastSent = t;
+    if (typeof video.fastSeek === 'function') {
+      try { video.fastSeek(t); return; } catch { /* 폴백 */ }
+    }
+    video.currentTime = t;
+  };
+  const tooClose = (t) => lastSent != null && Math.abs(t - lastSent) < minStep;
+  const onSeeked = () => {
+    inFlight = false;
+    if (pending == null) return;
+    const t = pending;
+    pending = null;
+    if (!tooClose(t)) send(t);
+  };
+  video.addEventListener('seeked', onSeeked);
+
+  const dispose = () => {
+    if (!attached) return;
+    attached = false;
+    pending = null;
+    video.removeEventListener('seeked', onSeeked);
+  };
+
+  return {
+    request(target) {
+      const t = Number(target);
+      if (!Number.isFinite(t)) return false;
+      const busy = inFlight && now() - sentAt < stallMs;
+      if (busy) { pending = t; return false; }
+      if (tooClose(t)) return false;
+      send(t);
+      return true;
+    },
+    /** 드래그 종료: 대기열을 버리고 정확한 위치로 한 번만 탐색한다 */
+    finish(target) {
+      dispose();
+      const t = Number(target);
+      if (Number.isFinite(t)) video.currentTime = t;
+    },
+    dispose,
+  };
+}
+
 /** 키보드 단축키를 무시해야 하는 타깃(입력 중)인지 */
 export function isTypingTarget(target) {
   if (!target || typeof target !== 'object') return false;
