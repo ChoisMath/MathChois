@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   buildVideoQuery, formatBytes, formatDuration, progressPercent, subtitleQueryUrl, getVideoSubtitlesCached,
+  deleteVideoSubtitle,
 } from './videos.js';
 
 describe('videos lib', () => {
@@ -51,5 +52,19 @@ describe('getVideoSubtitlesCached', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(responses.shift()), { status: 200 })));
     expect(await getVideoSubtitlesCached('/api/files/videos/library/1_a.mp4')).toEqual([]);
     expect(await getVideoSubtitlesCached('/api/files/videos/library/1_a.mp4')).toEqual([track]);
+  });
+});
+
+describe('deleteVideoSubtitle', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('이미 지워진 자막(404)은 성공으로 본다 — 다른 탭에서 먼저 지운 경우', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"자막을 찾을 수 없습니다"}', { status: 404 })));
+    await expect(deleteVideoSubtitle('v1', 'ko')).resolves.toBeUndefined();
+  });
+
+  it('그 밖의 오류는 그대로 던진다', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"수정 권한이 없습니다"}', { status: 403 })));
+    await expect(deleteVideoSubtitle('v1', 'ko')).rejects.toMatchObject({ status: 403 });
   });
 });

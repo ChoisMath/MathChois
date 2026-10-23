@@ -15,7 +15,8 @@ const ACCEPT = '.srt,.vtt';
  * - current: 이미 등록된 자막(VideoSubtitle) 또는 null
  * - value: 저장 시 반영할 변경 — null | { action: 'upload', file, info: { cueCount, lastEnd } } | { action: 'delete' }
  * - onChange(next)
- * - durationSec: 영상 길이(초) — 자막이 더 길면 경고(영상을 교체하면 다시 계산)
+ * - durationSec: 영상 길이(초) — 자막이 더 길면 경고. 영상을 교체하면 다시 계산하며, 기존 자막을 유지할 때도
+ *   그 자막의 lastEnd(서버가 저장)로 비교한다
  * - disabled
  *
  * 파일을 고르면 브라우저에서 바로 읽어 문장 수를 보여 주고, 실제 업로드·삭제는 폼 [저장] 때 한다.
@@ -46,7 +47,9 @@ export default function SubtitleField({ current = null, value = null, onChange, 
 
   const uploading = value?.action === 'upload';
   const deleting = value?.action === 'delete';
-  const warning = uploading ? subtitleLengthWarning(value.info.lastEnd, durationSec) : undefined;
+  const warning = uploading
+    ? subtitleLengthWarning(value.info.lastEnd, durationSec)
+    : (!deleting && current ? subtitleLengthWarning(current.lastEnd, durationSec) : undefined);
 
   let label = '자막 없음 — .srt / .vtt 파일(UTF-8, 2MB 이하)을 올릴 수 있습니다';
   let status = null;

@@ -75,6 +75,7 @@ export async function videoSubtitleRoutes(app: FastifyInstance) {
       lang: req.params.lang,
       vtt: toWebVtt(cues),
       cueCount: cues.length,
+      lastEndSec: Math.ceil(cues.reduce((m, c) => Math.max(m, c.end), 0)),
       createdBy: req.user.sub,
     });
     return reply.status(201).send(saved);

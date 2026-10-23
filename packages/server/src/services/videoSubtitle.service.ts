@@ -16,6 +16,7 @@ function toDto(row: SubtitleRow): VideoSubtitle {
     label: row.label,
     url: row.url,
     cueCount: row.cueCount,
+    lastEnd: row.lastEndSec,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -58,28 +59,46 @@ export async function listSubtitlesByVideoUrl(videoUrl: string): Promise<VideoSu
   return rows.map((r) => toDto(r.s)).sort((a, b) => langOrder(a.lang) - langOrder(b.lang));
 }
 
-/** WebVTT 문서를 저장하고 (videoId, lang) 행을 추가/교체한다. 교체된 이전 파일은 지운다. */
+/**
+ * WebVTT 문서를 저장하고 (videoId, lang) 행을 추가/교체한다.
+ * - 파일을 먼저 쓰고 트랜잭션 안에서 기존 행을 `FOR UPDATE` 로 잠근 뒤 upsert 한다 → 동시에 두 번 교체해도
+ *   각자 자기 직전 파일을 정확히 하나씩 지운다.
+ * - upsert 가 실패하면(영상이 그 사이 삭제돼 FK 위반 등) 방금 쓴 파일을 지워 고아 파일을 남기지 않는다.
+ */
 export async function saveSubtitle(p: {
-  videoId: string; lang: string; vtt: string; cueCount: number; createdBy: string;
+  videoId: string; lang: string; vtt: string; cueCount: number; lastEndSec: number; createdBy: string;
 }): Promise<VideoSubtitle> {
   const url = await uploadFile(
     SUBTITLE_BUCKET, 'subtitles', `${Date.now()}_${p.videoId}_${p.lang}.vtt`, Buffer.from(p.vtt, 'utf8'),
   );
-  const [existing] = await db.select({ url: videoSubtitles.url }).from(videoSubtitles)
-    .where(and(eq(videoSubtitles.videoId, p.videoId), eq(videoSubtitles.lang, p.lang))).limit(1);
   const values = {
     url,
     label: subtitleLangLabel(p.lang),
     cueCount: p.cueCount,
+    lastEndSec: p.lastEndSec,
     createdBy: p.createdBy,
     updatedAt: new Date(),
   };
-  const [row] = await db.insert(videoSubtitles)
-    .values({ videoId: p.videoId, lang: p.lang, ...values })
-    .onConflictDoUpdate({ target: [videoSubtitles.videoId, videoSubtitles.lang], set: values })
-    .returning();
-  if (existing && existing.url !== url) await removeStoredFile(existing.url);
-  return toDto(row!);
+  let previousUrl: string | null = null;
+  let row: SubtitleRow;
+  try {
+    row = await db.transaction(async (tx) => {
+      const [existing] = await tx.select({ url: videoSubtitles.url }).from(videoSubtitles)
+        .where(and(eq(videoSubtitles.videoId, p.videoId), eq(videoSubtitles.lang, p.lang)))
+        .for('update');
+      previousUrl = existing?.url ?? null;
+      const [saved] = await tx.insert(videoSubtitles)
+        .values({ videoId: p.videoId, lang: p.lang, ...values })
+        .onConflictDoUpdate({ target: [videoSubtitles.videoId, videoSubtitles.lang], set: values })
+        .returning();
+      return saved!;
+    });
+  } catch (err) {
+    await removeStoredFile(url);
+    throw err;
+  }
+  if (previousUrl && previousUrl !== url) await removeStoredFile(previousUrl);
+  return toDto(row);
 }
 
 /** 자막 행 + 파일 삭제. 없으면 false */

@@ -122,7 +122,12 @@ export function uploadVideoSubtitle(videoId, lang, file) {
   fd.append('file', file, file.name);
   return api.upload(`/api/videos/${videoId}/subtitles/${lang}`, fd);
 }
-export const deleteVideoSubtitle = (videoId, lang) => api.delete(`/api/videos/${videoId}/subtitles/${lang}`);
+/** 자막 삭제. 이미 없어진 자막(404 — 다른 탭에서 먼저 지운 경우)은 성공으로 본다. */
+export const deleteVideoSubtitle = (videoId, lang) =>
+  api.delete(`/api/videos/${videoId}/subtitles/${lang}`).catch((err) => {
+    if (err instanceof ApiError && err.status === 404) return undefined;
+    throw err;
+  });
 
 // 재생 화면용 캐시 — 같은 영상을 다시 열거나 여러 플레이어가 같은 자막을 쓸 때 재요청하지 않는다.
 // 실패한 요청과 빈 결과는 캐시하지 않는다 — 다음에 다시 시도하고, 교사가 나중에 올린 자막도 다시 열면 보인다.

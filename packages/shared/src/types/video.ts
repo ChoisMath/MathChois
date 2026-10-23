@@ -29,6 +29,8 @@ export interface VideoSubtitle {
   /** WebVTT 파일 URL (`/api/files/videos/subtitles/...vtt`) */
   url: string;
   cueCount: number;
+  /** 마지막 문장이 끝나는 시각(초, 올림). 길이 경고용 — 이 컬럼이 생기기 전 행은 null */
+  lastEnd: number | null;
   updatedAt: string;
 }
 

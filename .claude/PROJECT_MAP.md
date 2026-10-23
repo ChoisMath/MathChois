@@ -239,7 +239,7 @@ packages/
 | `video_comments` | classroomVideoId→classroom_videos(cascade), authorId→profiles(cascade), parentId→video_comments(cascade, 루트만 가리킴 — 깊이 1) | 학급 영상 댓글. content/isPrivate("교사만 확인" — 루트에만 의미, 대댓글은 상속)/timestampSec(영상 시각 첨부). 인덱스 (classroomVideoId, createdAt)/(parentId) |
 | `video_progress` | classroomVideoId→classroom_videos(cascade), studentId→profiles(cascade) | 학생 시청 기록. positionSec(이어보기)/maxPositionSec(진도율)/completed(**80%** 도달 — `PROGRESS_COMPLETE_RATIO`, sticky). (cv, student) unique |
 | `video_comment_reads` | classroomVideoId→classroom_videos(cascade), userId→profiles(cascade) | 댓글 읽음 시각 lastSeenAt. 미읽음 = 본인이 쓰지 않은·열람 가능한·lastSeenAt 이후 댓글 수. (cv, user) unique |
-| `video_subtitles` | videoId→videos(cascade), createdBy→profiles(set null) | 영상자료 자막(영상 × 언어). lang(`SUBTITLE_LANGS` — 현재 'ko')/label/url(`videos` 버킷 `subtitles/` WebVTT)/cueCount. (video, lang) unique. 영상 삭제 시 파일은 서비스가 정리 |
+| `video_subtitles` | videoId→videos(cascade), createdBy→profiles(set null) | 영상자료 자막(영상 × 언어). lang(`SUBTITLE_LANGS` — 현재 'ko')/label/url(`videos` 버킷 `subtitles/` WebVTT)/cueCount/lastEndSec(마지막 문장 끝, 영상만 교체했을 때 길이 경고용 — 기동 시 `ADD COLUMN IF NOT EXISTS`). (video, lang) unique. 교체는 트랜잭션 + `FOR UPDATE` 로 이전 파일을 정확히 하나만 지우고, upsert 실패 시 방금 쓴 파일을 되돌린다. 영상 삭제 시 파일은 서비스가 정리 |
 
 > 마이그레이션은 Drizzle Kit(`db:push`/`db:generate`). 추가로 `db/startupMigrate.ts`가 기동 시 멱등 DDL을 실행(예: `pages.html_url`·`pages.ai_problem_id`·`classrooms.color`(+색 없는 학급 채움) 컬럼, `problems`·`coaching_attempts`·`coaching_quota`(+(student,page) unique index)·`visualizations`·`videos`·`classroom_videos`·`video_comments`·`video_subtitles`(+`videos.video_url` 인덱스)·`classroom_groups`·`whiteboard_*` 테이블, `pages.page_type`/`whiteboard_template` 컬럼 보장).
 
