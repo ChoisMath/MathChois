@@ -134,7 +134,8 @@ Tables: `profiles`, `classrooms`, `classroom_members`, `chapters`, `pages`
 `classroom_groups`/`classroom_group_members` (default groups), `whiteboard_page_settings`/
 `whiteboard_groups`/`whiteboard_group_members` (shared boards),
 `posts`/`post_files`/`post_classrooms` (board), `assignments`/`assignment_pages`/
-`assignment_submissions`/`assignment_submission_files`. Migrations via Drizzle Kit;
+`assignment_submissions`/`assignment_submission_files`, `videos`/`classroom_videos`/`video_comments`/
+`video_subtitles` (video library). Migrations via Drizzle Kit;
 additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures the
 `pages.html_url` column).
 `classrooms.color` — one of six named colors (coral/mustard/sage/sky/lavender/rose); backfilled at boot by

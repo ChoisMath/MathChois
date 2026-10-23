@@ -30,6 +30,9 @@ export const SUBTITLE_EXT_RE = /\.(srt|vtt)$/i;
 
 const TIME_RE = /^(?:(\d+):)?(\d{1,2}):(\d{1,2})[.,](\d{1,3})$/;
 const SKIP_BLOCK_RE = /^(WEBVTT|NOTE|STYLE|REGION)(\s|$)/;
+// 알려진 서식 태그만 지운다. SRT 는 < > 를 이스케이프하지 않으므로 `x < 3`, `<a, b>` 같은 수식은 남겨야 한다.
+const MARKUP_TAG_RE = /<\/?(?:b|i|u|c|v|lang|ruby|rt|font)(?=[\s.>])[^>]*>/gi;
+const INLINE_TIMESTAMP_RE = /<(?:\d+:)?\d{1,2}:\d{2}\.\d{3}>/g;
 
 /** "hh:mm:ss,mmm" / "mm:ss.m" → 초. 형식이 아니면 null */
 function parseTime(raw: string): number | null {
@@ -40,10 +43,11 @@ function parseTime(raw: string): number | null {
   return Number(h ?? 0) * 3600 + Number(mm) * 60 + Number(ss) + millis / 1000;
 }
 
-/** 태그·엔티티 제거. `&amp;` 는 마지막에 풀어 `&amp;lt;` 가 `<` 로 두 번 풀리지 않게 한다. */
+/** 서식 태그·엔티티 제거. `&amp;` 는 마지막에 풀어 `&amp;lt;` 가 `<` 로 두 번 풀리지 않게 한다. */
 function cleanLine(line: string): string {
   return line
-    .replace(/<[^>]*>/g, '')
+    .replace(MARKUP_TAG_RE, '')
+    .replace(INLINE_TIMESTAMP_RE, '')
     .replace(/\{\\[^}]*\}/g, '')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
@@ -108,10 +112,11 @@ export function activeCues(cues: SubtitleCue[], time: number): SubtitleCue[] {
   return cues.filter((c) => c.start <= time && time < c.end);
 }
 
-/** UTF-8 이 아닌 파일(CP949 등)을 UTF-8 로 읽었을 때: 대체 문자가 공백 아닌 글자의 5% 이상 */
+/**
+ * UTF-8 이 아닌 파일(CP949 등)을 UTF-8 로 읽었는지: 대체 문자(U+FFFD)가 하나라도 있으면 그렇다고 본다.
+ * 비율로 재면 번호·타임코드(ASCII)가 희석해 한국어가 적은 수식 위주 자막이 통과하고 깨진 채 저장된다.
+ * 정상 UTF-8 자막에 U+FFFD 가 들어 있는 경우는 사실상 없다.
+ */
 export function isLikelyMisdecoded(text: string): boolean {
-  const chars = text.replace(/\s/g, '');
-  if (!chars.length) return false;
-  const bad = chars.match(/�/g)?.length ?? 0;
-  return bad / chars.length >= 0.05;
+  return text.includes('\uFFFD');
 }

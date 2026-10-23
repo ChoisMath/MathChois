@@ -259,20 +259,30 @@ export default function VideoPlayer({
     return () => window.removeEventListener('keydown', onKey);
   }, [hotkeys, settings.seekStep, settings.playbackRate, seekBy, changeVolume, togglePlay, toggleMute, toggleFullscreen, changeRate, seekTo, showFlash, hasSubs, toggleSubtitles]);
 
-  /* iPhone 기본 전체화면(webkitEnterFullscreen)은 웹 오버레이를 보여 주지 못하므로, 그동안만 같은 VTT 의 <track> 을 켠다 */
+  /* iPhone 기본 전체화면(webkitEnterFullscreen)은 웹 오버레이를 보여 주지 못하므로, 그동안만 같은 VTT 의 <track> 을 켠다.
+     그 밖에는 항상 꺼 둔다 — Safari 는 OS 접근성의 "자막" 설정이 켜져 있으면 트랙을 스스로 켜서 오버레이와 이중으로 보인다. */
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || !hasSubs) return undefined;
+    const list = v?.textTracks;
+    if (!v || !list || !hasSubs) return undefined;
+    let nativeFullscreen = false;
     const setModes = (showing) => {
-      for (const t of Array.from(v.textTracks ?? [])) {
-        t.mode = showing && t.language === subtitleTrack?.lang ? 'showing' : 'disabled';
+      for (const t of Array.from(list)) {
+        const mode = showing && t.language === subtitleTrack?.lang ? 'showing' : 'disabled';
+        if (t.mode !== mode) t.mode = mode; // 같은 값을 다시 넣으면 change 이벤트가 반복된다
       }
     };
-    const onBegin = () => setModes(settingsRef.current.subtitlesOn);
-    const onEnd = () => setModes(false);
+    const keepOff = () => { if (!nativeFullscreen) setModes(false); };
+    const onBegin = () => { nativeFullscreen = true; setModes(settingsRef.current.subtitlesOn); };
+    const onEnd = () => { nativeFullscreen = false; setModes(false); };
+    keepOff();
+    list.addEventListener('change', keepOff);
+    list.addEventListener('addtrack', keepOff);
     v.addEventListener('webkitbeginfullscreen', onBegin);
     v.addEventListener('webkitendfullscreen', onEnd);
     return () => {
+      list.removeEventListener('change', keepOff);
+      list.removeEventListener('addtrack', keepOff);
       v.removeEventListener('webkitbeginfullscreen', onBegin);
       v.removeEventListener('webkitendfullscreen', onEnd);
     };

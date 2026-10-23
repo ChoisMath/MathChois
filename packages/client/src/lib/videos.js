@@ -125,13 +125,16 @@ export function uploadVideoSubtitle(videoId, lang, file) {
 export const deleteVideoSubtitle = (videoId, lang) => api.delete(`/api/videos/${videoId}/subtitles/${lang}`);
 
 // 재생 화면용 캐시 — 같은 영상을 다시 열거나 여러 플레이어가 같은 자막을 쓸 때 재요청하지 않는다.
-// 실패한 요청은 캐시하지 않는다(다음에 다시 시도).
+// 실패한 요청과 빈 결과는 캐시하지 않는다 — 다음에 다시 시도하고, 교사가 나중에 올린 자막도 다시 열면 보인다.
 const subtitleListCache = new Map(); // videoUrl → Promise<VideoSubtitle[]>
 const subtitleCueCache = new Map();  // subtitle url → Promise<SubtitleCue[]>
 
 function cached(map, key, load) {
   if (!map.has(key)) {
-    const p = load().catch(() => {
+    const p = load().then((v) => {
+      if (!v?.length) map.delete(key);
+      return v;
+    }, () => {
       map.delete(key);
       return [];
     });

@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { buildVideoQuery, formatBytes, formatDuration, progressPercent, subtitleQueryUrl } from './videos.js';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import {
+  buildVideoQuery, formatBytes, formatDuration, progressPercent, subtitleQueryUrl, getVideoSubtitlesCached,
+} from './videos.js';
 
 describe('videos lib', () => {
   it('builds query strings skipping empty values', () => {
@@ -37,5 +39,17 @@ describe('subtitleQueryUrl', () => {
   it('한글·공백 URL 을 인코딩', () => {
     expect(subtitleQueryUrl('/api/files/videos/library/1_이차 함수.mp4'))
       .toBe('/api/video-subtitles?videoUrl=%2Fapi%2Ffiles%2Fvideos%2Flibrary%2F1_%EC%9D%B4%EC%B0%A8%20%ED%95%A8%EC%88%98.mp4');
+  });
+});
+
+describe('getVideoSubtitlesCached', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('빈 목록은 캐시하지 않는다 — 교사가 나중에 올린 자막이 다시 열 때 보인다', async () => {
+    const track = { id: 't1', lang: 'ko', label: '한국어', url: '/api/files/videos/subtitles/1_v_ko.vtt', cueCount: 1, updatedAt: '' };
+    const responses = [[], [track]];
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(responses.shift()), { status: 200 })));
+    expect(await getVideoSubtitlesCached('/api/files/videos/library/1_a.mp4')).toEqual([]);
+    expect(await getVideoSubtitlesCached('/api/files/videos/library/1_a.mp4')).toEqual([track]);
   });
 });

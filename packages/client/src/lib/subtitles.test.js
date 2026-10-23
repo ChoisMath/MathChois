@@ -24,6 +24,11 @@ describe('parseSubtitles', () => {
     expect(parseSubtitles(t)[0].text).toBe('가나');
   });
 
+  it('SRT 의 수식 부등호·벡터 표기는 태그로 보지 않고 남긴다', () => {
+    const t = '1\n00:00:00,000 --> 00:00:01,000\nx < 3 and y > 2\nx<y, y>z 와 <a, b>\n';
+    expect(parseSubtitles(t)[0].text).toBe('x < 3 and y > 2\nx<y, y>z 와 <a, b>');
+  });
+
   it('&amp; 는 마지막에 풀어서 &amp;lt; 가 < 로 바뀌지 않는다', () => {
     const t = '00:00:00.000 --> 00:00:01.000\n&amp;lt;\n';
     expect(parseSubtitles(t)[0].text).toBe('&lt;');
@@ -66,11 +71,17 @@ describe('activeCues', () => {
 });
 
 describe('isLikelyMisdecoded', () => {
-  it('대체 문자(\\uFFFD)가 공백 아닌 글자의 5% 이상', () => {
+  it('대체 문자(\\uFFFD)가 하나라도 있으면 UTF-8 이 아닌 파일로 본다', () => {
     expect(isLikelyMisdecoded('정상 자막 텍스트')).toBe(false);
     expect(isLikelyMisdecoded('��� abc')).toBe(true);
-    expect(isLikelyMisdecoded('a'.repeat(99) + '�')).toBe(false); // 1%
+    expect(isLikelyMisdecoded('a'.repeat(99) + '�')).toBe(true); // 1% 여도 거부
     expect(isLikelyMisdecoded('')).toBe(false);
+  });
+
+  it('한국어가 적은 CP949 자막(번호·타임코드가 대부분)도 깨진 글자가 하나라도 있으면 거부', () => {
+    const bad = String.fromCharCode(0xfffd);
+    const cue = (i) => `${i}\n00:00:0${i},000 --> 00:00:0${i},500\nf(x) = x^2 + 2x + 1 ${bad}${bad}\n`;
+    expect(isLikelyMisdecoded([1, 2, 3, 4, 5].map(cue).join('\n'))).toBe(true);
   });
 });
 
