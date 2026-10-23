@@ -151,6 +151,7 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
       updated_at timestamptz NOT NULL DEFAULT now()
     )`;
   await pgClient`CREATE UNIQUE INDEX IF NOT EXISTS uq_video_subtitles_video_lang ON video_subtitles (video_id, lang)`;
+  await pgClient`ALTER TABLE video_subtitles ADD COLUMN IF NOT EXISTS last_end_sec integer`;
   // 자막 목록은 영상 URL 로 조회한다(페이지 임베드는 URL 만 안다)
   await pgClient`CREATE INDEX IF NOT EXISTS idx_videos_video_url ON videos (video_url)`;
   log.info('startup migration: videos / classroom_videos / video_comments / video_subtitles ensured');

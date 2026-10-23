@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { inspectSubtitleText, readSubtitleFile } from './subtitleFile.js';
+import { inspectSubtitleText, readSubtitleFile, subtitleLengthWarning } from './subtitleFile.js';
 
 const ok = '1\n00:00:01,000 --> 00:01:05,000\n가\n';
 
@@ -31,5 +31,17 @@ describe('readSubtitleFile', () => {
     expect(await readSubtitleFile(new File(['a'.repeat(2 * 1024 * 1024 + 1)], 'a.srt'), 120))
       .toMatchObject({ ok: false, error: '자막 파일이 너무 큽니다. 최대 2MB 까지 올릴 수 있습니다.' });
     expect(await readSubtitleFile(new File([ok], 'a.SRT'), 120)).toEqual({ ok: true, cueCount: 1, lastEnd: 65 });
+  });
+});
+
+describe('subtitleLengthWarning', () => {
+  const msg = '자막이 영상보다 깁니다. 다른 영상의 자막이 아닌지 확인하세요.';
+  it('영상을 교체해 기존 자막(lastEnd)이 새 영상보다 길면 경고', () => {
+    expect(subtitleLengthWarning(65, 59)).toBe(msg);
+    expect(subtitleLengthWarning(65, 60)).toBeUndefined();
+  });
+  it('기존 행에 길이 정보가 없으면(null) 경고하지 않는다', () => {
+    expect(subtitleLengthWarning(null, 10)).toBeUndefined();
+    expect(subtitleLengthWarning(undefined, 10)).toBeUndefined();
   });
 });

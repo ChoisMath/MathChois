@@ -64,16 +64,22 @@ export function parseSubtitles(text: string): SubtitleCue[] {
   for (const block of normalized.split(/\n[ \t]*\n/)) {
     const lines = block.split('\n');
     if (SKIP_BLOCK_RE.test(lines[0]?.trim() ?? '')) continue;
-    const timeIdx = lines.findIndex((l) => l.includes('-->'));
-    if (timeIdx === -1) continue;
-    const [left, right = ''] = lines[timeIdx]!.split('-->');
-    const start = parseTime(left!);
-    // 오른쪽은 "00:00:03.500 align:start" 처럼 VTT 설정이 붙을 수 있다
-    const end = parseTime(right.trim().split(/\s+/)[0] ?? '');
-    if (start == null || end == null || end <= start) continue;
-    const body = lines.slice(timeIdx + 1).map(cleanLine).filter(Boolean).join('\n');
-    if (!body) continue;
-    cues.push({ start, end, text: body });
+    // 문장 사이 빈 줄이 빠진 잘못된 SRT 는 한 블록에 타임코드 줄이 여러 개 — 줄마다 문장으로 나눈다
+    const timeIdxs = lines.flatMap((l, i) => (l.includes('-->') ? [i] : []));
+    for (let k = 0; k < timeIdxs.length; k += 1) {
+      const timeIdx = timeIdxs[k]!;
+      const [left, right = ''] = lines[timeIdx]!.split('-->');
+      const start = parseTime(left!);
+      // 오른쪽은 "00:00:03.500 align:start" 처럼 VTT 설정이 붙을 수 있다
+      const end = parseTime(right.trim().split(/\s+/)[0] ?? '');
+      if (start == null || end == null || end <= start) continue;
+      let bodyEnd = timeIdxs[k + 1] ?? lines.length;
+      // 다음 타임코드 바로 앞의 번호 줄(SRT 순번·VTT cue id)은 본문이 아니다
+      if (bodyEnd < lines.length && bodyEnd - 1 > timeIdx && /^\s*\d+\s*$/.test(lines[bodyEnd - 1]!)) bodyEnd -= 1;
+      const body = lines.slice(timeIdx + 1, bodyEnd).map(cleanLine).filter(Boolean).join('\n');
+      if (!body) continue;
+      cues.push({ start, end, text: body });
+    }
   }
   // Array.prototype.sort 는 안정 정렬 — 같은 시작이면 원래 순서 유지
   return cues.sort((a, b) => a.start - b.start);

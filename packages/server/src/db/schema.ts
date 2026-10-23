@@ -366,6 +366,8 @@ export const videoSubtitles = pgTable('video_subtitles', {
   label: text('label').notNull(),
   url: text('url').notNull(),
   cueCount: integer('cue_count').notNull().default(0),
+  // 마지막 문장 끝 시각(초, 올림) — 영상만 교체했을 때 자막이 더 긴지 폼이 경고하는 데 쓴다
+  lastEndSec: integer('last_end_sec'),
   createdBy: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

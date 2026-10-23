@@ -25,7 +25,7 @@ const THUMB_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']); // 서�
  * (c) 수정 시 기존 썸네일 유지 중 하나다. 수정 화면에서는 기존 영상 URL 로 다른 장면을 다시 캡처할 수도 있다.
  * 업로드는 전용 스트리밍 라우트(`/api/videos/upload`)로 진행률을 표시하며 보낸다.
  * 자막(한국어 .srt/.vtt)은 영상 저장이 끝난 뒤 올리거나 지운다. 자막 단계만 실패하면 영상은 저장된 채로
- * 폼을 열어 두고 "자막 다시 올리기"로 자막만 재시도한다(새 영상이 두 번 등록되지 않게).
+ * 폼을 열어 두고 "자막 다시 올리기/삭제하기"로 자막만 재시도한다(새 영상이 두 번 등록되지 않게).
  */
 export default function VideoForm({ initial = null, onSaved, onCancel }) {
   const isEdit = !!initial;
@@ -159,7 +159,7 @@ export default function VideoForm({ initial = null, onSaved, onCancel }) {
   /** 자막 변경을 저장된 영상에 반영 */
   const applySubtitleChange = async (videoId) => {
     if (!subtitleChange) return;
-    setStage('자막 올리는 중…');
+    setStage(subtitleChange.action === 'upload' ? '자막 올리는 중…' : '자막 삭제하는 중…');
     if (subtitleChange.action === 'upload') await uploadVideoSubtitle(videoId, 'ko', subtitleChange.file);
     else await deleteVideoSubtitle(videoId, 'ko');
     invalidateVideoSubtitles();
@@ -171,7 +171,8 @@ export default function VideoForm({ initial = null, onSaved, onCancel }) {
       await applySubtitleChange(video.id);
     } catch (err) {
       setSavedVideo(video);
-      setError(`영상은 저장했지만 자막을 올리지 못했습니다: ${err.message ?? '알 수 없는 오류'}`);
+      const verb = subtitleChange?.action === 'delete' ? '삭제하지' : '올리지';
+      setError(`영상은 저장했지만 자막을 ${verb} 못했습니다: ${err.message ?? '알 수 없는 오류'}`);
       return;
     }
     onSaved?.(subtitleChange ? await getVideo(video.id).catch(() => video) : video);
@@ -384,7 +385,7 @@ export default function VideoForm({ initial = null, onSaved, onCancel }) {
           <IconButton icon={X} label="취소" onClick={savedVideo ? () => onSaved?.(savedVideo) : onCancel} disabled={saving} />
         )}
         <IconButton type="submit" icon={savedVideo ? Captions : isEdit ? Save : Plus} variant="primary"
-          label={savedVideo ? '자막 다시 올리기' : isEdit ? '수정' : '등록'}
+          label={savedVideo ? (subtitleChange?.action === 'delete' ? '자막 다시 삭제하기' : '자막 다시 올리기') : isEdit ? '수정' : '등록'}
           busy={saving} busyLabel="업로드 중…" disabled={probing} />
       </div>
     </form>

@@ -89,6 +89,7 @@ export function activeCues(cues: SubtitleCue[], time: number): SubtitleCue[];
 | `label` | text NOT NULL | 표시 이름(`'한국어'`) — 업로드 시 `subtitleLangLabel(lang)` |
 | `url` | text NOT NULL | `/api/files/videos/subtitles/<ts>_<videoId>_<lang>.vtt` |
 | `cueCount` | integer NOT NULL default 0 | 폼 안내용 |
+| `lastEndSec` | integer null | 마지막 문장 끝 시각(올림). 영상만 교체했을 때 폼이 길이 경고를 내는 데 쓴다. 컬럼 추가 전 행은 null(경고 없음) |
 | `createdBy` | uuid → profiles (set null) | 올린 사람 |
 | `createdAt` / `updatedAt` | timestamptz | |
 
@@ -172,7 +173,10 @@ export interface VideoSubtitle {
 ## 엣지케이스
 
 - 인코딩이 UTF-8이 아닌 SRT(일부 국내 도구의 CP949): 서버는 UTF-8로만 읽는다. 대체 문자(U+FFFD)가 **하나라도** 있으면(비율로 재면 번호·타임코드가 희석해 한국어가 적은 수식 자막이 통과한다 — 최종 리뷰 반영) 400 "UTF-8로 저장된 자막 파일만 올릴 수 있습니다" — 폼도 같은 검사로 미리 알린다.
-- 영상 파일을 교체해도 자막은 유지된다(자막은 `videoId` 에 붙는다). 새 영상과 길이가 다르면 폼이 위 경고를 보여 준다.
+- 영상 파일을 교체해도 자막은 유지된다(자막은 `videoId` 에 붙는다). 새 영상이 기존 자막(`lastEndSec`)보다 5초 넘게 짧으면 폼이 위 경고를 보여 준다.
+- 다른 탭에서 먼저 지운 자막을 삭제하면(404) 성공으로 본다. 자막 단계만 실패했을 때 문구·버튼은 동작에 맞춘다("올리지/삭제하지 못했습니다", "자막 다시 올리기/삭제하기").
+- 문장 사이 빈 줄이 빠진 SRT 는 타임코드 줄마다 문장으로 나눈다(다음 타임코드 바로 앞의 번호 줄은 본문에서 뺀다).
+- 같은 시각에 같은 문장이 겹쳐도 오버레이 키가 겹치지 않는다(index 포함).
 - 자막 cue 가 겹치면 겹친 문장을 시작 순으로 함께 보여 준다.
 - 자막 파일이 지워졌거나(404) 파싱 결과가 비면: 플레이어는 자막 없이 재생하고 CC 버튼을 숨긴다.
 - 로컬 Blob URL(등록 폼 미리보기), YouTube 페이지 영상: 자막 조회를 하지 않는다.

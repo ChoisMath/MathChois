@@ -24,9 +24,9 @@ export default function SubtitleOverlay({ cues, time, size = 'md', raised = fals
       style={{ bottom: raised ? '4.5rem' : '0.75rem', fontSize: FONT_SIZE[size] ?? FONT_SIZE.md }}
       aria-live="off"
     >
-      {lines.map((c) => (
+      {lines.map((c, i) => (
         <span
-          key={`${c.start}-${c.end}-${c.text}`}
+          key={`${i}-${c.start}-${c.end}`} // 같은 시각에 같은 문장이 겹쳐도 키가 겹치지 않게 index 포함
           className="max-w-[90%] rounded bg-black/75 px-2 py-0.5 text-center leading-snug text-white whitespace-pre-line"
         >
           {c.text}

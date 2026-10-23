@@ -39,6 +39,15 @@ describe('parseSubtitles', () => {
     expect(parseSubtitles(t).map((c) => c.text)).toEqual(['A1', 'A2', 'B']);
   });
 
+  it('문장 사이 빈 줄이 없는 SRT 도 타임코드 줄마다 새 문장으로 나눈다', () => {
+    const t = '1\n00:00:01,000 --> 00:00:02,000\n첫째\n2\n00:00:03,000 --> 00:00:04,000\n둘째\n00:00:05,000 --> 00:00:06,000\n셋째\n';
+    expect(parseSubtitles(t)).toEqual([
+      { start: 1, end: 2, text: '첫째' },
+      { start: 3, end: 4, text: '둘째' },
+      { start: 5, end: 6, text: '셋째' },
+    ]);
+  });
+
   it('빈 문자열·자막 아닌 텍스트 → []', () => {
     expect(parseSubtitles('')).toEqual([]);
     expect(parseSubtitles('그냥 메모입니다')).toEqual([]);
