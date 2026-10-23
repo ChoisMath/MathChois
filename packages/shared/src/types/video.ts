@@ -17,6 +17,19 @@ export interface Video {
   updatedAt: string;
   /** 목록 조회 시 조인되는 등록 교사 이름 */
   createdByName?: string | null;
+  /** 등록된 자막 언어 코드(목록 CC 배지용) */
+  subtitleLangs?: string[];
+}
+
+/** 영상자료 자막(언어별 1개) — `video_subtitles` */
+export interface VideoSubtitle {
+  id: string;
+  lang: string;
+  label: string;
+  /** WebVTT 파일 URL (`/api/files/videos/subtitles/...vtt`) */
+  url: string;
+  cueCount: number;
+  updatedAt: string;
 }
 
 export interface VideoListResult {
