@@ -200,6 +200,7 @@ function getMimeType(filePath: string): string {
     '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     '.zip': 'application/zip',
     '.txt': 'text/plain',
+    '.vtt': 'text/vtt', // <track> 은 이 MIME 을 요구한다
     '.html': 'text/html',
     '.htm': 'text/html',
     '.mp4': 'video/mp4',

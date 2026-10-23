@@ -353,6 +353,24 @@ export const videos = pgTable('videos', {
 }, (t) => [
   index('idx_videos_created_by').on(t.createdBy),
   index('idx_videos_subject').on(t.subject, t.majorUnit, t.minorUnit),
+  index('idx_videos_video_url').on(t.videoUrl),
+]);
+
+// ─── video_subtitles (영상자료 자막, 영상 × 언어) ──────
+// 업로드한 .srt/.vtt 를 WebVTT 로 정규화해 `videos` 버킷 subtitles/ 에 저장한다.
+
+export const videoSubtitles = pgTable('video_subtitles', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),
+  lang: text('lang').notNull(),
+  label: text('label').notNull(),
+  url: text('url').notNull(),
+  cueCount: integer('cue_count').notNull().default(0),
+  createdBy: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  unique('uq_video_subtitles_video_lang').on(t.videoId, t.lang),
 ]);
 
 // ─── classroom_videos (학급에 배정된 영상) ──────────
