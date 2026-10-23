@@ -102,7 +102,10 @@ sync in real time over Socket.IO.
 Beyond annotation, the teacher sidebar also has shared libraries: **문제은행** (`problems`),
 **시각화자료** (standalone HTML tools, `visualizations`) and **영상자료** (uploaded videos,
 `videos` + per-classroom `classroom_videos` with threaded `video_comments`; see
-`docs/superpowers/specs/2026-10-17-video-library-design.md`).
+`docs/superpowers/specs/2026-10-17-video-library-design.md`). Library videos can carry per-language
+subtitles (`video_subtitles`; .srt/.vtt normalized to WebVTT by the shared parser in
+`shared/src/subtitles/`, drawn by `VideoPlayer` as its own overlay; see
+`docs/superpowers/specs/2026-10-22-video-subtitles-design.md`).
 
 - **⑥ Whiteboard (모둠 공유 보드)** — a `pages.page_type = 'whiteboard'` page gives every
   classroom group its own shared Excalidraw board (`whiteboard_groups`, keyed by page + classroom +

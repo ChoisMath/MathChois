@@ -9,6 +9,12 @@ import {
 /** 영상 길이보다 이만큼(초) 넘게 긴 자막은 다른 영상의 자막일 수 있어 경고한다 */
 const LENGTH_TOLERANCE_SEC = 5;
 
+/** 영상 길이와 비교한 경고 문구(없으면 undefined) — 영상을 교체하면 폼이 다시 계산한다 */
+export function subtitleLengthWarning(lastEnd, durationSec) {
+  if (durationSec == null || !(lastEnd > Number(durationSec) + LENGTH_TOLERANCE_SEC)) return undefined;
+  return '자막이 영상보다 깁니다. 다른 영상의 자막이 아닌지 확인하세요.';
+}
+
 export function inspectSubtitleText(text, durationSec) {
   if (isLikelyMisdecoded(text)) {
     return { ok: false, error: 'UTF-8로 저장된 자막 파일만 올릴 수 있습니다.', cueCount: 0, lastEnd: 0 };
@@ -19,9 +25,8 @@ export function inspectSubtitleText(text, durationSec) {
   }
   const lastEnd = cues.reduce((m, c) => Math.max(m, c.end), 0);
   const result = { ok: true, cueCount: cues.length, lastEnd };
-  if (durationSec != null && lastEnd > Number(durationSec) + LENGTH_TOLERANCE_SEC) {
-    result.warning = '자막이 영상보다 깁니다. 다른 영상의 자막이 아닌지 확인하세요.';
-  }
+  const warning = subtitleLengthWarning(lastEnd, durationSec);
+  if (warning) result.warning = warning;
   return result;
 }
 

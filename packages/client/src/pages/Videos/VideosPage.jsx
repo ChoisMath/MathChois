@@ -129,6 +129,10 @@ export default function VideosPage() {
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap sticky left-0 bg-white z-10 max-w-60 truncate">
                     <span className="font-medium">{v.title}</span>
+                    {v.subtitleLangs?.length > 0 && (
+                      <span title="자막 있음" aria-label="자막 있음"
+                        className="ml-1 rounded border border-gray-300 px-1 text-[10px] font-semibold text-gray-600 align-middle">CC</span>
+                    )}
                     {v.description && <p className="text-xs text-gray-400 truncate">{v.description}</p>}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">{v.subject}</td>

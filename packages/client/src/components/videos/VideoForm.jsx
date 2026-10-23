@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Film, Image as ImageIcon, ImagePlus, Plus, Save, X } from 'lucide-react';
+import { Camera, Captions, Film, Image as ImageIcon, ImagePlus, Plus, Save, X } from 'lucide-react';
 import {
-  uploadVideoFile, createVideo, updateVideo, probeVideoDuration, captureVideoThumbnail,
+  uploadVideoFile, createVideo, updateVideo, getVideo, probeVideoDuration, captureVideoThumbnail,
   formatBytes, formatDuration,
+  listVideoSubtitles, uploadVideoSubtitle, deleteVideoSubtitle, invalidateVideoSubtitles,
 } from '../../lib/videos';
 import { fileNameFromUrl } from '../../lib/fileAccept';
 import FileDropZone from '../common/FileDropZone';
 import IconButton from '../common/IconButton';
+import SubtitleField from './SubtitleField';
 
 const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024; // 서버 한도와 동일 (2GB)
 const MAX_THUMB_BYTES = 5 * 1024 * 1024;        // 서버 한도와 동일 (5MB)
@@ -22,6 +24,8 @@ const THUMB_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']); // 서�
  * 썸네일은 (a) 자동 캡처 — 등록된 파일이 아닌 상태로 표시, (b) 직접 올린 이미지(JPEG/PNG/WebP),
  * (c) 수정 시 기존 썸네일 유지 중 하나다. 수정 화면에서는 기존 영상 URL 로 다른 장면을 다시 캡처할 수도 있다.
  * 업로드는 전용 스트리밍 라우트(`/api/videos/upload`)로 진행률을 표시하며 보낸다.
+ * 자막(한국어 .srt/.vtt)은 영상 저장이 끝난 뒤 올리거나 지운다. 자막 단계만 실패하면 영상은 저장된 채로
+ * 폼을 열어 두고 "자막 다시 올리기"로 자막만 재시도한다(새 영상이 두 번 등록되지 않게).
  */
 export default function VideoForm({ initial = null, onSaved, onCancel }) {
   const isEdit = !!initial;
@@ -46,6 +50,20 @@ export default function VideoForm({ initial = null, onSaved, onCancel }) {
   const [stage, setStage] = useState('');        // 진행 단계 안내
   const [error, setError] = useState('');
   const previewUrlRef = useRef(null);
+
+  // 자막: 등록된 자막(수정 시) / 저장 때 반영할 변경 / 자막 단계만 실패한 경우의 저장된 영상
+  const [currentSubtitle, setCurrentSubtitle] = useState(null);
+  const [subtitleChange, setSubtitleChange] = useState(null);
+  const [savedVideo, setSavedVideo] = useState(null);
+
+  useEffect(() => {
+    if (!initial?.videoUrl) return undefined;
+    let alive = true;
+    listVideoSubtitles(initial.videoUrl)
+      .then((list) => { if (alive) setCurrentSubtitle(list.find((t) => t.lang === 'ko') ?? null); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [initial?.videoUrl]);
 
   useEffect(() => () => { if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current); }, []);
 
@@ -138,9 +156,40 @@ export default function VideoForm({ initial = null, onSaved, onCancel }) {
     }
   };
 
+  /** 자막 변경을 저장된 영상에 반영 */
+  const applySubtitleChange = async (videoId) => {
+    if (!subtitleChange) return;
+    setStage('자막 올리는 중…');
+    if (subtitleChange.action === 'upload') await uploadVideoSubtitle(videoId, 'ko', subtitleChange.file);
+    else await deleteVideoSubtitle(videoId, 'ko');
+    invalidateVideoSubtitles();
+  };
+
+  /** 자막 단계 (영상은 이미 저장됨). 성공하면 목록 갱신용으로 다시 읽은 영상을 넘긴다. */
+  const finishWithSubtitles = async (video) => {
+    try {
+      await applySubtitleChange(video.id);
+    } catch (err) {
+      setSavedVideo(video);
+      setError(`영상은 저장했지만 자막을 올리지 못했습니다: ${err.message ?? '알 수 없는 오류'}`);
+      return;
+    }
+    onSaved?.(subtitleChange ? await getVideo(video.id).catch(() => video) : video);
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setError('');
+    if (savedVideo) {
+      setSaving(true);
+      try {
+        await finishWithSubtitles(savedVideo);
+      } finally {
+        setSaving(false);
+        setStage('');
+      }
+      return;
+    }
     if (!title.trim()) { setError('제목을 입력하세요.'); return; }
     if (!isEdit && !file) { setError('영상 파일을 선택하세요.'); return; }
 
@@ -179,7 +228,7 @@ export default function VideoForm({ initial = null, onSaved, onCancel }) {
       const saved = isEdit
         ? await updateVideo(initial.id, { ...meta, ...fileFields })
         : await createVideo({ ...meta, ...fileFields });
-      onSaved?.(saved);
+      await finishWithSubtitles(saved);
     } catch (err) {
       setError(err.message ?? '저장에 실패했습니다.');
     } finally {
@@ -251,7 +300,7 @@ export default function VideoForm({ initial = null, onSaved, onCancel }) {
           accept={ACCEPT}
           maxBytes={MAX_VIDEO_BYTES}
           icon={Film}
-          disabled={saving}
+          disabled={saving || !!savedVideo}
           label={isEdit ? '클릭하거나 영상을 끌어다 놓으면 기존 영상을 교체합니다' : '클릭하거나 영상 파일을 끌어다 놓으세요'}
           hint="mp4 / webm / mov, 최대 2GB"
           current={videoCurrent}
@@ -267,7 +316,7 @@ export default function VideoForm({ initial = null, onSaved, onCancel }) {
           accept={THUMB_ACCEPT}
           maxBytes={MAX_THUMB_BYTES}
           icon={ImagePlus}
-          disabled={saving || probing}
+          disabled={saving || probing || !!savedVideo}
           label={thumbLabel}
           hint="JPEG / PNG / WebP, 5MB 이하 · 클릭하거나 이미지를 끌어다 놓으세요"
           current={thumbStatus}
@@ -276,15 +325,17 @@ export default function VideoForm({ initial = null, onSaved, onCancel }) {
           actions={({ open }) => (
             <>
               <IconButton icon={ImagePlus} label={isCustomThumb || thumbPreview ? '썸네일 교체' : '이미지 선택'}
-                size="sm" onClick={open} disabled={saving || probing} />
+                size="sm" onClick={open} disabled={saving || probing || !!savedVideo} />
               {captureSource && (
-                <IconButton icon={Camera} label="다른 장면으로" size="sm" onClick={recapture} disabled={saving || probing} />
+                <IconButton icon={Camera} label="다른 장면으로" size="sm" onClick={recapture} disabled={saving || probing || !!savedVideo} />
               )}
             </>
           )}
         />
       </div>
 
+      {/* 영상은 저장됐고 자막만 재시도하는 동안에는 메타 수정이 반영되지 않으므로 잠근다 */}
+      <fieldset disabled={!!savedVideo} className="contents">
       <label className="flex flex-col gap-1 text-sm">
         <span className="font-medium">제목 *</span>
         <input className="border rounded px-2 min-h-11" value={title}
@@ -305,6 +356,16 @@ export default function VideoForm({ initial = null, onSaved, onCancel }) {
         <textarea className="border rounded px-2 py-1" rows={3} value={description}
           onChange={(e) => setDescription(e.target.value)} placeholder="영상 내용, 시청 전 안내 등" />
       </label>
+      </fieldset>
+
+      <SubtitleField
+        current={currentSubtitle}
+        value={subtitleChange}
+        // savedVideo 는 지우지 않는다 — 지우면 다음 저장이 새 영상을 한 번 더 등록한다
+        onChange={(next) => { setSubtitleChange(next); setError(''); }}
+        durationSec={durationSec}
+        disabled={saving}
+      />
 
       {saving && (
         <div className="flex flex-col gap-1">
@@ -319,9 +380,11 @@ export default function VideoForm({ initial = null, onSaved, onCancel }) {
 
       <div className="flex gap-2 justify-end">
         {onCancel && (
-          <IconButton icon={X} label="취소" onClick={onCancel} disabled={saving} />
+          // 영상은 이미 저장됐다면 닫을 때 목록에 반영되도록 onSaved 로 닫는다
+          <IconButton icon={X} label="취소" onClick={savedVideo ? () => onSaved?.(savedVideo) : onCancel} disabled={saving} />
         )}
-        <IconButton type="submit" icon={isEdit ? Save : Plus} variant="primary" label={isEdit ? '수정' : '등록'}
+        <IconButton type="submit" icon={savedVideo ? Captions : isEdit ? Save : Plus} variant="primary"
+          label={savedVideo ? '자막 다시 올리기' : isEdit ? '수정' : '등록'}
           busy={saving} busyLabel="업로드 중…" disabled={probing} />
       </div>
     </form>
