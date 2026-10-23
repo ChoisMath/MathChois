@@ -2,6 +2,7 @@ import { eq, and, or, ilike, desc, sql, type SQL } from 'drizzle-orm';
 import { db } from '../config/database.js';
 import { videos, classroomVideos, classrooms, profiles } from '../db/schema.js';
 import { removeFile, urlToStoragePath } from './storage.service.js';
+import { subtitleUrlsForVideo } from './videoSubtitle.service.js';
 
 export type VideoInsert = typeof videos.$inferInsert;
 
@@ -31,6 +32,8 @@ const videoColumns = {
   createdAt: videos.createdAt,
   updatedAt: videos.updatedAt,
   createdByName: profiles.name,
+  // 목록 CC 배지용 — 등록된 자막 언어 코드
+  subtitleLangs: sql<string[]>`coalesce((select array_agg(s.lang order by s.lang) from video_subtitles s where s.video_id = ${videos.id}), '{}')`,
 };
 
 export async function createVideo(values: VideoInsert) {
@@ -81,16 +84,17 @@ export async function removeVideo(id: string, opts: { force?: boolean } = {}) {
       { statusCode: 409, usage },
     );
   }
+  const subtitleUrls = await subtitleUrlsForVideo(id); // 행은 cascade 로 지워지므로 파일 경로를 먼저 읽어 둔다
   await db.transaction(async (tx) => {
     if (opts.force) await tx.delete(classroomVideos).where(eq(classroomVideos.videoId, id));
     await tx.delete(videos).where(eq(videos.id, id));
   });
-  await removeVideoFiles(row.videoUrl, row.thumbnailUrl);
+  await removeVideoFiles(row.videoUrl, row.thumbnailUrl, ...subtitleUrls);
   return row;
 }
 
-export async function removeVideoFiles(videoUrl?: string | null, thumbnailUrl?: string | null) {
-  for (const url of [videoUrl, thumbnailUrl]) {
+export async function removeVideoFiles(...urls: (string | null | undefined)[]) {
+  for (const url of urls) {
     if (!url) continue;
     const parsed = urlToStoragePath(url);
     if (parsed) await removeFile(parsed.bucket, parsed.path).catch(() => {});

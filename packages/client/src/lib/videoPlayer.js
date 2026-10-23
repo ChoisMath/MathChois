@@ -1,7 +1,7 @@
 /**
  * 영상 플레이어 설정/유틸 (순수 함수 — VideoPlayer.jsx 가 사용, Vitest 로 검증)
  *
- * - 설정은 기기별 localStorage(`mc_video_player`)에 저장: 방향키 이동 시간·배속·볼륨·음소거
+ * - 설정은 기기별 localStorage(`mc_video_player`)에 저장: 방향키 이동 시간·배속·볼륨·음소거·자막(켜짐·언어·글자 크기)
  * - 마지막 재생 위치는 `mc_video_pos:<key>` 에 저장(설계 결정 Q4: v1 은 로컬 이어보기만)
  */
 
@@ -14,11 +14,18 @@ export const BRIGHTNESS_MIN = 0.2;
 export const BRIGHTNESS_MAX = 1.5;
 export const BRIGHTNESS_DEFAULT = 1;
 
+/** 자막 글자 크기 단계 */
+export const SUBTITLE_SIZES = ['sm', 'md', 'lg'];
+
 export const DEFAULT_SETTINGS = Object.freeze({
   seekStep: 10,
   playbackRate: 1.0,
   volume: 1,
   muted: false,
+  // 교사가 일부러 올린 자막이므로 기본으로 켠다. 사용자가 끄면 그 선택이 기기에 저장된다.
+  subtitlesOn: true,
+  subtitleLang: 'ko',
+  subtitleSize: 'md',
 });
 
 const SETTINGS_KEY = 'mc_video_player';
@@ -49,7 +56,17 @@ export function normalizeSettings(raw) {
     playbackRate: normalizeRate(src.playbackRate),
     volume: Number.isFinite(vol) ? clamp(vol, 0, 1) : DEFAULT_SETTINGS.volume,
     muted: !!src.muted,
+    subtitlesOn: typeof src.subtitlesOn === 'boolean' ? src.subtitlesOn : DEFAULT_SETTINGS.subtitlesOn,
+    // 나중 번역 자막을 위해 SUBTITLE_LANGS 로 제한하지 않는다(없는 언어면 pickSubtitleTrack 이 첫 트랙을 고른다)
+    subtitleLang: typeof src.subtitleLang === 'string' && src.subtitleLang ? src.subtitleLang : DEFAULT_SETTINGS.subtitleLang,
+    subtitleSize: SUBTITLE_SIZES.includes(src.subtitleSize) ? src.subtitleSize : DEFAULT_SETTINGS.subtitleSize,
   };
+}
+
+/** 표시할 자막 트랙: 같은 언어 → 없으면 첫 트랙 → 트랙이 없으면 null */
+export function pickSubtitleTrack(tracks, lang) {
+  if (!Array.isArray(tracks) || !tracks.length) return null;
+  return tracks.find((t) => t.lang === lang) ?? tracks[0];
 }
 
 function storage() {

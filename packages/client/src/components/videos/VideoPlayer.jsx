@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   Play, Pause, Volume2, VolumeX, Settings, Maximize, Minimize, SkipBack, SkipForward, Check, Sun,
+  Captions, CaptionsOff,
 } from 'lucide-react';
 import {
   SEEK_STEPS, PLAYBACK_RATES, VOLUME_STEP,
   BRIGHTNESS_MIN, BRIGHTNESS_MAX, BRIGHTNESS_DEFAULT,
   loadSettings, saveSettings, stepRate, formatRate, formatTime, clamp,
   loadResumePosition, saveResumePosition, isTypingTarget,
-  decideGestureAxis, verticalGestureKind, dragToLevel,
+  decideGestureAxis, verticalGestureKind, dragToLevel, SUBTITLE_SIZES,
 } from '../../lib/videoPlayer';
+import useVideoSubtitles from '../../hooks/useVideoSubtitles';
+import SubtitleOverlay from './SubtitleOverlay';
+
+const SUBTITLE_SIZE_LABELS = { sm: '작게', md: '보통', lg: '크게' };
 
 /** onProgress 최소 호출 간격(ms) — 서버 분당 요청 제한 보호 */
 const PROGRESS_REPORT_INTERVAL_MS = 10000;
@@ -32,7 +37,8 @@ const PROGRESS_REPORT_INTERVAL_MS = 10000;
  * - ref: { getCurrentTime(), seekTo(sec), pause(), toggleFullscreen() }
  *
  * 단축키: ←/→ 설정된 초만큼 이동, ↑/↓ 볼륨, Space/K 재생·정지, M 음소거, F 전체화면,
- *        , / . 배속 내림/올림, 0~9 해당 % 위치. ⚙ 설정: 이동 시간(10/20/30/60초)·배속(0.7~2.5×).
+ *        , / . 배속 내림/올림, 0~9 해당 % 위치, C 자막. ⚙ 설정: 이동 시간(10/20/30/60초)·배속(0.7~2.5×)·자막.
+ * 자막: 영상자료 라이브러리 src 면 등록된 자막을 직접 조회해 오버레이로 그린다(useVideoSubtitles).
  * 제스처: 탭 재생·정지, 더블탭 좌/우 절반 = 뒤로/앞으로, 길게 누른 뒤 드래그 —
  *        좌우 = 시간 이동(스크럽), 상하 = 화면 왼쪽 절반에서 밝기 / 오른쪽 절반에서 볼륨.
  */
@@ -87,6 +93,12 @@ export default function VideoPlayer({
   const [brightness, setBrightness] = useState(BRIGHTNESS_DEFAULT);
   const brightnessRef = useRef(brightness);
   useEffect(() => { brightnessRef.current = brightness; }, [brightness]);
+
+  /* ── 자막 ── */
+  const { tracks: subtitleTracks, track: subtitleTrack, cues: subtitleCues } = useVideoSubtitles(src, {
+    enabled: settings.subtitlesOn, lang: settings.subtitleLang,
+  });
+  const hasSubs = subtitleTracks.length > 0;
 
   /* ── 화면 피드백 오버레이 ── */
   const showFlash = useCallback((text) => {
@@ -158,6 +170,13 @@ export default function VideoPlayer({
     revealControls();
   }, [revealControls, showFlash, updateSettings]);
 
+  const toggleSubtitles = useCallback(() => {
+    const on = !settingsRef.current.subtitlesOn;
+    updateSettings({ subtitlesOn: on });
+    showFlash(on ? '자막 켜짐' : '자막 꺼짐');
+    revealControls();
+  }, [revealControls, showFlash, updateSettings]);
+
   const changeRate = useCallback((rate) => {
     updateSettings({ playbackRate: rate });
     showFlash(formatRate(rate));
@@ -224,6 +243,7 @@ export default function VideoPlayer({
         case ' ': case 'k': case 'K': e.preventDefault(); togglePlay(); break;
         case 'm': case 'M': e.preventDefault(); toggleMute(); break;
         case 'f': case 'F': e.preventDefault(); toggleFullscreen(); break;
+        case 'c': case 'C': if (hasSubs) { e.preventDefault(); toggleSubtitles(); } break;
         case ',': e.preventDefault(); changeRate(stepRate(settings.playbackRate, -1)); break;
         case '.': e.preventDefault(); changeRate(stepRate(settings.playbackRate, +1)); break;
         case 'Escape': setShowSettings(false); break;
@@ -237,7 +257,36 @@ export default function VideoPlayer({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [hotkeys, settings.seekStep, settings.playbackRate, seekBy, changeVolume, togglePlay, toggleMute, toggleFullscreen, changeRate, seekTo, showFlash]);
+  }, [hotkeys, settings.seekStep, settings.playbackRate, seekBy, changeVolume, togglePlay, toggleMute, toggleFullscreen, changeRate, seekTo, showFlash, hasSubs, toggleSubtitles]);
+
+  /* iPhone 기본 전체화면(webkitEnterFullscreen)은 웹 오버레이를 보여 주지 못하므로, 그동안만 같은 VTT 의 <track> 을 켠다.
+     그 밖에는 항상 꺼 둔다 — Safari 는 OS 접근성의 "자막" 설정이 켜져 있으면 트랙을 스스로 켜서 오버레이와 이중으로 보인다. */
+  useEffect(() => {
+    const v = videoRef.current;
+    const list = v?.textTracks;
+    if (!v || !list || !hasSubs) return undefined;
+    let nativeFullscreen = false;
+    const setModes = (showing) => {
+      for (const t of Array.from(list)) {
+        const mode = showing && t.language === subtitleTrack?.lang ? 'showing' : 'disabled';
+        if (t.mode !== mode) t.mode = mode; // 같은 값을 다시 넣으면 change 이벤트가 반복된다
+      }
+    };
+    const keepOff = () => { if (!nativeFullscreen) setModes(false); };
+    const onBegin = () => { nativeFullscreen = true; setModes(settingsRef.current.subtitlesOn); };
+    const onEnd = () => { nativeFullscreen = false; setModes(false); };
+    keepOff();
+    list.addEventListener('change', keepOff);
+    list.addEventListener('addtrack', keepOff);
+    v.addEventListener('webkitbeginfullscreen', onBegin);
+    v.addEventListener('webkitendfullscreen', onEnd);
+    return () => {
+      list.removeEventListener('change', keepOff);
+      list.removeEventListener('addtrack', keepOff);
+      v.removeEventListener('webkitbeginfullscreen', onBegin);
+      v.removeEventListener('webkitendfullscreen', onEnd);
+    };
+  }, [hasSubs, subtitleTrack]);
 
   /* ── 시청 위치 보고 (서버 저장 등 — 호출 빈도 제한) ── */
   const reportProgress = useCallback((force = false, opts = undefined) => {
@@ -535,7 +584,7 @@ export default function VideoPlayer({
       ref={containerRef}
       className={`relative w-full bg-black overflow-hidden select-none outline-none group touch-manipulation ${
         fill ? 'h-full' : 'aspect-video rounded-lg'}`}
-      style={{ WebkitTouchCallout: 'none' }}
+      style={{ WebkitTouchCallout: 'none', containerType: 'inline-size' /* 자막 글자 크기(cqw) 기준 */ }}
       tabIndex={0}
       onMouseMove={revealControls}
       onTouchStart={revealControls}
@@ -569,7 +618,16 @@ export default function VideoPlayer({
         onPause={() => { setPlaying(false); setControlsVisible(true); persistPosition(); }}
         onEnded={() => { setPlaying(false); setControlsVisible(true); persistPosition(); }}
         onError={() => setError('영상을 불러올 수 없습니다. 파일이 삭제되었거나 브라우저가 지원하지 않는 형식입니다.')}
-      />
+      >
+        {/* 평소엔 꺼진 상태(default 없음) — iPhone 기본 전체화면에서만 켠다. 일반 화면은 SubtitleOverlay 가 그린다. */}
+        {subtitleTracks.map((t) => (
+          <track key={t.id} kind="subtitles" src={t.url} srcLang={t.lang} label={t.label} />
+        ))}
+      </video>
+
+      {hasSubs && settings.subtitlesOn && !error && (
+        <SubtitleOverlay cues={subtitleCues} time={currentTime} size={settings.subtitleSize} raised={controlsVisible} />
+      )}
 
       {/* 길게 누른 뒤 드래그 제스처 오버레이 */}
       {gesture?.kind === 'pending' && (
@@ -687,6 +745,13 @@ export default function VideoPlayer({
 
           <div className="flex-1" />
 
+          {hasSubs && (
+            <button onClick={toggleSubtitles}
+              className={`p-2 rounded hover:bg-white/15 ${settings.subtitlesOn ? 'bg-white/20' : ''}`}
+              aria-label="자막" aria-pressed={settings.subtitlesOn} title="자막 (C)">
+              {settings.subtitlesOn ? <Captions className="h-5 w-5" /> : <CaptionsOff className="h-5 w-5" />}
+            </button>
+          )}
           <button
             onClick={() => setShowSettings((v) => !v)}
             className={`px-2 py-1 rounded text-xs font-semibold hover:bg-white/15 ${showSettings ? 'bg-white/20' : ''}`}
@@ -729,8 +794,37 @@ export default function VideoPlayer({
                 ))}
               </div>
             </div>
+            {hasSubs && (
+              <div>
+                <p className="text-xs text-gray-300 mb-1.5">자막</p>
+                <div className="grid grid-cols-4 gap-1">
+                  <button onClick={() => { updateSettings({ subtitlesOn: false }); showFlash('자막 꺼짐'); }}
+                    className={`py-1.5 rounded text-xs font-medium ${!settings.subtitlesOn ? 'bg-blue-600' : 'bg-white/10 hover:bg-white/20'}`}>
+                    끄기
+                  </button>
+                  {subtitleTracks.map((t) => {
+                    const active = settings.subtitlesOn && subtitleTrack?.lang === t.lang;
+                    return (
+                      <button key={t.id} onClick={() => { updateSettings({ subtitlesOn: true, subtitleLang: t.lang }); showFlash(`자막 ${t.label}`); }}
+                        className={`py-1.5 rounded text-xs font-medium ${active ? 'bg-blue-600' : 'bg-white/10 hover:bg-white/20'}`}>
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-gray-300 mt-2 mb-1.5">자막 글자 크기</p>
+                <div className="grid grid-cols-3 gap-1">
+                  {SUBTITLE_SIZES.map((sz) => (
+                    <button key={sz} onClick={() => updateSettings({ subtitleSize: sz })}
+                      className={`py-1.5 rounded text-xs font-medium ${settings.subtitleSize === sz ? 'bg-blue-600' : 'bg-white/10 hover:bg-white/20'}`}>
+                      {SUBTITLE_SIZE_LABELS[sz]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <p className="text-[11px] text-gray-400 leading-snug">
-              Space 재생/정지 · ↑↓ 볼륨 · ←→ 이동 · M 음소거 · F 전체화면 · , . 배속
+              Space 재생/정지 · ↑↓ 볼륨 · ←→ 이동 · M 음소거 · F 전체화면 · , . 배속{hasSubs ? ' · C 자막' : ''}
             </p>
           </div>
         )}

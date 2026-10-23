@@ -1,4 +1,5 @@
 import { api, getAccessToken, refreshToken, ApiError } from './api';
+import { parseSubtitles } from '@mathchois/shared';
 
 // ─── 쿼리/포맷 유틸 ─────────────────────────────────
 
@@ -107,6 +108,57 @@ export function progressPercent(maxPositionSec, durationSec) {
   if (!Number.isFinite(d) || d <= 0) return null;
   const m = Number(maxPositionSec) || 0;
   return Math.max(0, Math.min(100, Math.round((m / d) * 100)));
+}
+
+// ─── 자막 API ───────────────────────────────────────
+
+/** 영상 URL 로 자막 목록 조회 경로 (한글 파일명 등은 인코딩) */
+export const subtitleQueryUrl = (videoUrl) => `/api/video-subtitles?videoUrl=${encodeURIComponent(videoUrl)}`;
+/** → VideoSubtitle[] (SUBTITLE_LANGS 순서) */
+export const listVideoSubtitles = (videoUrl) => api.get(subtitleQueryUrl(videoUrl));
+/** .srt/.vtt 업로드(추가·교체) → VideoSubtitle */
+export function uploadVideoSubtitle(videoId, lang, file) {
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  return api.upload(`/api/videos/${videoId}/subtitles/${lang}`, fd);
+}
+export const deleteVideoSubtitle = (videoId, lang) => api.delete(`/api/videos/${videoId}/subtitles/${lang}`);
+
+// 재생 화면용 캐시 — 같은 영상을 다시 열거나 여러 플레이어가 같은 자막을 쓸 때 재요청하지 않는다.
+// 실패한 요청과 빈 결과는 캐시하지 않는다 — 다음에 다시 시도하고, 교사가 나중에 올린 자막도 다시 열면 보인다.
+const subtitleListCache = new Map(); // videoUrl → Promise<VideoSubtitle[]>
+const subtitleCueCache = new Map();  // subtitle url → Promise<SubtitleCue[]>
+
+function cached(map, key, load) {
+  if (!map.has(key)) {
+    const p = load().then((v) => {
+      if (!v?.length) map.delete(key);
+      return v;
+    }, () => {
+      map.delete(key);
+      return [];
+    });
+    map.set(key, p);
+  }
+  return map.get(key);
+}
+
+/** 자막 목록(캐시). 실패하면 [] */
+export const getVideoSubtitlesCached = (videoUrl) =>
+  cached(subtitleListCache, videoUrl, () => listVideoSubtitles(videoUrl));
+
+/** VTT 파일을 받아 문장 배열로(캐시). 실패하면 [] */
+export const getSubtitleCuesCached = (url) =>
+  cached(subtitleCueCache, url, async () => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`subtitle ${res.status}`);
+    return parseSubtitles(await res.text());
+  });
+
+/** 자막을 올리거나 지운 뒤 호출 — 다음 재생 때 새로 받는다 */
+export function invalidateVideoSubtitles() {
+  subtitleListCache.clear();
+  subtitleCueCache.clear();
 }
 
 // ─── 업로드 (XHR: 진행률 필요 — fetch 는 업로드 progress 미지원) ─────

@@ -27,6 +27,7 @@ import { dashboardRoutes } from './routes/dashboard.js';
 import { visualizationRoutes } from './routes/visualizations.js';
 import { videoRoutes } from './routes/videos.js';
 import { classroomVideoRoutes } from './routes/classroomVideos.js';
+import { videoSubtitleRoutes } from './routes/videoSubtitles.js';
 import { classroomGroupRoutes } from './routes/classroomGroups.js';
 import { whiteboardRoutes } from './routes/whiteboards.js';
 
@@ -108,6 +109,7 @@ export function buildApp() {
   app.register(dashboardRoutes);
   app.register(visualizationRoutes);
   app.register(videoRoutes);
+  app.register(videoSubtitleRoutes);
   app.register(classroomVideoRoutes);
   app.register(classroomGroupRoutes);
   app.register(whiteboardRoutes);

@@ -102,7 +102,10 @@ sync in real time over Socket.IO.
 Beyond annotation, the teacher sidebar also has shared libraries: **문제은행** (`problems`),
 **시각화자료** (standalone HTML tools, `visualizations`) and **영상자료** (uploaded videos,
 `videos` + per-classroom `classroom_videos` with threaded `video_comments`; see
-`docs/superpowers/specs/2026-10-17-video-library-design.md`).
+`docs/superpowers/specs/2026-10-17-video-library-design.md`). Library videos can carry per-language
+subtitles (`video_subtitles`; .srt/.vtt normalized to WebVTT by the shared parser in
+`shared/src/subtitles/`, drawn by `VideoPlayer` as its own overlay; see
+`docs/superpowers/specs/2026-10-22-video-subtitles-design.md`).
 
 - **⑥ Whiteboard (모둠 공유 보드)** — a `pages.page_type = 'whiteboard'` page gives every
   classroom group its own shared Excalidraw board (`whiteboard_groups`, keyed by page + classroom +
@@ -131,7 +134,8 @@ Tables: `profiles`, `classrooms`, `classroom_members`, `chapters`, `pages`
 `classroom_groups`/`classroom_group_members` (default groups), `whiteboard_page_settings`/
 `whiteboard_groups`/`whiteboard_group_members` (shared boards),
 `posts`/`post_files`/`post_classrooms` (board), `assignments`/`assignment_pages`/
-`assignment_submissions`/`assignment_submission_files`. Migrations via Drizzle Kit;
+`assignment_submissions`/`assignment_submission_files`, `videos`/`classroom_videos`/`video_comments`/
+`video_subtitles` (video library). Migrations via Drizzle Kit;
 additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures the
 `pages.html_url` column).
 `classrooms.color` — one of six named colors (coral/mustard/sage/sky/lavender/rose); backfilled at boot by

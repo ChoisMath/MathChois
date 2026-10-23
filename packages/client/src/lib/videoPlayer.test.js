@@ -5,6 +5,7 @@ import {
   loadSettings, saveSettings, loadResumePosition, saveResumePosition, isTypingTarget,
   BRIGHTNESS_MIN, BRIGHTNESS_MAX, GESTURE_AXIS_THRESHOLD,
   decideGestureAxis, verticalGestureKind, dragToLevel,
+  SUBTITLE_SIZES, pickSubtitleTrack,
 } from './videoPlayer.js';
 
 function fakeStorage() {
@@ -33,12 +34,35 @@ describe('videoPlayer settings', () => {
     expect(normalizeRate(99)).toBe(2.5);
     expect(normalizeSettings({ volume: 7, muted: 'yes' })).toEqual({
       seekStep: 10, playbackRate: 1, volume: 1, muted: true,
+      subtitlesOn: true, subtitleLang: 'ko', subtitleSize: 'md',
     });
   });
 
   it('round-trips through localStorage', () => {
-    saveSettings({ seekStep: 30, playbackRate: 1.5, volume: 0.4, muted: false });
-    expect(loadSettings()).toEqual({ seekStep: 30, playbackRate: 1.5, volume: 0.4, muted: false });
+    saveSettings({ seekStep: 30, playbackRate: 1.5, volume: 0.4, muted: false, subtitlesOn: false, subtitleSize: 'lg' });
+    expect(loadSettings()).toEqual({
+      seekStep: 30, playbackRate: 1.5, volume: 0.4, muted: false,
+      subtitlesOn: false, subtitleLang: 'ko', subtitleSize: 'lg',
+    });
+  });
+
+  it('자막 설정 기본값과 보정', () => {
+    expect(SUBTITLE_SIZES).toEqual(['sm', 'md', 'lg']);
+    expect(normalizeSettings(null)).toMatchObject({ subtitlesOn: true, subtitleLang: 'ko', subtitleSize: 'md' });
+    expect(normalizeSettings({ subtitlesOn: false, subtitleLang: 'en', subtitleSize: 'lg' }))
+      .toMatchObject({ subtitlesOn: false, subtitleLang: 'en', subtitleSize: 'lg' });
+    expect(normalizeSettings({ subtitlesOn: 'x', subtitleLang: 3, subtitleSize: 'huge' }))
+      .toMatchObject({ subtitlesOn: true, subtitleLang: 'ko', subtitleSize: 'md' });
+    expect(normalizeSettings({ subtitleLang: '' })).toMatchObject({ subtitleLang: 'ko' });
+  });
+
+  it('pickSubtitleTrack: 같은 언어 → 첫 트랙 → null', () => {
+    const ko = { lang: 'ko' };
+    const en = { lang: 'en' };
+    expect(pickSubtitleTrack([en, ko], 'ko')).toBe(ko);
+    expect(pickSubtitleTrack([en], 'ko')).toBe(en);
+    expect(pickSubtitleTrack([], 'ko')).toBeNull();
+    expect(pickSubtitleTrack(undefined, 'ko')).toBeNull();
   });
 
   it('falls back to defaults on corrupt storage', () => {

@@ -138,7 +138,22 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
     )`;
   await pgClient`CREATE INDEX IF NOT EXISTS idx_video_comments_cv ON video_comments (classroom_video_id, created_at)`;
   await pgClient`CREATE INDEX IF NOT EXISTS idx_video_comments_parent ON video_comments (parent_id)`;
-  log.info('startup migration: videos / classroom_videos / video_comments ensured');
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS video_subtitles (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      video_id uuid NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+      lang text NOT NULL,
+      label text NOT NULL,
+      url text NOT NULL,
+      cue_count integer NOT NULL DEFAULT 0,
+      created_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`;
+  await pgClient`CREATE UNIQUE INDEX IF NOT EXISTS uq_video_subtitles_video_lang ON video_subtitles (video_id, lang)`;
+  // 자막 목록은 영상 URL 로 조회한다(페이지 임베드는 URL 만 안다)
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_videos_video_url ON videos (video_url)`;
+  log.info('startup migration: videos / classroom_videos / video_comments / video_subtitles ensured');
 
   await pgClient`
     CREATE TABLE IF NOT EXISTS video_progress (
