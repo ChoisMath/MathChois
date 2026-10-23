@@ -64,7 +64,7 @@ export const MAX_SUBTITLE_BYTES = 2 * 1024 * 1024;
 export function parseSubtitles(text: string): SubtitleCue[];
 /** cue 배열 → WebVTT 문서 문자열 ("WEBVTT\n\n00:00:01.000 --> 00:00:03.500\n…") */
 export function toWebVtt(cues: SubtitleCue[]): string;
-/** time 에 보여야 할 cue 들(겹치는 cue 는 여러 개) — 정렬된 배열에서 이진 탐색 */
+/** time 에 보여야 할 cue 들(겹치는 cue 는 여러 개). 앞서 시작한 긴 cue 도 잡도록 전체를 선형 필터(수천 개 × 4Hz 로 충분) */
 export function activeCues(cues: SubtitleCue[], time: number): SubtitleCue[];
 ```
 
@@ -75,7 +75,7 @@ export function activeCues(cues: SubtitleCue[], time: number): SubtitleCue[];
 - `WEBVTT` 헤더 블록, `NOTE` / `STYLE` / `REGION` 블록은 건너뛴다.
 - 본문의 태그(`<b>`, `<i>`, `<u>`, `<c.x>`, `<v 이름>`, `<00:00:01.000>`, SRT `<font …>`, `{\an8}` 류 ASS 태그)는 제거하고 `&amp; &lt; &gt; &nbsp; &lrm; &rlm;` 은 문자로 되돌린다. 화면에는 React 텍스트로 넣으므로 HTML로 해석되지 않는다.
 - `end <= start` 이거나 본문이 비면 버린다. 결과는 `start` 오름차순(같으면 원래 순서) 정렬.
-- `toWebVtt` 는 본문 안의 빈 줄을 공백 한 줄로 접고(빈 줄은 VTT에서 cue 종료), `-->` 를 `->` 로 바꿔 문서가 깨지지 않게 한다. `&`/`<` 는 이스케이프한다.
+- `toWebVtt` 는 본문 안의 빈 줄을 없애고(빈 줄은 VTT에서 cue 종료), `-->` 를 `->` 로 바꿔 문서가 깨지지 않게 한다. `&`/`<` 는 이스케이프한다.
 
 ## 데이터 모델
 
