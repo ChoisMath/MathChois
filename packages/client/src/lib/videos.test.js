@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildVideoQuery, formatBytes, formatDuration, progressPercent } from './videos.js';
+import { buildVideoQuery, formatBytes, formatDuration, progressPercent, subtitleQueryUrl } from './videos.js';
 
 describe('videos lib', () => {
   it('builds query strings skipping empty values', () => {
@@ -30,5 +30,12 @@ describe('videos lib', () => {
     expect(progressPercent(10, 0)).toBeNull();
     expect(progressPercent(10, null)).toBeNull();
     expect(progressPercent(undefined, 60)).toBe(0);
+  });
+});
+
+describe('subtitleQueryUrl', () => {
+  it('한글·공백 URL 을 인코딩', () => {
+    expect(subtitleQueryUrl('/api/files/videos/library/1_이차 함수.mp4'))
+      .toBe('/api/video-subtitles?videoUrl=%2Fapi%2Ffiles%2Fvideos%2Flibrary%2F1_%EC%9D%B4%EC%B0%A8%20%ED%95%A8%EC%88%98.mp4');
   });
 });
