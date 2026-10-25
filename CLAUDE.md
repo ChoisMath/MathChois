@@ -106,6 +106,10 @@ Beyond annotation, the teacher sidebar also has shared libraries: **문제은행
 subtitles (`video_subtitles`; .srt/.vtt normalized to WebVTT by the shared parser in
 `shared/src/subtitles/`, drawn by `VideoPlayer` as its own overlay; see
 `docs/superpowers/specs/2026-10-22-video-subtitles-design.md`).
+A classroom's [챕터] and [영상] tabs (ClassroomDetail) can group its chapters and videos into teacher-made **units** (단원, shown like
+YouTube playlists): `units` table, `chapters.unit_id`/`classroom_videos.unit_id` (NULL = unassigned), address
+`?tab=…&unit=<id|none>`, hide-from-students only affects lists (detail URLs stay open), UI in `components/units/`
+(see `docs/superpowers/specs/2026-10-25-classroom-units-design.md`).
 
 - **⑥ Whiteboard (모둠 공유 보드)** — a `pages.page_type = 'whiteboard'` page gives every
   classroom group its own shared Excalidraw board (`whiteboard_groups`, keyed by page + classroom +
@@ -135,7 +139,7 @@ Tables: `profiles`, `classrooms`, `classroom_members`, `chapters`, `pages`
 `whiteboard_groups`/`whiteboard_group_members` (shared boards),
 `posts`/`post_files`/`post_classrooms` (board), `assignments`/`assignment_pages`/
 `assignment_submissions`/`assignment_submission_files`, `videos`/`classroom_videos`/`video_comments`/
-`video_subtitles` (video library). Migrations via Drizzle Kit;
+`video_subtitles` (video library), `units` (classroom units; `chapters.unit_id`, `classroom_videos.unit_id`). Migrations via Drizzle Kit;
 additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures the
 `pages.html_url` column).
 `classrooms.color` — one of six named colors (coral/mustard/sage/sky/lavender/rose); backfilled at boot by

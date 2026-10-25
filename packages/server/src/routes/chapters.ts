@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import {
@@ -14,7 +15,15 @@ import {
 } from '../services/chapter.service.js';
 import { getPageImageUrls, findSharedImageUrls } from '../services/page.service.js';
 import { isClassroomOwner } from '../services/classroom.service.js';
+import { isUnitInClassroom } from '../services/unit.service.js';
 import { removeFile, urlToStoragePath, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
+
+const unitIdSchema = z.string().uuid().nullable().optional();
+const patchChapterBody = z.object({
+  title: z.string().optional(),
+  description: z.string().nullable().optional(),
+  unitId: unitIdSchema,
+});
 
 export async function chapterRoutes(app: FastifyInstance) {
 
@@ -23,7 +32,8 @@ export async function chapterRoutes(app: FastifyInstance) {
   app.get<{ Params: { cid: string } }>('/api/classrooms/:cid/chapters', {
     preHandler: [authenticate],
   }, async (request) => {
-    return getChaptersByClassroom(request.params.cid);
+    // 학생에게는 숨김 단원의 챕터를 목록에서 뺀다(상세 주소 접근은 막지 않는다).
+    return getChaptersByClassroom(request.params.cid, { studentView: request.user.role === 'student' });
   });
 
   // ─── GET /api/chapters/:id — 챕터 상세 ────────
@@ -42,7 +52,7 @@ export async function chapterRoutes(app: FastifyInstance) {
 
   app.post<{
     Params: { cid: string };
-    Body: { title: string; description?: string; position?: number };
+    Body: { title: string; description?: string; position?: number; unitId?: string | null };
   }>('/api/classrooms/:cid/chapters', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
@@ -56,12 +66,21 @@ export async function chapterRoutes(app: FastifyInstance) {
     if (!title?.trim()) {
       return reply.status(400).send({ error: 'Title is required' });
     }
+    const unitParsed = unitIdSchema.safeParse(request.body.unitId);
+    if (!unitParsed.success) {
+      return reply.status(400).send({ error: unitParsed.error.issues[0]?.message ?? '요청 형식이 올바르지 않습니다.' });
+    }
+    const unitId = unitParsed.data ?? null;
+    if (unitId && !(await isUnitInClassroom(unitId, cid))) {
+      return reply.status(400).send({ error: '이 학급의 단원이 아닙니다' });
+    }
 
     const chapter = await createChapter({
       classroomId: cid,
       title: title.trim(),
       description: description?.trim() || null,
       position,
+      unitId,
     });
     return reply.status(201).send(chapter);
   });
@@ -70,7 +89,7 @@ export async function chapterRoutes(app: FastifyInstance) {
 
   app.patch<{
     Params: { id: string };
-    Body: { title?: string; description?: string };
+    Body: { title?: string; description?: string | null; unitId?: string | null };
   }>('/api/chapters/:id', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
@@ -83,7 +102,17 @@ export async function chapterRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Not the classroom owner' });
     }
 
-    const updated = await updateChapter(request.params.id, request.body);
+    // title / description / unitId 만 반영한다(classroomId 등 다른 키는 무시).
+    const parsed = patchChapterBody.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.issues[0]?.message ?? '요청 형식이 올바르지 않습니다.' });
+    }
+    const { unitId } = parsed.data;
+    if (unitId && !(await isUnitInClassroom(unitId, classroomId))) {
+      return reply.status(400).send({ error: '이 학급의 단원이 아닙니다' });
+    }
+
+    const updated = await updateChapter(request.params.id, parsed.data);
     return updated;
   });
 
@@ -162,7 +191,7 @@ export async function chapterRoutes(app: FastifyInstance) {
 
   app.post<{
     Params: { id: string };
-    Body: { targetClassroomId: string };
+    Body: { targetClassroomId: string; unitId?: string | null };
   }>('/api/chapters/:id/import', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
@@ -182,6 +211,16 @@ export async function chapterRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Not the target classroom owner' });
     }
 
+    // 단원은 대상 학급 기준으로 검사한다(원본 학급의 단원이 아님).
+    const unitParsed = unitIdSchema.safeParse(request.body.unitId);
+    if (!unitParsed.success) {
+      return reply.status(400).send({ error: unitParsed.error.issues[0]?.message ?? '요청 형식이 올바르지 않습니다.' });
+    }
+    const unitId = unitParsed.data ?? null;
+    if (unitId && !(await isUnitInClassroom(unitId, request.body.targetClassroomId))) {
+      return reply.status(400).send({ error: '이 학급의 단원이 아닙니다' });
+    }
+
     // 체인 방지: source가 이미 linked이면 원본의 sourceChapterId 사용
     const effectiveSourceId = sourceChapter.sourceChapterId ?? sourceChapter.id;
 
@@ -191,6 +230,7 @@ export async function chapterRoutes(app: FastifyInstance) {
       title: sourceChapter.title,
       description: sourceChapter.description,
       sourceChapterId: effectiveSourceId,
+      unitId,
     });
 
     return reply.status(201).send(newChapter);

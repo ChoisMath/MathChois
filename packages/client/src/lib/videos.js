@@ -47,8 +47,9 @@ export const deleteVideo = (id, { force } = {}) => api.delete(`/api/videos/${id}
 // ─── 학급 배정 / 댓글 API ───────────────────────────
 
 export const listClassroomVideos = (classroomId) => api.get(`/api/classrooms/${classroomId}/videos`);
-export const addClassroomVideo = (classroomId, videoId, note) =>
-  api.post(`/api/classrooms/${classroomId}/videos`, { videoId, note: note ?? null });
+/** 학급에 영상 배정 — unitId 를 주면 그 단원에(없으면 미분류) */
+export const addClassroomVideo = (classroomId, videoId, note, unitId) =>
+  api.post(`/api/classrooms/${classroomId}/videos`, { videoId, note: note ?? null, unitId: unitId ?? null });
 export const reorderClassroomVideos = (classroomId, ids) =>
   api.patch(`/api/classrooms/${classroomId}/videos/reorder`, { ids });
 export const getClassroomVideo = (id) => api.get(`/api/classroom-videos/${id}`);

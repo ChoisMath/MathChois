@@ -1,6 +1,6 @@
-import { eq, sql, inArray } from 'drizzle-orm';
+import { eq, and, sql, inArray, or, isNull, getTableColumns } from 'drizzle-orm';
 import { db } from '../config/database.js';
-import { chapters, pages } from '../db/schema.js';
+import { chapters, pages, units } from '../db/schema.js';
 
 // ─── Source Reference 헬퍼 ──────────────────────────
 
@@ -28,19 +28,24 @@ export async function isLinkedChapter(chapterId: string): Promise<boolean> {
 
 // ─── 기존 함수 ──────────────────────────────────────
 
-/** 교실의 챕터 목록 (페이지 수 포함) — linked 챕터는 source 챕터의 페이지 사용 */
-export async function getChaptersByClassroom(classroomId: string) {
-  const chapRows = await db
-    .select()
-    .from(chapters)
-    .where(eq(chapters.classroomId, classroomId))
-    .orderBy(chapters.position);
+/**
+ * 교실의 챕터 목록 (페이지 포함) — linked 챕터는 source 챕터의 페이지 사용.
+ * studentView 면 숨김 단원에 속한 챕터는 뺀다(미분류는 항상 포함).
+ */
+export async function getChaptersByClassroom(classroomId: string, opts: { studentView?: boolean } = {}) {
+  const base = db.select(getTableColumns(chapters)).from(chapters);
+  const chapRows = await (opts.studentView
+    ? base
+        .leftJoin(units, eq(chapters.unitId, units.id))
+        .where(and(eq(chapters.classroomId, classroomId), or(isNull(chapters.unitId), eq(units.isHidden, false))))
+    : base.where(eq(chapters.classroomId, classroomId))
+  ).orderBy(chapters.position);
 
   // effectiveId = sourceChapterId ?? id (linked 챕터는 source의 페이지를 사용)
   const effectiveIds = [...new Set(chapRows.map((c) => c.sourceChapterId ?? c.id))];
   const allPages = effectiveIds.length > 0
     ? await db
-        .select({ id: pages.id, chapterId: pages.chapterId, position: pages.position })
+        .select({ id: pages.id, chapterId: pages.chapterId, position: pages.position, imageUrl: pages.imageUrl })
         .from(pages)
         .where(inArray(pages.chapterId, effectiveIds))
         .orderBy(pages.position)
@@ -75,6 +80,7 @@ export async function createChapter(data: {
   description?: string | null;
   position?: number;
   sourceChapterId?: string | null;
+  unitId?: string | null;
 }) {
   // position 미지정 시 새 챕터를 맨 앞(0)에 넣고 기존 챕터는 한 칸씩 뒤로 민다.
   // → "교사 지정순"에서도 새로 등록한 항목이 가장 위에 보인다.
@@ -96,6 +102,7 @@ export async function createChapter(data: {
         description: data.description ?? null,
         position,
         sourceChapterId: data.sourceChapterId ?? null,
+        unitId: data.unitId ?? null,
       })
       .returning();
     return created;
@@ -106,7 +113,10 @@ export async function createChapter(data: {
 export async function updateChapter(id: string, data: {
   title?: string;
   description?: string | null;
+  unitId?: string | null;
 }) {
+  // 반영할 키가 하나도 없으면 UPDATE 없이 현재 값을 돌려준다(drizzle 은 빈 set 을 거부).
+  if (Object.keys(data).length === 0) return getChapterById(id);
   const [updated] = await db
     .update(chapters)
     .set(data)

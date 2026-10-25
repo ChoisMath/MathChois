@@ -5,6 +5,7 @@ import { requireRole } from '../middleware/roleGuard.js';
 import { isClassroomOwner, isClassroomMember } from '../services/classroom.service.js';
 import { getVideoById } from '../services/video.service.js';
 import * as svc from '../services/classroomVideo.service.js';
+import { isUnitInClassroom } from '../services/unit.service.js';
 import { getIO } from '../socket/index.js';
 import { emitVideoCommentChanged } from '../socket/handlers/videos.js';
 
@@ -50,18 +51,25 @@ export async function classroomVideoRoutes(app: FastifyInstance) {
     if (!(await canAccessClassroom(req, req.params.cid))) {
       return reply.status(403).send({ error: '접근 권한이 없습니다' });
     }
-    return svc.listClassroomVideos(req.params.cid);
+    return svc.listClassroomVideos(req.params.cid, { studentView: req.user.role === 'student' });
   });
 
   app.post<{ Params: { cid: string } }>('/api/classrooms/:cid/videos', teacher, async (req, reply) => {
     if (!(await isClassroomOwner(req.params.cid, req.user.sub))) {
       return reply.status(403).send({ error: '교실 소유자만 영상을 배정할 수 있습니다' });
     }
-    const body = z.object({ videoId: z.string().uuid(), note: z.string().nullable().optional() }).parse(req.body);
+    const body = z.object({
+      videoId: z.string().uuid(),
+      note: z.string().nullable().optional(),
+      unitId: z.string().uuid().nullable().optional(),
+    }).parse(req.body);
+    if (body.unitId && !(await isUnitInClassroom(body.unitId, req.params.cid))) {
+      return reply.status(400).send({ error: '이 학급의 단원이 아닙니다' });
+    }
     const video = await getVideoById(body.videoId);
     if (!video) return reply.status(404).send({ error: '영상자료를 찾을 수 없습니다' });
     try {
-      const row = await svc.addClassroomVideo(req.params.cid, body.videoId, req.user.sub, body.note);
+      const row = await svc.addClassroomVideo(req.params.cid, body.videoId, req.user.sub, body.note, body.unitId);
       return reply.status(201).send(row);
     } catch (err) {
       const e = err as { statusCode?: number; message: string };
@@ -81,7 +89,7 @@ export async function classroomVideoRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/api/classroom-videos/:id', auth, async (req, reply) => {
     const cv = await loadClassroomVideoOr404(req, reply, req.params.id);
     if (!cv) return;
-    return svc.getClassroomVideoDetail(cv.id);
+    return svc.getClassroomVideoDetail(cv.id, { studentView: req.user.role === 'student' });
   });
 
   app.patch<{ Params: { id: string } }>('/api/classroom-videos/:id', teacher, async (req, reply) => {
@@ -90,13 +98,18 @@ export async function classroomVideoRoutes(app: FastifyInstance) {
     const body = z.object({
       note: z.string().nullable().optional(),
       chapterId: z.string().uuid().nullable().optional(),
+      unitId: z.string().uuid().nullable().optional(),
     }).parse(req.body);
     if (body.chapterId && !(await svc.isChapterInClassroom(body.chapterId, cv.classroomId))) {
       return reply.status(400).send({ error: '이 학급의 챕터가 아닙니다.' });
     }
+    if (body.unitId && !(await isUnitInClassroom(body.unitId, cv.classroomId))) {
+      return reply.status(400).send({ error: '이 학급의 단원이 아닙니다' });
+    }
     const patch: svc.ClassroomVideoPatch = {};
     if ('note' in body) patch.note = body.note ?? null;
     if ('chapterId' in body) patch.chapterId = body.chapterId ?? null;
+    if ('unitId' in body) patch.unitId = body.unitId ?? null;
     return svc.updateClassroomVideo(cv.id, patch);
   });
 

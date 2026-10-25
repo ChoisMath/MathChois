@@ -28,6 +28,7 @@ import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 import { PageVideoEmbed, PageVideoThumb } from '../../components/videos/PageVideo';
 import HtmlToolOverlay from '../../components/study/HtmlToolOverlay';
 import { HTML_OVERLAY_LOCK_BASE } from '../../lib/htmlOverlay';
+import { UNASSIGNED } from '@mathchois/shared';
 
 /* ── 세션 내 캐시 (컴포넌트 unmount 후에도 유지) ── */
 const _notesCache    = new Map(); // `${userId}_${pageId}` → { elements, bgPosition, files }
@@ -397,8 +398,9 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
   }, [embedded, onNavigatePage, navigate, chapterId]);
   const exitViewer = useCallback(() => {
     if (embedded) onExit?.();
-    else navigate(`/student/classrooms/${chapter?.classroomId}`);
-  }, [embedded, onExit, navigate, chapter?.classroomId]);
+    // 학급의 챕터 탭, 이 챕터가 든 단원(또는 미분류) 화면으로 돌아간다
+    else navigate(`/student/classrooms/${chapter?.classroomId}?tab=chapters&unit=${chapter?.unitId ?? UNASSIGNED}`);
+  }, [embedded, onExit, navigate, chapter?.classroomId, chapter?.unitId]);
 
   const containerRef          = useRef(null);
   const saveTimerRef          = useRef(null);

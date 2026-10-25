@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clapperboard, Plus, GripVertical, Trash2, MessageSquare, Pencil, Check, X, Eye, CheckCircle2, BookOpen } from 'lucide-react';
+import { Clapperboard, Plus, GripVertical, Trash2, MessageSquare, Pencil, Check, X, Eye, CheckCircle2, BookOpen, ListPlus } from 'lucide-react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -20,6 +20,14 @@ import { useSortOrder } from '../../hooks/useSortOrder';
 import { sortItems, isManualOrder } from '../../lib/sortOrder';
 import { api } from '../../lib/api';
 import { CARD_GRID } from '../../lib/layout';
+import { addItemsToUnit } from '../../lib/units';
+import { groupByUnit } from '@mathchois/shared';
+import UnitBrowser from '../units/UnitBrowser';
+import UnitSelect from '../units/UnitSelect';
+import UnitItemPickerModal from '../units/UnitItemPickerModal';
+
+/** 단원 카드 그림: 영상 썸네일 */
+const videoCover = (cv) => cv.video.thumbnailUrl ?? null;
 
 /** 연결된 필기 챕터 칩 (교사·학생 공통) */
 function ChapterChip({ chapter }) {
@@ -34,7 +42,7 @@ function ChapterChip({ chapter }) {
 }
 
 /* ─── 영상 카드 (교사: 드래그 정렬·메모·필기 챕터 연결·해제) — 드래그는 교사 지정순(sortable)에서만 ─── */
-function VideoCard({ cv, isTeacher, sortable = isTeacher, progress, unread = 0, chapters = [], onOpen, onRemove, onSaveNote, onSaveChapter }) {
+function VideoCard({ cv, isTeacher, sortable = isTeacher, progress, unread = 0, chapters = [], units = [], onOpen, onRemove, onSaveNote, onSaveChapter, onUnitChange }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cv.id, disabled: !sortable });
   const [editingNote, setEditingNote] = useState(false);
   const [note, setNote] = useState(cv.note ?? '');
@@ -100,6 +108,11 @@ function VideoCard({ cv, isTeacher, sortable = isTeacher, progress, unread = 0, 
           cv.note && <p className="text-xs text-blue-700 bg-blue-50 rounded px-2 py-1 mt-1 whitespace-pre-wrap">{cv.note}</p>
         )}
 
+        {/* 단원 선택 (교사 전용, 단원이 있는 학급만) — 필기 챕터 줄 위 */}
+        {isTeacher && units.length > 0 && onUnitChange && (
+          <UnitSelect units={units} value={cv.unitId ?? null} onChange={(unitId) => onUnitChange(cv, unitId)} />
+        )}
+
         {/* 필기 챕터: 교사는 선택, 학생은 칩만. 학생은 영상 상세의 [2분할로 필기하며 보기] 로 이 챕터를 옆에 놓고 필기한다. */}
         {isTeacher ? (
           <label className="flex items-center gap-1.5 mt-1 text-xs text-gray-600">
@@ -162,10 +175,18 @@ function VideoCard({ cv, isTeacher, sortable = isTeacher, progress, unread = 0, 
 }
 
 /**
- * 학급 상세의 [영상] 탭.
- * 교사: 라이브러리에서 영상을 골라 배정, 드래그 정렬, 메모, 배정 해제. 학생: 시청 화면으로 이동.
+ * 학급 상세의 [영상] 탭 + 단원 재생목록 화면(UnitBrowser).
+ * 교사: 라이브러리에서 영상을 골라 배정, 드래그 정렬, 메모, 배정 해제, 카드별 단원 선택. 학생: 시청 화면으로 이동.
+ *
+ * @param {object} props
+ * @param {string} props.classroomId
+ * @param {boolean} props.isTeacher
+ * @param {object[]|null} props.units 학급 단원 목록(null = 아직 불러오는 중)
+ * @param {string|null} props.unitParam 주소의 unit 값
+ * @param {(next: string|null) => void} props.onUnitParamChange
+ * @param {() => void} props.onUnitsChanged 단원 목록(개수 포함)을 다시 읽게 한다
  */
-export default function ClassroomVideoTab({ classroomId, isTeacher }) {
+export default function ClassroomVideoTab({ classroomId, isTeacher, units, unitParam, onUnitParamChange, onUnitsChanged }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [items, setItems] = useState([]);
@@ -178,6 +199,13 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
   const [chapters, setChapters] = useState([]);       // 교사: 필기 챕터 선택용 학급 챕터 목록
   const [loading, setLoading] = useState(true);
   const [showPicker, setShowPicker] = useState(false);
+  const [addUnitId, setAddUnitId] = useState(null);     // [+ 영상 추가]로 넣을 단원(null = 미분류)
+  const [pickerUnit, setPickerUnit] = useState(null);   // 기존 항목 가져오기 대상 단원
+  /* 기존 항목 가져오기에 보일 미분류 영상 */
+  const unassignedItems = useMemo(
+    () => groupByUnit(units ?? [], sortedItems).unassigned,
+    [units, sortedItems],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -223,9 +251,10 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
 
   const handleSelect = async (video) => {
     try {
-      await addClassroomVideo(classroomId, video.id);
+      await addClassroomVideo(classroomId, video.id, undefined, addUnitId);
       setShowPicker(false);
       fetchList();
+      if (addUnitId) onUnitsChanged();
     } catch (err) {
       alert(err.message ?? '배정에 실패했습니다.');
     }
@@ -261,56 +290,115 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
     }
   };
 
-  const handleDragEnd = async ({ active, over }) => {
-    if (!canReorder || !over || active.id === over.id) return;
-    const oldIdx = sortedItems.findIndex((x) => x.id === active.id);
-    const newIdx = sortedItems.findIndex((x) => x.id === over.id);
-    if (oldIdx < 0 || newIdx < 0) return;
-    const next = arrayMove(sortedItems, oldIdx, newIdx).map((x, i) => ({ ...x, position: i }));
-    setItems(next);
+  /* 교사: 카드의 단원 선택 — 먼저 옮겨 보이고, 실패하면 되돌린다 */
+  const handleUnitChange = async (cv, unitId) => {
+    const prevUnitId = cv.unitId ?? null;
+    if (prevUnitId === unitId) return;
+    const setUnitOf = (value) => setItems((prev) => prev.map((x) => (x.id === cv.id ? { ...x, unitId: value } : x)));
+    setUnitOf(unitId);
     try {
-      await reorderClassroomVideos(classroomId, next.map((x) => x.id));
+      await updateClassroomVideo(cv.id, { unitId });
+      onUnitsChanged();
+    } catch (err) {
+      setUnitOf(prevUnitId);
+      alert(err?.message || '단원을 바꾸지 못했습니다.');
+    }
+  };
+
+  /* 교사: 기존 항목 가져오기(미분류 영상 → 이 단원) */
+  const handlePickVideos = async (ids) => {
+    await addItemsToUnit(pickerUnit.id, { classroomVideoIds: ids }); // 실패하면 창에 오류 문구
+    setPickerUnit(null);
+    await fetchList();
+    onUnitsChanged();
+  };
+
+  const openAddPicker = (unitId) => {
+    setAddUnitId(unitId ?? null);
+    setShowPicker(true);
+  };
+
+  /* 정렬: 보이는 목록(단원 안이면 그 단원 영상) 안에서만, 그 영상 id 만 보낸다 */
+  const handleDragEnd = async ({ active, over }, list) => {
+    if (!canReorder || !over || active.id === over.id) return;
+    const oldIdx = list.findIndex((x) => x.id === active.id);
+    const newIdx = list.findIndex((x) => x.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const ids = arrayMove(list, oldIdx, newIdx).map((x) => x.id);
+    const posById = new Map(ids.map((xid, i) => [xid, i]));
+    setItems((prev) => prev.map((x) => (posById.has(x.id) ? { ...x, position: posById.get(x.id) } : x)));
+    try {
+      await reorderClassroomVideos(classroomId, ids);
     } catch {
       fetchList();
     }
   };
 
+  /* 툴바: 단원 없음 → 목록 위 줄, 단원 안 → 단원 머리 오른쪽. 보일 것이 없으면 null */
+  const renderToolbar = (ctx) => {
+    const hasItems = items.length > 0;
+    if (!isTeacher && !hasItems) return null;
+    return (
+      <>
+        {isTeacher && hasItems && !canReorder && (
+          <span className="text-xs text-gray-400">드래그 정렬은 ‘교사 지정순’에서 가능합니다</span>
+        )}
+        {hasItems && <SortOrderSelect value={sortOrder} onChange={setSortOrder} />}
+        {isTeacher && ctx.unitId && (
+          <IconButton icon={ListPlus} label="기존 항목 가져오기" onClick={() => setPickerUnit(ctx.unit)} />
+        )}
+        {isTeacher && (
+          <IconButton icon={Plus} label="영상 추가" variant="primary" onClick={() => openAddPicker(ctx.unitId)} />
+        )}
+      </>
+    );
+  };
+
+  /* 영상 격자 — list 는 보이는 영상(단원 안이면 그 단원 것만), 정렬 순서 유지 */
+  const renderVideos = (list) => (
+    list.length === 0 ? (
+      <div
+        onClick={isTeacher ? () => openAddPicker(null) : undefined}
+        className={`border-2 border-dashed border-gray-300 rounded-xl h-40 flex flex-col items-center justify-center text-gray-400 text-sm gap-2 ${
+          isTeacher ? 'cursor-pointer hover:border-blue-300 hover:text-blue-400 transition-colors' : ''}`}>
+        <Clapperboard className="h-8 w-8" />
+        <span>{isTeacher ? '영상자료에서 이 학급에 보여줄 영상을 추가하세요.' : '아직 등록된 영상이 없습니다.'}</span>
+      </div>
+    ) : (
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEnd(e, list)}>
+        <SortableContext items={list.map((x) => x.id)} strategy={rectSortingStrategy}>
+          <div className={CARD_GRID}>
+            {list.map((cv) => (
+              <VideoCard key={cv.id} cv={cv} isTeacher={isTeacher} sortable={canReorder} progress={progressMap[cv.id]} unread={unreadMap[cv.id] ?? 0}
+                chapters={chapters} units={units ?? []}
+                onOpen={openWatch} onRemove={handleRemove} onSaveNote={handleSaveNote} onSaveChapter={handleSaveChapter}
+                onUnitChange={handleUnitChange} />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
+    )
+  );
+
   return (
     <div>
-      {(isTeacher || items.length > 0) && (
-        <div className="flex items-center justify-end gap-3 mb-3 flex-wrap">
-          {isTeacher && items.length > 0 && !canReorder && (
-            <span className="text-xs text-gray-400">드래그 정렬은 ‘교사 지정순’에서 가능합니다</span>
-          )}
-          {items.length > 0 && <SortOrderSelect value={sortOrder} onChange={setSortOrder} />}
-          {isTeacher && (
-            <IconButton icon={Plus} label="영상 추가" variant="primary" onClick={() => setShowPicker(true)} />
-          )}
-        </div>
-      )}
-
-      {loading ? (
+      {/* 단원 목록도 읽은 뒤에 그린다 — 그 전에 그리면 평면 격자·단원 목록이 잠깐 번갈아 보인다 */}
+      {loading || units == null ? (
         <p className="text-gray-400 text-sm">로딩 중...</p>
-      ) : items.length === 0 ? (
-        <div
-          onClick={isTeacher ? () => setShowPicker(true) : undefined}
-          className={`border-2 border-dashed border-gray-300 rounded-xl h-40 flex flex-col items-center justify-center text-gray-400 text-sm gap-2 ${
-            isTeacher ? 'cursor-pointer hover:border-blue-300 hover:text-blue-400 transition-colors' : ''}`}>
-          <Clapperboard className="h-8 w-8" />
-          <span>{isTeacher ? '영상자료에서 이 학급에 보여줄 영상을 추가하세요.' : '아직 등록된 영상이 없습니다.'}</span>
-        </div>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={sortedItems.map((x) => x.id)} strategy={rectSortingStrategy}>
-            <div className={CARD_GRID}>
-              {sortedItems.map((cv) => (
-                <VideoCard key={cv.id} cv={cv} isTeacher={isTeacher} sortable={canReorder} progress={progressMap[cv.id]} unread={unreadMap[cv.id] ?? 0}
-                  chapters={chapters}
-                  onOpen={openWatch} onRemove={handleRemove} onSaveNote={handleSaveNote} onSaveChapter={handleSaveChapter} />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
+        <UnitBrowser
+          classroomId={classroomId}
+          tab="videos"
+          units={units}
+          items={sortedItems}
+          isTeacher={isTeacher}
+          unitParam={unitParam}
+          onUnitParamChange={onUnitParamChange}
+          coverOfItem={videoCover}
+          onUnitsChanged={onUnitsChanged}
+          renderItems={renderVideos}
+          toolbar={renderToolbar}
+        />
       )}
 
       {showPicker && (
@@ -318,6 +406,16 @@ export default function ClassroomVideoTab({ classroomId, isTeacher }) {
           excludeIds={items.map((x) => x.videoId)}
           onSelect={handleSelect}
           onClose={() => setShowPicker(false)}
+        />
+      )}
+
+      {pickerUnit && (
+        <UnitItemPickerModal
+          title={`${pickerUnit.title}에 영상 가져오기`}
+          items={unassignedItems}
+          renderLabel={(cv) => cv.video.title}
+          onSubmit={handlePickVideos}
+          onClose={() => setPickerUnit(null)}
         />
       )}
     </div>
