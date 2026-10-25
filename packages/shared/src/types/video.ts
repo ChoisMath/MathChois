@@ -84,6 +84,8 @@ export interface ClassroomVideo {
   chapterId: string | null;
   /** 연결된 필기 챕터 (left join) — 없거나 삭제되면 null */
   chapter: { id: string; title: string } | null;
+  /** 소속 단원. 단원 삭제 시 FK SET NULL */
+  unitId: string | null;
   video: Video;
   commentCount: number;
 }

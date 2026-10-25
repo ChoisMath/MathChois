@@ -27,7 +27,26 @@ export interface Chapter {
   description: string | null;
   position: number;
   sourceChapterId?: string | null;
+  /** 소속 단원. 단원 삭제 시 FK SET NULL */
+  unitId?: string | null;
   createdAt?: string | null;
+}
+
+/** 학급의 단원 — 챕터·영상을 묶는 재생목록 단위 */
+export interface Unit {
+  id: string;
+  classroomId: string;
+  title: string;
+  description: string | null;
+  position: number;
+  /** 숨김: 학생의 목록에서만 뺀다 (주소로 여는 것은 막지 않음) */
+  isHidden: boolean;
+  createdAt: string;
+}
+
+export interface UnitWithCounts extends Unit {
+  chapterCount: number;
+  videoCount: number;
 }
 
 /** 페이지 종류. null = 기존 이미지/영상/HTML/AI 문항 페이지(URL 필드로 판별) */
