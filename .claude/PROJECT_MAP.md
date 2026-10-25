@@ -127,7 +127,7 @@ packages/
 
 - 서버: `coaching.service.ts`의 `listStudentHistory(studentId, q)`(본인), `listClassroomStudentHistory(classroomId, studentId, q)`(교사, 해당 클래스 챕터 범위 한정). 라우트는 위 coaching 그룹 표의 history 2개.
 - 클라이언트 공용 뷰: `components/coaching/CoachingHistoryView.jsx` — 기간 필터(프리셋 1주/1개월/전체 + 시작·종료 직접지정, 기본 최근 7일) + 카드 리스트 + 인라인 펼침(`ProblemView` 문제·풀이 + `CoachingPanel` + 필기 이미지) + 페이지네이션. `fetchHistory` prop 주입(ref 안정화).
-- 학생: `pages/History/MyCoachingHistory.jsx`(`/student/coaching-history`), StudentSidebar "내 풀이 기록"(History 아이콘). 교사: `pages/Monitor/StudentCoachingHistory.jsx`(`/teacher/classrooms/:classroomId/students/:studentId/coaching-history`), `ClassroomDetail.jsx` '학생' 탭 멤버 카드의 [코칭 기록] 버튼으로 진입.
+- 학생: `pages/History/MyCoachingHistory.jsx`(`/student/coaching-history`), StudentSidebar "내 풀이 기록"(History 아이콘). 교사: `pages/Monitor/StudentCoachingHistory.jsx`(`/teacher/classrooms/:classroomId/students/:studentId/coaching-history`), `components/classrooms/StudentsTab.jsx`('학생' 탭) 멤버 카드의 [코칭 기록] 버튼으로 진입.
 - `components/common/CoachingPanel.jsx`에 `showTeacherNotes` prop(강점 메모 표시) 추가. `lib/coaching.js`에 `getMyHistory`/`getStudentHistory` 추가.
 
 ### AI 코칭 횟수 제한·리셋 (`feat/ai-coaching-limits`)
@@ -164,7 +164,7 @@ packages/
 | `/` | Home (첫 화면·로그인) | 레이아웃 없음 (자체 로고, 상단 바 없음) |
 | `/login`(→`/`), `/choose-role`, `/privacy`, `/terms` | ChooseRole 등 | MainLayout (public) |
 | `/reset-password/:token`, `/verify-email/:token` | ResetPassword, VerifyEmail | public, 레이아웃 없음 |
-| `/teacher/classrooms`, `/teacher/classrooms/:id` | ClassroomList, ClassroomDetail | DashboardLayout. 교사 ClassroomDetail에 '대시보드' 탭(별도 라우트 아님 → `ClassroomDashboard` 렌더) |
+| `/teacher/classrooms`, `/teacher/classrooms/:id` | ClassroomList, ClassroomDetail | DashboardLayout. 활성 탭은 `?tab=`(chapters 기본, `lib/classroomTabs.js`)·챕터 탭은 `components/classrooms/ChapterTab.jsx`. 교사 ClassroomDetail에 '대시보드' 탭(별도 라우트 아님 → `ClassroomDashboard` 렌더) |
 | `/teacher/chapters/:id/edit` | Chapters/Editor | 이미지/영상/HTML 도구 업로드 |
 | `/teacher/.../chapters/:chapterId/monitor` | ChapterMonitor | 학생 진도 요약 |
 | `/teacher/.../chapters/:chapterId/monitor/:studentId` | **StudentWorkViewer** (③) | 전체화면 |
