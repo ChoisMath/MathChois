@@ -62,6 +62,54 @@ describe('resolveUnitView', () => {
   });
 });
 
+describe('resolveUnitView — 방금 숨긴 단원의 항목(항목 목록이 아직 옛것)', () => {
+  // 학생의 단원 목록에는 숨긴 단원이 오지 않는다 → 항목의 unitId 'x' 는 알 수 없는 단원
+  const stale = [...items, { id: 'x1', unitId: 'x' }, { id: 'x2', unitId: 'x' }];
+
+  it('학생: 알 수 없는 단원의 항목은 기타 자료로 가지 않는다', () => {
+    const v = resolveUnitView({ units, items: stale, isTeacher: false, unitParam: null });
+    expect(v.mode).toBe('grid');
+    expect(v.unassigned.map((x) => x.id)).toEqual(['d']);
+  });
+
+  it('학생: 미분류가 숨긴 단원 항목뿐이면 기타 자료 화면이 없다(none → 단원 목록)', () => {
+    const v = resolveUnitView({
+      units, items: [...items.slice(0, 3), { id: 'x1', unitId: 'x' }], isTeacher: false, unitParam: UNASSIGNED,
+    });
+    expect(v.mode).toBe('grid');
+    expect(v.unassigned).toEqual([]);
+  });
+
+  it('학생: 하나뿐인 단원을 숨겨 단원 0개 → flat 에 그 단원 항목이 없다', () => {
+    const v = resolveUnitView({ units: [], items: stale, isTeacher: false, unitParam: null });
+    expect(v.mode).toBe('flat');
+    expect(v.items.map((x) => x.id)).toEqual(['d']);
+  });
+
+  it('학생: 보일 단원이 없어 flat 이어도 숨긴 단원 항목은 뺀다', () => {
+    const v = resolveUnitView({
+      units, items: [{ id: 'd', unitId: null }, { id: 'x1', unitId: 'x' }], isTeacher: false, unitParam: null,
+    });
+    expect(v.mode).toBe('flat');
+    expect(v.items.map((x) => x.id)).toEqual(['d']);
+  });
+
+  it('학생: 목록에 숨김 표시로 남은 단원의 항목도 뺀다', () => {
+    const v = resolveUnitView({
+      units: [U('h', 0, true)], items: [{ id: 'd', unitId: null }, { id: 'e', unitId: 'h' }], isTeacher: false, unitParam: null,
+    });
+    expect(v.mode).toBe('flat');
+    expect(v.items.map((x) => x.id)).toEqual(['d']);
+  });
+
+  it('교사: 알 수 없는 단원의 항목은 그대로 미분류', () => {
+    const v = resolveUnitView({ units, items: stale, isTeacher: true, unitParam: null });
+    expect(v.unassigned.map((x) => x.id)).toEqual(['d', 'x1', 'x2']);
+    const flat = resolveUnitView({ units: [], items: stale, isTeacher: true, unitParam: null });
+    expect(flat.items).toBe(stale);
+  });
+});
+
 describe('applyUnitOrder', () => {
   it('ids 순서대로 position 을 덮어쓴다(원본 유지)', () => {
     const out = applyUnitOrder(units, ['empty', 'u1', 'u2']);

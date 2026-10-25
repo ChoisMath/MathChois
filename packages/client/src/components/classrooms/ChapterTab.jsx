@@ -220,6 +220,14 @@ export default function ChapterTab({ classroomId, isTeacher, units, unitParam, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  /* 다른 탭/앱에서 돌아오면 다시 읽는다 — 그 사이 교사가 단원을 숨겼을 수 있다(영상 탭과 같은 방식) */
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchChapters(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   /* 가져오기 탭 전환 시 다른 클래스 목록 로드 */
   useEffect(() => {
     if (createTab !== 'import' || !user) return;
@@ -265,6 +273,8 @@ export default function ChapterTab({ classroomId, isTeacher, units, unitParam, o
       fetchChapters();
     } catch (err) {
       console.error('[ChapterTab] 챕터 가져오기 오류:', err);
+      window.alert(err?.message || '챕터를 가져오지 못했습니다.');
+      onUnitsChanged(); // 단원이 다른 기기에서 지워졌을 수 있다
     }
     setImporting(false);
   };
@@ -283,6 +293,8 @@ export default function ChapterTab({ classroomId, isTeacher, units, unitParam, o
       setNewTitle(''); setNewDesc(''); setShowCreateModal(false); fetchChapters();
     } catch (err) {
       console.error('[ChapterTab] 챕터 생성 오류:', err);
+      window.alert(err?.message || '챕터를 만들지 못했습니다.');
+      onUnitsChanged(); // 단원이 다른 기기에서 지워졌을 수 있다
     }
     setCreating(false);
   };

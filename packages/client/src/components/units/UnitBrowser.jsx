@@ -72,6 +72,8 @@ export default function UnitBrowser({
       throw err; // 창에 오류 문구
     }
     setForm(null);
+    // 단원 0개 화면(평면 격자)에서 첫 단원을 만들면 단원 목록으로 — 옛 주소의 unit=none 이 남아 미분류 화면으로 가지 않게
+    if (!editing && units.length === 0 && unitParam != null) onUnitParamChange(null);
     onUnitsChanged();
   };
 

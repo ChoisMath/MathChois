@@ -61,20 +61,20 @@ const ClassroomDetail = () => {
   };
 
   /* 단원 목록 — 챕터·영상 탭이 함께 쓴다. { cid, list }: 다른 학급의 목록이 잠깐이라도 섞이지 않게 학급 id 와 함께 둔다.
-     이 학급 것을 아직 못 읽었으면 탭에 null(불러오는 중)을 넘긴다. 읽지 못하면 [] → 기존 평면 격자 */
+     이 학급 것을 아직 못 읽었으면 탭에 null(불러오는 중)을 넘긴다. 처음 읽기에 실패하면 [] → 기존 평면 격자,
+     다시 읽기(탭 전환·visibilitychange)에 실패하면 이전 목록을 그대로 둔다 */
   const [unitsState, setUnitsState] = useState({ cid: null, list: [] });
   const units = unitsState.cid === id ? unitsState.list : null;
   const unitsSeqRef = useRef(0); // 겹친 요청은 마지막 것만 반영
   const reloadUnits = useCallback(async () => {
     const seq = ++unitsSeqRef.current;
-    let list;
     try {
-      list = (await listUnits(id)) || [];
+      const list = (await listUnits(id)) || [];
+      if (seq === unitsSeqRef.current) setUnitsState({ cid: id, list });
     } catch (err) {
       console.error('[ClassroomDetail] 단원 목록 로드 오류:', err);
-      list = [];
+      if (seq === unitsSeqRef.current) setUnitsState((prev) => (prev.cid === id ? prev : { cid: id, list: [] }));
     }
-    if (seq === unitsSeqRef.current) setUnitsState({ cid: id, list });
   }, [id]);
   const usesUnits = activeTab === 'chapters' || activeTab === 'videos';
 
