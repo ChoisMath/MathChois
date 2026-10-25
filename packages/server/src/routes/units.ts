@@ -33,6 +33,10 @@ const patchBody = z.object({
     .transform((v) => (v === undefined ? undefined : v === null || v === '' ? null : v)),
   isHidden: z.boolean().optional(),
 });
+const itemsBody = z.object({
+  chapterIds: z.array(z.string().uuid()).max(200).optional(),
+  classroomVideoIds: z.array(z.string().uuid()).max(200).optional(),
+});
 const reorderBody = z.object({ ids: z.array(z.string().uuid()) });
 
 /** zod 실패 → 400 { error: 첫 issue message }. 성공이면 파싱된 값, 실패면 응답을 보내고 null. */
@@ -101,6 +105,20 @@ export async function unitRoutes(app: FastifyInstance) {
     const updated = await svc.updateUnit(unit.id, body);
     if (!updated) return reply.status(404).send({ error: '단원을 찾을 수 없습니다' });
     return updated;
+  });
+
+  // 챕터·학급영상을 이 단원으로 한꺼번에 옮긴다(가져오기). 하나라도 이 학급의 항목이 아니면 전부 취소.
+  app.post<{ Params: { id: string } }>('/api/units/:id/items', teacher, async (req, reply) => {
+    const unit = await loadOwnedUnit(req, reply, req.params.id);
+    if (!unit) return;
+    const body = parseBody(itemsBody, req.body, reply);
+    if (!body) return;
+    const ok = await svc.assignItemsToUnit(unit.id, unit.classroomId, {
+      chapterIds: body.chapterIds ?? [],
+      classroomVideoIds: body.classroomVideoIds ?? [],
+    });
+    if (!ok) return reply.status(400).send({ error: '이 학급의 항목이 아닙니다' });
+    return { ok: true };
   });
 
   app.delete<{ Params: { id: string } }>('/api/units/:id', teacher, async (req, reply) => {

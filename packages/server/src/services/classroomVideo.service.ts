@@ -1,6 +1,6 @@
-import { eq, and, asc, desc, sql, inArray, isNull } from 'drizzle-orm';
+import { eq, and, or, asc, desc, sql, inArray, isNull } from 'drizzle-orm';
 import { db } from '../config/database.js';
-import { classroomVideos, videos, videoComments, classrooms, chapters, profiles, classroomMembers, videoProgress, videoCommentReads } from '../db/schema.js';
+import { classroomVideos, videos, videoComments, classrooms, chapters, units, profiles, classroomMembers, videoProgress, videoCommentReads } from '../db/schema.js';
 
 // ─── 학급 배정 ───────────────────────────────────────
 
@@ -28,6 +28,7 @@ const classroomVideoSelect = {
   addedBy: classroomVideos.addedBy,
   note: classroomVideos.note,
   chapterId: classroomVideos.chapterId,
+  unitId: classroomVideos.unitId,
   position: classroomVideos.position,
   createdAt: classroomVideos.createdAt,
   video: videoSelect,
@@ -40,12 +41,17 @@ const classroomVideoSelect = {
   )`,
 };
 
-export async function listClassroomVideos(classroomId: string) {
+/** studentView 면 숨김 단원에 속한 영상은 뺀다(미분류는 항상 포함). */
+export async function listClassroomVideos(classroomId: string, opts: { studentView?: boolean } = {}) {
   return db.select(classroomVideoSelect)
     .from(classroomVideos)
     .innerJoin(videos, eq(classroomVideos.videoId, videos.id))
     .leftJoin(chapters, eq(classroomVideos.chapterId, chapters.id))
-    .where(eq(classroomVideos.classroomId, classroomId))
+    .leftJoin(units, eq(classroomVideos.unitId, units.id))
+    .where(and(
+      eq(classroomVideos.classroomId, classroomId),
+      opts.studentView ? or(isNull(classroomVideos.unitId), eq(units.isHidden, false)) : undefined,
+    ))
     .orderBy(asc(classroomVideos.position), asc(classroomVideos.createdAt));
 }
 
@@ -59,18 +65,26 @@ export async function getClassroomVideoById(id: string) {
   return rows[0] ?? null;
 }
 
-/** 시청 화면용 상세: 배정 + 학급 + 같은 학급의 다른 영상 */
-export async function getClassroomVideoDetail(id: string) {
+/**
+ * 시청 화면용 상세: 배정 + 학급 + 소속 단원 + 다른 영상(siblings).
+ * siblings 는 이 영상이 단원에 속하면 같은 단원의 영상만, 미분류면 학급의 나머지 전체.
+ * studentView 면 숨김 단원 영상은 siblings 에서 빠진다(상세 자체는 막지 않는다).
+ */
+export async function getClassroomVideoDetail(id: string, opts: { studentView?: boolean } = {}) {
   const cv = await getClassroomVideoById(id);
   if (!cv) return null;
   const [cls] = await db.select({ id: classrooms.id, name: classrooms.name, teacherId: classrooms.teacherId })
     .from(classrooms).where(eq(classrooms.id, cv.classroomId)).limit(1);
   if (!cls) return null;
-  const all = await listClassroomVideos(cv.classroomId);
-  return { ...cv, classroom: cls, siblings: all.filter((v) => v.id !== cv.id) };
+  const [unit = null] = cv.unitId
+    ? await db.select({ id: units.id, title: units.title }).from(units).where(eq(units.id, cv.unitId)).limit(1)
+    : [];
+  const all = await listClassroomVideos(cv.classroomId, opts);
+  const siblings = all.filter((v) => v.id !== cv.id && (cv.unitId ? v.unitId === cv.unitId : true));
+  return { ...cv, classroom: cls, unit, siblings };
 }
 
-export async function addClassroomVideo(classroomId: string, videoId: string, addedBy: string, note?: string | null) {
+export async function addClassroomVideo(classroomId: string, videoId: string, addedBy: string, note?: string | null, unitId?: string | null) {
   try {
     // 새 영상을 맨 앞(0)에 넣고 기존 배정은 한 칸씩 뒤로 민다 → "교사 지정순"에서도 새 항목이 가장 위.
     // unique 위반 시 트랜잭션이 롤백되므로 shift 도 함께 되돌아간다.
@@ -79,7 +93,7 @@ export async function addClassroomVideo(classroomId: string, videoId: string, ad
         .set({ position: sql`${classroomVideos.position} + 1` })
         .where(eq(classroomVideos.classroomId, classroomId));
       const [inserted] = await tx.insert(classroomVideos)
-        .values({ classroomId, videoId, addedBy, note: note ?? null, position: 0 })
+        .values({ classroomId, videoId, addedBy, note: note ?? null, unitId: unitId ?? null, position: 0 })
         .returning();
       return inserted;
     });
@@ -94,13 +108,14 @@ export async function addClassroomVideo(classroomId: string, videoId: string, ad
   }
 }
 
-export type ClassroomVideoPatch = { note?: string | null; chapterId?: string | null };
+export type ClassroomVideoPatch = { note?: string | null; chapterId?: string | null; unitId?: string | null };
 
 /** 전달된 키만 갱신한다(note 만 보내면 chapterId 는 유지). */
 export async function updateClassroomVideo(id: string, patch: ClassroomVideoPatch) {
   const set: Partial<typeof classroomVideos.$inferInsert> = {};
   if ('note' in patch) set.note = patch.note ?? null;
   if ('chapterId' in patch) set.chapterId = patch.chapterId ?? null;
+  if ('unitId' in patch) set.unitId = patch.unitId ?? null;
   if (Object.keys(set).length > 0) {
     await db.update(classroomVideos).set(set).where(eq(classroomVideos.id, id));
   }
