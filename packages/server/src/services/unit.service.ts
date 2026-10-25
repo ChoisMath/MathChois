@@ -18,14 +18,18 @@ function toUnit<T extends { createdAt: Date }>(row: T): Omit<T, 'createdAt'> & {
   return { ...row, createdAt: row.createdAt.toISOString() };
 }
 
+// 단일 테이블 select 에서 drizzle 은 ${units.id} 를 한정자 없는 "id" 로 그려, 서브쿼리 안에서 c.id / cv.id 로
+// 묶여 버린다(항상 0). 바깥 단원 id 를 "units"."id" 로 명시한다.
+const unitIdRef = sql`${sql.identifier('units')}.${sql.identifier('id')}`;
+
 /** 학급의 단원 목록(position 순) + 챕터/영상 개수. 학생은 includeHidden=false. */
 export async function listUnits(classroomId: string, opts: { includeHidden: boolean }): Promise<UnitWithCounts[]> {
   const conds = [eq(units.classroomId, classroomId)];
   if (!opts.includeHidden) conds.push(eq(units.isHidden, false));
   const rows = await db.select({
     ...unitColumns,
-    chapterCount: sql<number>`(SELECT count(*)::int FROM chapters c WHERE c.unit_id = ${units.id})`,
-    videoCount: sql<number>`(SELECT count(*)::int FROM classroom_videos cv WHERE cv.unit_id = ${units.id})`,
+    chapterCount: sql<number>`(SELECT count(*)::int FROM chapters c WHERE c.unit_id = ${unitIdRef})`,
+    videoCount: sql<number>`(SELECT count(*)::int FROM classroom_videos cv WHERE cv.unit_id = ${unitIdRef})`,
   })
     .from(units)
     .where(and(...conds))

@@ -10,8 +10,9 @@
  */
 import { eq } from 'drizzle-orm';
 import { db, pgClient } from '../src/config/database.js';
-import { profiles, classrooms, classroomMembers, units } from '../src/db/schema.js';
+import { profiles, classrooms, classroomMembers, units, chapters, videos, classroomVideos } from '../src/db/schema.js';
 import { signAccessToken, hashPassword } from '../src/services/auth.service.js';
+import { assignItemsToUnit } from '../src/services/unit.service.js';
 
 const BASE = process.env.SMOKE_BASE ?? 'http://localhost:3001';
 let failures = 0;
@@ -82,6 +83,18 @@ async function main() {
   check('PATCH isHidden → 200', hide.status === 200 && hide.json?.isHidden === true, hide);
   const sList = await api(tS, 'GET', base);
   check('학생 GET → 1개(숨김 제외)', sList.status === 200 && sList.json?.length === 1, sList.json);
+  // 개수: 챕터 1 + 학급영상 1 을 u1 에 넣고 chapterCount/videoCount 가 실제 값(1)인지 확인
+  const [chap] = await db.insert(chapters).values({ classroomId: cls.id, title: `units 스모크 ${Date.now()}`, position: 997 }).returning();
+  const [vid] = await db.insert(videos).values({ createdBy: teacher.id, title: 'units 스모크 영상', videoUrl: `units-smoke/${Date.now()}.mp4` }).returning();
+  const [cv] = await db.insert(classroomVideos).values({ classroomId: cls.id, videoId: vid.id, addedBy: teacher.id }).returning();
+  const assigned = await assignItemsToUnit(u1, cls.id, { chapterIds: [chap.id], classroomVideoIds: [cv.id] });
+  check('assignItemsToUnit → true', assigned === true, assigned);
+  const counted = await api(tT, 'GET', base);
+  const row1 = counted.json?.find((u: any) => u.id === u1);
+  const row2 = counted.json?.find((u: any) => u.id === u2);
+  check('u1 chapterCount === 1 && videoCount === 1', row1?.chapterCount === 1 && row1?.videoCount === 1, row1);
+  check('u2 chapterCount === 0 && videoCount === 0', row2?.chapterCount === 0 && row2?.videoCount === 0, row2);
+
   const tList = await api(tT, 'GET', base);
   check('교사 GET → 2개', tList.status === 200 && tList.json?.length === 2, tList.json);
   check('원소에 chapterCount·videoCount 숫자',
@@ -107,6 +120,9 @@ async function main() {
   check('삭제 후 PATCH → 404 단원을 찾을 수 없습니다', gone.status === 404 && gone.json?.error === '단원을 찾을 수 없습니다', gone);
 
   // 정리
+  await db.delete(classroomVideos).where(eq(classroomVideos.id, cv.id));
+  await db.delete(videos).where(eq(videos.id, vid.id));
+  await db.delete(chapters).where(eq(chapters.id, chap.id));
   await db.delete(units).where(eq(units.classroomId, cls.id));
   await pgClient.end();
   console.log(failures === 0 ? '\n전부 통과' : `\n실패 ${failures}건`);
