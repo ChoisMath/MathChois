@@ -52,11 +52,28 @@ export const chapters = pgTable('chapters', {
   description: text('description'),
   position: integer('position').notNull().default(0),
   sourceChapterId: uuid('source_chapter_id').references((): any => chapters.id, { onDelete: 'set null' }),
+  // 소속 단원(NULL = 미분류). units 는 아래에 정의되므로 지연 참조. 단원 삭제 시 미분류로.
+  unitId: uuid('unit_id').references((): any => units.id, { onDelete: 'set null' }),
   // 최신순/등록순 정렬 기준. 컬럼 도입 이전 행은 startupMigrate 시점의 now() 로 채워진다(동률 → position 으로 보조 정렬).
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
   index('idx_chapters_classroom').on(t.classroomId),
   index('idx_chapters_source').on(t.sourceChapterId),
+  index('idx_chapters_unit').on(t.unitId),
+]);
+
+// ─── units (학급 단원: 챕터·영상을 묶는 재생목록) ───
+
+export const units = pgTable('units', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  classroomId: uuid('classroom_id').notNull().references(() => classrooms.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  description: text('description'),
+  position: integer('position').notNull().default(0),
+  isHidden: boolean('is_hidden').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  index('idx_units_classroom').on(t.classroomId, t.position),
 ]);
 
 // ─── pages ──────────────────────────────────────────
@@ -386,6 +403,8 @@ export const classroomVideos = pgTable('classroom_videos', {
   note: text('note'),
   // 필기 챕터: 학생이 영상 2분할 화면에서 옆에 놓고 필기할 같은 학급의 챕터(교사 설정). 챕터 삭제 시 연결만 해제.
   chapterId: uuid('chapter_id').references(() => chapters.id, { onDelete: 'set null' }),
+  // 소속 단원(NULL = 미분류). 단원 삭제 시 미분류로.
+  unitId: uuid('unit_id').references((): any => units.id, { onDelete: 'set null' }),
   position: integer('position').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
@@ -393,6 +412,7 @@ export const classroomVideos = pgTable('classroom_videos', {
   index('idx_classroom_videos_classroom').on(t.classroomId, t.position),
   index('idx_classroom_videos_video').on(t.videoId),
   index('idx_classroom_videos_chapter').on(t.chapterId),
+  index('idx_classroom_videos_unit').on(t.unitId),
 ]);
 
 // ─── video_comments (학급 영상 댓글/대댓글) ─────────

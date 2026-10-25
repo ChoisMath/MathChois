@@ -234,6 +234,25 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
   log.info('startup migration: whiteboard tables ensured');
 
   await pgClient`ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS color text`;
+
+  // 학급 단원. units 를 먼저 만들어야 chapters/classroom_videos 의 FK 가 걸린다.
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS units (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      classroom_id uuid NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE,
+      title text NOT NULL,
+      description text,
+      position integer NOT NULL DEFAULT 0,
+      is_hidden boolean NOT NULL DEFAULT false,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_units_classroom ON units (classroom_id, position)`;
+  await pgClient`ALTER TABLE chapters ADD COLUMN IF NOT EXISTS unit_id uuid REFERENCES units(id) ON DELETE SET NULL`;
+  await pgClient`ALTER TABLE classroom_videos ADD COLUMN IF NOT EXISTS unit_id uuid REFERENCES units(id) ON DELETE SET NULL`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_chapters_unit ON chapters (unit_id)`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_classroom_videos_unit ON classroom_videos (unit_id)`;
+  log.info('startup migration: units ensured');
+
   await backfillClassroomColors(log);
 }
 
