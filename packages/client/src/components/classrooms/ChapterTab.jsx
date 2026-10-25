@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
-  FileText, Plus, Edit2, Trash2, GripVertical, Loader, X, Download,
+  FileText, Plus, Edit2, Trash2, GripVertical, Loader, X, Download, ListPlus,
 } from 'lucide-react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
@@ -21,9 +21,18 @@ import SortOrderSelect from '../common/SortOrderSelect';
 import { useSortOrder } from '../../hooks/useSortOrder';
 import { sortItems, isManualOrder } from '../../lib/sortOrder';
 import { CARD_GRID } from '../../lib/layout';
+import { invalidatePagesCache } from '../../lib/dataCache';
+import { addItemsToUnit } from '../../lib/units';
+import { groupByUnit } from '@mathchois/shared';
+import UnitBrowser from '../units/UnitBrowser';
+import UnitSelect from '../units/UnitSelect';
+import UnitItemPickerModal from '../units/UnitItemPickerModal';
+
+/** 단원 카드 그림: 챕터 첫 페이지 그림 */
+const chapterCover = (ch) => ch.pages?.[0]?.imageUrl ?? null;
 
 /* ─── 정렬 가능한 챕터 카드 ─── */
-function SortableChapterCard({ ch, isTeacher, sortable = isTeacher, onDelete, onCardClick, onDownloadPdf, downloadingId }) {
+function SortableChapterCard({ ch, isTeacher, sortable = isTeacher, units = [], onUnitChange, onDelete, onCardClick, onDownloadPdf, downloadingId }) {
   const {
     attributes, listeners, setNodeRef,
     transform, transition, isDragging,
@@ -98,6 +107,11 @@ function SortableChapterCard({ ch, isTeacher, sortable = isTeacher, onDelete, on
         <p className="text-xs text-gray-500 line-clamp-2">{ch.description}</p>
       )}
 
+      {/* 단원 선택 (교사 전용, 단원이 있는 학급만) */}
+      {isTeacher && units.length > 0 && onUnitChange && (
+        <UnitSelect units={units} value={ch.unitId ?? null} onChange={(unitId) => onUnitChange(ch, unitId)} />
+      )}
+
       {/* 페이지 수 및 다운로드 버튼 */}
       <div className="flex items-center justify-between mt-auto pt-1">
         <p className="text-xs text-gray-400 flex items-center gap-1">
@@ -124,8 +138,18 @@ function SortableChapterCard({ ch, isTeacher, sortable = isTeacher, onDelete, on
   );
 }
 
-/* ─── 챕터 탭: 챕터 목록·정렬·드래그·생성(직접/가져오기)·삭제·학생 PDF ─── */
-export default function ChapterTab({ classroomId, isTeacher }) {
+/**
+ * 챕터 탭: 챕터 목록·정렬·드래그·생성(직접/가져오기)·삭제·학생 PDF + 단원 재생목록 화면(UnitBrowser).
+ *
+ * @param {object} props
+ * @param {string} props.classroomId
+ * @param {boolean} props.isTeacher
+ * @param {object[]|null} props.units 학급 단원 목록(null = 아직 불러오는 중)
+ * @param {string|null} props.unitParam 주소의 unit 값
+ * @param {(next: string|null) => void} props.onUnitParamChange
+ * @param {() => void} props.onUnitsChanged 단원 목록(개수 포함)을 다시 읽게 한다
+ */
+export default function ChapterTab({ classroomId, isTeacher, units, unitParam, onUnitParamChange, onUnitsChanged }) {
   const id = classroomId;
   const navigate = useNavigate();
   const { user, profile } = useAuth();
@@ -138,6 +162,10 @@ export default function ChapterTab({ classroomId, isTeacher }) {
   const [newTitle, setNewTitle]     = useState('');
   const [newDesc, setNewDesc]       = useState('');
   const [creating, setCreating]     = useState(false);
+  const [createUnitId, setCreateUnitId] = useState(null); // 새 챕터·가져온 챕터가 들어갈 단원(null = 미분류)
+
+  /* 기존 항목 가져오기(미분류 챕터 → 지금 단원) */
+  const [pickerUnit, setPickerUnit] = useState(null);
 
   /* 가져오기 */
   const [importClassrooms, setImportClassrooms]   = useState([]);
@@ -150,6 +178,11 @@ export default function ChapterTab({ classroomId, isTeacher }) {
   const [chapterSort, setChapterSort] = useSortOrder('chapters', user?.id);
   const sortedChapters = useMemo(() => sortItems(chapters, chapterSort), [chapters, chapterSort]);
   const canReorder = isTeacher && isManualOrder(chapterSort);
+  /* 피커에 보일 미분류 챕터 — 열려 있는 동안 목록이 바뀌어도 지금 것으로 */
+  const unassignedChapters = useMemo(
+    () => groupByUnit(units ?? [], sortedChapters).unassigned,
+    [units, sortedChapters],
+  );
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting]     = useState(false);
@@ -227,7 +260,7 @@ export default function ChapterTab({ classroomId, isTeacher }) {
     if (!importSelectedChid) return;
     setImporting(true);
     try {
-      await api.post(`/api/chapters/${importSelectedChid}/import`, { targetClassroomId: id });
+      await api.post(`/api/chapters/${importSelectedChid}/import`, { targetClassroomId: id, unitId: createUnitId });
       closeCreateModal();
       fetchChapters();
     } catch (err) {
@@ -245,6 +278,7 @@ export default function ChapterTab({ classroomId, isTeacher }) {
       await api.post(`/api/classrooms/${id}/chapters`, {
         title:       newTitle.trim(),
         description: newDesc.trim() || null,
+        unitId:      createUnitId,
       });
       setNewTitle(''); setNewDesc(''); setShowCreateModal(false); fetchChapters();
     } catch (err) {
@@ -279,22 +313,50 @@ export default function ChapterTab({ classroomId, isTeacher }) {
     }
   };
 
-  /* ── 챕터 순서 변경 ── */
-  const handleDragEnd = async ({ active, over }) => {
+  /* ── 챕터 순서 변경: 보이는 목록(단원 안이면 그 단원 챕터) 안에서만, 그 챕터들의 position 만 보낸다 ── */
+  const handleDragEnd = async ({ active, over }, list) => {
     if (!canReorder || !over || active.id === over.id) return;
-    const oldIdx = sortedChapters.findIndex((c) => c.id === active.id);
-    const newIdx = sortedChapters.findIndex((c) => c.id === over.id);
+    const oldIdx = list.findIndex((c) => c.id === active.id);
+    const newIdx = list.findIndex((c) => c.id === over.id);
     if (oldIdx < 0 || newIdx < 0) return;
-    const newOrder = arrayMove(sortedChapters, oldIdx, newIdx).map((ch, i) => ({ ...ch, position: i }));
-    setChapters(newOrder); // optimistic update
+    const newOrder = arrayMove(list, oldIdx, newIdx).map((ch, i) => ({ id: ch.id, position: i }));
+    const posById = new Map(newOrder.map((ch) => [ch.id, ch.position]));
+    setChapters((prev) => prev.map((ch) => (posById.has(ch.id) ? { ...ch, position: posById.get(ch.id) } : ch))); // optimistic update
     try {
-      await api.put('/api/chapters/reorder', {
-        items: newOrder.map((ch) => ({ id: ch.id, position: ch.position })),
-      });
+      await api.put('/api/chapters/reorder', { items: newOrder });
     } catch (err) {
       console.error('[ChapterTab] 순서 변경 오류:', err);
       fetchChapters();
     }
+  };
+
+  /* ── 교사: 카드의 단원 선택 — 먼저 옮겨 보이고, 실패하면 되돌린다 ── */
+  const handleUnitChange = async (ch, unitId) => {
+    const prevUnitId = ch.unitId ?? null;
+    if (prevUnitId === unitId) return;
+    const setUnitOf = (value) => setChapters((prev) => prev.map((c) => (c.id === ch.id ? { ...c, unitId: value } : c)));
+    setUnitOf(unitId);
+    try {
+      await api.patch(`/api/chapters/${ch.id}`, { unitId });
+      invalidatePagesCache(ch.id); // 뷰어의 '나가기'가 새 단원으로 돌아가도록
+      onUnitsChanged();
+    } catch (err) {
+      setUnitOf(prevUnitId);
+      window.alert(err?.message || '단원을 바꾸지 못했습니다.');
+    }
+  };
+
+  /* ── 교사: 기존 항목 가져오기(미분류 챕터 → 이 단원) ── */
+  const handlePickChapters = async (ids) => {
+    await addItemsToUnit(pickerUnit.id, { chapterIds: ids }); // 실패하면 창에 오류 문구
+    setPickerUnit(null);
+    await fetchChapters();
+    onUnitsChanged();
+  };
+
+  const openCreateModal = (unitId) => {
+    setCreateUnitId(unitId ?? null);
+    setShowCreateModal(true);
   };
 
   /* ── 학생 챕터 PDF 일괄 다운로드 ── */
@@ -327,77 +389,115 @@ export default function ChapterTab({ classroomId, isTeacher }) {
     }
   };
 
-  if (loading) return <p className="text-gray-500">로딩 중...</p>;
+  /* 단원 목록도 읽은 뒤에 그린다 — 그 전에 그리면 평면 격자·단원 목록이 잠깐 번갈아 보인다 */
+  if (loading || units == null) return <p className="text-gray-500">로딩 중...</p>;
+
+  /* 툴바: 단원 없음 → 목록 위 줄, 단원 안 → 단원 머리 오른쪽. 보일 것이 없으면 null */
+  const renderToolbar = (ctx) => {
+    const hasChapters = chapters.length > 0;
+    if (!isTeacher && !hasChapters) return null;
+    return (
+      <>
+        {isTeacher && hasChapters && !canReorder && (
+          <span className="text-xs text-gray-400">드래그 정렬은 ‘교사 지정순’에서 가능합니다</span>
+        )}
+        {hasChapters && (
+          <SortOrderSelect value={chapterSort} onChange={setChapterSort} />
+        )}
+        {isTeacher && ctx.unitId && (
+          <IconButton icon={ListPlus} label="기존 항목 가져오기" onClick={() => setPickerUnit(ctx.unit)} />
+        )}
+        {isTeacher && (
+          <IconButton icon={Plus} label="새 챕터" variant="primary" onClick={() => openCreateModal(ctx.unitId)} />
+        )}
+      </>
+    );
+  };
+
+  /* 챕터 격자 — list 는 보이는 챕터(단원 안이면 그 단원 것만), 정렬 순서 유지 */
+  const renderChapters = (list) => (
+    list.length === 0 ? (
+      <div
+        onClick={isTeacher ? () => openCreateModal(null) : undefined}
+        className={`border-2 border-dashed border-gray-300 rounded-xl h-40 flex flex-col items-center justify-center text-gray-400 text-sm gap-2 ${
+          isTeacher ? 'cursor-pointer hover:border-blue-300 hover:text-blue-400 transition-colors' : ''
+        }`}
+      >
+        {isTeacher
+          ? <><Plus className="h-8 w-8" /><span>새 챕터 추가</span></>
+          : <span>등록된 챕터가 없습니다.</span>}
+      </div>
+    ) : isTeacher ? (
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={(e) => handleDragEnd(e, list)}
+      >
+        <SortableContext
+          items={list.map((c) => c.id)}
+          strategy={rectSortingStrategy}
+        >
+          <div className={CARD_GRID}>
+            {list.map((ch) => (
+              <SortableChapterCard
+                key={ch.id}
+                ch={ch}
+                isTeacher={true}
+                sortable={canReorder}
+                units={units}
+                onUnitChange={handleUnitChange}
+                onDelete={setDeleteTarget}
+                onCardClick={handleCardClick}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
+    ) : (
+      <div className={CARD_GRID}>
+        {list.map((ch) => (
+          <SortableChapterCard
+            key={ch.id}
+            ch={ch}
+            isTeacher={false}
+            onDelete={() => {}}
+            onCardClick={handleCardClick}
+            onDownloadPdf={handleDownloadStudentChapterPdf}
+            downloadingId={downloadingChapterId}
+          />
+        ))}
+      </div>
+    )
+  );
 
   return (
     <>
       <div>
-
-        {(isTeacher || chapters.length > 0) && (
-          <div className="flex items-center justify-end gap-3 mb-3">
-            {isTeacher && chapters.length > 0 && !canReorder && (
-              <span className="text-xs text-gray-400">드래그 정렬은 ‘교사 지정순’에서 가능합니다</span>
-            )}
-            {chapters.length > 0 && (
-              <SortOrderSelect value={chapterSort} onChange={setChapterSort} />
-            )}
-            {isTeacher && (
-              <IconButton icon={Plus} label="새 챕터" variant="primary" onClick={() => setShowCreateModal(true)} />
-            )}
-          </div>
-        )}
-
-        {chapters.length === 0 ? (
-          <div
-            onClick={isTeacher ? () => setShowCreateModal(true) : undefined}
-            className={`border-2 border-dashed border-gray-300 rounded-xl h-40 flex flex-col items-center justify-center text-gray-400 text-sm gap-2 ${
-              isTeacher ? 'cursor-pointer hover:border-blue-300 hover:text-blue-400 transition-colors' : ''
-            }`}
-          >
-            {isTeacher
-              ? <><Plus className="h-8 w-8" /><span>새 챕터 추가</span></>
-              : <span>등록된 챕터가 없습니다.</span>}
-          </div>
-        ) : isTeacher ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={sortedChapters.map((c) => c.id)}
-              strategy={rectSortingStrategy}
-            >
-              <div className={CARD_GRID}>
-                {sortedChapters.map((ch) => (
-                  <SortableChapterCard
-                    key={ch.id}
-                    ch={ch}
-                    isTeacher={true}
-                    sortable={canReorder}
-                    onDelete={setDeleteTarget}
-                    onCardClick={handleCardClick}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-        ) : (
-          <div className={CARD_GRID}>
-            {sortedChapters.map((ch) => (
-              <SortableChapterCard
-                key={ch.id}
-                ch={ch}
-                isTeacher={false}
-                onDelete={() => {}}
-                onCardClick={handleCardClick}
-                onDownloadPdf={handleDownloadStudentChapterPdf}
-                downloadingId={downloadingChapterId}
-              />
-            ))}
-          </div>
-        )}
+        <UnitBrowser
+          classroomId={id}
+          tab="chapters"
+          units={units}
+          items={sortedChapters}
+          isTeacher={isTeacher}
+          unitParam={unitParam}
+          onUnitParamChange={onUnitParamChange}
+          coverOfItem={chapterCover}
+          onUnitsChanged={onUnitsChanged}
+          renderItems={renderChapters}
+          toolbar={renderToolbar}
+        />
       </div>
+
+      {/* ── 모달: 기존 항목 가져오기 ── */}
+      {pickerUnit && (
+        <UnitItemPickerModal
+          title={`${pickerUnit.title}에 챕터 가져오기`}
+          items={unassignedChapters}
+          renderLabel={(ch) => ch.title}
+          onSubmit={handlePickChapters}
+          onClose={() => setPickerUnit(null)}
+        />
+      )}
 
       {/* ── 모달: 새 챕터 ── */}
       {showCreateModal && (

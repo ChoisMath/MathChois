@@ -13,6 +13,7 @@ import VideoPlayer from '../../components/videos/VideoPlayer';
 import VideoComments from '../../components/videos/VideoComments';
 import CollapsibleSection from '../../components/videos/CollapsibleSection';
 import IconButton from '../../components/common/IconButton';
+import { UNASSIGNED } from '@mathchois/shared';
 
 function formatWatchedAt(iso) {
   if (!iso) return '';
@@ -178,7 +179,7 @@ export default function ClassroomVideoWatch() {
     return (
       <div className="max-w-3xl mx-auto">
         <p className="text-red-600 mb-3">{error || '영상을 찾을 수 없습니다.'}</p>
-        <Link to={`${base}/classrooms/${classroomId}`} className="text-blue-600 hover:underline text-sm">← 학급으로 돌아가기</Link>
+        <Link to={`${base}/classrooms/${classroomId}?tab=videos`} className="text-blue-600 hover:underline text-sm">← 학급으로 돌아가기</Link>
       </div>
     );
   }
@@ -189,7 +190,8 @@ export default function ClassroomVideoWatch() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <button onClick={() => navigate(`${base}/classrooms/${classroomId}`)}
+      {/* 학급의 영상 탭, 이 영상이 든 단원(또는 미분류) 화면으로 돌아간다 */}
+      <button onClick={() => navigate(`${base}/classrooms/${classroomId}?tab=videos&unit=${detail.unitId ?? UNASSIGNED}`)}
         className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 mb-3 cursor-pointer">
         <ArrowLeft className="h-4 w-4" /> {detail.classroom?.name ?? '학급'}
       </button>
@@ -251,9 +253,11 @@ export default function ClassroomVideoWatch() {
           />
         </div>
 
-        {/* ── 같은 학급의 다른 영상 ── */}
+        {/* ── 같은 단원(단원이 없으면 같은 학급)의 다른 영상 ── */}
         <aside className="min-w-0">
-          <h2 className="text-sm font-semibold text-gray-700 mb-2">이 학급의 다른 영상</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-2 break-keep [overflow-wrap:anywhere]">
+            {detail.unit ? `이 단원의 다른 영상 · ${detail.unit.title}` : '이 학급의 다른 영상'}
+          </h2>
           {detail.siblings?.length ? (
             <ul className="flex flex-col gap-2">
               {detail.siblings.map((s) => (

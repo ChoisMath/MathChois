@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Copy, Check, Trash2, Plus, Hash, LogOut, Loader, X,
@@ -12,6 +12,7 @@ import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { refreshSidebar } from '../../lib/sidebarRefresh';
 import { getClassroomVideoUnread } from '../../lib/videos';
+import { listUnits } from '../../lib/units';
 import { resolveClassroomColor, colorVars } from '../../lib/classroomColor';
 import ClassroomColorPicker from '../../components/classrooms/ClassroomColorPicker';
 import ChapterTab from '../../components/classrooms/ChapterTab';
@@ -50,6 +51,44 @@ const ClassroomDetail = () => {
     next.set('tab', key);
     setSearchParams(next, { replace: true });
   };
+  /* 보고 있는 단원(?unit= 단원 id | 'none' | 없음=단원 목록). 단원을 열고 닫는 것은 기록을 남겨 뒤로 가기로 단원 목록에 돌아온다 */
+  const unitParam = searchParams.get('unit');
+  const setUnitParam = (nextUnit) => {
+    const next = new URLSearchParams(searchParams);
+    if (nextUnit) next.set('unit', nextUnit);
+    else next.delete('unit');
+    setSearchParams(next, { replace: false });
+  };
+
+  /* 단원 목록 — 챕터·영상 탭이 함께 쓴다. { cid, list }: 다른 학급의 목록이 잠깐이라도 섞이지 않게 학급 id 와 함께 둔다.
+     이 학급 것을 아직 못 읽었으면 탭에 null(불러오는 중)을 넘긴다. 읽지 못하면 [] → 기존 평면 격자 */
+  const [unitsState, setUnitsState] = useState({ cid: null, list: [] });
+  const units = unitsState.cid === id ? unitsState.list : null;
+  const unitsSeqRef = useRef(0); // 겹친 요청은 마지막 것만 반영
+  const reloadUnits = useCallback(async () => {
+    const seq = ++unitsSeqRef.current;
+    let list;
+    try {
+      list = (await listUnits(id)) || [];
+    } catch (err) {
+      console.error('[ClassroomDetail] 단원 목록 로드 오류:', err);
+      list = [];
+    }
+    if (seq === unitsSeqRef.current) setUnitsState({ cid: id, list });
+  }, [id]);
+  const usesUnits = activeTab === 'chapters' || activeTab === 'videos';
+
+  /* 챕터·영상 탭에 들어올 때, 다른 탭/앱에서 돌아왔을 때 다시 읽는다(다른 기기에서 단원을 바꿨을 수 있다) */
+  useEffect(() => {
+    if (!usesUnits) return undefined;
+    const timer = setTimeout(reloadUnits, 0);
+    const onVisible = () => { if (document.visibilityState === 'visible') reloadUnits(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [usesUnits, activeTab, reloadUnits]);
   const [deleting, setDeleting]     = useState(false);
   const [showDeleteClassroom, setShowDeleteClassroom] = useState(false);
   const [unsubmittedCount, setUnsubmittedCount] = useState(0);
@@ -304,7 +343,15 @@ const ClassroomDetail = () => {
 
         {/* ── 챕터 탭 ── */}
         {activeTab === 'chapters' && (
-          <ChapterTab key={id} classroomId={id} isTeacher={isTeacher} />
+          <ChapterTab
+            key={id}
+            classroomId={id}
+            isTeacher={isTeacher}
+            units={units}
+            unitParam={unitParam}
+            onUnitParamChange={setUnitParam}
+            onUnitsChanged={reloadUnits}
+          />
         )}
 
         {/* ── 게시판 탭 ── */}
@@ -328,7 +375,15 @@ const ClassroomDetail = () => {
         {/* ── 영상 탭 ── */}
         {activeTab === 'videos' && (
           <Suspense fallback={<p className="text-gray-400 text-sm">로딩 중...</p>}>
-            <ClassroomVideoTab classroomId={id} isTeacher={isTeacher} />
+            <ClassroomVideoTab
+              key={id}
+              classroomId={id}
+              isTeacher={isTeacher}
+              units={units}
+              unitParam={unitParam}
+              onUnitParamChange={setUnitParam}
+              onUnitsChanged={reloadUnits}
+            />
           </Suspense>
         )}
 

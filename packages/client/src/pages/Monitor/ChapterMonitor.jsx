@@ -5,6 +5,7 @@ import { ArrowLeft, PenLine, Users, FileText, Download, Presentation } from 'luc
 import { api } from '../../lib/api';
 import { joinRoom, leaveRoom, getSocket } from '../../lib/socket';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
+import { UNASSIGNED } from '@mathchois/shared';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 
@@ -205,7 +206,10 @@ const ChapterMonitor = () => {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/teacher/classrooms/${classroomId}`)} title="뒤로 가기"
+            onClick={() => navigate(
+              /* 학급의 챕터 탭, 이 챕터가 든 단원(또는 미분류) 화면으로. 챕터를 아직 못 읽었으면 챕터 탭만 */
+              `/teacher/classrooms/${classroomId}?tab=chapters${chapter ? `&unit=${chapter.unitId ?? UNASSIGNED}` : ''}`,
+            )} title="뒤로 가기"
             className="p-1.5 text-gray-400 hover:text-gray-600 cursor-pointer flex items-center justify-center"
           >
             <ArrowLeft className="h-5 w-5" />
