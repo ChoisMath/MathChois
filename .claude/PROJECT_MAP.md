@@ -24,17 +24,20 @@ packages/
 │       ├── routes/             # auth, classrooms, chapters, pages, storage, posts,
 │       │                       #   assignments, notes, comments, admin, problems, coaching, dashboard, visualizations,
 │       │                       #   classroomGroups(학급 기본 모둠), whiteboards(화이트보드 — 페이지 뷰/배정/설정/보드/잠금/초기화/복원/템플릿 원자 적용),
-│       │                       #   videos(영상자료 라이브러리+스트리밍 업로드), videoSubtitles(영상 자막 조회/업로드/삭제), classroomVideos(학급 영상 배정+댓글)
-│       ├── services/           # *.service.ts (DB 접근 로직) + ai.service.ts(Gemini), problem.service.ts, coaching.service.ts, dashboard.service.ts, visualization.service.ts, video.service.ts, videoSubtitle.service.ts, classroomVideo.service.ts,
+│       │                       #   videos(영상자료 라이브러리+스트리밍 업로드), videoSubtitles(영상 자막 조회/업로드/삭제), classroomVideos(학급 영상 배정+댓글),
+│       │                       #   units(학급 단원 — 목록/생성/수정/삭제/순서/항목 일괄 배정)
+│       ├── services/           # *.service.ts (DB 접근 로직) + ai.service.ts(Gemini), problem.service.ts, coaching.service.ts, dashboard.service.ts, visualization.service.ts, video.service.ts, videoSubtitle.service.ts, classroomVideo.service.ts, unit.service.ts(단원 CRUD·순서·`assignItemsToUnit` 전부-아니면-전무),
 │       │                       #   pageAccess.service.ts(페이지↔학급 접근 헬퍼 — socket/routes 공용), classroomGroup.service.ts(기본 모둠), whiteboard.service.ts(보드 지연 생성·설정·배정·장면 저장/직전본·권한)
-│       ├── scripts/            # seed-test-accounts.ts, wb-smoke.ts(화이트보드 소켓/REST 스모크), wb-e2e-setup.ts(브라우저 E2E 픽스처)
+│       ├── scripts/            # seed-test-accounts.ts, wb-smoke.ts(화이트보드 소켓/REST 스모크), wb-e2e-setup.ts(브라우저 E2E 픽스처),
+│       │                       #   units-smoke.ts(단원 REST 스모크), units-e2e-setup.ts(단원 브라우저 픽스처 — TEST0001 단원 u1/u2/uh + `--cleanup`)
 │       └── socket/             # index.ts + handlers/(notes, comments, assignments, presence, videos, whiteboard(메모리 권위 장면 + 요소 단위 병합))
 ├── client/                 # @mathchois/client (React SPA)
 │   └── src/
 │       ├── App.jsx             # 라우팅 정의
 │       ├── contexts/AuthContext.jsx
 │       ├── components/         # ProtectedRoute, Navbar(남색 상단 바 — 햄버거·체크 노트 로고·관리자 패널·아바타·이름+역할·로그아웃, MainLayout 과 공용), shell/(BrandMark 체크 노트 로고, SideTab(SideTab 메뉴 탭·ClassTab 학급 색 탭), shell.css — 상단 바·사이드바·`--shell-main-fill`), classrooms/(ClassroomColorPicker — 44px 색 원 6개 `role=group`+`aria-pressed`, `size="sm"`(보이는 원 30px·누르는 영역 44px — 학급 상세 헤더, 그룹 `aria-label="표지 색"`)·`ariaLabel`(글자 라벨 없이 그룹 이름만 줄 때) props; 교사 헤더의 작은 색 원은 `#`(클래스 코드) 버튼을 누르면 코드와 함께 나타나고 누르면 바로 저장, classrooms.css), assignment/, board/, common/(IconButton — 아이콘만 있는 공통 버튼: `label` 하나로 title+aria-label, 누르는 영역 44px, variant ghost/primary(남색)/danger/danger-solid, size sm/md/lg, busy·busyLabel, `as`(Link 등); 글자 버튼을 아이콘으로 바꿀 때 사용(설계 `docs/superpowers/specs/2026-10-20-icon-buttons-design.md`), ProblemView, CoachingPanel, SortablePageItem, SplitPane(2분할 컨테이너 — 손잡이 드래그/키보드로 비율 조정, 드래그 중 투명 오버레이), FileDropZone — 클릭/드래그 앤 드롭 파일 선택 영역, SortOrderSelect — 정렬 순서 선택), problems/(ProblemPickerModal), coaching/(CoachingHistoryView, AttemptStack), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal),
-│       │                       #   videos/(VideoPlayer, SubtitleOverlay, VideoPreviewModal, VideoForm, SubtitleField, VideoPickerModal, ClassroomVideoTab, VideoComments)
+│       │                       #   videos/(VideoPlayer, SubtitleOverlay, VideoPreviewModal, VideoForm, SubtitleField, VideoPickerModal, ClassroomVideoTab, VideoComments),
+│       │                       #   units/(UnitBrowser — 단원 없음=평면 / 단원 목록 / 단원 안 3화면을 고르는 공용 틀, UnitCard·UnitGrid(재생목록 카드·드래그 순서)·UnitHeader·UnitFormModal·UnitDeleteModal·UnitItemPickerModal(기존 항목 가져오기)·UnitSelect(카드별 단원 선택 칸)), classrooms/ChapterTab(챕터 탭 — UnitBrowser 사용)
 │       │   ├── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay, HtmlToolOverlay
 │       │   └── whiteboard/     # WhiteboardCanvas(Excalidraw 기본 UI + 협업), WhiteboardTopBar, BackgroundColorPicker, TemplatePickerDialog, TemplateThumb(SVG 미리보기),
 │       │                       #   WhiteboardTile(격자 정적 썸네일), WhiteboardSettingsDrawer(교사 설정), GroupAssignmentPanel, ClassroomGroupSettings(학급 학생 탭 모둠 설정)
@@ -55,6 +58,7 @@ packages/
 │                               #   dashboard.js(getClassroomDashboard),
 │                               #   visualizations.js(list/facets/CRUD/upload + buildVisualizationQuery),
 │                               #   videos.js(라이브러리/학급배정/댓글/자막 API + 자막 캐시 + XHR 진행률 업로드 + 썸네일 캡처/길이 측정), subtitleFile.js(자막 업로드 전 검사),
+│                               #   units.js(단원 API 래퍼), unitBrowser.js(`resolveUnitView` — 단원 화면 판단: shared 규칙을 엮음),
 │                               #   videoPlayer.js(플레이어 설정 localStorage, SEEK_STEPS/PLAYBACK_RATES, formatTime, 이어보기 위치, 길게 누름 제스처 축/좌우/드래그→값 순수 함수),
 │                               #   splitLayout.js(영상 2분할 — 비율/영상 위치 `mc_video_split`, 마지막 페이지 `mc_video_split_page:<cv>`, ratioFromPointer/stepRatio),
 │                               #   swUpdate.js(PWA SW 자동 업데이트 — setupSwAutoUpdate),
@@ -96,6 +100,14 @@ packages/
 - Socket emit: `socket/handlers/notes.ts`(①②), `comments.ts`(③), `assignments.ts`(④⑤).
 - 교사 모니터링 진입점: `pages/Monitor/ChapterMonitor.jsx`(챕터별 학생 진도 → StudentWorkViewer로), `pages/Assignment/AssignmentMonitor.jsx`(과제별 제출 → AssignmentWorkViewer로).
 - 페이지 배경은 이미지/영상/**HTML 도구** 중 하나 (`pages.html_url`). HTML 도구는 iframe으로 렌더되고, 그 위에 **투명 Excalidraw 오버레이**(`components/study/HtmlToolOverlay.jsx` + `lib/htmlOverlay.js`)로 필기를 얹는다(①②③ 뷰어). 자세한 동작은 아래 "주의사항"의 HTML 필기 오버레이 항목 참조.
+
+## 학급 단원 — 챕터·영상 재생목록 (설계 `docs/superpowers/specs/2026-10-25-classroom-units-design.md`)
+
+학급 상세 [챕터]·[영상] 탭의 첫 화면을 **단원 카드**(재생목록 모양)로 묶는다. 한 단원이 챕터와 영상을 함께 담고(`chapters.unit_id`/`classroom_videos.unit_id`, NULL = 미분류), 두 탭이 같은 단원 목록을 쓴다.
+- **화면 규칙**은 `@mathchois/shared` `units/units.ts`(`groupByUnit`/`visibleUnits`/`resolveUnitParam`, `UNASSIGNED='none'`)와 `lib/unitBrowser.js` `resolveUnitView` 에 있다. 단원이 0개면 **기존 평면 격자 그대로**(교사에게 [새 단원]만 추가), 학생은 이 탭에 보일 단원이 없어도 평면. 위치는 주소 `?tab=…&unit=<id|none>`(단원 열기는 `replace:false` — 뒤로 가기로 단원 목록). 단원 안의 마지막 항목을 다른 단원으로 옮겨도 그 단원 안 화면에 머물고 빈 안내가 보인다. 미분류 카드는 교사 `미분류` / 학생 `기타 자료`.
+- **숨김은 목록에서만**: 학생의 챕터·영상 목록과 영상 시청 화면 siblings 에서 뺀다. 상세 주소는 막지 않는다. 학생 뷰어(`StudyViewer`)·시청 화면·`ChapterMonitor` 의 나가기는 `?tab=…&unit=<소속|none>` 으로 돌아간다.
+- **항목 넣기**: 카드의 `UnitSelect`(낙관적 PATCH, 실패 시 되돌림) / 단원 안 [+ 새 챕터]·[+ 영상 추가]가 현재 단원으로 생성 / [기존 항목 가져오기](`UnitItemPickerModal` → `POST /units/:id/items`). 드래그는 보이는 목록 안의 순서만.
+- 테스트: `npm test -w @mathchois/client`(`unitBrowser`·`units`·shared 규칙), `packages/server/scripts/units-smoke.ts`(REST — 이름 검증·숨김 필터·가져오기 전부-아니면-전무), `packages/client/e2e/units.smoke.mjs`(Chromium — 학생 단원 카드/뒤로 가기/나가기/영상 탭, 교사 숨김 배지·빈 단원 유지; 준비는 `units-e2e-setup.ts`).
 
 ## 화이트보드 — 모둠 공유 보드 (설계 `docs/superpowers/specs/2026-10-18-whiteboard-design.md`, 계획 `docs/superpowers/plans/2026-10-18-whiteboard.md`)
 
@@ -205,6 +217,7 @@ packages/
 | videos | routes/videos.ts | 모두 teacher. `POST /videos/upload?kind=video\|thumbnail`(**스트리밍 업로드** — 디스크 직접 기록, 영상 2GB/썸네일 5MB, mp4/webm/mov, 초과 413), `GET /videos`(목록 q/subject/majorUnit/minorUnit/`mine=1`/페이지네이션 + createdByName), `GET /videos/facets`, `GET /videos/:id`, `GET /videos/:id/usage`(배정 학급), `POST /videos`, `PATCH /videos/:id`(소유자/관리자, 파일 교체 시 이전 파일 정리), `DELETE /videos/:id`(소유자/관리자 — **학급 배정 중이면 409 + usage**, `?force=1` 이면 트랜잭션으로 모든 배정 해제 후 삭제, 파일·썸네일 삭제) |
 | videoSubtitles | routes/videoSubtitles.ts | `GET /video-subtitles?videoUrl=`(로그인 사용자 — 영상 URL 로 자막 목록, 퍼센트 인코딩 절대 URL 도 매칭), `POST /videos/:id/subtitles/:lang`(소유자/관리자, multipart .srt/.vtt ≤ 2MB → 공유 파서로 WebVTT 정규화, UTF-8 아님/문장 0개 400, 초과 413, 같은 언어는 교체), `DELETE /videos/:id/subtitles/:lang`. `GET /videos`·`/videos/:id` 응답에 `subtitleLangs` |
 | classroomVideos | routes/classroomVideos.ts | 시청 기록: `PUT/GET /classroom-videos/:id/progress`(학생), `GET /classroom-videos/:id/progress/summary`(교사), `GET /classrooms/:cid/videos/progress`(학생 본인 맵/교사 통계 맵). 미읽음: `POST /classroom-videos/:id/seen`, `GET /classrooms/:cid/videos/unread`, `GET /videos/unread`(역할별 학급 합계). 교실 소유 교사/소속 학생 가드. `GET /classrooms/:cid/videos`, `POST`(교사 — `{videoId, note}`, 중복 409, 새 배정은 position 0 + 기존 shift → 맨 위), `PATCH /classrooms/:cid/videos/reorder`(`{ids}`), `GET /classroom-videos/:id`(상세 + classroom + siblings), `PATCH`(note·**chapterId**(필기 챕터 — 같은 학급 챕터가 아니면 400, 전달된 키만 갱신), 응답에 `chapter:{id,title}|null` left join)·`DELETE`(교사 — 댓글 cascade). 댓글: `GET /classroom-videos/:id/comments`(학생은 공개 + 본인 비공개 스레드만), `POST`(`content/parentId/isPrivate/timestampSec` — 대댓글은 루트 공개범위 상속, 깊이 1, 타인 비공개 스레드 403), `PATCH /video-comments/:id`(작성자), `DELETE /video-comments/:id`(작성자 또는 교실 소유 교사). 쓰기 후 socket `video:{cvId}` 에 `video-comment:changed` |
+| units | routes/units.ts | `GET /classrooms/:cid/units`(교사·소속 학생 — 학생에게는 숨긴 단원 제외, 항목 개수 `chapterCount`/`videoCount` 포함), `POST`(교사 소유 — `{title, description?, isHidden?}`, 이름 trim 1~100자·설명 ≤ 500자 아니면 400 `단원 이름을 입력하세요`, 새 단원은 맨 뒤 position), `PUT /classrooms/:cid/units/reorder`(`{ids}` — 학급 단원 전부가 아니면 400), `PATCH /units/:id`, `DELETE /units/:id`(204, 항목은 미분류로), `POST /units/:id/items`(`{chapterIds?, classroomVideoIds?}` — 다른 학급 항목이 섞이면 400 `이 학급의 항목이 아닙니다` + 아무것도 옮기지 않음). `POST/PATCH` 챕터·학급 영상에 `unitId`(같은 학급 단원이 아니면 400 `이 학급의 단원이 아닙니다`), 학생의 챕터·영상 목록·영상 siblings 는 숨긴 단원 항목 제외(**목록에서만** — 상세 주소는 막지 않음) |
 | classroomGroups | routes/classroomGroups.ts | 학급 기본 모둠. `GET /classrooms/:id/groups`(소유 교사/소속 학생), `PUT`(교사 — `{groups:[{id?,name,position,studentIds[]}]}` 전체 교체, 누락 id 삭제, 학생당 한 모둠), `POST /classrooms/:id/groups/auto`(`{count}` 가입순 셔플 균등 배분) |
 | whiteboards | routes/whiteboards.ts | 모두 `?classroomId=` 로 (페이지, 학급) 접근 검증(교사 = 학급 소유 && 페이지 관련, 학생 = 소속 && 관련). `GET /whiteboards/page/:pageId`(보드 지연 생성 + 뷰: settings/groups(구성원·elementCount·hasPrevious)/myGroupId(학생)/unassigned(교사)/templateKey/isSourceChapter), `PUT /whiteboards/page/:pageId/groups`(교사 — 페이지별 배정 교체, 삭제된 모둠 보드는 메모리 폐기 + `wb:removed`), `PATCH /whiteboards/page/:pageId/settings`(`allowCrossGroupView`/`lockedAll` → `wb:settings`/`wb:lock`), `GET /whiteboards/groups/:gid`(장면 — 메모리 우선), `PATCH /whiteboards/groups/:gid`(`name`/`locked` → `wb:lock`), `POST /whiteboards/groups/:gid/reset`·`/restore-previous`(교사 — `wb:scene`), `POST /whiteboards/groups/:gid/apply-template`(쓰기 권한자 — 살아있는 요소 0개일 때만 `{applied:true}`) |
 | health | app.ts | `GET /api/health` (DB ping) |
@@ -215,7 +228,8 @@ packages/
 | `profiles` | — | googleId/email unique, role, isAdmin, authMethod(google\|email), passwordHash |
 | `classrooms` | teacherId→profiles | classCode unique, **color**(text NULL — 여섯 색 이름, 공책 표지·사이드바 탭 색. startupMigrate 가 칸을 추가하고 색 없는 학급만 교사별로 채움(저장된 색은 유지)) |
 | `classroom_members` | classroomId, studentId | (classroom, student) unique |
-| `chapters` | classroomId, sourceChapterId(self) | position, sourceChapterId(복제 출처), createdAt(최신순/등록순 정렬용 — startupMigrate 가 보강). 새 챕터는 position 0 에 삽입되고 기존 챕터는 +1 shift(새 항목이 맨 위) |
+| `chapters` | classroomId, sourceChapterId(self), **unitId→units(set null)** | position, sourceChapterId(복제 출처), createdAt(최신순/등록순 정렬용 — startupMigrate 가 보강). 새 챕터는 position 0 에 삽입되고 기존 챕터는 +1 shift(새 항목이 맨 위) |
+| `units` | classroomId→classrooms(cascade) | 학급 단원(챕터·영상을 묶는 재생목록). title(1~100자)/description(≤ 500자)/position(새 단원은 max+1)/isHidden(학생 목록에서만 숨김)/createdAt. 인덱스 (classroomId, position). 삭제 시 `chapters.unit_id`·`classroom_videos.unit_id` 는 SET NULL(미분류) |
 | `pages` | chapterId, aiProblemId→problems(set null) | imageUrl / videoUrl / **htmlUrl**(HTML 도구) / position / **pageType**('whiteboard' \| null) / **whiteboardTemplate**(기본 템플릿 key). `aiProblemId` 설정 시 배경 없는 AI 코칭 페이지 |
 | `student_notes` ① | studentId, pageId | (student, page) unique, excalidrawData |
 | `classroom_groups` / `classroom_group_members` | classroomId→classrooms(cascade) / groupId(cascade), studentId(cascade) | 학급 기본 모둠. name/position. (classroom, student) unique — 학생은 학급당 한 모둠 |
@@ -235,13 +249,13 @@ packages/
 | `coaching_quota` | studentId, pageId | 문제(페이지)당 학생 AI 코칭 횟수 제한/리셋 기준. (student, page) unique, resetAt(이 시각 이후의 `coaching_attempts`만 사용 횟수로 카운트), updatedAt. 시도 기록 자체는 `coaching_attempts`에 그대로 보존 |
 | `visualizations` | createdBy→profiles(cascade) | 시각화자료 라이브러리(교사 간 공유). title(필수)/subject/majorUnit/minorUnit/description/htmlUrl(원본, `visualizations` 버킷). 인덱스 (createdBy)/(subject,majorUnit,minorUnit). 페이지 삽입 시 chapter-tools로 **복제**(독립 복사본) |
 | `videos` | createdBy→profiles(cascade) | 영상자료 라이브러리(교사 간 공유). title/subject/majorUnit/minorUnit/description/videoUrl(`videos` 버킷 `library/`)/thumbnailUrl(`thumbnails/`)/mimeType/fileSize(bigint)/durationSec. 인덱스 (createdBy)/(subject,majorUnit,minorUnit) |
-| `classroom_videos` | classroomId→classrooms(cascade), videoId→videos(**restrict**), addedBy→profiles(set null), **chapterId→chapters(set null)** | 학급에 배정된 영상 — 라이브러리를 **참조**(복사 아님). note(학급 안내 메모)/position. (classroom, video) unique. 배정 중인 라이브러리 영상은 삭제 차단 |
+| `classroom_videos` | classroomId→classrooms(cascade), videoId→videos(**restrict**), addedBy→profiles(set null), **chapterId→chapters(set null)**, **unitId→units(set null)** | 학급에 배정된 영상 — 라이브러리를 **참조**(복사 아님). note(학급 안내 메모)/position. (classroom, video) unique. 배정 중인 라이브러리 영상은 삭제 차단 |
 | `video_comments` | classroomVideoId→classroom_videos(cascade), authorId→profiles(cascade), parentId→video_comments(cascade, 루트만 가리킴 — 깊이 1) | 학급 영상 댓글. content/isPrivate("교사만 확인" — 루트에만 의미, 대댓글은 상속)/timestampSec(영상 시각 첨부). 인덱스 (classroomVideoId, createdAt)/(parentId) |
 | `video_progress` | classroomVideoId→classroom_videos(cascade), studentId→profiles(cascade) | 학생 시청 기록. positionSec(이어보기)/maxPositionSec(진도율)/completed(**80%** 도달 — `PROGRESS_COMPLETE_RATIO`, sticky). (cv, student) unique |
 | `video_comment_reads` | classroomVideoId→classroom_videos(cascade), userId→profiles(cascade) | 댓글 읽음 시각 lastSeenAt. 미읽음 = 본인이 쓰지 않은·열람 가능한·lastSeenAt 이후 댓글 수. (cv, user) unique |
 | `video_subtitles` | videoId→videos(cascade), createdBy→profiles(set null) | 영상자료 자막(영상 × 언어). lang(`SUBTITLE_LANGS` — 현재 'ko')/label/url(`videos` 버킷 `subtitles/` WebVTT)/cueCount/lastEndSec(마지막 문장 끝, 영상만 교체했을 때 길이 경고용 — 기동 시 `ADD COLUMN IF NOT EXISTS`). (video, lang) unique. 교체는 트랜잭션 + `FOR UPDATE` 로 이전 파일을 정확히 하나만 지우고, upsert 실패 시 방금 쓴 파일을 되돌린다. 영상 삭제 시 파일은 서비스가 정리 |
 
-> 마이그레이션은 Drizzle Kit(`db:push`/`db:generate`). 추가로 `db/startupMigrate.ts`가 기동 시 멱등 DDL을 실행(예: `pages.html_url`·`pages.ai_problem_id`·`classrooms.color`(+색 없는 학급 채움) 컬럼, `problems`·`coaching_attempts`·`coaching_quota`(+(student,page) unique index)·`visualizations`·`videos`·`classroom_videos`·`video_comments`·`video_subtitles`(+`videos.video_url` 인덱스)·`classroom_groups`·`whiteboard_*` 테이블, `pages.page_type`/`whiteboard_template` 컬럼 보장).
+> 마이그레이션은 Drizzle Kit(`db:push`/`db:generate`). 추가로 `db/startupMigrate.ts`가 기동 시 멱등 DDL을 실행(예: `pages.html_url`·`pages.ai_problem_id`·`classrooms.color`(+색 없는 학급 채움) 컬럼, `problems`·`coaching_attempts`·`coaching_quota`(+(student,page) unique index)·`visualizations`·`videos`·`classroom_videos`·`video_comments`·`video_subtitles`(+`videos.video_url` 인덱스)·`units`(+`chapters.unit_id`/`classroom_videos.unit_id` 컬럼·인덱스)·`classroom_groups`·`whiteboard_*` 테이블, `pages.page_type`/`whiteboard_template` 컬럼 보장).
 
 ## 외부 의존성
 - **PostgreSQL** (Railway) — `DATABASE_URL`.
@@ -317,4 +331,4 @@ packages/
 - **`.gitignore`** — `*.tsbuildinfo`·`.superpowers/`·`.plans/`·`review.md` 무시(빌드 산출물·작업 노트는 읽지 않음).
 
 ---
-마지막 업데이트: 2026-10-23 (영상자료 자막: video_subtitles·shared 자막 파서·SubtitleOverlay·VideoForm 자막 칸 / 직전: 2026-10-20 앱 틀 리디자인 — 남색 상단 바 + 색 인덱스 탭 사이드바, `classrooms.color` + 교사 학급 색 선택, 사이드바·목록 카드 화면 높이 채움 / 직전: 화이트보드 — 모둠 공유 보드: classroom_groups·whiteboard_* 테이블, pages.page_type, 요소 단위 실시간 병합(socket wb:*), 템플릿 34종, 교사 격자/단일 화면 / 직전: 영상 2분할 필기: classroom_videos.chapter_id·ClassroomVideoSplit·SplitPane·StudyViewer 임베드 모드 / 직전: 영상자료 v2 후속: 시청 기록·force 삭제·챕터 페이지 영상 삽입·미읽음 배지 / 직전: 영상자료 라이브러리 + 학급 영상 탭/댓글, 파일 서빙 스트리밍+Range, 도메인 class.chois.pro 이전)
+마지막 업데이트: 2026-10-25 (학급 단원: units·chapters/classroom_videos.unit_id·components/units·ChapterTab·shared units 규칙 / 직전: 2026-10-23 영상자료 자막: video_subtitles·shared 자막 파서·SubtitleOverlay·VideoForm 자막 칸 / 직전: 2026-10-20 앱 틀 리디자인 — 남색 상단 바 + 색 인덱스 탭 사이드바, `classrooms.color` + 교사 학급 색 선택, 사이드바·목록 카드 화면 높이 채움 / 직전: 화이트보드 — 모둠 공유 보드: classroom_groups·whiteboard_* 테이블, pages.page_type, 요소 단위 실시간 병합(socket wb:*), 템플릿 34종, 교사 격자/단일 화면 / 직전: 영상 2분할 필기: classroom_videos.chapter_id·ClassroomVideoSplit·SplitPane·StudyViewer 임베드 모드 / 직전: 영상자료 v2 후속: 시청 기록·force 삭제·챕터 페이지 영상 삽입·미읽음 배지 / 직전: 영상자료 라이브러리 + 학급 영상 탭/댓글, 파일 서빙 스트리밍+Range, 도메인 class.chois.pro 이전)
