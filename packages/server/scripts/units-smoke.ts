@@ -6,14 +6,14 @@
  *   npx tsx --env-file=.env scripts/units-smoke.ts  # (packages/server 에서)
  *
  * Task 3: 챕터·영상 단원 연결(POST/PATCH unitId), POST /api/units/:id/items(성공·전부-아니면-전무), 학생 숨김 필터
- *          (챕터 목록·영상 목록·시청 화면 siblings), 단원 삭제 시 항목 미분류, 챕터 pages[].imageUrl.
+ *          (챕터 목록·영상 목록·시청 화면 siblings·영상 미읽음 배지), 단원 삭제 시 항목 미분류, 챕터 pages[].imageUrl.
  *
  * 검증: 단원 생성(position 0,1) → 빈/긴 이름 400 + 행 미생성 → 학생 생성 403 →
  *       숨김 토글 후 학생/교사 목록 → reorder(역순 200, 일부만 400) → 삭제 204 → 404 → 다른 교사 403.
  */
 import { eq, and, like, inArray } from 'drizzle-orm';
 import { db, pgClient } from '../src/config/database.js';
-import { profiles, classrooms, classroomMembers, units, chapters, pages, videos, classroomVideos } from '../src/db/schema.js';
+import { profiles, classrooms, classroomMembers, units, chapters, pages, videos, classroomVideos, videoComments } from '../src/db/schema.js';
 import { signAccessToken, hashPassword } from '../src/services/auth.service.js';
 import { assignItemsToUnit } from '../src/services/unit.service.js';
 
@@ -223,6 +223,27 @@ async function main() {
   // 학생 detail: 숨기지 않은 단원 / 미분류 영상은 정상 siblings
   const sDetail2 = await api(tS, 'GET', `/api/classroom-videos/${cv2id}`);
   check('학생 미분류 영상 siblings 에 숨긴 단원 영상 없음', sDetail2.status === 200 && !ids({ json: sDetail2.json?.siblings }).includes(cv1id), sDetail2.json?.siblings?.map((s: any) => s.id));
+
+  // 미읽음 배지: 학생에게 숨긴 단원(u1)의 영상 댓글은 세지 않는다 (교사 댓글 cv1·cv2 각 1개)
+  const unreadTotal = async () => (await api(tS, 'GET', '/api/videos/unread')).json?.byClassroom?.[cls.id] ?? 0;
+  const sTotalBefore = await unreadTotal();
+  await db.insert(videoComments).values([
+    { classroomVideoId: cv1id, authorId: teacher.id, content: 'units-smoke 숨긴 단원 댓글' },
+    { classroomVideoId: cv2id, authorId: teacher.id, content: 'units-smoke 미분류 댓글' },
+  ]);
+  const sUnread = await api(tS, 'GET', `/api/classrooms/${cls.id}/videos/unread`);
+  check('학생 학급 미읽음: 숨긴 단원 영상(cv1) 0, 미분류 cv2 1',
+    sUnread.status === 200 && (sUnread.json?.byClassroomVideo?.[cv1id] ?? 0) === 0 && sUnread.json?.byClassroomVideo?.[cv2id] === 1,
+    sUnread.json);
+  const sTotalHidden = await unreadTotal();
+  check('학생 사이드바 합계: 숨긴 단원 댓글은 늘지 않는다(+1)', sTotalHidden - sTotalBefore === 1, [sTotalBefore, sTotalHidden]);
+  await api(tT, 'PATCH', `/api/units/${u1}`, { isHidden: false });
+  const sUnreadShown = await api(tS, 'GET', `/api/classrooms/${cls.id}/videos/unread`);
+  const sTotalShown = await unreadTotal();
+  check('숨김 해제 → 학생 미읽음에 cv1 1, 합계 +2',
+    sUnreadShown.json?.byClassroomVideo?.[cv1id] === 1 && sTotalShown - sTotalBefore === 2,
+    [sUnreadShown.json, sTotalBefore, sTotalShown]);
+  await db.delete(videoComments).where(inArray(videoComments.classroomVideoId, [cv1id, cv2id]));
 
   // 삭제
   const del = await api(tT, 'DELETE', `/api/units/${u1}`);

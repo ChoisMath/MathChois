@@ -431,7 +431,8 @@ export async function markCommentsSeen(classroomVideoId: string, userId: string)
  * 미읽음 = 본인이 쓰지 않았고, lastSeenAt(없으면 -infinity) 이후 작성됐고, viewer 가 열람 가능한 댓글.
  *  - 교사(교실 소유자): 전부
  *  - 학생: 공개 스레드(루트/대댓글 모두 is_private=false — 대댓글은 루트 공개범위를 상속) 또는
- *          본인이 쓴 비공개 루트에 달린 대댓글(교사 답변)
+ *          본인이 쓴 비공개 루트에 달린 대댓글(교사 답변). 숨긴 단원의 영상은 세지 않는다(목록과 같은
+ *          `unit_id IS NULL OR is_hidden = false` 규칙 — 목록에 없는 영상의 배지는 지울 수 없다)
  * keyExpr 로 그룹 키(cv.id 또는 cv.classroom_id), scope 로 cv 범위를 지정한다.
  */
 function unreadCountQuery(viewer: { id: string; isTeacher: boolean }, keyExpr: ReturnType<typeof sql>, scope: ReturnType<typeof sql>) {
@@ -440,9 +441,11 @@ function unreadCountQuery(viewer: { id: string; isTeacher: boolean }, keyExpr: R
     ? sql`TRUE`
     : sql`(NOT c.is_private OR (c.parent_id IS NOT NULL AND EXISTS (
           SELECT 1 FROM video_comments root WHERE root.id = c.parent_id AND root.author_id = ${viewer.id})))`;
+  const unitVisible = viewer.isTeacher ? sql`TRUE` : sql`(cv.unit_id IS NULL OR u.is_hidden = false)`;
   return sql`
     SELECT ${keyExpr} AS key, count(c.id)::int AS unread
     FROM classroom_videos cv
+    LEFT JOIN units u ON u.id = cv.unit_id
     LEFT JOIN video_comment_reads r
       ON r.classroom_video_id = cv.id AND r.user_id = ${viewer.id}
     LEFT JOIN video_comments c
@@ -450,7 +453,7 @@ function unreadCountQuery(viewer: { id: string; isTeacher: boolean }, keyExpr: R
      AND c.author_id <> ${viewer.id}
      AND c.created_at > COALESCE(r.last_seen_at, '-infinity'::timestamptz)
      AND ${visible}
-    WHERE ${scope}
+    WHERE ${scope} AND ${unitVisible}
     GROUP BY ${keyExpr}
   `;
 }

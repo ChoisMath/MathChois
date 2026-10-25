@@ -92,7 +92,10 @@ export interface ClassroomVideo {
 
 export interface ClassroomVideoDetail extends ClassroomVideo {
   classroom: { id: string; name: string; teacherId: string };
-  /** 같은 학급의 다른 영상(재생목록 패널용) */
+  /** 소속 단원(이름 표시용). 단원이 없거나 지워졌으면 null */
+  unit: { id: string; title: string } | null;
+  /** 재생목록 패널용 다른 영상: 단원에 속한 영상이면 같은 단원의 다른 영상, 아니면 같은 학급의 다른 영상.
+   *  학생에게는 숨긴 단원의 영상을 뺀다 */
   siblings: ClassroomVideo[];
 }
 
