@@ -11,7 +11,7 @@ import { eq, inArray, like } from 'drizzle-orm';
 import { db, pgClient } from '../src/config/database.js';
 import {
   profiles, classroomMembers, pages, chapters, studentNotes, coachingAttempts, videos, videoProgress,
-  posts, postFiles, postClassrooms,
+  posts, postFiles, postClassrooms, problems,
 } from '../src/db/schema.js';
 import { hashPassword } from '../src/services/auth.service.js';
 
@@ -39,6 +39,18 @@ for (const chId of chIds) {
 }
 const allPages = await db.select({ id: pages.id, chapterId: pages.chapterId }).from(pages).where(inArray(pages.chapterId, chIds));
 
+// AI 코칭 페이지: 문제 1개를 만들어 챕터마다 앞 2장에 붙인다(시도는 이런 페이지에서만 생긴다)
+let [prob] = await db.select({ id: problems.id }).from(problems).where(eq(problems.title, 'DASH E2E 문제')).limit(1);
+if (!prob) [prob] = await db.insert(problems).values({ createdBy: u.teacher.id, title: 'DASH E2E 문제', problemLatex: 'x+1=2' }).returning({ id: problems.id });
+const aiPageIds: string[] = [];
+for (const chId of chIds) {
+  const [a, b] = allPages.filter((p) => p.chapterId === chId);
+  for (const p of [a, b]) if (p) aiPageIds.push(p.id);
+}
+await db.update(pages).set({ aiProblemId: null }).where(inArray(pages.id, allPages.map((p) => p.id)));
+await db.update(pages).set({ aiProblemId: prob.id }).where(inArray(pages.id, aiPageIds));
+const aiPages = new Set(aiPageIds);
+
 // 필기·AI 풀이: 학생마다 다른 양
 await db.delete(studentNotes).where(inArray(studentNotes.pageId, allPages.map((p) => p.id)));
 await db.delete(coachingAttempts).where(inArray(coachingAttempts.pageId, allPages.map((p) => p.id)));
@@ -46,7 +58,7 @@ const noteRows: any[] = []; const attRows: any[] = [];
 students.forEach((s, si) => {
   allPages.forEach((p, pi) => {
     if (pi % (si + 1) === 0) noteRows.push({ studentId: s.id, pageId: p.id, excalidrawData: { elements: [], appState: {} } });
-    if (pi % 3 === si % 3) {
+    if (aiPages.has(p.id) && pi % 3 === si % 3) {
       attRows.push({ studentId: s.id, pageId: p.id, isCorrect: (pi + si) % 2 === 0 });
       attRows.push({ studentId: s.id, pageId: p.id, isCorrect: si === 0 });
     }
@@ -76,5 +88,5 @@ await mk('DASH E2E 중간고사 범위 안내', '다항식 1단원 전체입니�
 await mk('DASH E2E 수행평가 일정', '다음 주 화요일 3교시', 1, 5);
 await mk('DASH E2E 학습 안내 — 긴 제목이 표에서 어떻게 줄어드는지 확인하기 위한 아주 긴 게시글 제목입니다', '', 0, 12);
 
-console.log(JSON.stringify({ students: students.map((s) => ({ id: s.id, name: s.name, email: s.email })), pages: allPages.length }));
+console.log(JSON.stringify({ students: students.map((s) => ({ id: s.id, name: s.name, email: s.email })), pages: allPages.length, aiPages: aiPageIds.length }));
 await pgClient.end();

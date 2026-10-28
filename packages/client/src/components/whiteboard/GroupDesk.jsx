@@ -9,12 +9,14 @@ import { Trash2 } from 'lucide-react';
  *  - title: 이름(트레이) — name/onRename 이 있으면 이름 입력 칸이 대신 나온다
  *  - count: 학생 수
  *  - variant: 'desk' | 'tray'
+ *  - fallbackName: 이름을 비웠을 때 읽기 이름·안내문에 쓰는 이름(예: '3모둠')
  *  - readOnly, onRename(name), onRemove()
  */
 export default function GroupDesk({
-  id, title, name, count, children, variant = 'desk', readOnly = false, onRename, onRemove,
+  id, title, name, fallbackName, count, children, variant = 'desk', readOnly = false, onRename, onRemove,
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id, data: { title: title ?? name } });
+  const accessibleName = (title ?? name)?.trim() || fallbackName || '모둠';
+  const { setNodeRef, isOver } = useDroppable({ id, data: { title: accessibleName } });
   const empty = count === 0;
   const classes = [
     variant === 'tray' ? 'tray' : 'desk',
@@ -23,13 +25,14 @@ export default function GroupDesk({
   ].filter(Boolean).join(' ');
 
   return (
-    <section ref={setNodeRef} className={classes} aria-label={title ?? name}>
+    <section ref={setNodeRef} className={classes} aria-label={accessibleName}>
       <header className="desk-head">
         {onRename && !readOnly ? (
           <input
             value={name} maxLength={30}
             onChange={(e) => onRename(e.target.value)}
             className="desk-name"
+            placeholder={fallbackName}
             aria-label="모둠 이름"
           />
         ) : (

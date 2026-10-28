@@ -103,7 +103,9 @@
 .desk-hint { font-size: 13px; color: #9aa4b8; align-self: center; width: 100%; text-align: center; padding: 4px 0; }
 
 .chip-btn {
-  padding: 0; border: 0; background: none; cursor: grab; border-radius: 999px; touch-action: none;
+  padding: 0; border: 0; background: none; cursor: grab; border-radius: 999px;
+  touch-action: manipulation; /* 손가락으로 칩 위를 쓸면 스크롤, 200ms 누르면 드래그(TouchSensor delay) */
+  -webkit-user-select: none; user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 .chip-btn:disabled { cursor: default; }

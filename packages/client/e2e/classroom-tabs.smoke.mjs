@@ -152,7 +152,7 @@ async function dragChip(page, chipName, deskLabel) {
   await page.getByRole('button', { name: '이서연 AI 풀이 초기화' }).click();
   const status = page.locator('td[role="status"]');
   await status.waitFor();
-  check('초기화됨 · 페이지 N개', /초기화됨 · 페이지 \d+개/.test(await status.textContent()), await status.textContent());
+  check('초기화됨 · AI 풀이 페이지 N개', /초기화됨 · AI 풀이 페이지 \d+개/.test(await status.textContent()), await status.textContent());
   await shot(page, 'students-table-reset');
   await ctx.close();
 }

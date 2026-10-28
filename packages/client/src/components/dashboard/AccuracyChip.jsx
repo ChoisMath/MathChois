@@ -6,7 +6,7 @@ export default function AccuracyChip({ correct, attempts, prefix = '' }) {
   const tone = pct == null ? 'none' : pct >= 70 ? 'good' : pct >= 40 ? 'mid' : 'low';
   const label = pct == null ? '시도 없음' : `정답률 ${pct}% (${attempts}회 중 ${correct}회)`;
   return (
-    <span className={`acc acc--${tone}`} title={label} aria-label={label}>
+    <span className={`acc acc--${tone}`} role="img" title={label} aria-label={label}>
       {prefix}{pct == null ? '–' : `${pct}%`}
     </span>
   );

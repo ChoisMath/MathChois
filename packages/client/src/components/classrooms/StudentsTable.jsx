@@ -39,7 +39,7 @@ export default function StudentsTable({ classroomId, members, isTeacher }) {
     setNotice(null);
     try {
       const r = await resetStudentClassroomQuota(classroomId, m.studentId);
-      setNotice({ studentId: m.studentId, kind: 'ok', text: `초기화됨 · 페이지 ${r?.resetPages ?? 0}개` });
+      setNotice({ studentId: m.studentId, kind: 'ok', text: `초기화됨 · AI 풀이 페이지 ${r?.resetPages ?? 0}개` });
       setTimeout(() => setNotice((n) => (n?.studentId === m.studentId && n.kind === 'ok' ? null : n)), 5000);
     } catch (err) {
       setNotice({ studentId: m.studentId, kind: 'error', text: err.message ?? '초기화하지 못했습니다. 다시 시도해 주세요.' });
