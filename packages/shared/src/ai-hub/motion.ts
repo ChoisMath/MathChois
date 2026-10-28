@@ -33,7 +33,12 @@ export function validateMotionCatalog(list: unknown): string[] {
   const errors: string[] = [];
   const ids = new Set<string>();
   const nos = new Set<number>();
-  for (const m of list as MotionPublic[]) {
+  for (const [i, m] of (list as MotionPublic[]).entries()) {
+    // 스크립트가 신뢰할 수 없는 JSON 을 읽으므로 null·숫자 같은 원소에서 던지지 않고 보고한다.
+    if (typeof m !== 'object' || m === null || Array.isArray(m)) {
+      errors.push(`bad entry at ${i}`);
+      continue;
+    }
     if (!MOTION_ID.test(m.id)) errors.push(`bad motion id: ${m.id}`);
     if (ids.has(m.id)) errors.push(`duplicate motion id: ${m.id}`);
     ids.add(m.id);

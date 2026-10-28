@@ -38,7 +38,12 @@ export function validateSlideCatalog(list: unknown): string[] {
   const errors: string[] = [];
   const ids = new Set<string>();
   const nos = new Set<number>();
-  for (const s of list as SlidePublic[]) {
+  for (const [i, s] of (list as SlidePublic[]).entries()) {
+    // 스크립트가 신뢰할 수 없는 JSON 을 읽으므로 null·숫자 같은 원소에서 던지지 않고 보고한다.
+    if (typeof s !== 'object' || s === null || Array.isArray(s)) {
+      errors.push(`bad entry at ${i}`);
+      continue;
+    }
     if (!SLIDE_ID.test(s.id)) errors.push(`bad slide id: ${s.id}`);
     if (ids.has(s.id)) errors.push(`duplicate slide id: ${s.id}`);
     ids.add(s.id);

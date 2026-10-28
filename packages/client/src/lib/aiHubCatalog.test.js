@@ -29,3 +29,12 @@ describe('ai-hub catalog', () => {
     expect(validateSlideCatalog({})).toEqual(['slide catalog is not an array']);
   });
 });
+
+describe('validate*Catalog guard', () => {
+  it('reports a non-object element instead of throwing, and skips its other checks', () => {
+    for (const bad of [null, undefined, 3, 'x', [1]]) {
+      expect(validateMotionCatalog([MOTION_CATALOG[0], bad])).toEqual(['bad entry at 1']);
+      expect(validateSlideCatalog([bad, SLIDE_CATALOG[0]])).toEqual(['bad entry at 0']);
+    }
+  });
+});
