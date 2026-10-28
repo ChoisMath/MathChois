@@ -6,6 +6,7 @@ import {
   getChaptersByClassroom,
   getChapterById,
   createChapter,
+  createChapterUnlessTitleTaken,
   updateChapter,
   deleteChapter,
   reorderChapters,
@@ -224,14 +225,18 @@ export async function chapterRoutes(app: FastifyInstance) {
     // 체인 방지: source가 이미 linked이면 원본의 sourceChapterId 사용
     const effectiveSourceId = sourceChapter.sourceChapterId ?? sourceChapter.id;
 
-    // 새 챕터 생성 (페이지 복제 없이 source 참조만 설정)
-    const newChapter = await createChapter({
+    // 새 챕터 생성 (페이지 복제 없이 source 참조만 설정).
+    // 대상 학급에 같은 이름의 챕터가 이미 있으면 다시 넣지 않는다.
+    const newChapter = await createChapterUnlessTitleTaken({
       classroomId: request.body.targetClassroomId,
       title: sourceChapter.title,
       description: sourceChapter.description,
       sourceChapterId: effectiveSourceId,
       unitId,
     });
+    if (!newChapter) {
+      return reply.status(409).send({ error: '이 클래스에 같은 이름의 챕터가 이미 있습니다.', code: 'DUPLICATE_TITLE' });
+    }
 
     return reply.status(201).send(newChapter);
   });

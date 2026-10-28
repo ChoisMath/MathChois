@@ -23,7 +23,7 @@ import { sortItems, isManualOrder } from '../../lib/sortOrder';
 import { CARD_GRID } from '../../lib/layout';
 import { invalidatePagesCache } from '../../lib/dataCache';
 import { addItemsToUnit } from '../../lib/units';
-import { groupByUnit } from '@mathchois/shared';
+import { groupByUnit, hasSameChapterTitle } from '@mathchois/shared';
 import UnitBrowser from '../units/UnitBrowser';
 import UnitSelect from '../units/UnitSelect';
 import UnitItemPickerModal from '../units/UnitItemPickerModal';
@@ -274,7 +274,8 @@ export default function ChapterTab({ classroomId, isTeacher, units, unitParam, o
     } catch (err) {
       console.error('[ChapterTab] 챕터 가져오기 오류:', err);
       window.alert(err?.message || '챕터를 가져오지 못했습니다.');
-      onUnitsChanged(); // 단원이 다른 기기에서 지워졌을 수 있다
+      if (err?.status === 409) { setImportSelectedChid(''); fetchChapters(); } // 다른 기기에서 같은 이름을 먼저 넣었다
+      else onUnitsChanged(); // 단원이 다른 기기에서 지워졌을 수 있다
     }
     setImporting(false);
   };
@@ -577,17 +578,24 @@ export default function ChapterTab({ classroomId, isTeacher, units, unitParam, o
                           <p className="text-sm text-gray-400 py-2">이 클래스에 챕터가 없습니다.</p>
                         ) : (
                           <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md divide-y">
-                            {importChapters.map((ch) => (
-                              <button key={ch.id} type="button"
-                                onClick={() => setImportSelectedChid(ch.id)}
-                                className={`w-full text-left px-3 py-2.5 text-sm transition-colors cursor-pointer ${
-                                  importSelectedChid === ch.id
-                                    ? 'bg-blue-50 text-blue-700 font-medium'
-                                    : 'hover:bg-gray-50 text-gray-700'
-                                }`}>
-                                {ch.title}
-                              </button>
-                            ))}
+                            {importChapters.map((ch) => {
+                              /* 이 클래스에 같은 이름이 이미 있으면 고를 수 없다 — 서버도 409 로 거절 */
+                              const taken = hasSameChapterTitle(chapters, ch.title);
+                              return (
+                                <button key={ch.id} type="button" disabled={taken}
+                                  onClick={() => setImportSelectedChid(ch.id)}
+                                  className={`w-full text-left px-3 py-2.5 text-sm transition-colors flex items-center justify-between gap-2 ${
+                                    taken
+                                      ? 'text-gray-400 cursor-not-allowed'
+                                      : importSelectedChid === ch.id
+                                        ? 'bg-blue-50 text-blue-700 font-medium cursor-pointer'
+                                        : 'hover:bg-gray-50 text-gray-700 cursor-pointer'
+                                  }`}>
+                                  <span className="truncate">{ch.title}</span>
+                                  {taken && <span className="text-xs whitespace-nowrap shrink-0">이미 있음</span>}
+                                </button>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
