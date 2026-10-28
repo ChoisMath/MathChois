@@ -54,6 +54,18 @@ const ClassroomDetail = () => {
   };
   /* 보고 있는 단원(?unit= 단원 id | 'none' | 없음=단원 목록). 단원을 열고 닫는 것은 기록을 남겨 뒤로 가기로 단원 목록에 돌아온다 */
   const unitParam = searchParams.get('unit');
+  /* 대시보드 선택(?view= ?student=) — unit 은 챕터·영상 탭과 같은 키를 쓴다. 대시보드가 바꾸는 값은 기록을 남기지 않는다(replace) */
+  const dashboardSelection = { view: searchParams.get('view'), unit: unitParam, student: searchParams.get('student') };
+  const onDashboardSelectionChange = useCallback((patch, { replace = true } = {}) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      for (const [key, value] of Object.entries(patch)) {
+        if (value == null || value === '') next.delete(key);
+        else next.set(key, value);
+      }
+      return next;
+    }, { replace });
+  }, [setSearchParams]);
   const setUnitParam = (nextUnit) => {
     const next = new URLSearchParams(searchParams);
     if (nextUnit) next.set('unit', nextUnit);
@@ -407,7 +419,11 @@ const ClassroomDetail = () => {
         {/* ── 대시보드 탭 (교사 전용) ── */}
         {activeTab === 'dashboard' && isTeacher && (
           <Suspense fallback={<p className="text-gray-400 text-sm">로딩 중...</p>}>
-            <ClassroomDashboard classroomId={id} />
+            <ClassroomDashboard
+              classroomId={id}
+              selection={dashboardSelection}
+              onSelectionChange={onDashboardSelectionChange}
+            />
           </Suspense>
         )}
       </div>
