@@ -74,12 +74,32 @@ export async function upsertMotionPrompt(id: string, p: MotionPromptInput) {
   return row;
 }
 
-/** 시드/가져오기용 일괄 저장 — 이미 있는 id 는 덮어쓴다. */
-export async function upsertMotionPrompts(list: (MotionPromptInput & { id: string })[]) {
-  if (!list.length) return;
-  await db.insert(aiMotionPrompts)
-    .values(list.map((p) => ({ id: p.id, promptEn: p.en, promptKo: p.ko, shots: p.shots, cues: p.cues })))
-    .onConflictDoUpdate({
+/** 일괄 가져오기 결과 — inserted(새 id), updated(덮어씀, overwrite 일 때만), skipped(이미 있어 건드리지 않음). */
+export type PromptImportResult = { inserted: number; updated: number; skipped: number };
+
+/**
+ * 일괄 가져오기(ai:push) 결과를 센다. 기본은 없는 id 만 넣고(ON CONFLICT DO NOTHING) 이미 있는 행 — 관리자가 웹에서
+ * 고친 원본 템플릿 — 은 그대로 둔다. overwrite 면 덮어쓰고, Postgres 의 `xmax = 0`(이번 문장에서 새로 넣은 행)으로
+ * 새 행과 덮어쓴 행을 구분한다.
+ */
+function importResult(total: number, rows: { inserted: boolean }[], overwrite: boolean): PromptImportResult {
+  const inserted = rows.filter((r) => r.inserted).length;
+  return overwrite
+    ? { inserted, updated: rows.length - inserted, skipped: 0 }
+    : { inserted, updated: 0, skipped: total - inserted };
+}
+
+const insertedFlag = { inserted: sql<boolean>`(xmax = 0)` };
+
+export async function importMotionPrompts(
+  list: (MotionPromptInput & { id: string })[],
+  { overwrite = false } = {},
+): Promise<PromptImportResult> {
+  if (!list.length) return { inserted: 0, updated: 0, skipped: 0 };
+  const insert = db.insert(aiMotionPrompts)
+    .values(list.map((p) => ({ id: p.id, promptEn: p.en, promptKo: p.ko, shots: p.shots, cues: p.cues })));
+  const rows = overwrite
+    ? await insert.onConflictDoUpdate({
       target: aiMotionPrompts.id,
       set: {
         promptEn: sql`excluded.prompt_en`,
@@ -88,16 +108,22 @@ export async function upsertMotionPrompts(list: (MotionPromptInput & { id: strin
         cues: sql`excluded.cues`,
         updatedAt: new Date(),
       },
-    });
+    }).returning(insertedFlag)
+    : await insert.onConflictDoNothing({ target: aiMotionPrompts.id }).returning(insertedFlag);
+  return importResult(list.length, rows, overwrite);
 }
 
-export async function upsertSlidePrompts(list: { id: string; prompt: string }[]) {
-  if (!list.length) return;
-  await db.insert(aiSlidePrompts)
-    .values(list)
-    .onConflictDoUpdate({
+export async function importSlidePrompts(
+  list: { id: string; prompt: string }[],
+  { overwrite = false } = {},
+): Promise<PromptImportResult> {
+  if (!list.length) return { inserted: 0, updated: 0, skipped: 0 };
+  const insert = db.insert(aiSlidePrompts).values(list);
+  const rows = overwrite
+    ? await insert.onConflictDoUpdate({
       target: aiSlidePrompts.id,
       set: { prompt: sql`excluded.prompt`, updatedAt: new Date() },
-    });
+    }).returning(insertedFlag)
+    : await insert.onConflictDoNothing({ target: aiSlidePrompts.id }).returning(insertedFlag);
+  return importResult(list.length, rows, overwrite);
 }
-

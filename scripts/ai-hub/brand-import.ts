@@ -1,14 +1,22 @@
 // 브랜드 룩북 사본(BRAND_SRC = motion/brand, 그쪽 build.cjs 산출물)을 .media-out/ai-hub/brand/ 에 서버와 같은 구조로 옮기고 manifest 를 만든다.
 // 내용은 고치지 않는다. iframe 안에서 깨지는 두 가지만 손본다: 사본 밖을 가리키는 상대 링크, 외부 사이트로 가는 링크(새 창).
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+//
+// .media-out/ 은 me.chois.pro 폐쇄 뒤 유일한 원천 백업이다. 그래서 기존 brand/ 를 먼저 지우지 않는다:
+// ① 복사할 원천을 모두 확인하고(없으면 아무것도 건드리지 않고 멈춤) ② 옆 임시 폴더에 새 사본을 다 만든 뒤
+// ③ 기존 brand/ 를 잠시 옆으로 옮기고 새 사본을 그 자리에 넣고 manifest 를 만든다. ③ 이 실패하면 기존 것을 되돌려 놓는다.
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { writeManifest } from './manifest.js';
-import { AI_DIR } from './volumeLayout.js';
+import { AI_DIR, OUT_DIR } from './volumeLayout.js';
 
 const SRC = process.env.BRAND_SRC ?? '/Volumes/Chois_SD2/dev/motion/brand';
 const DEST = path.join(AI_DIR, 'brand');
+// 같은 파일시스템(.media-out/) 안의 임시 폴더 — rename 으로 바꿔 넣는다. ai-hub/ 밖이라 manifest·push 에 섞이지 않는다.
+const STAGE = path.join(OUT_DIR, '.brand-import-new');
+const PREVIOUS = path.join(OUT_DIR, '.brand-import-old');
 const SLUG_FILE = /^[a-z0-9-]+\.(?:json|html)$/;
 const ASSETS = ['assets/app.js', 'assets/ai-hub-static.js', 'assets/shell.js', 'assets/app.css', 'assets/ai-hub.css', 'assets/shell.css', 'assets/tokens.css', 'assets/fonts/PretendardVariable.woff2', 'data/brands-index.json'];
+const DIRS = ['data/hero', 'data/detail', 'brand'];
 
 // 원본 사이트(X-Frame-Options)는 iframe 안에서 열리지 않으므로 다른 출처로 가는 링크는 새 창으로 연다.
 const EXTERNAL_LINKS_IN_NEW_TAB = `<script>document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href]');if(a&&a.origin!==location.origin&&!a.target){a.target='_blank';a.rel='noopener'}},true)</script>`;
@@ -18,33 +26,76 @@ const SIBLING_LINKS: [string, string][] = [
   ['"../slide/index.html"', '"https://www.oppadu.com/ai/slide-styles/"'],
 ];
 
-function writeHtml(rel: string, html: string) {
-  if (!html.includes('</body>')) throw new Error(`${rel}: </body> not found`);
-  const out = path.join(DEST, rel);
-  mkdirSync(path.dirname(out), { recursive: true });
-  writeFileSync(out, html.replace('</body>', `${EXTERNAL_LINKS_IN_NEW_TAB}\n</body>`));
+type Entry = { rel: string; kind: 'html' | 'copy' };
+
+/** ① 원천 확인 — 복사할 파일 목록을 만들며 빠진 것을 모두 모은다. 하나라도 빠지면 아무것도 쓰지 않는다. */
+function planImport(): Entry[] {
+  if (!existsSync(path.join(SRC, 'index.html'))) throw new Error(`${SRC}/index.html not found — set BRAND_SRC to the motion/brand folder`);
+  const missing: string[] = [];
+  const entries: Entry[] = [{ rel: 'index.html', kind: 'html' }];
+  for (const rel of ASSETS) {
+    if (existsSync(path.join(SRC, rel))) entries.push({ rel, kind: 'copy' });
+    else missing.push(rel);
+  }
+  for (const dir of DIRS) {
+    const abs = path.join(SRC, dir);
+    if (!existsSync(abs) || !statSync(abs).isDirectory()) {
+      missing.push(`${dir}/`);
+      continue;
+    }
+    // brand/index.html 은 서버 허용 경로가 아니다(상세 페이지 슬러그는 index 를 쓰지 않는다) — 복사하지 않는다.
+    const names = readdirSync(abs).filter((n) => SLUG_FILE.test(n) && !(dir === 'brand' && n === 'index.html'));
+    if (!names.length) missing.push(`${dir}/ (empty)`);
+    for (const name of names) entries.push({ rel: `${dir}/${name}`, kind: dir === 'brand' ? 'html' : 'copy' });
+  }
+  if (missing.length) {
+    throw new Error(`${SRC}: ${missing.length} source(s) missing — run node brand/scripts/build.cjs in motion/ first. Nothing was changed.\n  ${missing.join('\n  ')}`);
+  }
+  for (const e of entries) {
+    if (e.kind === 'html' && !readFileSync(path.join(SRC, e.rel), 'utf8').includes('</body>')) {
+      throw new Error(`${e.rel}: </body> not found — nothing was changed`);
+    }
+  }
+  return entries;
 }
 
-function copy(rel: string) {
-  const from = path.join(SRC, rel);
-  if (!existsSync(from)) throw new Error(`${from} missing — run node brand/scripts/build.cjs in motion/ first`);
-  const to = path.join(DEST, rel);
-  mkdirSync(path.dirname(to), { recursive: true });
-  copyFileSync(from, to);
-}
-
-if (!existsSync(path.join(SRC, 'index.html'))) throw new Error(`${SRC}/index.html not found — set BRAND_SRC to the motion/brand folder`);
-rmSync(DEST, { recursive: true, force: true });
-let index = readFileSync(path.join(SRC, 'index.html'), 'utf8');
-for (const [from, to] of SIBLING_LINKS) index = index.split(from).join(to);
-writeHtml('index.html', index);
-for (const rel of ASSETS) copy(rel);
-for (const dir of ['data/hero', 'data/detail', 'brand']) {
-  // brand/index.html 은 서버 허용 경로가 아니다(상세 페이지 슬러그는 index 를 쓰지 않는다) — 복사하지 않는다.
-  for (const name of readdirSync(path.join(SRC, dir)).filter((n) => SLUG_FILE.test(n) && !(dir === 'brand' && n === 'index.html'))) {
-    if (dir === 'brand') writeHtml(`${dir}/${name}`, readFileSync(path.join(SRC, dir, name), 'utf8'));
-    else copy(`${dir}/${name}`);
+/** ② 임시 폴더에 새 사본을 만든다. */
+function buildStage(entries: Entry[]) {
+  rmSync(STAGE, { recursive: true, force: true });
+  for (const { rel, kind } of entries) {
+    const to = path.join(STAGE, rel);
+    mkdirSync(path.dirname(to), { recursive: true });
+    if (kind === 'copy') {
+      copyFileSync(path.join(SRC, rel), to);
+      continue;
+    }
+    let html = readFileSync(path.join(SRC, rel), 'utf8');
+    if (rel === 'index.html') for (const [from, toLink] of SIBLING_LINKS) html = html.split(from).join(toLink);
+    writeFileSync(to, html.replace('</body>', `${EXTERNAL_LINKS_IN_NEW_TAB}\n</body>`));
   }
 }
-const manifest = await writeManifest('brand');
-console.info(`brand: ${Object.keys(manifest).length} files → ${path.relative(process.cwd(), DEST)}`);
+
+if (existsSync(PREVIOUS)) {
+  // 지난 실행이 ③ 도중에 끊겼다 — 이 폴더가 기존 사본의 유일한 사본일 수 있으므로 지우지 않고 멈춘다.
+  throw new Error(`${path.relative(process.cwd(), PREVIOUS)} exists (an earlier import was interrupted). Check it, move it back to ${path.relative(process.cwd(), DEST)} if that is missing, then delete it and rerun.`);
+}
+const entries = planImport();
+buildStage(entries);
+
+// ③ 바꿔 넣기
+const hadPrevious = existsSync(DEST);
+mkdirSync(path.dirname(DEST), { recursive: true });
+if (hadPrevious) renameSync(DEST, PREVIOUS);
+try {
+  renameSync(STAGE, DEST);
+  const manifest = await writeManifest('brand');
+  if (hadPrevious) rmSync(PREVIOUS, { recursive: true, force: true });
+  console.info(`brand: ${Object.keys(manifest).length} files → ${path.relative(process.cwd(), DEST)}`);
+} catch (err) {
+  if (hadPrevious) {
+    rmSync(DEST, { recursive: true, force: true });
+    renameSync(PREVIOUS, DEST);
+    console.error('brand import failed — the previous copy was put back');
+  }
+  throw err;
+}

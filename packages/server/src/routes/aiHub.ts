@@ -8,7 +8,7 @@ import { requireAdmin } from '../middleware/roleGuard.js';
 import { requireAiHub } from '../middleware/aiHub.js';
 import { abilitiesFor } from '../services/aiHubAccess.service.js';
 import {
-  listMotion, listSlide, readManifest, upsertMotionPrompt, upsertMotionPrompts, upsertSlidePrompts,
+  importMotionPrompts, importSlidePrompts, listMotion, listSlide, readManifest, upsertMotionPrompt,
 } from '../services/aiHub.service.js';
 import { MAX_UPLOAD_BYTES, resolveAiHubPath, saveUpload } from '../services/aiHubUpload.service.js';
 import { serveBrandFile } from '../services/brandSite.service.js';
@@ -126,23 +126,29 @@ export async function aiHubRoutes(app: FastifyInstance) {
     return (await readManifest(set)) ?? {};
   });
 
-  // ─── PUT /api/ai/prompts/:set — 프롬프트 일괄 가져오기 (토큰) ───
-  app.put<{ Params: { set: string } }>('/api/ai/prompts/:set', {
+  // ─── PUT /api/ai/prompts/:set[?overwrite=1] — 프롬프트 일괄 가져오기 (토큰) ───
+  // 기본은 없는 id 만 넣는다 — ai:push 를 다시 돌려도 관리자가 웹 편집기에서 고친 원본 템플릿을 덮어쓰지 않는다.
+  // ?overwrite=1 (ai:push --overwrite-prompts) 일 때만 이미 있는 행도 파일 내용으로 바꾼다.
+  app.put<{ Params: { set: string }; Querystring: { overwrite?: unknown } }>('/api/ai/prompts/:set', {
     onRequest: [requireUploadToken],
     bodyLimit: 20 * 1024 * 1024,
   }, async (request, reply) => {
     const { set } = request.params;
+    const overwrite = request.query.overwrite === '1';
     if (set === 'motion') {
       const parsed = motionImport.safeParse(request.body);
       if (!parsed.success) return reply.status(400).send({ error: 'invalid body', issues: parsed.error.issues.slice(0, 20) });
-      await upsertMotionPrompts(parsed.data.map((m) => ({ id: m.id, en: m.prompt, ko: m.ko, shots: m.shots, cues: m.cues })));
-      return { ok: true, count: parsed.data.length };
+      const result = await importMotionPrompts(
+        parsed.data.map((m) => ({ id: m.id, en: m.prompt, ko: m.ko, shots: m.shots, cues: m.cues })),
+        { overwrite },
+      );
+      return { ok: true, count: parsed.data.length, overwrite, ...result };
     }
     if (set === 'slide') {
       const parsed = slideImport.safeParse(request.body);
       if (!parsed.success) return reply.status(400).send({ error: 'invalid body', issues: parsed.error.issues.slice(0, 20) });
-      await upsertSlidePrompts(parsed.data);
-      return { ok: true, count: parsed.data.length };
+      const result = await importSlidePrompts(parsed.data, { overwrite });
+      return { ok: true, count: parsed.data.length, overwrite, ...result };
     }
     return reply.status(400).send({ error: 'unknown set' });
   });

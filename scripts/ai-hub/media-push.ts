@@ -1,7 +1,9 @@
 // .media-out/ai-hub/ 을 서버(class.chois.pro)와 비교해 바뀐 파일만 올린다.
-// 사용: npm run ai:push -- --set motion|slide|brand [--dry-run]
+// 사용: npm run ai:push -- --set motion|slide|brand [--dry-run] [--no-prompts] [--overwrite-prompts]
 // 순서: 원격 manifest 와 sha 비교 → 바뀐 파일 PUT /api/ai/media(스트리밍, 동시 4개) → 프롬프트 JSON PUT /api/ai/prompts/:set
 // → 마지막에 manifest. 하나라도 실패하면 manifest 는 올리지 않는다(다음 실행이 실패한 파일을 다시 찾도록).
+// 프롬프트는 기본으로 서버에 없는 id 만 들어간다 — 관리자가 웹에서 고친 원본 템플릿을 덮어쓰지 않는다.
+// 파일 내용으로 덮어써야 할 때만 --overwrite-prompts (PUT …?overwrite=1).
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -22,6 +24,7 @@ async function main() {
   const set = parseSetArg(argv, true) as AiSet;
   const dryRun = hasFlag(argv, '--dry-run');
   const noPrompts = hasFlag(argv, '--no-prompts');
+  const overwritePrompts = hasFlag(argv, '--overwrite-prompts');
   const base = baseUrl(process.env.AI_PUSH_URL, 'http://localhost:3001');
   const auth = { authorization: `Bearer ${requireEnv('AI_MEDIA_UPLOAD_TOKEN', 'the server\'s upload token')}` };
 
@@ -90,11 +93,14 @@ async function main() {
     } else {
       const body = JSON.stringify(await readJsonFile(promptPath));
       await attempt(`prompts/${set}`, async () => {
-        const res = await fetchRetry(`${base}/api/ai/prompts/${set}`, () => ({
+        const res = await fetchRetry(`${base}/api/ai/prompts/${set}${overwritePrompts ? '?overwrite=1' : ''}`, () => ({
           method: 'PUT', headers: { ...auth, 'content-type': 'application/json' }, body,
         }), { label: `prompts/${set}` });
         if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-        console.info(`prompts ${set}: ${JSON.stringify(await res.json())}`);
+        const r = (await res.json()) as { count: number; inserted?: number; updated?: number; skipped?: number };
+        console.info(overwritePrompts
+          ? `prompts ${set}: ${r.count} sent — ${r.inserted} inserted, ${r.updated} updated (--overwrite-prompts)`
+          : `prompts ${set}: ${r.count} sent — ${r.inserted} inserted, ${r.skipped} skipped (already on the server; web edits kept — --overwrite-prompts replaces them)`);
       });
     }
   }
