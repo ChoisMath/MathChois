@@ -7,3 +7,4 @@ export * from './promptEngine.js';
 export * from './render.js';
 export * from './upload.js';
 export * from './brandEmbed.js';
+export * from './merge.js';

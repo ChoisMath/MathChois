@@ -15,10 +15,17 @@
     "dev:client": "npm run dev -w @mathchois/client",
     "build": "npm run build -w @mathchois/shared && npm run build -w @mathchois/client && npm run build -w @mathchois/server",
     "start": "npm run start -w @mathchois/server",
-    "lint": "npm run lint -w @mathchois/client"
+    "lint": "npm run lint -w @mathchois/client",
+    "ai:pull": "tsx scripts/ai-hub/pull.ts",
+    "ai:push": "tsx scripts/ai-hub/media-push.ts",
+    "ai:prepare": "tsx scripts/ai-hub/media-prepare.ts",
+    "ai:motion:import": "tsx scripts/ai-hub/motion-import.ts",
+    "ai:slide:import": "tsx scripts/ai-hub/slide-import.ts",
+    "ai:brand:import": "tsx scripts/ai-hub/brand-import.ts"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
+    "tsx": "^4",
     "typescript": "^5.8.3"
   },
   "overrides": {

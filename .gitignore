@@ -81,3 +81,6 @@ drizzle/
 # Python bytecode (e.g. .claude/skills/*/scripts)
 __pycache__/
 *.pyc
+
+# AI 활용 자료 이전 스크립트 산출물(원천 백업이라 지우지 않고 커밋하지 않는다)
+.media-out/
