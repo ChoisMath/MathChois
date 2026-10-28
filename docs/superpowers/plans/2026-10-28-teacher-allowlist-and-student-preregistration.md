@@ -34,12 +34,12 @@
 
 ## Tasks
 
-- [ ] **Task 1 — shared 순수 함수 (TDD)**: `packages/shared/src/auth/access.ts` (`normalizeEmail`, `parseEmailList`, `resolveRole`, `EMAIL_LIST_MAX`), `index.ts` export, `packages/client/src/lib/accessShared.test.js`.
-- [ ] **Task 2 — 스키마·기동 마이그레이션**: `schema.ts` 두 테이블, `startupMigrate.ts` DDL + 1회 백필 + 이메일 소문자 정리.
-- [ ] **Task 3 — 서버 서비스**: `services/access.service.ts`, `services/classroomInvite.service.ts`; `auth.service.ts`(소문자 이메일, 신규 Google 계정 student, `updateProfileRole` 삭제).
-- [ ] **Task 4 — 서버 라우트**: `routes/auth.ts`(applyAccessRules 4곳, `PATCH /profiles/role` 삭제), `routes/admin.ts`(allowed-teachers 3개, role 의미 변경), `routes/classrooms.ts`(invites 3개). `admin.service.updateUserRole` 가 허용 목록 동기화.
-- [ ] **Task 5 — 클라이언트 정리**: `ChooseRole.jsx`/`Login.jsx` 삭제, `App.jsx`, `ProtectedRoute.jsx`, `Home.jsx`, `OAuthCallback.jsx`, `AuthContext.jsx`, `api.ts`.
-- [ ] **Task 6 — 관리자 패널 [교사 등록] 탭**: `components/admin/AllowedTeachersTab.jsx`, `AdminPanel.jsx` 탭 추가·역할 선택 안내.
-- [ ] **Task 7 — 학급 [학생] 탭 사전 등록 카드**: `components/classrooms/StudentInvitesCard.jsx`, `StudentsTab.jsx`, `ClassroomDetail.jsx`(`onMembersChanged`).
-- [ ] **Task 8 — 시드·문서**: `scripts/seed-test-accounts.ts`(허용 목록), `CLAUDE.md`, `.claude/PROJECT_MAP.md`.
-- [ ] **Task 9 — 검증**: `npm run build`, `npm run lint`, `npm test -w @mathchois/client`; 로컬 PostgreSQL 이 되면 API 스모크(Review Focus 1~5).
+- [x] **Task 1 — shared 순수 함수 (TDD)**: `packages/shared/src/auth/access.ts` (`normalizeEmail`, `parseEmailList`, `resolveRole`, `EMAIL_LIST_MAX`), `index.ts` export, `packages/client/src/lib/accessShared.test.js`.
+- [x] **Task 2 — 스키마·기동 마이그레이션**: `schema.ts` 두 테이블, `startupMigrate.ts` DDL + 1회 백필 + 이메일 소문자 정리.
+- [x] **Task 3 — 서버 서비스**: `services/access.service.ts`, `services/classroomInvite.service.ts`; `auth.service.ts`(소문자 이메일, 신규 Google 계정 student, `updateProfileRole` 삭제).
+- [x] **Task 4 — 서버 라우트**: `routes/auth.ts`(applyAccessRules 4곳, `PATCH /profiles/role` 삭제), `routes/admin.ts`(allowed-teachers 3개, role 의미 변경), `routes/classrooms.ts`(invites 3개). `admin.service.updateUserRole` 가 허용 목록 동기화.
+- [x] **Task 5 — 클라이언트 정리**: `ChooseRole.jsx`/`Login.jsx` 삭제, `App.jsx`, `ProtectedRoute.jsx`, `Home.jsx`, `OAuthCallback.jsx`, `AuthContext.jsx`, `api.ts`.
+- [x] **Task 6 — 관리자 패널 [교사 등록] 탭**: `components/admin/AllowedTeachersTab.jsx`, `AdminPanel.jsx` 탭 추가·역할 선택 안내.
+- [x] **Task 7 — 학급 [학생] 탭 사전 등록 카드**: `components/classrooms/StudentInvitesCard.jsx`, `StudentsTab.jsx`, `ClassroomDetail.jsx`(`onMembersChanged`).
+- [x] **Task 8 — 시드·문서**: `scripts/seed-test-accounts.ts`(허용 목록), `CLAUDE.md`, `.claude/PROJECT_MAP.md`.
+- [x] **Task 9 — 검증**: `npm run build`, `npm run lint`, `npm test -w @mathchois/client`; 로컬 PostgreSQL 이 되면 API 스모크(Review Focus 1~5).
