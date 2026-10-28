@@ -1,0 +1,57 @@
+/*
+ * 학급 상세 탭 안쪽 — 장부 표(게시판·학생·대시보드)와 모둠 보드.
+ * 색은 classrooms.css 의 공책 토큰을 그대로 쓰고, 학급 표지색(--nb-cover/--nb-tint/--nb-deep)은
+ * ClassroomDetail 의 바깥 div 에 인라인 style 로 들어온다(lib/classroomColor.js colorVars).
+ * 설계: docs/superpowers/specs/2026-10-28-classroom-tabs-tables-groups-dashboard-design.md
+ */
+.classroom-tabs {
+  --paper: #f8fafd;
+  --rule: #e3eaf4;
+  --ink: #1c2b4a;
+  --soft: #56627c;
+  --pen: #2453a6;
+}
+
+/* ── 장부 표: 세로선 없음, 줄 사이 1px, 행 44px, 왼쪽에 표지색 띠 ── */
+.ledger-wrap {
+  border-left: 3px solid var(--nb-cover, #6fa8dc);
+  background: #fff;
+  overflow-x: auto;
+}
+.ledger { width: 100%; border-collapse: collapse; color: var(--ink); font-size: 14px; }
+.ledger th {
+  padding: 8px 12px; text-align: left;
+  font-size: 13px; font-weight: 400; color: var(--soft); white-space: nowrap;
+  border-bottom: 1px solid var(--rule);
+}
+.ledger td { padding: 0 12px; height: 44px; border-top: 1px solid var(--rule); vertical-align: middle; }
+.ledger tbody tr:first-child td { border-top: 0; }
+.ledger .num { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--soft); }
+.ledger .tight { width: 1%; white-space: nowrap; }
+.ledger .act { width: 1%; padding: 0 2px; }
+.ledger tr.row-btn { cursor: pointer; }
+@media (hover: hover) { .ledger tr.row-btn:hover > td { background: var(--paper); } }
+.ledger tr.row-btn[aria-expanded='true'] > td { background: var(--paper); }
+.ledger .ledger-detail > td { height: auto; padding: 4px 16px 16px; background: var(--paper); border-top: 0; }
+.ledger .title-btn {
+  display: block; width: 100%; min-height: 44px; text-align: left; font: inherit; color: inherit;
+  background: none; border: 0; padding: 0; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ledger .title-btn:focus-visible { outline: 3px solid var(--pen); outline-offset: -3px; border-radius: 6px; }
+.ledger .chev { color: var(--soft); transition: transform .15s ease; }
+.ledger tr[aria-expanded='true'] .chev { transform: rotate(180deg); }
+
+/* ── 접히는 묶음 제목(학생 표) ── */
+.fold-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  min-height: 44px; padding: 0 4px; margin-bottom: 8px;
+  background: none; border: 0; font: inherit; font-size: 15px; font-weight: 600; color: var(--ink); cursor: pointer;
+}
+.fold-head .chev { color: var(--soft); transition: transform .15s ease; }
+.fold-head[aria-expanded='false'] .chev { transform: rotate(-90deg); }
+.fold-head:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; border-radius: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ledger .chev, .fold-head .chev { transition: none; }
+}

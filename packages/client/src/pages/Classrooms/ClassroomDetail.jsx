@@ -15,6 +15,7 @@ import { getClassroomVideoUnread } from '../../lib/videos';
 import { listUnits } from '../../lib/units';
 import { resolveClassroomColor, colorVars } from '../../lib/classroomColor';
 import ClassroomColorPicker from '../../components/classrooms/ClassroomColorPicker';
+import '../../components/classrooms/classroomTabs.css';
 import ChapterTab from '../../components/classrooms/ChapterTab';
 import StudentsTab from '../../components/classrooms/StudentsTab';
 import ClassroomTabs from '../../components/classrooms/ClassroomTabs';
@@ -235,10 +236,11 @@ const ClassroomDetail = () => {
 
   return (
     <>
-      <div className="w-full space-y-6">
+      {/* 학급 표지색 변수는 바깥 div 에 두어 헤더와 모든 탭(표 띠·모둠 방)이 함께 쓴다 */}
+      <div className="w-full space-y-6 classroom-tabs" style={colorVars(resolveClassroomColor(classroom))}>
 
         {/* ── 헤더 (학급 색 띠 + 옅은 배경) ── */}
-        <div className="classroom-head" style={colorVars(resolveClassroomColor(classroom))}>
+        <div className="classroom-head">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
