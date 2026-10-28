@@ -14,6 +14,13 @@ import {
   resetUserData,
 } from '../services/admin.service.js';
 import { getProfileById, setMustResetPassword, updateProfileName } from '../services/auth.service.js';
+import {
+  listAllowedTeachers,
+  addAllowedTeachers,
+  removeAllowedTeacher,
+  getAllowedTeacherById,
+} from '../services/access.service.js';
+import { parseEmailList, EMAIL_LIST_MAX } from '@mathchois/shared';
 import { getStorageInfo } from '../services/storageInfo.service.js';
 
 export async function adminRoutes(app: FastifyInstance) {
@@ -58,11 +65,51 @@ export async function adminRoutes(app: FastifyInstance) {
     if (role !== 'teacher' && role !== 'student') {
       return reply.status(400).send({ error: 'Invalid role (teacher or student)' });
     }
-    const updated = await updateUserRole(request.params.id, role);
+    const updated = await updateUserRole(request.params.id, role, request.user.sub);
     if (!updated) {
       return reply.status(404).send({ error: 'User not found' });
     }
     return updated;
+  });
+
+  // ─── 교사 허용 목록 — 여기 등록된 이메일만 교사로 로그인할 수 있다 ─────
+
+  // GET /api/admin/allowed-teachers — 목록(+ 가입한 계정)
+  app.get('/api/admin/allowed-teachers', {
+    preHandler: [authenticate, requireAdmin],
+  }, async () => {
+    return listAllowedTeachers();
+  });
+
+  // POST /api/admin/allowed-teachers — 이메일 여러 개 등록. 형식이 아닌 항목은 invalid 로 돌려주고 나머지는 처리한다.
+  app.post<{ Body: { emails?: string[] | string } }>('/api/admin/allowed-teachers', {
+    preHandler: [authenticate, requireAdmin],
+  }, async (request, reply) => {
+    const parsed = parseEmailList(request.body?.emails ?? '');
+    if (parsed.tooMany) {
+      return reply.status(400).send({ error: `한 번에 ${EMAIL_LIST_MAX}개까지 등록할 수 있습니다.` });
+    }
+    if (parsed.valid.length === 0) {
+      return reply.status(400).send({ error: '등록할 이메일을 입력해 주세요.', invalid: parsed.invalid });
+    }
+    const result = await addAllowedTeachers(parsed.valid, request.user.sub);
+    return reply.status(201).send({ ...result, invalid: parsed.invalid });
+  });
+
+  // DELETE /api/admin/allowed-teachers/:id — 목록에서 빼면 그 계정은 바로 학생이 된다(관리자 계정 제외)
+  app.delete<{ Params: { id: string } }>('/api/admin/allowed-teachers/:id', {
+    preHandler: [authenticate, requireAdmin],
+  }, async (request, reply) => {
+    const entry = await getAllowedTeacherById(request.params.id);
+    if (!entry) {
+      return reply.status(404).send({ error: 'Not found' });
+    }
+    const me = await getProfileById(request.user.sub);
+    if (me?.email && me.email.toLowerCase() === entry.email) {
+      return reply.status(400).send({ error: '자기 자신은 교사 목록에서 뺄 수 없습니다.' });
+    }
+    await removeAllowedTeacher(entry.id);
+    return reply.status(204).send();
   });
 
   // ─── PATCH /api/admin/users/:id/admin — 관리자 토글 ──

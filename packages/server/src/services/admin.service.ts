@@ -10,6 +10,7 @@ import {
   assignmentNotes, assignmentTeacherComments,
 } from '../db/schema.js';
 import { urlToStoragePath, removeFile, urlToParentDir, removeDirectoryIfEmpty } from './storage.service.js';
+import { syncAllowedTeacherForRole } from './access.service.js';
 import { env } from '../config/env.js';
 
 const VOLUME_ROOT = path.resolve(env.VOLUME_PATH);
@@ -124,13 +125,19 @@ export async function getTeachersWithStudents() {
 }
 
 /** 사용자 역할 변경 */
-export async function updateUserRole(userId: string, role: 'teacher' | 'student') {
+/**
+ * 역할 변경 — 교사 허용 목록도 함께 맞춘다(teacher → 목록 추가, student → 목록 제거).
+ * 목록을 맞추지 않으면 다음 토큰 갱신 때 applyAccessRules 가 되돌린다.
+ */
+export async function updateUserRole(userId: string, role: 'teacher' | 'student', byId: string | null = null) {
   const [updated] = await db
     .update(profiles)
     .set({ role })
     .where(eq(profiles.id, userId))
     .returning();
-  return updated ?? null;
+  if (!updated) return null;
+  await syncAllowedTeacherForRole(updated.email, role, byId);
+  return updated;
 }
 
 /** 관리자 상태 토글 */

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { isClassroomColor, pickLeastUsedColor } from '@mathchois/shared';
+import { isClassroomColor, pickLeastUsedColor, parseEmailList, EMAIL_LIST_MAX } from '@mathchois/shared';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import {
@@ -18,6 +18,7 @@ import {
   findSharedClassroomImageUrls,
 } from '../services/classroom.service.js';
 import { getChaptersByClassroom, getLinkedChapterIds } from '../services/chapter.service.js';
+import { listClassroomInvites, addClassroomInvites, removeClassroomInvite } from '../services/classroomInvite.service.js';
 import { removeFile, urlToStoragePath, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
 
 export async function classroomRoutes(app: FastifyInstance) {
@@ -229,6 +230,48 @@ export async function classroomRoutes(app: FastifyInstance) {
     }
 
     await removeClassroomMember(id, studentId);
+    return reply.status(204).send();
+  });
+
+  // ─── 학생 사전 등록 — 교사가 올린 이메일로 가입하면 코드 없이 바로 구성원 ─────
+
+  // GET /api/classrooms/:id/invites — 가입 대기 명단(소유 교사)
+  app.get<{ Params: { id: string } }>('/api/classrooms/:id/invites', {
+    preHandler: [authenticate, requireRole('teacher')],
+  }, async (request, reply) => {
+    if (!(await isClassroomOwner(request.params.id, request.user.sub))) {
+      return reply.status(403).send({ error: 'Not the classroom owner' });
+    }
+    return listClassroomInvites(request.params.id);
+  });
+
+  // POST /api/classrooms/:id/invites — { emails } 여러 개. 이미 가입한 학생은 바로 구성원, 아니면 대기 명단.
+  app.post<{ Params: { id: string }; Body: { emails?: string[] | string } }>('/api/classrooms/:id/invites', {
+    preHandler: [authenticate, requireRole('teacher')],
+  }, async (request, reply) => {
+    if (!(await isClassroomOwner(request.params.id, request.user.sub))) {
+      return reply.status(403).send({ error: 'Not the classroom owner' });
+    }
+    const parsed = parseEmailList(request.body?.emails ?? '');
+    if (parsed.tooMany) {
+      return reply.status(400).send({ error: `한 번에 ${EMAIL_LIST_MAX}명까지 등록할 수 있습니다.` });
+    }
+    if (parsed.valid.length === 0) {
+      return reply.status(400).send({ error: '등록할 이메일을 입력해 주세요.', invalid: parsed.invalid });
+    }
+    const result = await addClassroomInvites(request.params.id, parsed.valid, request.user.sub);
+    return reply.status(201).send({ ...result, invalid: parsed.invalid });
+  });
+
+  // DELETE /api/classrooms/:id/invites/:inviteId
+  app.delete<{ Params: { id: string; inviteId: string } }>('/api/classrooms/:id/invites/:inviteId', {
+    preHandler: [authenticate, requireRole('teacher')],
+  }, async (request, reply) => {
+    if (!(await isClassroomOwner(request.params.id, request.user.sub))) {
+      return reply.status(403).send({ error: 'Not the classroom owner' });
+    }
+    const removed = await removeClassroomInvite(request.params.id, request.params.inviteId);
+    if (!removed) return reply.status(404).send({ error: 'Not found' });
     return reply.status(204).send();
   });
 }
