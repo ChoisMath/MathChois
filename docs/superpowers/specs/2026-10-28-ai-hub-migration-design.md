@@ -151,7 +151,7 @@ export function finalPrompt(tpl, st, values, off, L, lang, withTables, tables): 
 | 사용자 | `/ai/*` 화면 | `GET /api/ai/motion`·`/slide` | 편집기 빈칸·복사 | 원본 저장 `PUT …/prompt` | 학급 토글 PATCH |
 |---|---|---|---|---|---|
 | 비로그인 | `/` 로 이동 | 401 | — | — | — |
-| 역할 없음 | `/choose-role` | 403 | — | — | — |
+| 역할 없음(로그인·갱신 때 서버가 정하므로 보통 없음) | 학생처럼 — 서버 접근 결과가 불허라 `/student/classrooms` | 403 | — | — | — |
 | 학생(허용 학급 있음) | 열람 | 200 | 편집기 링크 안 보임, 주소 직접 입력은 403 | 403 | — |
 | 학생(허용 학급 없음) | 자기 학급 목록으로 | 403 | 403 | 403 | — |
 | 교사 | 열람 | 200 | 가능 | 403 | 자기 학급만 |
@@ -231,7 +231,7 @@ export const MANIFEST_FILE = /^manifest\/(motion|slide|brand)\.json$/;
 ### `AiHubRoute`
 
 `useAuth()` 로 로그인·역할을 보고, `GET /api/ai/access` 를 한 번 불러 `allowed` 를 컨텍스트로 내린다.
-비로그인 → `/`, 역할 없음 → `/choose-role`, `allowed=false` → `/{role}/classrooms`. 로딩 중에는 `ProtectedRoute` 와 같은 "로딩 중…" 화면.
+비로그인 → `/`, `allowed=false` → `/{role}/classrooms` (역할이 비어 있으면 `ProtectedRoute` 처럼 학생으로 보아 `/student/classrooms`; 역할 선택 화면 `/choose-role` 은 교사 허용 목록 도입으로 없어짐). 로딩 중에는 `ProtectedRoute` 와 같은 "로딩 중…" 화면.
 
 ### `AiHubLayout`
 

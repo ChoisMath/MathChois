@@ -47,14 +47,14 @@ function LoadingScreen() {
 }
 
 /**
- * /ai/* 가드 + 데이터 공급자. 비로그인 → /, 역할 없음 → /choose-role, 허락 없음 → /{role}/classrooms.
+ * /ai/* 가드 + 데이터 공급자. 비로그인 → /, 허락 없음 → /{role}/classrooms (역할이 비어 있으면 학생으로 본다 — ProtectedRoute 와 같음).
  * 하위 화면은 useAiHubData() 로 { access, motion, slide, status, reload, from } 를 받는다(from = 돌아갈 학급 주소 또는 null).
  */
 export default function AiHubRoute() {
   const { isAuthenticated, isLoading, profile } = useAuth();
   const { pathname, state: navState } = useLocation();
   const role = profile?.role ?? null;
-  const ready = !isLoading && isAuthenticated && !!role;
+  const ready = !isLoading && isAuthenticated;
 
   const [data, setData] = useState({ access: null, motion: [], slide: [] });
   const [status, setStatus] = useState('loading');

@@ -4,7 +4,8 @@
  */
 export function resolveAiHubRedirect({ isAuthenticated, role, allowed }) {
   if (!isAuthenticated) return '/';
-  if (!role) return '/choose-role';
-  if (allowed === false) return `/${role}/classrooms`;
+  // 역할은 서버가 로그인·갱신 때 정한다(교사 허용 목록). ProtectedRoute 처럼 비어 있으면 학생으로 본다.
+  const effectiveRole = role ?? 'student';
+  if (allowed === false) return `/${effectiveRole}/classrooms`;
   return null;
 }

@@ -9,6 +9,8 @@
  * 소유 표식: <VOLUME_PATH>/ai-hub/.e2e-fixture(MARK + 파일 sha256). 표식 없이 허브 자료가 있으면 setup 은 exit 1 로 멈추고,
  * --cleanup 은 표식이 있고 항목이 우리 것(sha·MARK·01-pixel 만 든 manifest)일 때만 지운다 — 아니면 건너뛰고 이유를 stderr 에 남긴다.
  * AIHUB001 학급은 소유자가 픽스처 교사일 때만 다시 쓰거나 지운다(아니면 exit 1).
+ * 교사는 교사 허용 목록(allowed_teachers)에 있어야 로그인 때 교사로 남는다(applyAccessRules) — 표식(note=ALLOWED_NOTE)을 단 행을
+ * 넣고, --cleanup 은 그 표식이 있는 행만 지운다(미리 있던 행은 그대로).
  *
  *   npx tsx --env-file=.env scripts/ai-hub-e2e-setup.ts > "$SCRATCH/aihub.json"   # (packages/server 에서)
  *   npx tsx --env-file=.env scripts/ai-hub-e2e-setup.ts --cleanup                  # 만든 것 모두 삭제
@@ -18,10 +20,10 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db, pgClient } from '../src/config/database.js';
 import { env } from '../src/config/env.js';
-import { aiMotionPrompts, classrooms, classroomMembers, profiles } from '../src/db/schema.js';
+import { aiMotionPrompts, allowedTeachers, classrooms, classroomMembers, profiles } from '../src/db/schema.js';
 import { hashPassword } from '../src/services/auth.service.js';
 
 const PASSWORD = 'Test1234!';
@@ -30,6 +32,7 @@ const STUDENT_EMAIL = 'ai-hub.student@chois.test';
 const CLASS_CODE = 'AIHUB001';
 const MOTION_ID = '01-pixel';
 const MARK = 'AI-HUB-E2E'; // 이 스크립트가 만든 프롬프트·브랜드 파일 표식
+const ALLOWED_NOTE = `${MARK} fixture teacher`; // 이 스크립트가 넣은 교사 허용 목록 행 표식
 
 const ROOT = path.resolve(env.VOLUME_PATH, 'ai-hub');
 const MOTION_DIR = path.join(ROOT, 'motion', MOTION_ID);
@@ -217,6 +220,9 @@ async function cleanup() {
   // 학급 → 학급 멤버는 CASCADE. 계정까지 지운다.
   await db.delete(classrooms).where(eq(classrooms.classCode, CLASS_CODE));
   await db.delete(profiles).where(inArray(profiles.email, [TEACHER_EMAIL, STUDENT_EMAIL]));
+  // 교사 허용 목록 — 이 스크립트가 넣은 행(표식 note)만
+  await db.delete(allowedTeachers)
+    .where(and(eq(allowedTeachers.email, TEACHER_EMAIL), eq(allowedTeachers.note, ALLOWED_NOTE)));
 }
 
 async function main() {
@@ -229,6 +235,10 @@ async function main() {
   await assertOurs();
 
   const teacher = await ensureUser(TEACHER_EMAIL, 'AI허브 교사', 'teacher');
+  // 허용 목록에 없으면 첫 로그인 때 applyAccessRules 가 학생으로 내린다(seed-test-accounts.ts 와 같은 방식)
+  await db.insert(allowedTeachers)
+    .values({ email: TEACHER_EMAIL, note: ALLOWED_NOTE })
+    .onConflictDoNothing({ target: allowedTeachers.email });
   const student = await ensureUser(STUDENT_EMAIL, 'AI허브 학생', 'student');
   let [cls] = await db.select().from(classrooms).where(eq(classrooms.classCode, CLASS_CODE)).limit(1);
   if (!cls) {
