@@ -161,7 +161,7 @@ export function finalPrompt(tpl, st, values, off, L, lang, withTables, tables): 
   `classroom_members ⋈ classrooms WHERE student_id = me AND ai_hub_enabled` 가 1건 이상이면 통과, 아니면 403.
   판정 자체는 `shared/src/ai-hub/access.ts` 의 순수 함수 `canUseAiHub({ role, isAdmin, allowedClassrooms })` 로 빼서 테스트한다.
 - `GET /api/ai/access` → `{ allowed: boolean, canEdit: boolean(교사·관리자), canEditOriginal: boolean(관리자) }`.
-- 영상·이미지(`/api/files/ai-hub/*`)와 브랜드 사본(`/api/ai/brand/site/*`)은 인증 없이 나간다(결정표 참고).
+- 영상·이미지(`/api/files/ai-hub/*`)와 브랜드 사본(`/api/ai/brand/site/*`)은 인증 없이 나간다(결정표 참고). `/api/files/ai-hub/*` 는 모션·슬라이드 미디어와 manifest 만(`isAiHubPublicFile`) 서빙하고 브랜드 파일은 404, 응답에 `X-Robots-Tag: noindex`.
 
 ## 서버
 
@@ -176,7 +176,7 @@ export function finalPrompt(tpl, st, values, off, L, lang, withTables, tables): 
 | `GET /api/ai/brand/site/*` | 공개 | 허용 목록 정규식 밖 404. HTML 은 셸 숨김 스타일 삽입(`embedBrandHtml`), `Content-Security-Policy: frame-ancestors …`(`routes/storage.ts` 의 `buildFrameAncestors` 재사용), `X-Frame-Options`·`Origin-Agent-Cluster` 제거(`reply.raw.removeHeader`), `X-Robots-Tag: noindex`, `Cache-Control: private, no-cache`(HTML) / `private, max-age=600` |
 | `PUT /api/ai/media?path=<rel>` | Bearer `AI_MEDIA_UPLOAD_TOKEN` | 스트리밍 저장(임시 → rename), `x-content-sha256` 대조, 100 MB 상한, 허용 경로 정규식, manifest JSON 은 스키마 검증 |
 | `GET /api/ai/media/manifest?set=motion|slide|brand` | Bearer 토큰 | Volume 의 manifest(없으면 `{}`) |
-| `PUT /api/ai/prompts/:set` | Bearer 토큰 | `set=motion`: `MotionAdmin[]` → `ai_motion_prompts` 전체 upsert · `set=slide`: `SlideAdmin[]` → `ai_slide_prompts` |
+| `PUT /api/ai/prompts/:set[?overwrite=1]` | Bearer 토큰 | `set=motion`: `MotionAdmin[]` → `ai_motion_prompts` · `set=slide`: `SlideAdmin[]` → `ai_slide_prompts`. 기본은 없는 id 만 넣는다(관리자 웹 편집 보존), `?overwrite=1`(`ai:push --overwrite-prompts`)일 때만 upsert. 응답 `{ ok, count, overwrite, inserted, updated, skipped }` |
 
 토큰 비교는 `timingSafeEqual`. 토큰 env 가 없으면 업로드 라우트 셋은 모두 503(`upload disabled`).
 
@@ -203,7 +203,7 @@ export const MANIFEST_FILE = /^manifest\/(motion|slide|brand)\.json$/;
 
 ### 환경 변수 (`config/env.ts`)
 
-- `AI_MEDIA_UPLOAD_TOKEN` (선택, ≥ 32자) — 없으면 업로드 비활성.
+- `AI_MEDIA_UPLOAD_TOKEN` (선택, ≥ 32자) — 없으면 업로드 비활성. 32자 미만이면 기동 때 경고하고 없는 것으로 친다.
 - 기존 `FRAME_ANCESTORS`·`APP_URL` 을 브랜드 라우트도 그대로 쓴다.
 
 ## 클라이언트
@@ -264,7 +264,7 @@ export const MANIFEST_FILE = /^manifest\/(motion|slide|brand)\.json$/;
 
 ### 브랜드 `/ai/brand`
 
-`<iframe src="/api/ai/brand/site/" title="브랜드 룩북" allow="clipboard-write">` 하나. 높이 = `100dvh − 머리글 − 푸터`.
+`<iframe src={toolUrl('/api/ai/brand/site/')} title="브랜드 룩북" allow="clipboard-write">` 하나 — HTML 도구처럼 별도 origin(`VITE_TOOLS_ORIGIN`)에서 열어 제3자 룩북 JS 가 앱 origin 쿠키로 `/api` 를 부르지 못하게 한다(로컬 dev 는 같은 origin). 높이 = `100dvh − 머리글 − 푸터`.
 외부 링크 새 창 열기는 사본에 심어 둔 스크립트가 맡는다(`brand-import` 가 넣음).
 
 ### 편집기 `/ai/motion/:id/edit` — `MotionEditorPage`

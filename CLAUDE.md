@@ -73,7 +73,8 @@ NODE_ENV=development
 # SMTP (optional — password-reset email): SMTP_HOST/PORT/USER/PASS/FROM, APP_URL
 # FRAME_ANCESTORS (optional) — extra origins allowed to frame HTML tool pages (space-separated)
 # AI_MEDIA_UPLOAD_TOKEN (optional, >= 32 chars; `openssl rand -hex 32`) — bearer token for the ai:push upload routes
-#   (PUT /api/ai/media, GET /api/ai/media/manifest, PUT /api/ai/prompts/:set). Empty/unset = uploads disabled (503).
+#   (PUT /api/ai/media, GET /api/ai/media/manifest, PUT /api/ai/prompts/:set). Empty/unset = uploads disabled (503);
+#   shorter than 32 chars = boot warning + treated as unset.
 ```
 
 Production domain is **`https://class.chois.pro`** (moved from `class.chois.ai.kr`). The
@@ -144,10 +145,13 @@ YouTube playlists): `units` table, `chapters.unit_id`/`classroom_videos.unit_id`
   when allowed). Editor: blanks/options/copy for any teacher (browser-local), original template + shot/cue tables admin only
   (`PUT /api/ai/motion/:id/prompt`). **Data**: the catalog (106 motion / 748 slide, with `source: chois|oppadu`) lives in
   git at `packages/shared/src/ai-hub/*.data.ts`; prompts in Postgres (`ai_motion_prompts`, `ai_slide_prompts`); media +
-  `manifest/{motion,slide,brand}.json` in the Volume bucket `ai-hub` (public `/api/files/ai-hub/…?v=<sha8>`; brand copy via
-  `/api/ai/brand/site/*` with a `frame-ancestors` CSP). A list only contains items whose files are all in the manifest.
-  Material goes in with `npm run ai:*` (token-authenticated upload; the generic `/api/files` upload/delete refuse this
-  bucket). Spec: `docs/superpowers/specs/2026-10-28-ai-hub-migration-design.md`; first migration steps:
+  `manifest/{motion,slide,brand}.json` in the Volume bucket `ai-hub` (public `/api/files/ai-hub/…?v=<sha8>` serves only motion/slide
+  media + manifests (`isAiHubPublicFile`), brand files 404 there; the brand copy is served only via `/api/ai/brand/site/*` with a
+  `frame-ancestors` CSP, and `BrandPage` frames it through `toolUrl()` on the separate `VITE_TOOLS_ORIGIN` so the third-party
+  lookbook JS never runs on the app origin). A list only contains items whose files are all in the manifest.
+  Material goes in with `npm run ai:*` (token-authenticated upload; the generic `/api/files` upload/delete and
+  `storage.service` `removeFile`/`removeDirectoryIfEmpty` refuse this bucket). `PUT /api/ai/prompts/:set` inserts missing ids
+  only, so re-running `ai:push` never overwrites admin web edits; `ai:push --overwrite-prompts` (`?overwrite=1`) replaces them. Spec: `docs/superpowers/specs/2026-10-28-ai-hub-migration-design.md`; first migration steps:
   `scripts/ai-hub/README.md`. Browser smoke: `packages/server/scripts/ai-hub-e2e-setup.ts` + `packages/client/e2e/ai-hub.smoke.mjs`.
 - Server handlers: notes ①②④ → `routes/notes.ts`; comments ③⑤ → `routes/comments.ts`.
   DB logic concentrated in `services/note.service.ts`.
@@ -205,7 +209,7 @@ additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures th
 - **Pen/eraser input** is custom-handled: `hooks/useExcalidrawTouch.js`,
   `hooks/useScribbleErase.js` (S-Pen barrel button, scribble-to-erase, palm rejection).
 - File storage uses `VOLUME_PATH`; buckets: `chapter-pages`, `chapter-tools` (HTML only),
-  `visualizations` (HTML only), `whiteboard-files` (raster images ≤ 2MB, students allowed), `ai-hub` (AI활용 hub material — written only through the `AI_MEDIA_UPLOAD_TOKEN` routes, never `/api/files/upload`; read via `/api/files/ai-hub/*`), `videos` (teacher-only, uploaded through the streaming route
+  `visualizations` (HTML only), `whiteboard-files` (raster images ≤ 2MB, students allowed), `ai-hub` (AI활용 hub material — written only through the `AI_MEDIA_UPLOAD_TOKEN` routes, never `/api/files/upload`; read via `/api/files/ai-hub/*` for motion/slide media + manifests only; brand files only via `/api/ai/brand/site/*`), `videos` (teacher-only, uploaded through the streaming route
   `POST /api/videos/upload`, not `/api/files/upload` which buffers whole files in memory),
   `submission-files`, post attachments. Served via `/api/files/*` as a stream with HTTP Range
   support (required for `<video>` seeking).
