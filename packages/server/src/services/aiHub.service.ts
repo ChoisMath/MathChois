@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { sql } from 'drizzle-orm';
 import {
-  MOTION_CATALOG, SLIDE_CATALOG, renderMotionItems, renderSlideItems,
+  MOTION_CATALOG, SLIDE_CATALOG, renderMotionItems, renderSlideItems, validateManifest,
   type Manifest, type MotionPrompt, type MotionItem, type SlideItem, type Row,
 } from '@mathchois/shared';
 import { db } from '../config/database.js';
@@ -15,7 +15,7 @@ export type ManifestSet = 'motion' | 'slide' | 'brand';
 
 const manifestCache = new Map<ManifestSet, { mtimeMs: number; value: Manifest | null }>();
 
-/** manifest 를 읽는다. 파일 mtime 이 바뀔 때만 다시 읽고, 없거나 JSON 이 깨졌으면 null. */
+/** manifest 를 읽는다. 파일 mtime 이 바뀔 때만 다시 읽고, 없거나 JSON 이 깨졌거나 validateManifest 를 통과하지 못하면 null. */
 export async function readManifest(set: ManifestSet): Promise<Manifest | null> {
   const file = path.join(env.VOLUME_PATH, 'ai-hub', 'manifest', `${set}.json`);
   let mtimeMs: number;
@@ -29,7 +29,11 @@ export async function readManifest(set: ManifestSet): Promise<Manifest | null> {
   if (hit && hit.mtimeMs === mtimeMs) return hit.value;
   let value: Manifest | null = null;
   try {
-    value = JSON.parse(await readFile(file, 'utf8')) as Manifest;
+    const json: unknown = JSON.parse(await readFile(file, 'utf8'));
+    const errors = validateManifest(json);
+    // mtime 별로 캐시되므로 같은 파일에 대해 한 번만 기록된다.
+    if (errors.length) console.error(`[ai-hub] manifest ${set}.json 모양이 잘못되었습니다`, errors.slice(0, 20));
+    else value = json as Manifest;
   } catch (err) {
     console.error(`[ai-hub] manifest ${set}.json 을 읽지 못했습니다`, err);
   }

@@ -268,6 +268,10 @@ export async function storageRoutes(app: FastifyInstance) {
     // 파일명에 타임스탬프 포함 → immutable 캐시
     reply.header('Content-Type', stat.mimeType);
     reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+    // ai-hub 파일은 같은 이름으로 덮어써지므로 ?v=<sha 앞 8자> 가 붙은 주소만 오래 캐시한다.
+    if (bucket === 'ai-hub' && !(request.query as Record<string, string>).v) {
+      reply.header('Cache-Control', 'private, no-cache');
+    }
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Accept-Ranges', 'bytes');
 
