@@ -11,6 +11,8 @@ import {
   listMotion, listSlide, readManifest, upsertMotionPrompt, upsertMotionPrompts, upsertSlidePrompts,
 } from '../services/aiHub.service.js';
 import { MAX_UPLOAD_BYTES, resolveAiHubPath, saveUpload } from '../services/aiHubUpload.service.js';
+import { serveBrandFile } from '../services/brandSite.service.js';
+import { buildFrameAncestors } from './storage.js';
 
 const row = z.tuple([z.string(), z.string(), z.string()]);
 const promptBody = z.object({
@@ -59,6 +61,23 @@ export async function aiHubRoutes(app: FastifyInstance) {
 
   // ─── GET /api/ai/access — 내 AI활용 허브 권한 ───
   app.get('/api/ai/access', { preHandler: [authenticate] }, async (request) => abilitiesFor(request.user));
+
+  // ─── GET /api/ai/brand/site/* — 브랜드 룩북 사본 (공개, iframe 용) ───
+  // 허브 페이지가 로그인 뒤에 있고 사본은 공개 정적 자원이라 인증하지 않는다. 앱 origin 에서만 frame 되도록 한다.
+  app.get<{ Params: { '*': string } }>('/api/ai/brand/site/*', async (request, reply) => {
+    const result = await serveBrandFile(request.params['*'] || 'index.html');
+    if (result.status === 404) return reply.status(404).send({ error: 'Not found' });
+    reply.header('Content-Type', result.contentType);
+    reply.header('Cache-Control', result.cacheControl);
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Robots-Tag', 'noindex');
+    reply.header('Content-Security-Policy', buildFrameAncestors());
+    reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
+    // helmet 이 raw 응답에 직접 setHeader 하므로 reply.removeHeader 로는 안 지워진다(routes/storage.ts 와 동일).
+    reply.raw.removeHeader('X-Frame-Options');
+    reply.raw.removeHeader('Origin-Agent-Cluster');
+    return reply.send(result.body);
+  });
 
   // ─── GET /api/ai/motion · /api/ai/slide — 올라간 파일이 모두 있는 항목만 ───
   app.get('/api/ai/motion', { preHandler: [authenticate, requireAiHub] }, async () => listMotion());
