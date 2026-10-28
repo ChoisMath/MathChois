@@ -6,6 +6,7 @@
  *   npx tsx --env-file=.env scripts/units-e2e-setup.ts > "$SCRATCH/units.json"
  *   npx tsx --env-file=.env scripts/classroom-tabs-e2e-setup.ts "$SCRATCH/units.json" > "$SCRATCH/tabs.json"
  */
+import { readFileSync } from 'node:fs';
 import { eq, inArray, like } from 'drizzle-orm';
 import { db, pgClient } from '../src/config/database.js';
 import {
