@@ -15,6 +15,7 @@ import { getClassroomVideoUnread } from '../../lib/videos';
 import { listUnits } from '../../lib/units';
 import { resolveClassroomColor, colorVars } from '../../lib/classroomColor';
 import ClassroomColorPicker from '../../components/classrooms/ClassroomColorPicker';
+import '../../components/classrooms/classroomTabs.css';
 import ChapterTab from '../../components/classrooms/ChapterTab';
 import StudentsTab from '../../components/classrooms/StudentsTab';
 import ClassroomTabs from '../../components/classrooms/ClassroomTabs';
@@ -49,10 +50,23 @@ const ClassroomDetail = () => {
   const selectTab = (key) => {
     const next = new URLSearchParams(searchParams); // unit 등 다른 쿼리는 유지
     next.set('tab', key);
+    if (key !== 'dashboard') { next.delete('view'); next.delete('student'); } // 대시보드 선택값은 다른 탭 주소에 남기지 않는다
     setSearchParams(next, { replace: true });
   };
   /* 보고 있는 단원(?unit= 단원 id | 'none' | 없음=단원 목록). 단원을 열고 닫는 것은 기록을 남겨 뒤로 가기로 단원 목록에 돌아온다 */
   const unitParam = searchParams.get('unit');
+  /* 대시보드 선택(?view= ?student=) — unit 은 챕터·영상 탭과 같은 키를 쓴다. 대시보드가 바꾸는 값은 기록을 남기지 않는다(replace) */
+  const dashboardSelection = { view: searchParams.get('view'), unit: unitParam, student: searchParams.get('student') };
+  const onDashboardSelectionChange = useCallback((patch, { replace = true } = {}) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      for (const [key, value] of Object.entries(patch)) {
+        if (value == null || value === '') next.delete(key);
+        else next.set(key, value);
+      }
+      return next;
+    }, { replace });
+  }, [setSearchParams]);
   const setUnitParam = (nextUnit) => {
     const next = new URLSearchParams(searchParams);
     if (nextUnit) next.set('unit', nextUnit);
@@ -235,10 +249,11 @@ const ClassroomDetail = () => {
 
   return (
     <>
-      <div className="w-full space-y-6">
+      {/* 학급 표지색 변수는 바깥 div 에 두어 헤더와 모든 탭(표 띠·모둠 방)이 함께 쓴다 */}
+      <div className="w-full space-y-6 classroom-tabs" style={colorVars(resolveClassroomColor(classroom))}>
 
         {/* ── 헤더 (학급 색 띠 + 옅은 배경) ── */}
-        <div className="classroom-head" style={colorVars(resolveClassroomColor(classroom))}>
+        <div className="classroom-head">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -405,7 +420,11 @@ const ClassroomDetail = () => {
         {/* ── 대시보드 탭 (교사 전용) ── */}
         {activeTab === 'dashboard' && isTeacher && (
           <Suspense fallback={<p className="text-gray-400 text-sm">로딩 중...</p>}>
-            <ClassroomDashboard classroomId={id} />
+            <ClassroomDashboard
+              classroomId={id}
+              selection={dashboardSelection}
+              onSelectionChange={onDashboardSelectionChange}
+            />
           </Suspense>
         )}
       </div>

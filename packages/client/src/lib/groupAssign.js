@@ -60,3 +60,35 @@ export function findGroupKeyOf(groups, studentId) {
   const g = groups.find((x) => x.studentIds.includes(studentId));
   return g ? groupKey(g) : null;
 }
+
+/** 모둠 수 범위(모둠 보드의 "모둠 수" 입력과 같다) */
+export const GROUP_COUNT_MIN = 1;
+export const GROUP_COUNT_MAX = 30;
+
+/**
+ * 모둠 수를 count 로 맞춘다. 늘리면 빈 모둠을 뒤에 더하고, 줄이면 뒤에서부터 잘라낸다
+ * (잘린 모둠의 학생은 어느 모둠에도 없게 되어 미배정이 된다). 같은 수면 같은 배열을 돌려준다.
+ */
+export function resizeGroups(groups, count) {
+  const n = Math.max(GROUP_COUNT_MIN, Math.min(GROUP_COUNT_MAX, Math.floor(Number(count) || 0)));
+  if (n === groups.length) return groups;
+  if (n < groups.length) {
+    return groups.slice(0, n).map((g, i) => (g.position === i ? g : { ...g, position: i }));
+  }
+  const added = Array.from({ length: n - groups.length }, (_, k) => {
+    const i = groups.length + k;
+    return { name: `${i + 1}모둠`, position: i, studentIds: [] };
+  });
+  return [...groups, ...added];
+}
+
+/**
+ * 모둠 수 입력을 글자 하나마다 바로 적용해도 되는가.
+ * 늘리기는 언제나 바로. 줄이기는 잘릴 방이 모두 비어 있고 저장된 방(id)도 아닐 때만 바로 —
+ * 아니면 "12" 를 치는 도중 "1" 에서 학생이 쏟아지지 않게 입력을 마칠 때(blur·Enter)까지 미룬다.
+ */
+export function canResizeNow(groups, count) {
+  const n = Math.max(GROUP_COUNT_MIN, Math.min(GROUP_COUNT_MAX, Math.floor(Number(count) || 0)));
+  if (n >= groups.length) return true;
+  return groups.slice(n).every((g) => g.studentIds.length === 0 && !g.id);
+}

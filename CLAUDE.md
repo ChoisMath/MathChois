@@ -169,6 +169,14 @@ additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures th
   Template application goes through `POST /api/whiteboards/groups/:gid/apply-template`, which
   only succeeds on an empty board (the server never imports Excalidraw). The server keeps board
   scenes in memory → single-instance deployment assumption.
+- **Classroom detail tabs** (`pages/Classrooms/ClassroomDetail.jsx`): board, student list and dashboard are
+  ledger-style tables (`components/classrooms/classroomTabs.css`, `.ledger`); the group settings card is a
+  drag board (`components/whiteboard/GroupAssignmentPanel.jsx`, dnd-kit chips → desks, 모둠 수 input resizes the
+  desks via `lib/groupAssign.js` `resizeGroups`). The teacher dashboard is 보기(챕터별·영상별·학생별) × 대상
+  (`?view=`, `?unit=` shared with the chapter/video tabs, `?student=`); pure calculations live in
+  `lib/dashboardViews.js`. [학생] tab row-end [AI 풀이 초기화] calls
+  `POST /api/coaching/classrooms/:cid/students/:sid/reset` (resets quota for every page of the classroom, keeps
+  attempt records). Spec: `docs/superpowers/specs/2026-10-28-classroom-tabs-tables-groups-dashboard-design.md`.
 - **Icon-only buttons** use `components/common/IconButton.jsx` (`label` → `title` + `aria-label`, 44px hit area,
   variants ghost/primary/danger/danger-solid). Icon dictionary and keep-text rules:
   `docs/superpowers/specs/2026-10-20-icon-buttons-design.md`. `DrawingToolbar` keeps its own buttons.
