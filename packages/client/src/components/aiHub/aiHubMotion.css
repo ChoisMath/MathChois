@@ -112,4 +112,6 @@
 .ai-pill--ghost { background: #fff; color: var(--ai-ink); border-color: var(--ai-line); font-weight: 500; padding: 0 16px; }
 .ai-pill--ghost:hover { background: #fff; border-color: var(--ai-pen); }
 .ai-note { font-size: 14px; color: var(--ai-muted); white-space: nowrap; }
+/* 긴 안내(복사 실패)는 줄바꿈을 허용하고 단추 아래 한 줄을 차지한다 */
+.ai-note--warn { flex-basis: 100%; white-space: normal; word-break: keep-all; color: #9a3412; }
 .ai-detail-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 24px; }

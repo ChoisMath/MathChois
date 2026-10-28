@@ -52,6 +52,7 @@ const AiHubRoute         = lazy(() => import('./pages/AiHub/AiHubRoute'));
 const AiHubLayout        = lazy(() => import('./pages/AiHub/AiHubLayout'));
 const MotionGalleryPage  = lazy(() => import('./pages/AiHub/MotionGalleryPage'));
 const MotionDetailPage   = lazy(() => import('./pages/AiHub/MotionDetailPage'));
+const SlideGalleryPage   = lazy(() => import('./pages/AiHub/SlideGalleryPage'));
 
 /* 관리자 */
 const AdminPanel = lazy(() => import('./pages/Admin/AdminPanel'));
@@ -178,7 +179,7 @@ function App() {
               <Route path="/ai" element={<Navigate to="/ai/motion" replace />} />
               <Route path="/ai/motion" element={<MotionGalleryPage />} />
               <Route path="/ai/motion/:id" element={<MotionDetailPage />} />
-              <Route path="/ai/slide" element={<AiHubPlaceholder />} />
+              <Route path="/ai/slide" element={<SlideGalleryPage />} />
               <Route path="/ai/brand" element={<AiHubPlaceholder />} />
             </Route>
             {/* 편집기: 전체 화면(레이아웃 밖), 교사·관리자 */}

@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { finalPrompt } from '@mathchois/shared';
-import { writeClipboard } from '../../lib/aiHub/clipboard';
+import { COPY_FAILED, useCopyFeedback } from '../../hooks/useCopyFeedback';
 import './aiHubMotion.css';
 
 const LABEL = { en: '프롬프트 복사 (영문)', ko: '프롬프트 복사 (국문)' };
@@ -12,17 +11,11 @@ const LABEL = { en: '프롬프트 복사 (영문)', ko: '프롬프트 복사 (�
  * prompt: { en, ko, shots, cues } | null
  */
 export default function PromptCopy({ id, prompt, canEdit }) {
-  const [copied, setCopied] = useState(null);
-  const timer = useRef(0);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const { copied, failed, copy } = useCopyFeedback();
 
-  const onCopy = async (lang) => {
+  const onCopy = (lang) => {
     if (!prompt) return;
-    const text = finalPrompt({ tpl: prompt[lang], lang, withTables: true, tables: prompt });
-    await writeClipboard(text);
-    setCopied(lang);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setCopied(null), 1500);
+    copy(finalPrompt({ tpl: prompt[lang], lang, withTables: true, tables: prompt }), lang);
   };
 
   return (
@@ -43,6 +36,7 @@ export default function PromptCopy({ id, prompt, canEdit }) {
         <Link to={`/ai/motion/${id}/edit`} className="ai-pill ai-pill--ghost">빈칸 편집·장면표</Link>
       ) : null}
       {!prompt ? <span className="ai-note">프롬프트 데이터 준비 중</span> : null}
+      {failed ? <span role="status" data-testid="copy-failed" className="ai-note ai-note--warn">{COPY_FAILED}</span> : null}
     </div>
   );
 }

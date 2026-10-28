@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { ArrowLeft, ChevronDown, Sparkles } from 'lucide-react';
 import { creditLine } from '@mathchois/shared';
@@ -80,8 +80,11 @@ export default function AiHubLayout() {
         </div>
       </header>
 
+      {/* 화면(lazy)을 받는 동안에도 머리글·탭·푸터는 그대로 두고 이 자리만 로더로 바꾼다 */}
       <main className="ai-hub-main">
-        <Outlet />
+        <Suspense fallback={<p className="ai-empty" role="status">불러오는 중...</p>}>
+          <Outlet />
+        </Suspense>
       </main>
 
       <footer className="ai-hub-foot">{creditLine(tab.id)}</footer>
