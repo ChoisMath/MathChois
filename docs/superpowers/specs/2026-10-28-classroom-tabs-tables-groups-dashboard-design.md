@@ -118,10 +118,10 @@
 ```
 
 - **보기**: `chapters | videos | students`. **대상**: 보기가 챕터별·영상별이면 단원 목록(`전체`, 단원들…, `단원 미지정`), 학생별이면 학생 명렬(이름순).
-- 주소: `?tab=dashboard&view=…&unit=<id|all|none>&student=<id>`. `unit` 은 챕터·영상 탭과 **같은 키**를 공유한다(영상 탭에서 보던 단원이 그대로 선택됨).
-  `unit` 이 없으면 `all`. 학생별에서 `student` 가 없으면 명렬 첫 학생.
+- 주소: `?tab=dashboard&view=…&unit=<id|none>&student=<id>`. `unit` 은 챕터·영상 탭과 **같은 키**를 공유한다(영상 탭에서 보던 단원이 그대로 선택됨). **`unit` 이 없으면 "전체"** — 챕터·영상 탭은 `unit` 없음 = 단원 목록이므로 `all` 같은 값을 넣어 다른 탭을 깨뜨리지 않는다.
+  학생별에서 `student` 가 없으면 명렬 첫 학생.
 - 셀 계산은 `lib/dashboardViews.js` 순수 함수(단위 테스트): `accuracy(correct, attempts)`, `watchPercent(maxPositionSec, durationSec)`,
-  `groupByUnit(units, items)`, `studentSummary(student, chapters, videos)`, `itemsForUnit(items, unitParam)`.
+  `groupByUnit(units, items)`, `studentSummary(student, chapters, videos)`, `itemsForUnit(items, unitParam)`(`null`=전체, `'none'`=미지정).
 
 ### 챕터별 (`ChapterMatrix.jsx`)
 - 행=학생(첫 열 고정, `sticky left-0`), 열=선택 단원의 챕터. 셀: `필기 3/8` 가는 막대(`--nb-deep`) + 정답률 칩(기존 색 규칙: ≥70 초록, ≥40 호박, <40 장미, 시도 없음 회색 `–`).
@@ -175,7 +175,7 @@ interface ClassroomDashboard {
 
 - 모둠 저장 실패: 지금처럼 빨간 한 줄 + dirty 유지. 자동 배분 실패: 다시 읽기.
 - 드래그 중 네트워크는 쓰지 않는다(저장 버튼에서만).
-- 대시보드 로드 실패: 빨간 한 줄 + "다시 시도" 버튼. 단원·학생 `?unit=`/`?student=` 가 목록에 없으면 `all`/첫 학생로 되돌리고 주소를 고친다(`replace`).
+- 대시보드 로드 실패: 빨간 한 줄 + "다시 시도" 버튼. 단원·학생 `?unit=`/`?student=` 가 목록에 없으면 전체(`unit` 삭제)/첫 학생으로 되돌리고 주소를 고친다(`replace`).
 - 초기화 실패: 그 행 아래 빨간 한 줄, 버튼 다시 활성.
 
 ## 테스트
