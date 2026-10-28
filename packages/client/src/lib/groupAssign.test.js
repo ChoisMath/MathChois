@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { distributeEvenly, moveStudent, unassignedStudents, findGroupKeyOf, groupKey, resizeGroups } from './groupAssign';
+import { distributeEvenly, moveStudent, unassignedStudents, findGroupKeyOf, groupKey, resizeGroups, canResizeNow } from './groupAssign';
 
 const seq = (vals) => { let i = 0; return () => vals[i++ % vals.length]; };
 
@@ -92,5 +92,19 @@ describe('resizeGroups', () => {
   it('id 가 있는 모둠은 id 를 유지한다', () => {
     const r = resizeGroups([{ id: 'x', name: 'A', position: 0, studentIds: [] }], 2);
     expect(r[0].id).toBe('x');
+  });
+});
+
+describe('canResizeNow', () => {
+  const g = (n, ids = [], id) => ({ id, name: `${n}모둠`, position: n - 1, studentIds: ids });
+  it('늘리기는 언제나 바로', () => {
+    expect(canResizeNow([g(1, ['a'])], 5)).toBe(true);
+  });
+  it('잘릴 방이 모두 비어 있고 id 도 없으면 바로', () => {
+    expect(canResizeNow([g(1, ['a']), g(2), g(3)], 1)).toBe(true);
+  });
+  it('잘릴 방에 학생이 있거나 저장된 방(id)이면 입력을 마칠 때까지 미룬다', () => {
+    expect(canResizeNow([g(1, ['a']), g(2, ['b'])], 1)).toBe(false);
+    expect(canResizeNow([g(1), g(2, [], 'saved')], 1)).toBe(false);
   });
 });

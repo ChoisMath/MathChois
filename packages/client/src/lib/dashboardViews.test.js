@@ -103,3 +103,11 @@ describe('resolveDashboardSelection', () => {
     expect(resolveDashboardSelection({ view: 'chapters', student: 's2' }, ctx)).toMatchObject({ student: 's2', changed: false });
   });
 });
+
+describe('resolveDashboardSelection — 주소에 view 가 없을 때', () => {
+  const ctx = { units: [], students: [{ studentId: 's1' }] };
+  it('기본(chapters)으로 보되 주소를 고쳐 쓰지 않는다(changed=false)', () => {
+    expect(resolveDashboardSelection({}, ctx)).toEqual({ view: 'chapters', unit: null, student: null, changed: false });
+    expect(resolveDashboardSelection({ view: null, unit: null, student: null }, ctx)).toMatchObject({ view: 'chapters', changed: false });
+  });
+});

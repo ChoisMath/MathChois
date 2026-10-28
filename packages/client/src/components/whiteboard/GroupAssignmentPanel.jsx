@@ -7,7 +7,7 @@ import IconButton from '../common/IconButton';
 import GroupDesk from './GroupDesk';
 import StudentChip, { ChipFace } from './StudentChip';
 import {
-  moveStudent, groupKey, unassignedStudents, resizeGroups, GROUP_COUNT_MIN, GROUP_COUNT_MAX,
+  moveStudent, groupKey, unassignedStudents, resizeGroups, canResizeNow, GROUP_COUNT_MIN, GROUP_COUNT_MAX,
 } from '../../lib/groupAssign';
 import { deskKeyboardCoordinates, deskCollision } from '../../lib/groupBoardKeyboard';
 
@@ -52,10 +52,16 @@ export default function GroupAssignmentPanel({
     useSensor(KeyboardSensor, { coordinateGetter: deskKeyboardCoordinates }),
   );
 
-  /* ── 모둠 수: 유효한 수가 들어오는 즉시 방 개수를 맞춘다. 비우거나 범위 밖이면 blur 때 되돌린다 ── */
-  const applyCount = (raw) => {
+  /* ── 모둠 수: 늘리기와 빈 방 줄이기는 글자가 들어오는 즉시. 학생이 있거나 저장된 방이 잘리는 줄이기는
+        "12" 를 치는 도중 "1" 에서 학생이 쏟아지지 않게 입력을 마칠 때(blur·Enter)까지 미룬다 ── */
+  const parseCount = (raw) => {
     const n = Number(raw);
-    if (raw === '' || !Number.isInteger(n) || n < GROUP_COUNT_MIN || n > GROUP_COUNT_MAX) { setCountDraft(raw); return; }
+    return raw !== '' && Number.isInteger(n) && n >= GROUP_COUNT_MIN && n <= GROUP_COUNT_MAX ? n : null;
+  };
+  const applyCount = (raw, { commit = false } = {}) => {
+    const n = parseCount(raw);
+    if (n == null) { setCountDraft(commit ? null : raw); return; }
+    if (!commit && !canResizeNow(groups, n)) { setCountDraft(raw); return; }
     if (n < groups.length && warnOnRemove && groups.slice(n).some((g) => g.id) && !window.confirm(warnOnRemove)) {
       setCountDraft(null);
       return;
@@ -104,7 +110,8 @@ export default function GroupAssignmentPanel({
                 type="number" inputMode="numeric" min={GROUP_COUNT_MIN} max={GROUP_COUNT_MAX}
                 value={countInput}
                 onChange={(e) => applyCount(e.target.value)}
-                onBlur={() => setCountDraft(null)}
+                onBlur={(e) => applyCount(e.target.value, { commit: true })}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyCount(e.currentTarget.value, { commit: true }); } }}
               />
             </label>
             {onAuto && (

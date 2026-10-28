@@ -47,7 +47,7 @@ export default function StudentsTable({ classroomId, members, isTeacher }) {
     setBusyId(null);
   };
 
-  const cols = isTeacher ? 5 : 3;
+  const cols = isTeacher ? 5 : 2;
 
   return (
     <section aria-label="학생 목록">
@@ -62,7 +62,7 @@ export default function StudentsTable({ classroomId, members, isTeacher }) {
               <tr>
                 <th scope="col">이름</th>
                 <th scope="col" className="hidden sm:table-cell">아이디</th>
-                <th scope="col" className="tight">참여일</th>
+                {isTeacher && <th scope="col" className="tight">참여일</th>}
                 {isTeacher && <th scope="col" className="act"><span className="sr-only">코칭 기록</span></th>}
                 {isTeacher && <th scope="col" className="act">초기화</th>}
               </tr>
@@ -82,7 +82,7 @@ export default function StudentsTable({ classroomId, members, isTeacher }) {
                       </div>
                     </td>
                     <td className="hidden sm:table-cell text-gray-600 truncate max-w-64">{m.student?.email}</td>
-                    <td className="tight num"><time dateTime={m.joinedAt}>{formatYmd(m.joinedAt)}</time></td>
+                    {isTeacher && <td className="tight num"><time dateTime={m.joinedAt}>{formatYmd(m.joinedAt)}</time></td>}
                     {isTeacher && (
                       <td className="act">
                         <IconButton

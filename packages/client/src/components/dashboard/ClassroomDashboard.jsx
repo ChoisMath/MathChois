@@ -25,8 +25,9 @@ export default function ClassroomDashboard({ classroomId, selection, onSelection
     return () => { alive = false; };
   }, [classroomId, attempt]);
 
-  /* 주소의 선택값이 목록과 안 맞으면(삭제된 단원·탈퇴 학생·잘못된 view) 바로잡아 주소를 고쳐 쓴다 */
-  const resolved = data ? resolveDashboardSelection(selection, data) : null;
+  /* 주소의 선택값이 목록과 안 맞으면(삭제된 단원·탈퇴 학생·잘못된 view) 바로잡아 주소를 고쳐 쓴다.
+     다른 학급으로 옮긴 직후(loading)에는 이전 학급 데이터로 판단하지 않는다 */
+  const resolved = data && !loading ? resolveDashboardSelection(selection, data) : null;
   useEffect(() => {
     if (resolved?.changed) onSelectionChange({ view: resolved.view, unit: resolved.unit, student: resolved.student }, { replace: true });
   }, [resolved?.changed, resolved?.view, resolved?.unit, resolved?.student, onSelectionChange]);

@@ -109,6 +109,7 @@ export function resolveDashboardSelection({ view, unit, student }, { units, stud
     const exists = nextStudent != null && students.some((s) => s.studentId === nextStudent);
     if (!exists) nextStudent = students[0]?.studentId ?? null;
   }
-  const changed = nextView !== view || nextUnit !== (unit ?? null) || nextStudent !== (student ?? null);
+  // view 가 없으면 chapters 로 보되 주소는 손대지 않는다(첫 방문마다 주소를 고쳐 쓰지 않게)
+  const changed = nextView !== (view ?? 'chapters') || nextUnit !== (unit ?? null) || nextStudent !== (student ?? null);
   return { view: nextView, unit: nextUnit, student: nextStudent, changed };
 }

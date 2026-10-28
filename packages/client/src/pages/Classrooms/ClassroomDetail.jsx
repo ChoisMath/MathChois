@@ -50,6 +50,7 @@ const ClassroomDetail = () => {
   const selectTab = (key) => {
     const next = new URLSearchParams(searchParams); // unit 등 다른 쿼리는 유지
     next.set('tab', key);
+    if (key !== 'dashboard') { next.delete('view'); next.delete('student'); } // 대시보드 선택값은 다른 탭 주소에 남기지 않는다
     setSearchParams(next, { replace: true });
   };
   /* 보고 있는 단원(?unit= 단원 id | 'none' | 없음=단원 목록). 단원을 열고 닫는 것은 기록을 남겨 뒤로 가기로 단원 목록에 돌아온다 */

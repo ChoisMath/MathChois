@@ -81,3 +81,14 @@ export function resizeGroups(groups, count) {
   });
   return [...groups, ...added];
 }
+
+/**
+ * 모둠 수 입력을 글자 하나마다 바로 적용해도 되는가.
+ * 늘리기는 언제나 바로. 줄이기는 잘릴 방이 모두 비어 있고 저장된 방(id)도 아닐 때만 바로 —
+ * 아니면 "12" 를 치는 도중 "1" 에서 학생이 쏟아지지 않게 입력을 마칠 때(blur·Enter)까지 미룬다.
+ */
+export function canResizeNow(groups, count) {
+  const n = Math.max(GROUP_COUNT_MIN, Math.min(GROUP_COUNT_MAX, Math.floor(Number(count) || 0)));
+  if (n >= groups.length) return true;
+  return groups.slice(n).every((g) => g.studentIds.length === 0 && !g.id);
+}
