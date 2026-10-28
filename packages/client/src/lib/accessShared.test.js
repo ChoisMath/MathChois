@@ -44,10 +44,11 @@ describe('parseEmailList', () => {
 });
 
 describe('resolveRole', () => {
-  it('관리자는 현재 역할을 유지한다(없으면 teacher)', () => {
-    expect(resolveRole({ isAdmin: true, currentRole: 'student', isAllowedTeacher: false })).toBe('student');
+  it('관리자는 허용 목록과 무관하게 항상 teacher(교사이자 관리자)', () => {
+    expect(resolveRole({ isAdmin: true, currentRole: 'student', isAllowedTeacher: false })).toBe('teacher');
     expect(resolveRole({ isAdmin: true, currentRole: 'teacher', isAllowedTeacher: false })).toBe('teacher');
     expect(resolveRole({ isAdmin: true, currentRole: null, isAllowedTeacher: false })).toBe('teacher');
+    expect(resolveRole({ isAdmin: true, currentRole: 'student', isAllowedTeacher: true })).toBe('teacher');
   });
   it('허용 목록에 있으면 teacher', () => {
     expect(resolveRole({ isAdmin: false, currentRole: null, isAllowedTeacher: true })).toBe('teacher');

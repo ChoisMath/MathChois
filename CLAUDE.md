@@ -87,8 +87,8 @@ Google OAuth + email/password (bcrypt). JWT access/refresh tokens, role `teacher
 (not logged in → `/`; wrong role → own dashboard).
 
 **Roles are decided by the server, never chosen by the user.** Only emails on the admin-managed
-`allowed_teachers` list are teachers; every other signup (Google or email) is a student. Admins keep
-whatever role they have. `services/access.service.ts` `applyAccessRules` re-evaluates this on every
+`allowed_teachers` list are teachers; every other signup (Google or email) is a student. Admins are
+always teachers (teacher + admin). `services/access.service.ts` `applyAccessRules` re-evaluates this on every
 login and token refresh (rules in `@mathchois/shared` `auth/access.ts` `resolveRole`), so removing a
 teacher from the list takes effect within 15 minutes. Teachers can pre-register student emails per
 classroom (`classroom_invites`); when that email signs in as a student it is moved into

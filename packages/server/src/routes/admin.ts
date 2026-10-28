@@ -65,6 +65,14 @@ export async function adminRoutes(app: FastifyInstance) {
     if (role !== 'teacher' && role !== 'student') {
       return reply.status(400).send({ error: 'Invalid role (teacher or student)' });
     }
+    const target = await getProfileById(request.params.id);
+    if (!target) {
+      return reply.status(404).send({ error: 'User not found' });
+    }
+    // 관리자는 교사이자 관리자 — 학생으로 내리려면 먼저 관리자 권한을 해제해야 한다
+    if (target.isAdmin && role === 'student') {
+      return reply.status(400).send({ error: '관리자는 항상 교사입니다. 먼저 관리자 권한을 해제해 주세요.' });
+    }
     const updated = await updateUserRole(request.params.id, role, request.user.sub);
     if (!updated) {
       return reply.status(404).send({ error: 'User not found' });

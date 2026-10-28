@@ -2,7 +2,7 @@
  * 접속 규칙 — 누가 교사이고 누가 학생인지, 이메일 명단을 어떻게 읽는지. 서버·클라이언트가 같은 규칙을 쓴다.
  *
  * - 교사는 관리자가 등록한 이메일(allowed_teachers)만. 그 외 모든 계정은 학생.
- * - 관리자(isAdmin)는 자동으로 역할을 바꾸지 않는다(관리자 패널에서 스스로 정한다).
+ * - 관리자(isAdmin)는 교사이자 관리자다 — 항상 teacher.
  * - 이메일은 소문자·trim 으로 저장·비교한다.
  */
 
@@ -64,7 +64,7 @@ export function parseEmailList(
 
 /**
  * 역할 규칙.
- * - 관리자: 현재 역할 유지(아직 없으면 teacher).
+ * - 관리자: 항상 teacher(교사이자 관리자).
  * - 허용 목록에 있으면 teacher.
  * - 그 외 student (예전에 teacher 였어도 내려간다).
  */
@@ -73,6 +73,6 @@ export function resolveRole(input: {
   currentRole: AccessRole | null | undefined;
   isAllowedTeacher: boolean;
 }): AccessRole {
-  if (input.isAdmin) return input.currentRole ?? 'teacher';
+  if (input.isAdmin) return 'teacher';
   return input.isAllowedTeacher ? 'teacher' : 'student';
 }

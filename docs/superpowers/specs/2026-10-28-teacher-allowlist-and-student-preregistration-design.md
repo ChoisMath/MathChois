@@ -1,7 +1,7 @@
 # 교사 허용 목록 · 학생 사전 등록 (가입/로그인 정책) — 설계
 
 작성일: 2026-10-28
-상태: 자율 세션에서 작성 — 아래 **"확인이 필요한 가정"** 을 사용자가 검토한다.
+상태: 확정 — 아래 가정 표는 사용자가 검토해 A1·A2·A4·A5 는 그대로, A3 는 "관리자는 교사이자 관리자(항상 teacher)" 로 바뀌었다.
 
 ## 배경 / 문제
 
@@ -35,7 +35,7 @@
 |---|---|---|---|
 | A1 | **허용 목록에 없는 Google 계정도 로그인은 된다 — 학생으로.** "허용되지 않은 google 계정은 접속되지 않도록" 을 *교사로의 접속* 차단으로 읽었다. 요구 2("가입하면 무조건 학생")·3("학생의 google 계정") 과 함께 읽으면 학생은 Google 로 가입할 수 있어야 하고, 이미 Google 로 가입한 학생들을 막지 않는다. | 교사 허용 목록·학생 사전 등록 **어디에도 없는** Google 계정은 로그인 자체를 거부(이메일 가입만 열어 둠). | `access.service.ts` 의 `applyAccessRules` 에서 Google 신규 계정이면서 두 명단 모두에 없을 때 `AccessDeniedError` 를 던지고 `/?auth_error=not_allowed` 로 보낸다. 한 곳이다. |
 | A2 | **이미 가입한 학생**의 이메일을 교사가 사전 등록하면 **즉시** 학급에 넣는다(기다릴 일이 없으므로). | 가입 시점에만 처리하고, 기존 계정은 코드로 들어오게 한다. | `addClassroomInvites` 의 즉시 가입 분기를 뺀다. |
-| A3 | **관리자(`isAdmin`) 계정의 역할은 자동으로 바꾸지 않는다.** 관리자는 관리자 패널의 역할 선택으로 자기 역할을 정한다. | 관리자도 허용 목록을 따른다. | `resolveRole` 의 `isAdmin` 분기를 뺀다. |
+| A3 | **관리자(`isAdmin`) 는 교사이자 관리자 — 항상 `teacher`.** 허용 목록과 무관하다. 관리자를 학생으로 바꾸는 요청은 400(먼저 관리자 해제). 관리자로 지정하면 즉시 교사. | (확정 전) 관리자는 현재 역할 유지. | `resolveRole` 의 `isAdmin` 분기와 `PATCH /admin/users/:id/role` 의 400 가드. |
 | A4 | 배포 시 **기존 교사(`role='teacher'`) 전원을 허용 목록에 자동으로 옮긴다**(한 번). 그래야 배포 직후 아무도 잠기지 않는다. | 빈 목록으로 시작해 관리자가 다시 등록한다(기존 교사가 모두 학생으로 내려감). | `startupMigrate.ts` 의 백필을 뺀다. |
 | A5 | 사전 등록은 이메일 가입 학생에게도 같은 이메일이면 똑같이 적용한다(Google 로 한정할 이유가 없다). | Google 계정만. | `consumeClassroomInvites` 호출을 Google 콜백에만 둔다. |
 
@@ -45,7 +45,7 @@
 |---|---|---|
 | 교사 판별 기준 | **이메일 허용 목록 `allowed_teachers`** (관리자가 관리) | Google `sub` 대신 이메일 — 교사가 아직 가입 전이라 `sub` 를 알 수 없다. 이메일은 소문자로 저장·비교. |
 | 역할을 정하는 시점 | **모든 로그인·토큰 갱신 때 서버가 다시 계산** (`applyAccessRules`) | 허용 목록에서 빼면 늦어도 15분(access token 만료) 안에 반영. 사용자가 역할을 스스로 고르는 길(`PATCH /api/profiles/role`, `/choose-role`)은 없앤다. |
-| 역할 규칙 | `isAdmin` → 현재 역할 유지(없으면 teacher) · 허용 목록에 있음 → `teacher` · 그 외 → `student` | 공용 순수 함수 `resolveRole` (`shared/src/auth/access.ts`). |
+| 역할 규칙 | `isAdmin` → `teacher`(항상) · 허용 목록에 있음 → `teacher` · 그 외 → `student` | 공용 순수 함수 `resolveRole` (`shared/src/auth/access.ts`). |
 | 학생 사전 등록 저장 | **`classroom_invites`** (학급 × 이메일, unique) | 가입 시 `classroom_members` 로 옮기고 행을 지운다(소비). 교사가 뒤에 학생을 내보내도 다시 자동 가입되지 않는다. |
 | 사전 등록 소비 시점 | `applyAccessRules` 안에서, **결과 역할이 student 일 때만** | 교사 이메일이 실수로 학생 명단에 있어도 교사를 학생 명단으로 넣지 않는다. |
 | 관리자 "역할 선택" | 유지 — 의미를 **허용 목록 등록/해제 + 역할 즉시 변경** 으로 바꿈 | 그렇지 않으면 다음 토큰 갱신 때 되돌아간다. |
@@ -101,7 +101,7 @@ export function normalizeEmail(raw: string): string | null;
 export function parseEmailList(text: string, max = 200): { valid: string[]; invalid: string[] };
 
 /**
- * 역할 규칙 (A3): 관리자는 현재 역할 유지(없으면 teacher).
+ * 역할 규칙 (A3): 관리자는 항상 teacher.
  * 허용 목록에 있으면 teacher, 아니면 student.
  */
 export function resolveRole(input: { isAdmin: boolean; currentRole: Role | null; isAllowedTeacher: boolean }): Role;
@@ -143,7 +143,8 @@ export function resolveRole(input: { isAdmin: boolean; currentRole: Role | null;
 | `GET /api/admin/allowed-teachers` | admin | 목록 + 가입 상태 |
 | `POST /api/admin/allowed-teachers` `{ emails: string[] }` | admin | 추가. 응답 `{ added: string[]; existing: string[]; invalid: string[] }` |
 | `DELETE /api/admin/allowed-teachers/:id` | admin | 삭제(+즉시 학생으로). 자기 자신(관리자) 이메일은 400 |
-| `PATCH /api/admin/users/:id/role` | admin | **의미 변경**: teacher → 허용 목록 추가, student → 허용 목록 제거, 그리고 역할 즉시 반영 |
+| `PATCH /api/admin/users/:id/role` | admin | **의미 변경**: teacher → 허용 목록 추가, student → 허용 목록 제거, 그리고 역할 즉시 반영. 대상이 관리자이고 student 면 400 |
+| `PATCH /api/admin/users/:id/admin` | admin | 관리자 지정 시 역할도 즉시 `teacher` |
 | `GET /api/classrooms/:id/invites` | teacher·소유자 | 사전 등록 목록 |
 | `POST /api/classrooms/:id/invites` `{ emails: string[] }` | teacher·소유자 | 추가(위 결과 구조) |
 | `DELETE /api/classrooms/:id/invites/:inviteId` | teacher·소유자 | 삭제 |
@@ -171,7 +172,7 @@ export function resolveRole(input: { isAdmin: boolean; currentRole: Role | null;
 
 - 이메일 형식이 아닌 항목은 서버가 400 으로 막지 않고 `invalid` 로 돌려줘 나머지는 처리한다(명단 붙여넣기 UX).
 - 한 요청 최대 200개(`parseEmailList` 의 `max`). 넘으면 400.
-- 허용 목록 삭제가 **관리자 본인** 이메일이면 400(관리자가 스스로를 잠그지 않도록 — 어차피 A3 로 역할은 안 바뀌지만 혼란 방지).
+- 허용 목록 삭제가 **관리자 본인** 이메일이면 400(관리자는 어차피 교사지만, 스스로를 목록에서 지우는 혼란 방지).
 - 사전 등록 소비 중 unique 충돌(동시 로그인)은 `ON CONFLICT DO NOTHING`.
 
 ## 테스트

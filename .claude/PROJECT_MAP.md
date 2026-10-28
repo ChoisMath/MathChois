@@ -7,7 +7,7 @@
   - `packages/client` (`@mathchois/client`) — **React 19** + **Vite 7** + **Tailwind 4** + **React Router 7** + **Excalidraw 0.18** + dnd-kit + jspdf + socket.io-client + **katex/react-markdown/remark-math/rehype-katex**(수식·해설 렌더). PWA(Service Worker + manifest).
   - `packages/shared` (`@mathchois/shared`) — 공용 TS 타입(소스 직접 export, 빌드 산출물 아님).
 - 배포: **Railway** (Dockerfile 빌드, `packages/server/Dockerfile`, healthcheck `/api/health`). 프로덕션에서 server가 `client/dist`를 정적 서빙 + SPA fallback.
-- 인증: Google OAuth + 이메일/비밀번호(bcrypt). JWT access/refresh, 역할 `teacher` | `student`(+ `isAdmin`). **역할은 사용자가 고르지 않고 서버가 정한다** — 관리자가 등록한 `allowed_teachers` 이메일만 교사, 그 외 가입은 모두 학생(`services/access.service.ts` `applyAccessRules`, 로그인·토큰 갱신마다 적용). 교사가 학급에 미리 올린 학생 이메일(`classroom_invites`)은 가입 시 코드 없이 `classroom_members` 가 된다. 설계 `docs/superpowers/specs/2026-10-28-teacher-allowlist-and-student-preregistration-design.md`.
+- 인증: Google OAuth + 이메일/비밀번호(bcrypt). JWT access/refresh, 역할 `teacher` | `student`(+ `isAdmin`). **역할은 사용자가 고르지 않고 서버가 정한다** — 관리자가 등록한 `allowed_teachers` 이메일만 교사(관리자는 항상 교사), 그 외 가입은 모두 학생(`services/access.service.ts` `applyAccessRules`, 로그인·토큰 갱신마다 적용). 교사가 학급에 미리 올린 학생 이메일(`classroom_invites`)은 가입 시 코드 없이 `classroom_members` 가 된다. 설계 `docs/superpowers/specs/2026-10-28-teacher-allowlist-and-student-preregistration-design.md`.
 
 > 루트 `CLAUDE.md`는 현재 위 모노레포(Fastify/Drizzle) 기준으로 최신화되어 이 맵과 일치한다. (과거엔 "React+Vite+Supabase 단일 앱"으로 적혀 있었으나 갱신됨. Supabase는 미사용 — Storage·RPC·RLS는 자체 구현으로 대체.) 구조 상세는 이 PROJECT_MAP을 기준으로 본다.
 

@@ -140,11 +140,11 @@ export async function updateUserRole(userId: string, role: 'teacher' | 'student'
   return updated;
 }
 
-/** 관리자 상태 토글 */
+/** 관리자 상태 토글 — 관리자는 교사이자 관리자이므로 지정하면 바로 교사가 된다. 해제하면 다음 갱신 때 허용 목록대로. */
 export async function setUserAdmin(userId: string, isAdmin: boolean) {
   const [updated] = await db
     .update(profiles)
-    .set({ isAdmin })
+    .set(isAdmin ? { isAdmin, role: 'teacher' } : { isAdmin })
     .where(eq(profiles.id, userId))
     .returning();
   return updated ?? null;

@@ -355,8 +355,10 @@ function UsersTab() {
                   <select
                     value={u.role || ''}
                     onChange={e => handleRoleChange(u.id, e.target.value)}
-                    disabled={actionLoading === u.id}
-                    title="교사로 바꾸면 교사 허용 목록에 함께 등록되고, 학생으로 바꾸면 목록에서 빠집니다"
+                    disabled={actionLoading === u.id || u.isAdmin}
+                    title={u.isAdmin
+                      ? '관리자는 항상 교사입니다. 학생으로 바꾸려면 먼저 관리자 권한을 해제하세요'
+                      : '교사로 바꾸면 교사 허용 목록에 함께 등록되고, 학생으로 바꾸면 목록에서 빠집니다'}
                     className="text-xs border border-gray-300 rounded px-1.5 py-1 cursor-pointer"
                   >
                     <option value="" disabled>역할</option>
