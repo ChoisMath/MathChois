@@ -111,7 +111,7 @@ const BoardTab = ({ classroomId, isTeacher }) => {
             const fileCount = post.files?.length ?? 0;
             return [
               <tr key={post.id} className="row-btn" aria-expanded={open} onClick={() => toggle(post.id)}>
-                <td>
+                <td className="grow">
                   <button
                     type="button"
                     className="title-btn font-medium"

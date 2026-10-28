@@ -14,6 +14,7 @@
 
 /* ── 장부 표: 세로선 없음, 줄 사이 1px, 행 44px, 왼쪽에 표지색 띠 ── */
 .ledger-wrap {
+  max-width: 100%;
   border-left: 3px solid var(--nb-cover, #6fa8dc);
   background: #fff;
   overflow-x: auto;
@@ -28,6 +29,8 @@
 .ledger tbody tr:first-child td { border-top: 0; }
 .ledger .num { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--soft); }
 .ledger .tight { width: 1%; white-space: nowrap; }
+/* 남는 폭을 다 쓰는 열(제목): max-width 0 이어야 자동 표 배치에서 글이 줄어들고 표가 화면 밖으로 안 커진다 */
+.ledger .grow { width: 100%; max-width: 0; }
 .ledger .act { width: 1%; padding: 0 2px; }
 .ledger tr.row-btn { cursor: pointer; }
 @media (hover: hover) { .ledger tr.row-btn:hover > td { background: var(--paper); } }
@@ -39,7 +42,7 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ledger .title-btn:focus-visible { outline: 3px solid var(--pen); outline-offset: -3px; border-radius: 6px; }
-.ledger .chev { color: var(--soft); transition: transform .15s ease; }
+.ledger .chev { color: var(--soft); transition: transform .15s ease; transform-box: fill-box; transform-origin: center; }
 .ledger tr[aria-expanded='true'] .chev { transform: rotate(180deg); }
 
 /* ── 접히는 묶음 제목(학생 표) ── */
@@ -48,7 +51,7 @@
   min-height: 44px; padding: 0 4px; margin-bottom: 8px;
   background: none; border: 0; font: inherit; font-size: 15px; font-weight: 600; color: var(--ink); cursor: pointer;
 }
-.fold-head .chev { color: var(--soft); transition: transform .15s ease; }
+.fold-head .chev { color: var(--soft); transition: transform .15s ease; transform-box: fill-box; transform-origin: center; }
 .fold-head[aria-expanded='false'] .chev { transform: rotate(-90deg); }
 .fold-head:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; border-radius: 8px; }
 
