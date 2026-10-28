@@ -7,7 +7,9 @@
   --ai-pen: #2453a6;
   --ai-muted: #56627c;
   --ai-line: #dbe3f0;
-  display: flex; flex-direction: column; min-height: 100vh;
+  display: flex; flex-direction: column;
+  min-height: 100vh; /* dvh 를 모르는 브라우저 */
+  min-height: 100dvh; /* 모바일 주소창이 접히고 펴져도 푸터가 화면 아래에 붙게 */
   background: #f8fafd; color: var(--ai-ink);
 }
 .ai-hub :focus-visible { outline: 3px solid var(--ai-pen); outline-offset: 2px; }
@@ -62,6 +64,9 @@
 
 .ai-hub-main { flex: 1; width: 100%; max-width: 80rem; margin: 0 auto; padding: 20px 16px 32px; }
 @media (min-width: 768px) { .ai-hub-main { padding: 24px 24px 40px; } }
+
+/* 화면(lazy)을 받는 동안 main 자리의 로더 — 레이아웃이 가진 클래스(화면 CSS 는 아직 안 왔을 수 있다) */
+.ai-hub-loading { padding: 64px 0; text-align: center; color: var(--ai-muted); }
 
 /* 브랜드: iframe 이 머리글과 푸터 사이를 가득 채운다(여백·너비 제한 없음). 높이는 BrandPage 가 --ai-head-h/--ai-foot-h 로 계산 */
 .ai-hub-main--fill { max-width: none; padding: 0; }

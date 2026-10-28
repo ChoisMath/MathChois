@@ -5,7 +5,7 @@ export const COPY_FAILED = '복사하지 못했어요 — 글을 직접 선택�
 
 /**
  * 복사 단추의 표시 상태. copy(text, key) 가 성공하면 copied === key 가 1.5초, 실패하면 failed 가 3초 true.
- * key 는 단추가 여럿일 때(영문/국문) 어느 쪽을 눌렀는지 구분하는 값이다.
+ * copy 는 성공 여부(boolean)를 돌려준다. key 는 단추가 여럿일 때(영문/국문) 어느 쪽을 눌렀는지 구분하는 값이다.
  */
 export function useCopyFeedback() {
   const [copied, setCopied] = useState(null);
@@ -22,6 +22,7 @@ export function useCopyFeedback() {
       setCopied(null);
       setFailed(false);
     }, ok ? 1500 : 3000);
+    return ok;
   }, []);
 
   return { copied, failed, copy };
