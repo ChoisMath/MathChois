@@ -45,6 +45,15 @@ const ClassroomVideoSplit = lazy(() => import('./pages/Videos/ClassroomVideoSpli
 const MyCoachingHistory     = lazy(() => import('./pages/History/MyCoachingHistory'));
 const StudentCoachingHistory = lazy(() => import('./pages/Monitor/StudentCoachingHistory'));
 
+/* AI활용 허브 */
+const AiHubRoute         = lazy(() => import('./pages/AiHub/AiHubRoute'));
+const AiHubLayout        = lazy(() => import('./pages/AiHub/AiHubLayout'));
+const MotionGalleryPage  = lazy(() => import('./pages/AiHub/MotionGalleryPage'));
+const MotionDetailPage   = lazy(() => import('./pages/AiHub/MotionDetailPage'));
+const SlideGalleryPage   = lazy(() => import('./pages/AiHub/SlideGalleryPage'));
+const BrandPage          = lazy(() => import('./pages/AiHub/BrandPage'));
+const MotionEditorPage   = lazy(() => import('./pages/AiHub/MotionEditorPage'));
+
 /* 관리자 */
 const AdminPanel = lazy(() => import('./pages/Admin/AdminPanel'));
 
@@ -163,6 +172,19 @@ function App() {
               path="/teacher/classrooms/:classroomId/assignments/:assignmentId/monitor/:studentId"
               element={<AssignmentWorkViewer />}
             />
+          </Route>
+
+          {/* AI활용 허브 — 로그인·역할·접근 허락은 AiHubRoute 가 판정 */}
+          <Route element={<AiHubRoute />}>
+            <Route element={<AiHubLayout />}>
+              <Route path="/ai" element={<Navigate to="/ai/motion" replace />} />
+              <Route path="/ai/motion" element={<MotionGalleryPage />} />
+              <Route path="/ai/motion/:id" element={<MotionDetailPage />} />
+              <Route path="/ai/slide" element={<SlideGalleryPage />} />
+              <Route path="/ai/brand" element={<BrandPage />} />
+            </Route>
+            {/* 편집기: 전체 화면(레이아웃 밖), 교사·관리자 */}
+            <Route path="/ai/motion/:id/edit" element={<MotionEditorPage />} />
           </Route>
 
           {/* Admin Routes */}

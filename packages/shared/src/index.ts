@@ -14,4 +14,5 @@ export * from './classroom/color.js';
 export * from './subtitles/subtitles.js';
 export * from './units/units.js';
 export * from './chapter/title.js';
+export * from './ai-hub/index.js';
 export * from './auth/access.js';

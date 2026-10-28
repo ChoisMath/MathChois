@@ -25,6 +25,7 @@ export async function getTeacherClassrooms(teacherId: string) {
       classCode: classrooms.classCode,
       createdAt: classrooms.createdAt,
       color: classrooms.color,
+      aiHubEnabled: classrooms.aiHubEnabled,
       memberCount: count(classroomMembers.id),
     })
     .from(classrooms)
@@ -57,6 +58,7 @@ export async function getStudentClassrooms(studentId: string) {
       classCode: classrooms.classCode,
       createdAt: classrooms.createdAt,
       color: classrooms.color,
+      aiHubEnabled: classrooms.aiHubEnabled,
       memberCount: count(classroomMembers.id),
     })
     .from(classrooms)
@@ -102,7 +104,7 @@ export async function createClassroom(teacherId: string, name: string, color?: C
 }
 
 /** 교실 수정 */
-export async function updateClassroom(id: string, data: { name?: string; color?: ClassroomColor }) {
+export async function updateClassroom(id: string, data: { name?: string; color?: ClassroomColor; aiHubEnabled?: boolean }) {
   const [updated] = await db
     .update(classrooms)
     .set(data)

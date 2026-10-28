@@ -37,6 +37,11 @@ npm run build        # Build shared → client → server
 npm run start        # Production: node dist/index.js (server serves client/dist)
 npm run lint         # ESLint (client)
 
+# AI활용 허브 material scripts (run at the repo root; details + first-migration steps: scripts/ai-hub/README.md)
+npm run ai:pull                       # one-time: me.chois.pro → .media-out/ (keep it, it is the backup)
+npm run ai:push -- --set motion|slide|brand   # .media-out/ → server (AI_PUSH_URL + AI_MEDIA_UPLOAD_TOKEN)
+npm run ai:prepare | ai:motion:import | ai:slide:import | ai:brand:import   # add new material later
+
 # DB (run inside packages/server)
 npm run db:push -w @mathchois/server      # Push Drizzle schema to DB
 npm run db:generate -w @mathchois/server  # Generate migration
@@ -67,6 +72,9 @@ PORT=3001
 NODE_ENV=development
 # SMTP (optional — password-reset email): SMTP_HOST/PORT/USER/PASS/FROM, APP_URL
 # FRAME_ANCESTORS (optional) — extra origins allowed to frame HTML tool pages (space-separated)
+# AI_MEDIA_UPLOAD_TOKEN (optional, >= 32 chars; `openssl rand -hex 32`) — bearer token for the ai:push upload routes
+#   (PUT /api/ai/media, GET /api/ai/media/manifest, PUT /api/ai/prompts/:set). Empty/unset = uploads disabled (503);
+#   shorter than 32 chars = boot warning + treated as unset.
 ```
 
 Production domain is **`https://class.chois.pro`** (moved from `class.chois.ai.kr`). The
@@ -127,6 +135,24 @@ YouTube playlists): `units` table, `chapters.unit_id`/`classroom_videos.unit_id`
   Client: `components/whiteboard/WhiteboardCanvas.jsx`, student `pages/Whiteboard/StudentWhiteboardViewer.jsx`,
   teacher `pages/Whiteboard/TeacherWhiteboardPage.jsx` (grid / single + settings). Templates (34) in
   `lib/whiteboardTemplates.js`. Spec: `docs/superpowers/specs/2026-10-18-whiteboard-design.md`.
+- **AI활용 허브 (`/ai/*`)** — the three galleries moved here from me.chois.pro: **모션** (`/ai/motion`, `/ai/motion/:id`,
+  Chois-made HyperFrames intros + prompts), **슬라이드** (`/ai/slide`, slide-style prompts) and **브랜드** (`/ai/brand`,
+  design-system lookbook in an iframe), plus the prompt editor `/ai/motion/:id/edit`. Outside DashboardLayout
+  (`pages/AiHub/AiHubLayout.jsx`); `AiHubRoute` is the guard + data provider (`useAiHubData()`). **Access rule**
+  (`@mathchois/shared` `ai-hub/access.ts`, same function on server `requireAiHub`/`GET /api/ai/access` and client guard):
+  logged-in teachers/admins always; a student only if one of their classrooms has `classrooms.ai_hub_enabled`
+  (teacher switch **"학생에게 AI활용 열기"** in the `#` panel of ClassroomDetail; the **AI활용** button shows in the header
+  when allowed). Editor: blanks/options/copy for any teacher (browser-local), original template + shot/cue tables admin only
+  (`PUT /api/ai/motion/:id/prompt`). **Data**: the catalog (106 motion / 748 slide, with `source: chois|oppadu`) lives in
+  git at `packages/shared/src/ai-hub/*.data.ts`; prompts in Postgres (`ai_motion_prompts`, `ai_slide_prompts`); media +
+  `manifest/{motion,slide,brand}.json` in the Volume bucket `ai-hub` (public `/api/files/ai-hub/…?v=<sha8>` serves only motion/slide
+  media + manifests (`isAiHubPublicFile`), brand files 404 there; the brand copy is served only via `/api/ai/brand/site/*` with a
+  `frame-ancestors` CSP, and `BrandPage` frames it through `toolUrl()` on the separate `VITE_TOOLS_ORIGIN` so the third-party
+  lookbook JS never runs on the app origin). A list only contains items whose files are all in the manifest.
+  Material goes in with `npm run ai:*` (token-authenticated upload; the generic `/api/files` upload/delete and
+  `storage.service` `removeFile`/`removeDirectoryIfEmpty` refuse this bucket). `PUT /api/ai/prompts/:set` inserts missing ids
+  only, so re-running `ai:push` never overwrites admin web edits; `ai:push --overwrite-prompts` (`?overwrite=1`) replaces them. Spec: `docs/superpowers/specs/2026-10-28-ai-hub-migration-design.md`; first migration steps:
+  `scripts/ai-hub/README.md`. Browser smoke: `packages/server/scripts/ai-hub-e2e-setup.ts` + `packages/client/e2e/ai-hub.smoke.mjs`.
 - Server handlers: notes ①②④ → `routes/notes.ts`; comments ③⑤ → `routes/comments.ts`.
   DB logic concentrated in `services/note.service.ts`.
 - Socket handlers: `socket/handlers/notes.ts` (①②), `comments.ts` (③), `assignments.ts` (④⑤).
@@ -149,7 +175,7 @@ Tables: `profiles`, `allowed_teachers` (teacher allowlist), `classrooms`, `class
 `whiteboard_groups`/`whiteboard_group_members` (shared boards),
 `posts`/`post_files`/`post_classrooms` (board), `assignments`/`assignment_pages`/
 `assignment_submissions`/`assignment_submission_files`, `videos`/`classroom_videos`/`video_comments`/
-`video_subtitles` (video library), `units` (classroom units; `chapters.unit_id`, `classroom_videos.unit_id`). Migrations via Drizzle Kit;
+`video_subtitles` (video library), `ai_motion_prompts`/`ai_slide_prompts` (AI활용 hub prompts; `classrooms.ai_hub_enabled`), `units` (classroom units; `chapters.unit_id`, `classroom_videos.unit_id`). Migrations via Drizzle Kit;
 additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures the
 `pages.html_url` column).
 `classrooms.color` — one of six named colors (coral/mustard/sage/sky/lavender/rose); backfilled at boot by
@@ -183,7 +209,7 @@ additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures th
 - **Pen/eraser input** is custom-handled: `hooks/useExcalidrawTouch.js`,
   `hooks/useScribbleErase.js` (S-Pen barrel button, scribble-to-erase, palm rejection).
 - File storage uses `VOLUME_PATH`; buckets: `chapter-pages`, `chapter-tools` (HTML only),
-  `visualizations` (HTML only), `whiteboard-files` (raster images ≤ 2MB, students allowed), `videos` (teacher-only, uploaded through the streaming route
+  `visualizations` (HTML only), `whiteboard-files` (raster images ≤ 2MB, students allowed), `ai-hub` (AI활용 hub material — written only through the `AI_MEDIA_UPLOAD_TOKEN` routes, never `/api/files/upload`; read via `/api/files/ai-hub/*` for motion/slide media + manifests only; brand files only via `/api/ai/brand/site/*`), `videos` (teacher-only, uploaded through the streaming route
   `POST /api/videos/upload`, not `/api/files/upload` which buffers whole files in memory),
   `submission-files`, post attachments. Served via `/api/files/*` as a stream with HTTP Range
   support (required for `<video>` seeking).

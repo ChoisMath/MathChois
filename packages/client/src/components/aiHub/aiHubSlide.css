@@ -1,0 +1,140 @@
+/*
+ * AI활용 슬라이드 갤러리·상세 — 색은 AiHubLayout.css 의 --ai-* 토큰(.ai-hub 안에서 상속).
+ * 상세 창(<dialog>)은 top layer 로 올라가지만 .ai-hub 의 자손이라 토큰은 그대로 쓴다.
+ * 누르는 영역은 44px 이상, 라벨·배지는 nowrap.
+ */
+
+/* ── 도구줄: 분류 거르기 + 정렬 + 표지/본문 ── */
+.ai-slide-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+.ai-slide-bar > .ai-filter { flex: 1 1 14rem; min-width: 0; margin-bottom: 0; }
+.ai-slide-tools { display: flex; flex-shrink: 0; align-items: center; gap: 8px; margin-left: auto; }
+
+.ai-sort { position: relative; }
+.ai-sort-btn {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 14px;
+  border-radius: 999px; border: 1px solid var(--ai-line); background: #fff;
+  color: var(--ai-ink); font-size: 14px; white-space: nowrap; cursor: pointer;
+}
+.ai-sort-btn:hover { border-color: var(--ai-pen); }
+.ai-sort-chevron { width: 16px; height: 16px; }
+.ai-sort-menu {
+  position: absolute; right: 0; z-index: 10; margin-top: 4px; min-width: 8rem; padding: 4px;
+  display: flex; flex-direction: column; border-radius: 12px;
+  border: 1px solid var(--ai-line); background: #fff; box-shadow: 0 8px 24px rgb(28 43 74 / .14);
+}
+.ai-sort-item {
+  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border-radius: 8px;
+  color: var(--ai-ink); font-size: 14px; text-align: left; white-space: nowrap; cursor: pointer;
+}
+.ai-sort-item:hover { background: #eef2f8; }
+.ai-sort-item[aria-checked='true'] { font-weight: 600; }
+.ai-sort-check { width: 12px; }
+
+.ai-slide-view { display: inline-flex; border-radius: 999px; border: 1px solid var(--ai-line); background: #fff; }
+.ai-slide-view-btn {
+  min-height: 44px; padding: 0 16px; border-radius: 999px;
+  color: var(--ai-ink); font-size: 14px; white-space: nowrap; cursor: pointer;
+}
+.ai-slide-view-btn[aria-pressed='true'] { background: var(--ai-ink); color: #fff; }
+
+/* ── 카드 격자 1/2/3/4열 ── */
+.ai-slide-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px;
+  list-style: none; margin: 0; padding: 0;
+}
+@media (min-width: 640px) { .ai-slide-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .ai-slide-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1280px) { .ai-slide-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.ai-slide-card { display: block; width: 100%; text-align: left; cursor: pointer; }
+.ai-slide-thumb {
+  position: relative; display: block; aspect-ratio: 16 / 9; overflow: hidden;
+  border-radius: 8px; border: 1px solid var(--ai-line); background: var(--ai-line);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ai-slide-card:hover .ai-slide-thumb, .ai-slide-card:focus-visible .ai-slide-thumb {
+  border-color: var(--ai-pen); box-shadow: 0 2px 8px rgb(28 43 74 / .08);
+}
+.ai-slide-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ai-slide-back { opacity: 0; transition: opacity .3s ease; }
+.ai-slide-card:hover .ai-slide-back, .ai-slide-card:focus-visible .ai-slide-back { opacity: 1; }
+.ai-slide-meta { display: flex; min-width: 0; align-items: baseline; gap: 8px; margin-top: 6px; }
+.ai-slide-no { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--ai-muted); }
+.ai-slide-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
+.ai-slide-family { margin-left: auto; flex-shrink: 0; font-size: 12px; color: var(--ai-muted); white-space: nowrap; }
+
+/* ── 상세 창 (전체 화면 dialog) ── */
+.ai-viewer {
+  --v-bg: #0f1626; --v-fg: #e8edf7; --v-dim: rgb(232 237 247 / .72); --v-line: rgb(255 255 255 / .12);
+  margin: 0; padding: 0; border: 0; width: 100%; max-width: none; height: 100dvh; max-height: none;
+  background: var(--v-bg); color: var(--v-fg);
+}
+.ai-viewer::backdrop { background: rgb(0 0 0 / .8); }
+.ai-viewer[open] { display: block; }
+.ai-viewer :focus-visible { outline: 3px solid #9db8ec; outline-offset: 2px; }
+.ai-viewer-body { display: flex; flex-direction: column; height: 100%; overflow-y: auto; }
+@media (min-width: 1024px) { .ai-viewer-body { flex-direction: row; overflow: hidden; } }
+
+.ai-viewer-main { display: flex; flex-shrink: 0; flex-direction: column; gap: 8px; min-height: 0; padding: 8px; }
+@media (min-width: 640px) { .ai-viewer-main { padding: 12px; } }
+@media (min-width: 1024px) { .ai-viewer-main { flex: 1; flex-shrink: 1; padding: 16px; } }
+
+.ai-viewer-stage {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  width: 100%; aspect-ratio: 16 / 9; background: #000; touch-action: pan-y;
+}
+@media (min-width: 1024px) { .ai-viewer-stage { flex: 1; aspect-ratio: auto; min-height: 0; } }
+.ai-viewer-stage img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; -webkit-user-select: none; }
+.ai-viewer-stage:fullscreen { background: #000; }
+
+/* 아이콘 단추(IconButton) 를 어두운 배경 위에 맞춘다 */
+.ai-viewer .icon-btn { color: var(--v-fg); }
+.ai-viewer .icon-btn:focus-visible .icon-btn-face { outline-color: #9db8ec; }
+@media (hover: hover) {
+  .ai-viewer .icon-btn--ghost:not(:disabled):hover .icon-btn-face { background: rgb(255 255 255 / .14); color: #fff; }
+}
+.ai-viewer .icon-btn--ghost:active .icon-btn-face { background: rgb(255 255 255 / .2); color: #fff; }
+.ai-viewer .ai-viewer-nav { position: absolute; }
+.ai-viewer-nav .icon-btn-face { background: rgb(0 0 0 / .5); border-radius: 999px; color: #fff; }
+.ai-viewer .ai-viewer-nav--prev { top: 50%; left: 4px; transform: translateY(-50%); }
+.ai-viewer .ai-viewer-nav--next { top: 50%; right: 4px; transform: translateY(-50%); }
+.ai-viewer .ai-viewer-full { top: 4px; right: 4px; }
+
+.ai-viewer-strip { display: flex; align-items: center; gap: 8px; }
+.ai-viewer-thumbs { display: flex; flex: 1; min-width: 0; gap: 8px; overflow-x: auto; padding: 4px 2px; }
+.ai-viewer-thumb {
+  flex-shrink: 0; height: 48px; overflow: hidden; border-radius: 4px; border: 2px solid transparent;
+  opacity: .6; cursor: pointer;
+}
+@media (min-width: 640px) { .ai-viewer-thumb { height: 56px; } }
+.ai-viewer-thumb[aria-current='true'] { border-color: #9db8ec; opacity: 1; }
+.ai-viewer-thumb img { display: block; height: 100%; width: auto; }
+.ai-viewer-pos { flex-shrink: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: nowrap; }
+
+.ai-viewer-side {
+  display: flex; flex-direction: column; gap: 12px; padding: 12px; border-top: 1px solid var(--v-line);
+}
+@media (min-width: 1024px) {
+  .ai-viewer-side { width: 24rem; flex-shrink: 0; overflow-y: auto; padding: 20px; border-top: 0; border-left: 1px solid var(--v-line); }
+}
+.ai-viewer-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ai-viewer-bar-nav { display: flex; align-items: center; gap: 4px; }
+.ai-viewer-kicker { font-size: 12px; color: var(--v-dim); white-space: nowrap; }
+.ai-viewer-name { font-size: 20px; font-weight: 700; line-height: 1.3; word-break: keep-all; }
+.ai-viewer-look { font-size: 14px; line-height: 1.7; word-break: keep-all; }
+.ai-viewer-line { font-size: 14px; line-height: 1.6; word-break: keep-all; }
+.ai-viewer-label { margin-right: 8px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.ai-viewer .ai-credit { margin-top: 0; color: var(--v-dim); }
+.ai-viewer .ai-credit a { color: #9db8ec; }
+
+.ai-slide-prompt { display: flex; flex-direction: column; gap: 8px; }
+@media (min-width: 1024px) { .ai-slide-prompt { margin-top: auto; } }
+.ai-slide-prompt-text {
+  max-height: 12rem; overflow-y: auto; border-radius: 8px; background: rgb(255 255 255 / .07); padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.6; white-space: pre-wrap;
+}
+.ai-slide-prompt-empty { border-radius: 8px; background: rgb(255 255 255 / .07); padding: 12px; font-size: 12px; color: var(--v-dim); }
+.ai-viewer .ai-slide-copy { justify-content: center; background: #9db8ec; border-color: #9db8ec; color: #0f1626; }
+.ai-viewer .ai-slide-copy:hover:not(:disabled) { background: #b7cdf5; }
+.ai-viewer .ai-slide-copy.is-done { background: #fff; border-color: #fff; color: #0f1626; }
+.ai-slide-copy-failed { font-size: 13px; line-height: 1.5; color: #fdba74; word-break: keep-all; }

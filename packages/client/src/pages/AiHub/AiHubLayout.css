@@ -1,0 +1,77 @@
+/*
+ * AI활용 허브 틀 — 상단 바(Navbar) 아래 머리글(제목·탭 칩·소개)과 푸터.
+ * 색은 앱 틀과 같은 남색 #1c2b4a / 펜 #2453a6 / 종이 #f8fafd. 누르는 영역은 44px 이상.
+ */
+.ai-hub {
+  --ai-ink: #1c2b4a;
+  --ai-pen: #2453a6;
+  --ai-muted: #56627c;
+  --ai-line: #dbe3f0;
+  display: flex; flex-direction: column;
+  min-height: 100vh; /* dvh 를 모르는 브라우저 */
+  min-height: 100dvh; /* 모바일 주소창이 접히고 펴져도 푸터가 화면 아래에 붙게 */
+  background: #f8fafd; color: var(--ai-ink);
+}
+.ai-hub :focus-visible { outline: 3px solid var(--ai-pen); outline-offset: 2px; }
+
+.ai-hub-head { background: #fff; border-bottom: 1px solid var(--ai-line); }
+.ai-hub-head-inner { max-width: 80rem; margin: 0 auto; padding: 12px 16px 0; }
+@media (min-width: 768px) { .ai-hub-head-inner { padding: 16px 24px 0; } }
+
+.ai-hub-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ai-hub-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 22px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2;
+}
+.ai-hub-title-icon { width: 22px; height: 22px; color: var(--ai-pen); }
+
+.ai-hub-back {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  min-height: 44px; padding: 0 12px; border-radius: 12px;
+  color: var(--ai-pen); font-size: 14px; font-weight: 500; white-space: nowrap;
+  transition: background-color .15s ease;
+}
+.ai-hub-back:hover { background: #eef2f8; }
+
+/* 탭 칩 */
+/* overflow-x:auto 가 포커스 링(3px + 오프셋 2px)을 자르지 않도록 사방에 5px 여백을 두고 같은 만큼 음수 마진으로 되돌린다 */
+.ai-hub-tabs { display: flex; gap: 8px; margin: -1px -5px 0; overflow-x: auto; padding: 5px 5px 17px; }
+.ai-hub-tab {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  min-height: 44px; padding: 0 20px; border-radius: 999px;
+  border: 1px solid var(--ai-line); background: #fff;
+  color: var(--ai-muted); font-size: 15px; font-weight: 500; white-space: nowrap;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+.ai-hub-tab:hover { background: #eef2f8; color: var(--ai-ink); }
+.ai-hub-tab[aria-current='page'] { background: var(--ai-ink); border-color: var(--ai-ink); color: #fff; }
+
+/* 소개 한 줄 — 모바일은 접힘, 데스크톱은 항상 펼침 */
+.ai-hub-intro { padding-bottom: 12px; }
+.ai-hub-intro-toggle {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 4px;
+  color: var(--ai-muted); font-size: 14px; cursor: pointer;
+}
+.ai-hub-chevron { transition: transform .15s ease; }
+.ai-hub-chevron.is-open { transform: rotate(180deg); }
+.ai-hub-intro-text { display: none; max-width: 52rem; word-break: keep-all; font-size: 15px; line-height: 1.6; color: var(--ai-muted); }
+.ai-hub-intro-text.is-open { display: block; padding-bottom: 4px; }
+@media (min-width: 768px) {
+  .ai-hub-intro { padding-bottom: 16px; }
+  .ai-hub-intro-toggle { display: none; }
+  .ai-hub-intro-text { display: block; }
+}
+
+.ai-hub-main { flex: 1; width: 100%; max-width: 80rem; margin: 0 auto; padding: 20px 16px 32px; }
+@media (min-width: 768px) { .ai-hub-main { padding: 24px 24px 40px; } }
+
+/* 화면(lazy)을 받는 동안 main 자리의 로더 — 레이아웃이 가진 클래스(화면 CSS 는 아직 안 왔을 수 있다) */
+.ai-hub-loading { padding: 64px 0; text-align: center; color: var(--ai-muted); }
+
+/* 브랜드: iframe 이 머리글과 푸터 사이를 가득 채운다(여백·너비 제한 없음). 높이는 BrandPage 가 --ai-head-h/--ai-foot-h 로 계산 */
+.ai-hub-main--fill { max-width: none; padding: 0; }
+
+.ai-hub-foot {
+  padding: 16px; border-top: 1px solid var(--ai-line);
+  color: var(--ai-muted); font-size: 13px; text-align: center;
+}

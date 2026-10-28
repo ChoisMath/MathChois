@@ -6,6 +6,18 @@ import path from 'node:path';
 import { env } from '../config/env.js';
 
 const VOLUME_ROOT = path.resolve(env.VOLUME_PATH);
+const AI_HUB_ROOT = path.join(VOLUME_ROOT, 'ai-hub');
+
+/**
+ * 해석된 경로가 AI활용 허브 버킷(ai-hub) 안이면 버킷 기준 상대 경로('/' 구분, 버킷 자체면 ''), 아니면 null.
+ * 버킷 이름 문자열만 비교하면 `x/../ai-hub` 나 경로 안의 `..` 로 우회되므로 실제로 해석된 경로로 판단한다.
+ */
+export function aiHubRelPath(...segments: string[]): string | null {
+  const target = path.resolve(VOLUME_ROOT, ...segments);
+  if (target === AI_HUB_ROOT) return '';
+  if (!target.startsWith(AI_HUB_ROOT + path.sep)) return null;
+  return target.slice(AI_HUB_ROOT.length + 1).split(path.sep).join('/');
+}
 
 /**
  * 경로 traversal 방지: 최종 경로가 Volume 루트 내인지 확인
@@ -99,8 +111,12 @@ export async function readFile(bucket: string, filePath: string): Promise<{
   }
 }
 
-/** 파일 삭제 */
+/**
+ * 파일 삭제. ai-hub 버킷은 토큰 업로드 API 만 관리하므로 지우지 않는다(false = 지운 것 없음) —
+ * DB 에 저장된 URL 을 지우는 서비스가 어떤 경로로든 허브 자료를 지우지 못하게 한다.
+ */
 export async function removeFile(bucket: string, filePath: string): Promise<boolean> {
+  if (aiHubRelPath(bucket, filePath) !== null) return false;
   try {
     const absPath = safePath(bucket, filePath);
     await fs.unlink(absPath);
@@ -110,13 +126,14 @@ export async function removeFile(bucket: string, filePath: string): Promise<bool
   }
 }
 
-/** 여러 파일 삭제 */
+/** 여러 파일 삭제 (removeFile 을 거치므로 ai-hub 는 건너뛴다) */
 export async function removeFiles(bucket: string, filePaths: string[]): Promise<void> {
   await Promise.all(filePaths.map((p) => removeFile(bucket, p)));
 }
 
-/** 디렉토리 삭제 (비어 있을 때만) */
+/** 디렉토리 삭제 (비어 있을 때만, ai-hub 버킷은 건드리지 않는다) */
 export async function removeDirectoryIfEmpty(bucket: string, dirPath: string): Promise<boolean> {
+  if (aiHubRelPath(bucket, dirPath) !== null) return false;
   try {
     const absPath = safePath(bucket, dirPath);
     const entries = await fs.readdir(absPath);

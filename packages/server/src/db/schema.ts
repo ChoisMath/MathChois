@@ -28,6 +28,8 @@ export const classrooms = pgTable('classrooms', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   // 학급 색(shared CLASSROOM_COLORS 중 하나). null 이면 클라이언트가 자동 색을 쓴다.
   color: text('color'),
+  // 이 학급 학생에게 AI활용 허브를 열어 줄지 여부 (교사·관리자는 항상 사용 가능)
+  aiHubEnabled: boolean('ai_hub_enabled').notNull().default(false),
 });
 
 // ─── classroom_members ──────────────────────────────
@@ -526,6 +528,24 @@ export const whiteboardGroupMembers = pgTable('whiteboard_group_members', {
   index('idx_wb_group_members_student').on(t.studentId),
 ]);
 
+// ─── AI활용 허브 프롬프트 ─────────────────────────────
+
+/** 모션 프롬프트 원본·샷/큐 목록 (id = 프롬프트 키) */
+export const aiMotionPrompts = pgTable('ai_motion_prompts', {
+  id: text('id').primaryKey(),
+  promptEn: text('prompt_en').notNull(),
+  promptKo: text('prompt_ko').notNull(),
+  shots: jsonb('shots').$type<[string, string, string][]>().notNull(),
+  cues: jsonb('cues').$type<[string, string, string][]>().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** 슬라이드 프롬프트 원본 (id = 프롬프트 키) */
+export const aiSlidePrompts = pgTable('ai_slide_prompts', {
+  id: text('id').primaryKey(),
+  prompt: text('prompt').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
 // ─── allowed_teachers (관리자가 등록한 교사 이메일 — 여기 있어야 교사) ──
 
 export const allowedTeachers = pgTable('allowed_teachers', {

@@ -253,6 +253,25 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
   await pgClient`CREATE INDEX IF NOT EXISTS idx_classroom_videos_unit ON classroom_videos (unit_id)`;
   log.info('startup migration: units ensured');
 
+  // AI활용 허브: 학급별 허용 플래그 + 프롬프트 원본 테이블
+  await pgClient`ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS ai_hub_enabled boolean NOT NULL DEFAULT false`;
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS ai_motion_prompts (
+      id text PRIMARY KEY,
+      prompt_en text NOT NULL,
+      prompt_ko text NOT NULL,
+      shots jsonb NOT NULL,
+      cues jsonb NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`;
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS ai_slide_prompts (
+      id text PRIMARY KEY,
+      prompt text NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`;
+  log.info('startup migration: ai hub ensured');
+
   await ensureAccessTables(log);
   await backfillClassroomColors(log);
 }

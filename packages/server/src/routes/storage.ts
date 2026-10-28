@@ -1,8 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Readable } from 'node:stream';
+import { isAiHubPublicFile } from '@mathchois/shared';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
-import { uploadFile, removeFile, statFile, openFileStream } from '../services/storage.service.js';
+import { uploadFile, removeFile, statFile, openFileStream, aiHubRelPath } from '../services/storage.service.js';
 import { env } from '../config/env.js';
 
 // 프로덕션 앱 도메인. (구 도메인 class.chois.ai.kr → class.chois.pro 로 이전됨)
@@ -20,6 +21,14 @@ export function buildFrameAncestors(): string {
   }
   for (const o of (env.FRAME_ANCESTORS ?? '').split(/\s+/).filter(Boolean)) origins.add(o);
   return `frame-ancestors ${[...origins].join(' ')}`;
+}
+
+// AI활용 허브 버킷은 토큰 보호 업로드 API(PUT /api/ai/media)로만 쓴다.
+// 일반 쓰기·삭제 라우트에서는 막고, 읽기는 모션·슬라이드 미디어와 manifest 만 허용한다(isAiHubPublicFile).
+// 버킷 이름 문자열만 비교하면 `x/../ai-hub` 나 directory 의 `..` 로 우회되므로 실제로 해석된 경로로 본다(aiHubRelPath).
+const AI_HUB_WRITE_DENIED = { error: 'This bucket is managed by the AI hub upload API' };
+function touchesAiHub(...segments: string[]): boolean {
+  return aiHubRelPath(...segments) !== null;
 }
 
 // 학생 업로드 허용 버킷
@@ -124,6 +133,8 @@ export async function storageRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'bucket and directory are required' });
     }
 
+    if (touchesAiHub(bucket, directory)) return reply.status(403).send(AI_HUB_WRITE_DENIED);
+
     // 학생은 허용 버킷만 접근 가능
     if (request.user.role === 'student' && !STUDENT_ALLOWED_BUCKETS.has(bucket)) {
       return reply.status(403).send({ error: 'Permission denied for this bucket' });
@@ -191,6 +202,8 @@ export async function storageRoutes(app: FastifyInstance) {
     if (!bucket || !directory) {
       return reply.status(400).send({ error: 'bucket and directory are required' });
     }
+
+    if (touchesAiHub(bucket, directory)) return reply.status(403).send(AI_HUB_WRITE_DENIED);
 
     // 학생은 허용 버킷만 접근 가능
     if (request.user.role === 'student' && !STUDENT_ALLOWED_BUCKETS.has(bucket)) {
@@ -260,6 +273,13 @@ export async function storageRoutes(app: FastifyInstance) {
     const bucket = pathPart.slice(0, slashIdx);
     const filePath = decodePath(pathPart.slice(slashIdx + 1));
 
+    // ai-hub 는 모션·슬라이드 미디어와 manifest 만 여기서 서빙한다. 브랜드 사본(제3자 HTML·JS)이 앱 origin 에서
+    // 열리면 그 스크립트가 로그인 쿠키로 /api 를 부를 수 있으므로 404 — 브랜드는 /api/ai/brand/site/* 로만 나간다.
+    const aiHubRel = aiHubRelPath(bucket, filePath);
+    if (aiHubRel !== null && !isAiHubPublicFile(aiHubRel)) {
+      return reply.status(404).send({ error: 'File not found' });
+    }
+
     const stat = await statFile(bucket, filePath);
     if (!stat) {
       return reply.status(404).send({ error: 'File not found' });
@@ -268,6 +288,11 @@ export async function storageRoutes(app: FastifyInstance) {
     // 파일명에 타임스탬프 포함 → immutable 캐시
     reply.header('Content-Type', stat.mimeType);
     reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+    if (aiHubRel !== null) {
+      // ai-hub 파일은 같은 이름으로 덮어써지므로 ?v=<sha 앞 8자> 가 붙은 주소만 오래 캐시한다.
+      if (!(request.query as Record<string, string>).v) reply.header('Cache-Control', 'private, no-cache');
+      reply.header('X-Robots-Tag', 'noindex');
+    }
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Accept-Ranges', 'bytes');
 
@@ -339,6 +364,8 @@ export async function storageRoutes(app: FastifyInstance) {
 
     const bucket = rest.slice(0, slashIdx);
     const filePath = decodePath(rest.slice(slashIdx + 1));
+
+    if (touchesAiHub(bucket, filePath)) return reply.status(403).send(AI_HUB_WRITE_DENIED);
 
     const deleted = await removeFile(bucket, filePath);
     if (!deleted) {
