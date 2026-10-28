@@ -63,6 +63,9 @@
 .ai-hub-main { flex: 1; width: 100%; max-width: 80rem; margin: 0 auto; padding: 20px 16px 32px; }
 @media (min-width: 768px) { .ai-hub-main { padding: 24px 24px 40px; } }
 
+/* 브랜드: iframe 이 머리글과 푸터 사이를 가득 채운다(여백·너비 제한 없음). 높이는 BrandPage 가 --ai-head-h/--ai-foot-h 로 계산 */
+.ai-hub-main--fill { max-width: none; padding: 0; }
+
 .ai-hub-foot {
   padding: 16px; border-top: 1px solid var(--ai-line);
   color: var(--ai-muted); font-size: 13px; text-align: center;

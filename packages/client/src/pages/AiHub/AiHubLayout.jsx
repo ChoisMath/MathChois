@@ -1,4 +1,4 @@
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { ArrowLeft, ChevronDown, Sparkles } from 'lucide-react';
 import { creditLine } from '@mathchois/shared';
@@ -29,17 +29,48 @@ const TABS = [
   },
 ];
 
+/**
+ * 화면을 가득 채우는 자식(브랜드 iframe)을 위해 두 CSS 변수를 .ai-hub 에 둔다.
+ *   --ai-head-h  main 위쪽에 쌓인 높이 전부(Navbar + 허브 머리글)
+ *   --ai-foot-h  푸터 높이
+ * 머리글은 모바일에서 소개가 접히고 펼쳐지며 높이가 바뀌므로 ResizeObserver 로 따라간다.
+ */
+function useChromeHeights(rootRef, mainRef, footRef) {
+  useEffect(() => {
+    const root = rootRef.current;
+    const main = mainRef.current;
+    const foot = footRef.current;
+    if (!root || !main || !foot) return undefined;
+    const measure = () => {
+      root.style.setProperty('--ai-head-h', `${Math.round(main.getBoundingClientRect().top + window.scrollY)}px`);
+      root.style.setProperty('--ai-foot-h', `${Math.round(foot.offsetHeight)}px`);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    Array.from(root.children).forEach((el) => { if (el !== main) ro.observe(el); });
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [rootRef, mainRef, footRef]);
+}
+
 export default function AiHubLayout() {
   const { profile } = useAuth();
   const { from } = useAiHubData();
   const { pathname } = useLocation();
   const [introOpen, setIntroOpen] = useState(false);
+  const rootRef = useRef(null);
+  const mainRef = useRef(null);
+  const footRef = useRef(null);
+  useChromeHeights(rootRef, mainRef, footRef);
 
   const tab = TABS.find((t) => pathname === t.href || pathname.startsWith(`${t.href}/`)) ?? TABS[0];
   const backTo = from ?? `/${profile?.role ?? 'student'}/classrooms`;
 
   return (
-    <div className="ai-hub">
+    <div className="ai-hub" ref={rootRef}>
       <Navbar />
       <header className="ai-hub-head">
         <div className="ai-hub-head-inner">
@@ -81,13 +112,13 @@ export default function AiHubLayout() {
       </header>
 
       {/* 화면(lazy)을 받는 동안에도 머리글·탭·푸터는 그대로 두고 이 자리만 로더로 바꾼다 */}
-      <main className="ai-hub-main">
+      <main ref={mainRef} className={`ai-hub-main${tab.id === 'brand' ? ' ai-hub-main--fill' : ''}`}>
         <Suspense fallback={<p className="ai-empty" role="status">불러오는 중...</p>}>
           <Outlet />
         </Suspense>
       </main>
 
-      <footer className="ai-hub-foot">{creditLine(tab.id)}</footer>
+      <footer ref={footRef} className="ai-hub-foot">{creditLine(tab.id)}</footer>
     </div>
   );
 }
