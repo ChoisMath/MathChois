@@ -1,0 +1,20 @@
+// 허용 경로(업로드·서빙 공통). 슬라이드 장 번호는 1–12, 브랜드 상세(brand/<slug>.html)는 index 를 슬러그로 쓰지 않는다.
+// `rel` 은 ai-hub 버킷 루트 기준 상대 경로이며 쿼리·`..`·앞 슬래시를 허용하지 않는다.
+export const MOTION_FILE = /^motion\/\d{2,3}-[a-z0-9-]+\/(video\.mp4|preview\.mp4|poster\.webp)$/;
+export const SLIDE_FILE = /^slide\/\d{2,3}\/(?:[st]\/)?(?:[1-9]|1[0-2])\.webp$/; // 슬라이드는 한 덱에 최대 12장
+export const BRAND_FILE = /^brand\/(?:index\.html|brand\/(?!index\.html)[a-z0-9-]+\.html|assets\/(?:app|ai-hub-static|shell)\.js|assets\/(?:app|ai-hub|shell|tokens)\.css|assets\/fonts\/PretendardVariable\.woff2|data\/brands-index\.json|data\/(?:hero|detail)\/[a-z0-9-]+\.json)$/;
+export const MANIFEST_FILE = /^manifest\/(motion|slide|brand)\.json$/;
+
+export function isAiHubFile(rel: string): boolean {
+  return MOTION_FILE.test(rel) || SLIDE_FILE.test(rel) || BRAND_FILE.test(rel) || MANIFEST_FILE.test(rel);
+}
+
+/** `brand/` 밑 사본 안에서의 상대 경로(브랜드 사이트 서빙 라우트용). */
+export function isBrandSiteFile(rel: string): boolean {
+  return BRAND_FILE.test('brand/' + rel);
+}
+
+/** 미디어 주소 — manifest 의 sha256 앞 8자를 버전으로 붙여 캐시가 안전하게 오래 간다. */
+export function mediaUrl(rel: string, sha256: string): string {
+  return `/api/files/ai-hub/${rel}?v=${sha256.slice(0, 8)}`;
+}
