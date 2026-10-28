@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Readable } from 'node:stream';
+import path from 'node:path';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import { uploadFile, removeFile, statFile, openFileStream } from '../services/storage.service.js';
@@ -20,6 +21,17 @@ export function buildFrameAncestors(): string {
   }
   for (const o of (env.FRAME_ANCESTORS ?? '').split(/\s+/).filter(Boolean)) origins.add(o);
   return `frame-ancestors ${[...origins].join(' ')}`;
+}
+
+// AI활용 허브 버킷은 토큰 보호 업로드 API(PUT /api/ai/media)로만 쓴다.
+// 일반 쓰기·삭제 라우트에서는 막는다(읽기는 허용). 버킷 이름 문자열만 비교하면 `x/../ai-hub` 나 directory 의 `..` 로
+// 우회되므로 실제로 해석된 경로가 ai-hub 밑인지 본다.
+const AI_HUB_BUCKET = 'ai-hub';
+const AI_HUB_ROOT = path.resolve(env.VOLUME_PATH, AI_HUB_BUCKET);
+const AI_HUB_WRITE_DENIED = { error: 'This bucket is managed by the AI hub upload API' };
+function touchesAiHub(...segments: string[]): boolean {
+  const target = path.resolve(env.VOLUME_PATH, ...segments);
+  return target === AI_HUB_ROOT || target.startsWith(AI_HUB_ROOT + path.sep);
 }
 
 // 학생 업로드 허용 버킷
@@ -124,6 +136,8 @@ export async function storageRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'bucket and directory are required' });
     }
 
+    if (touchesAiHub(bucket, directory)) return reply.status(403).send(AI_HUB_WRITE_DENIED);
+
     // 학생은 허용 버킷만 접근 가능
     if (request.user.role === 'student' && !STUDENT_ALLOWED_BUCKETS.has(bucket)) {
       return reply.status(403).send({ error: 'Permission denied for this bucket' });
@@ -191,6 +205,8 @@ export async function storageRoutes(app: FastifyInstance) {
     if (!bucket || !directory) {
       return reply.status(400).send({ error: 'bucket and directory are required' });
     }
+
+    if (touchesAiHub(bucket, directory)) return reply.status(403).send(AI_HUB_WRITE_DENIED);
 
     // 학생은 허용 버킷만 접근 가능
     if (request.user.role === 'student' && !STUDENT_ALLOWED_BUCKETS.has(bucket)) {
@@ -343,6 +359,8 @@ export async function storageRoutes(app: FastifyInstance) {
 
     const bucket = rest.slice(0, slashIdx);
     const filePath = decodePath(rest.slice(slashIdx + 1));
+
+    if (touchesAiHub(bucket, filePath)) return reply.status(403).send(AI_HUB_WRITE_DENIED);
 
     const deleted = await removeFile(bucket, filePath);
     if (!deleted) {

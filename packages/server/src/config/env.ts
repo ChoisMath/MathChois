@@ -24,8 +24,8 @@ const envSchema = z.object({
   // HTML 도구(iframe) 를 프레임할 수 있는 앱 origin 목록(공백 구분, 선택).
   // 기본값은 프로덕션 도메인 https://class.chois.pro + APP_URL + localhost:3000.
   FRAME_ANCESTORS: z.string().optional(),
-  // AI활용 허브 이전 스크립트용 업로드 토큰(PUT /api/ai/media 등). 없으면 업로드 API 가 503.
-  AI_MEDIA_UPLOAD_TOKEN: z.string().min(32).optional(),
+  // AI활용 허브 이전 스크립트용 업로드 토큰(PUT /api/ai/media 등). 없으면(빈 문자열 포함) 업로드 API 가 503.
+  AI_MEDIA_UPLOAD_TOKEN: z.preprocess((v) => (v === '' ? undefined : v), z.string().min(32).optional()),
 });
 
 function loadEnv() {
