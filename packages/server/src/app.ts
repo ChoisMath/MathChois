@@ -31,6 +31,7 @@ import { unitRoutes } from './routes/units.js';
 import { videoSubtitleRoutes } from './routes/videoSubtitles.js';
 import { classroomGroupRoutes } from './routes/classroomGroups.js';
 import { whiteboardRoutes } from './routes/whiteboards.js';
+import { aiHubRoutes } from './routes/aiHub.js';
 
 export function buildApp() {
   const app = Fastify({
@@ -115,6 +116,7 @@ export function buildApp() {
   app.register(unitRoutes);
   app.register(classroomGroupRoutes);
   app.register(whiteboardRoutes);
+  app.register(aiHubRoutes);
 
   // ─── Global Error Handler ──────────────────────────
 

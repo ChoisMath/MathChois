@@ -99,7 +99,7 @@ export async function classroomRoutes(app: FastifyInstance) {
 
   app.patch<{
     Params: { id: string };
-    Body: { name?: string; color?: string };
+    Body: { name?: string; color?: string; aiHubEnabled?: boolean };
   }>('/api/classrooms/:id', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
@@ -107,17 +107,21 @@ export async function classroomRoutes(app: FastifyInstance) {
     if (!isOwner) {
       return reply.status(403).send({ error: 'Not the classroom owner' });
     }
-    // 본문 통째 전달 금지 — teacherId·classCode 등은 무시하고 name/color 만 반영
-    const { name, color } = request.body ?? {};
+    // 본문 통째 전달 금지 — teacherId·classCode 등은 무시하고 name/color/aiHubEnabled 만 반영
+    const { name, color, aiHubEnabled } = request.body ?? {};
     if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
       return reply.status(400).send({ error: 'Name is required' });
     }
     if (color !== undefined && !isClassroomColor(color)) {
       return reply.status(400).send({ error: 'Invalid color' });
     }
+    if (aiHubEnabled !== undefined && typeof aiHubEnabled !== 'boolean') {
+      return reply.status(400).send({ error: 'aiHubEnabled must be boolean' });
+    }
     const patch = {
       ...(name !== undefined && { name: name.trim() }),
       ...(color !== undefined && { color }),
+      ...(aiHubEnabled !== undefined && { aiHubEnabled }),
     };
     if (Object.keys(patch).length === 0) {
       return reply.status(400).send({ error: 'Nothing to update' });
