@@ -72,6 +72,7 @@ packages/
 └── shared/src/
     ├── types/             # api, auth, excalidraw, models(+ Whiteboard* 타입), socket(+ wb:* 페이로드), problem, coaching, dashboard, visualization, video
     ├── classroom/         # color.ts — 학급 색 6가지(`CLASSROOM_COLORS` 고정 순서: coral·mustard·sage·sky·lavender·rose), `isClassroomColor`, `classroomColor(id)`, `assignClassroomColors`(저장 색 우선·사용 수 반영, 나머지는 만든 순서대로 고유 색/덜 쓴 색), `pickLeastUsedColor` — 서버(부팅 채움·기본값)·클라이언트 공용
+    ├── chapter/           # title.ts — `chapterTitleKey`(NFC·앞뒤 공백 제거·연속 공백 하나로, 대소문자 구분)·`hasSameChapterTitle` — 챕터 공유 시 같은 이름 중복 방지(서버 409·클라이언트 표시 공용)
     ├── whiteboard/        # merge.ts — 요소 단위 병합 순수 함수(서버·클라이언트 공용, version→versionNonce, 작성자 보존, 변경 추출, 삭제 정리)
     └── curriculum/        # math2022.ts — 2022 개정 수학과 교육과정 MAP(과목→대단원→소단원+성취기준) + buildCurriculumPromptBlock()
 ```
@@ -202,7 +203,7 @@ packages/
 |---|---|---|
 | auth | routes/auth.ts | `GET /auth/google`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`, `GET /profiles/:id` |
 | classrooms | routes/classrooms.ts | `GET/POST /classrooms`, `GET /classrooms/:id`, `/:id/members`, 클래스코드 가입. **색 계약**: `POST {name, color?}` — color 생략 시 교사의 가장 적게 쓴 색(`pickLeastUsedColor`), 여섯 색이 아니면 400 `{error:'Invalid color'}`. `PATCH /classrooms/:id {name?, color?}` — 소유 교사만, 본문에서 `name`/`color` 만 반영(`teacherId`·`classCode` 등은 무시), 잘못된 색 400 `Invalid color`, 바꿀 것이 없으면 400 `Nothing to update`. 목록·상세 응답에 `color` 포함 |
-| chapters | routes/chapters.ts | `GET /classrooms/:cid/chapters`, `GET/PATCH/DELETE /chapters/:id` |
+| chapters | routes/chapters.ts | `GET /classrooms/:cid/chapters`, `GET/PATCH/DELETE /chapters/:id`, `POST /chapters/:id/import`(다른 학급 챕터 공유 — 대상 학급에 같은 이름이 있으면 409 `DUPLICATE_TITLE`; 가져오기 목록은 `이미 있음` 비활성, 편집기 내보내기는 그 학급만 건너뜀) |
 | pages | routes/pages.ts | `GET /chapters/:chapterId/pages`, `POST` 생성(`htmlUrl`/`aiProblemId`/**`fromVisualizationId`**(시각화자료 복제 삽입) 허용; `videoUrl` 은 YouTube 또는 `/api/files/videos/library/…` 만 — `utils/videoUrl.ts`, 아니면 400), `PATCH /pages/:id`, `DELETE /pages/:id` |
 | storage | routes/storage.ts | `POST /files/upload`(+multiple; `whiteboard-files` 버킷은 학생 허용·래스터 이미지만·2MB), `GET /files/*`(**스트리밍 + HTTP Range 206/416 + HEAD** — 영상 탐색/배속용, 전체 Buffer 읽기 없음), `DELETE /files/*` |
 | posts | routes/posts.ts | `GET /posts`, `GET /classrooms/:cid/posts`, `GET/DELETE /posts/:id` (+파일) |

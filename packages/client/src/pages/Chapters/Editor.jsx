@@ -77,7 +77,7 @@ const ChapterEditor = () => {
   const [exportClassrooms, setExportClassrooms] = useState([]);
   const [exportTargetIds, setExportTargetIds]   = useState(new Set());
   const [exporting, setExporting]               = useState(false);
-  const [exportDone, setExportDone]             = useState(false);
+  const [exportResult, setExportResult]         = useState(null); // null | { added, skipped, failed } — 클래스 이름 목록
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -216,7 +216,7 @@ const ChapterEditor = () => {
     if (!showExportModal || !user || !chapter) return;
     const timer = setTimeout(() => {
       setExportTargetIds(new Set());
-      setExportDone(false);
+      setExportResult(null);
     }, 0);
 
     api.get(`/api/classrooms/other/${chapter.classroomId}`)
@@ -231,19 +231,24 @@ const ChapterEditor = () => {
     if (exportTargetIds.size === 0) return;
     setExporting(true);
 
-    try {
-      // 선택된 각 클래스에 순차 내보내기
-      for (const targetId of exportTargetIds) {
-        await api.post(`/api/chapters/${id}/import`, {
-          targetClassroomId: targetId,
-        });
+    // 선택된 각 클래스에 순차 내보내기 — 한 곳이 실패해도 나머지는 계속한다.
+    // 같은 이름의 챕터가 이미 있는 클래스는 서버가 409 로 거절한다(건너뜀).
+    const result = { added: [], skipped: [], failed: [] };
+    for (const cls of exportClassrooms.filter((c) => exportTargetIds.has(c.id))) {
+      try {
+        await api.post(`/api/chapters/${id}/import`, { targetClassroomId: cls.id });
+        result.added.push(cls.name);
+      } catch (err) {
+        if (err?.status === 409) result.skipped.push(cls.name);
+        else {
+          console.error('내보내기 실패:', cls.name, err?.message);
+          result.failed.push(cls.name);
+        }
       }
-    } catch (err) {
-      console.error('내보내기 실패:', err.message);
     }
 
     setExporting(false);
-    setExportDone(true);
+    setExportResult(result);
   };
 
   const handleTitleSave = async () => {
@@ -703,12 +708,20 @@ const ChapterEditor = () => {
               <span className="font-medium text-gray-700">"{chapter?.title}"</span>을(를) 공유할 클래스를 선택하세요.
             </p>
 
-            {exportDone ? (
+            {exportResult ? (
               <div className="text-center py-4">
-                <p className="text-green-600 font-semibold mb-1">내보내기 완료!</p>
-                <p className="text-sm text-gray-500 mb-4">
-                  {exportTargetIds.size}개 클래스에 챕터가 추가되었습니다.
+                <p className={`font-semibold mb-1 ${exportResult.failed.length ? 'text-amber-600' : 'text-green-600'}`}>
+                  {exportResult.failed.length ? '일부 클래스에 내보내지 못했습니다' : '내보내기 완료!'}
                 </p>
+                <div className="text-sm text-gray-500 mb-4 flex flex-col gap-1 whitespace-normal break-keep">
+                  <p>{exportResult.added.length}개 클래스에 챕터가 추가되었습니다.</p>
+                  {exportResult.skipped.length > 0 && (
+                    <p>같은 이름의 챕터가 이미 있어 건너뜀: {exportResult.skipped.join(', ')}</p>
+                  )}
+                  {exportResult.failed.length > 0 && (
+                    <p className="text-red-500">실패: {exportResult.failed.join(', ')}</p>
+                  )}
+                </div>
                 <IconButton icon={X} label="닫기" onClick={() => setShowExportModal(false)} />
               </div>
             ) : exportClassrooms.length === 0 ? (

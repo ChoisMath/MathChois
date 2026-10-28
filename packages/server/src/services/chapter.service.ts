@@ -1,4 +1,5 @@
 import { eq, and, sql, inArray, or, isNull, getTableColumns } from 'drizzle-orm';
+import { hasSameChapterTitle } from '@mathchois/shared';
 import { db } from '../config/database.js';
 import { chapters, pages, units } from '../db/schema.js';
 
@@ -73,39 +74,61 @@ export async function getChapterById(id: string) {
   return rows[0] ?? null;
 }
 
-/** 챕터 생성 */
-export async function createChapter(data: {
+type NewChapter = {
   classroomId: string;
   title: string;
   description?: string | null;
   position?: number;
   sourceChapterId?: string | null;
   unitId?: string | null;
-}) {
+};
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function insertChapter(tx: Tx, data: NewChapter) {
   // position 미지정 시 새 챕터를 맨 앞(0)에 넣고 기존 챕터는 한 칸씩 뒤로 민다.
   // → "교사 지정순"에서도 새로 등록한 항목이 가장 위에 보인다.
-  return db.transaction(async (tx) => {
-    let position = data.position;
-    if (position === undefined) {
-      await tx
-        .update(chapters)
-        .set({ position: sql`${chapters.position} + 1` })
-        .where(eq(chapters.classroomId, data.classroomId));
-      position = 0;
-    }
+  let position = data.position;
+  if (position === undefined) {
+    await tx
+      .update(chapters)
+      .set({ position: sql`${chapters.position} + 1` })
+      .where(eq(chapters.classroomId, data.classroomId));
+    position = 0;
+  }
 
-    const [created] = await tx
-      .insert(chapters)
-      .values({
-        classroomId: data.classroomId,
-        title: data.title,
-        description: data.description ?? null,
-        position,
-        sourceChapterId: data.sourceChapterId ?? null,
-        unitId: data.unitId ?? null,
-      })
-      .returning();
-    return created;
+  const [created] = await tx
+    .insert(chapters)
+    .values({
+      classroomId: data.classroomId,
+      title: data.title,
+      description: data.description ?? null,
+      position,
+      sourceChapterId: data.sourceChapterId ?? null,
+      unitId: data.unitId ?? null,
+    })
+    .returning();
+  return created;
+}
+
+/** 챕터 생성 */
+export async function createChapter(data: NewChapter) {
+  return db.transaction((tx) => insertChapter(tx, data));
+}
+
+/**
+ * 같은 이름(chapterTitleKey 기준)의 챕터가 학급에 없을 때만 만든다 — 다른 학급에서 복사해 올 때.
+ * 같은 학급으로의 동시 요청은 advisory lock 으로 줄 세워 둘 다 들어가지 않게 한다.
+ * 이미 있으면 null.
+ */
+export async function createChapterUnlessTitleTaken(data: NewChapter) {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`chapter-title:${data.classroomId}`}))`);
+    const existing = await tx
+      .select({ title: chapters.title })
+      .from(chapters)
+      .where(eq(chapters.classroomId, data.classroomId));
+    if (hasSameChapterTitle(existing, data.title)) return null;
+    return insertChapter(tx, data);
   });
 }
 
