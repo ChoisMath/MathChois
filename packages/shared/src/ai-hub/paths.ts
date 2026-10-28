@@ -9,6 +9,14 @@ export function isAiHubFile(rel: string): boolean {
   return MOTION_FILE.test(rel) || SLIDE_FILE.test(rel) || BRAND_FILE.test(rel) || MANIFEST_FILE.test(rel);
 }
 
+/**
+ * `/api/files/ai-hub/…` 로 공개 서빙해도 되는 파일 — 모션·슬라이드 미디어와 manifest 뿐이다.
+ * 브랜드 사본(HTML·JS)은 제3자 스크립트라 앱 origin 에서 열리면 안 되므로 여기서 빠지고 `/api/ai/brand/site/*` 로만 나간다.
+ */
+export function isAiHubPublicFile(rel: string): boolean {
+  return MOTION_FILE.test(rel) || SLIDE_FILE.test(rel) || MANIFEST_FILE.test(rel);
+}
+
 /** `brand/` 밑 사본 안에서의 상대 경로(브랜드 사이트 서빙 라우트용). */
 export function isBrandSiteFile(rel: string): boolean {
   return BRAND_FILE.test('brand/' + rel);
