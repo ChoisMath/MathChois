@@ -84,7 +84,16 @@ Google OAuth + email/password (bcrypt). JWT access/refresh tokens, role `teacher
 `student` (+ `isAdmin`). Server middleware: `middleware/auth.ts` (JWT),
 `middleware/roleGuard.ts` (`requireRole`). Client auth state in
 `src/contexts/AuthContext.jsx`; `src/components/ProtectedRoute.jsx` guards routes
-(not logged in → `/`; no role → `/choose-role`; wrong role → own dashboard).
+(not logged in → `/`; wrong role → own dashboard).
+
+**Roles are decided by the server, never chosen by the user.** Only emails on the admin-managed
+`allowed_teachers` list are teachers; every other signup (Google or email) is a student. Admins keep
+whatever role they have. `services/access.service.ts` `applyAccessRules` re-evaluates this on every
+login and token refresh (rules in `@mathchois/shared` `auth/access.ts` `resolveRole`), so removing a
+teacher from the list takes effect within 15 minutes. Teachers can pre-register student emails per
+classroom (`classroom_invites`); when that email signs in as a student it is moved into
+`classroom_members` without a class code. Admin UI: AdminPanel [교사 등록] tab; teacher UI: classroom
+[학생] tab. Spec: `docs/superpowers/specs/2026-10-28-teacher-allowlist-and-student-preregistration-design.md`.
 
 ### Core feature: the 5 annotation pages
 
@@ -133,7 +142,8 @@ YouTube playlists): `units` table, `chapters.unit_id`/`classroom_videos.unit_id`
 
 ### Data model (Drizzle: `packages/server/src/db/schema.ts`)
 
-Tables: `profiles`, `classrooms`, `classroom_members`, `chapters`, `pages`
+Tables: `profiles`, `allowed_teachers` (teacher allowlist), `classrooms`, `classroom_members`, `classroom_invites`
+(pre-registered student emails), `chapters`, `pages`
 (`imageUrl`/`videoUrl`/**`htmlUrl`**/`pageType`/`whiteboardTemplate`/position), the 5 annotation tables above,
 `classroom_groups`/`classroom_group_members` (default groups), `whiteboard_page_settings`/
 `whiteboard_groups`/`whiteboard_group_members` (shared boards),
