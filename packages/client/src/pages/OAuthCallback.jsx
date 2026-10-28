@@ -14,11 +14,7 @@ const OAuthCallback = () => {
       return;
     }
 
-    if (!profile?.role) {
-      navigate('/choose-role', { replace: true });
-    } else {
-      navigate(`/${profile.role}/classrooms`, { replace: true });
-    }
+    navigate(`/${profile?.role ?? 'student'}/classrooms`, { replace: true });
   }, [isLoading, isAuthenticated, profile, navigate]);
 
   return (

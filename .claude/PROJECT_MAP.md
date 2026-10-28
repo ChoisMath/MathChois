@@ -7,7 +7,7 @@
   - `packages/client` (`@mathchois/client`) — **React 19** + **Vite 7** + **Tailwind 4** + **React Router 7** + **Excalidraw 0.18** + dnd-kit + jspdf + socket.io-client + **katex/react-markdown/remark-math/rehype-katex**(수식·해설 렌더). PWA(Service Worker + manifest).
   - `packages/shared` (`@mathchois/shared`) — 공용 TS 타입(소스 직접 export, 빌드 산출물 아님).
 - 배포: **Railway** (Dockerfile 빌드, `packages/server/Dockerfile`, healthcheck `/api/health`). 프로덕션에서 server가 `client/dist`를 정적 서빙 + SPA fallback.
-- 인증: Google OAuth + 이메일/비밀번호(bcrypt). JWT access/refresh, 역할 `teacher` | `student`(+ `isAdmin`).
+- 인증: Google OAuth + 이메일/비밀번호(bcrypt). JWT access/refresh, 역할 `teacher` | `student`(+ `isAdmin`). **역할은 사용자가 고르지 않고 서버가 정한다** — 관리자가 등록한 `allowed_teachers` 이메일만 교사(관리자는 항상 교사), 그 외 가입은 모두 학생(`services/access.service.ts` `applyAccessRules`, 로그인·토큰 갱신마다 적용). 교사가 학급에 미리 올린 학생 이메일(`classroom_invites`)은 가입 시 코드 없이 `classroom_members` 가 된다. 설계 `docs/superpowers/specs/2026-10-28-teacher-allowlist-and-student-preregistration-design.md`.
 
 > 루트 `CLAUDE.md`는 현재 위 모노레포(Fastify/Drizzle) 기준으로 최신화되어 이 맵과 일치한다. (과거엔 "React+Vite+Supabase 단일 앱"으로 적혀 있었으나 갱신됨. Supabase는 미사용 — Storage·RPC·RLS는 자체 구현으로 대체.) 구조 상세는 이 PROJECT_MAP을 기준으로 본다.
 
@@ -175,7 +175,7 @@ packages/
 |---|---|---|
 | `/auth/callback` | OAuthCallback | 레이아웃 없음 |
 | `/` | Home (첫 화면·로그인) | 레이아웃 없음 (자체 로고, 상단 바 없음) |
-| `/login`(→`/`), `/choose-role`, `/privacy`, `/terms` | ChooseRole 등 | MainLayout (public) |
+| `/login`(→`/`), `/choose-role`(→`/`, 역할 선택 화면은 삭제됨), `/privacy`, `/terms` | — | MainLayout (public) |
 | `/reset-password/:token`, `/verify-email/:token` | ResetPassword, VerifyEmail | public, 레이아웃 없음 |
 | `/teacher/classrooms`, `/teacher/classrooms/:id` | ClassroomList, ClassroomDetail | DashboardLayout. 활성 탭은 `?tab=`(chapters 기본, `lib/classroomTabs.js`)·챕터 탭은 `components/classrooms/ChapterTab.jsx`. 교사 ClassroomDetail에 '대시보드' 탭(별도 라우트 아님 → `ClassroomDashboard` 렌더) |
 | `/teacher/chapters/:id/edit` | Chapters/Editor | 이미지/영상/HTML 도구 업로드 |
@@ -201,8 +201,8 @@ packages/
 ### 서버 API (Fastify, 모두 `/api/*`)
 | 그룹 | 파일 | 주요 엔드포인트 |
 |---|---|---|
-| auth | routes/auth.ts | `GET /auth/google`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`, `GET /profiles/:id` |
-| classrooms | routes/classrooms.ts | `GET/POST /classrooms`, `GET /classrooms/:id`, `/:id/members`, 클래스코드 가입. **색 계약**: `POST {name, color?}` — color 생략 시 교사의 가장 적게 쓴 색(`pickLeastUsedColor`), 여섯 색이 아니면 400 `{error:'Invalid color'}`. `PATCH /classrooms/:id {name?, color?}` — 소유 교사만, 본문에서 `name`/`color` 만 반영(`teacherId`·`classCode` 등은 무시), 잘못된 색 400 `Invalid color`, 바꿀 것이 없으면 400 `Nothing to update`. 목록·상세 응답에 `color` 포함 |
+| auth | routes/auth.ts | `GET /auth/google`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`, `GET /profiles/:id`, `PATCH /profiles/name`, 이메일 가입/로그인/비번 초기화. Google 콜백·이메일 로그인·가입 확인·refresh 는 프로필을 돌려주기 전에 `applyAccessRules`(역할 재계산 + 사전 등록 소비). `PATCH /profiles/role` 은 없음(역할 자가 선택 종료) |
+| classrooms | routes/classrooms.ts | `GET/POST /classrooms`, `GET /classrooms/:id`, `/:id/members`, 클래스코드 가입. **학생 사전 등록**(소유 교사): `GET/POST /classrooms/:id/invites`(`{emails}` 여러 개 — 이미 가입한 학생은 즉시 구성원 `joined`, 없으면 대기 `invited`, 교사/관리자·이미 구성원·이미 대기는 `skipped{reason}`, 형식 오류는 `invalid`), `DELETE /classrooms/:id/invites/:inviteId`. 서비스 `services/classroomInvite.service.ts`, 화면 `components/classrooms/StudentInvitesCard.jsx`. **색 계약**: `POST {name, color?}` — color 생략 시 교사의 가장 적게 쓴 색(`pickLeastUsedColor`), 여섯 색이 아니면 400 `{error:'Invalid color'}`. `PATCH /classrooms/:id {name?, color?}` — 소유 교사만, 본문에서 `name`/`color` 만 반영(`teacherId`·`classCode` 등은 무시), 잘못된 색 400 `Invalid color`, 바꿀 것이 없으면 400 `Nothing to update`. 목록·상세 응답에 `color` 포함 |
 | chapters | routes/chapters.ts | `GET /classrooms/:cid/chapters`, `GET/PATCH/DELETE /chapters/:id`, `POST /chapters/:id/import`(다른 학급 챕터 공유 — 대상 학급에 같은 이름이 있으면 409 `DUPLICATE_TITLE`; 가져오기 목록은 `이미 있음` 비활성, 편집기 내보내기는 그 학급만 건너뜀) |
 | pages | routes/pages.ts | `GET /chapters/:chapterId/pages`, `POST` 생성(`htmlUrl`/`aiProblemId`/**`fromVisualizationId`**(시각화자료 복제 삽입) 허용; `videoUrl` 은 YouTube 또는 `/api/files/videos/library/…` 만 — `utils/videoUrl.ts`, 아니면 400), `PATCH /pages/:id`, `DELETE /pages/:id` |
 | storage | routes/storage.ts | `POST /files/upload`(+multiple; `whiteboard-files` 버킷은 학생 허용·래스터 이미지만·2MB), `GET /files/*`(**스트리밍 + HTTP Range 206/416 + HEAD** — 영상 탐색/배속용, 전체 Buffer 읽기 없음), `DELETE /files/*` |
@@ -210,7 +210,7 @@ packages/
 | assignments | routes/assignments.ts | `GET /classrooms/:cid/assignments`, `GET/DELETE /assignments/:id`, `/:id/pages`, `/:id/submissions` |
 | notes | routes/notes.ts | ①② 및 ④ 필기 (위 표 참조) + `student-summary`, `student-notes-for/:studentId` |
 | comments | routes/comments.ts | ③⑤ 코멘트 필기 (위 표 참조) |
-| admin | routes/admin.ts | `GET /admin/users`, `/teachers-with-students`, `/stats`, 비번 초기화 등. **`GET /admin/storage-info`**(Volume 진단 — 경로 출처·버킷별 파일 수·DB 참조 누락, `services/storageInfo.service.ts`; AdminPanel '시스템 현황' 탭의 "Volume 진단" 카드) |
+| admin | routes/admin.ts | `GET /admin/users`, `/teachers-with-students`, `/stats`, 비번 초기화 등. **교사 허용 목록**: `GET/POST /admin/allowed-teachers`(`{emails}`, 응답 `{added, existing, invalid}`; 가입한 비관리자 계정은 즉시 교사), `DELETE /admin/allowed-teachers/:id`(비관리자 계정은 즉시 학생, 본인은 400). `PATCH /admin/users/:id/role` 은 허용 목록도 함께 넣고/뺀다. 화면 `components/admin/AllowedTeachersTab.jsx`(AdminPanel [교사 등록] 탭). **`GET /admin/storage-info`**(Volume 진단 — 경로 출처·버킷별 파일 수·DB 참조 누락, `services/storageInfo.service.ts`; AdminPanel '시스템 현황' 탭의 "Volume 진단" 카드) |
 | problems | routes/problems.ts | `POST /problems/ocr`, `/problems/markscheme-ocr`, `/problems/generate-solution`(Gemini), `GET /problems`(검색·필터·페이지네이션), `GET /problems/facets`, `GET/POST/PATCH/DELETE /problems/:id`(teacher). `GET /problems/:id/for-coaching`(authenticate, 학생용 — 정답·해설 제외 표시필드만) |
 | coaching | routes/coaching.ts | `POST /coaching/convert`(필기→LaTeX, body `pageId`, 한도 초과 429), `POST /coaching/review`(서버에서만 정답 대조 후 attempt 생성, 한도 초과 429 → `{attempt,used,limit,resetAt}`), `GET /coaching/pages/:pageId/attempts`(본인 → `{attempts,used,limit,resetAt}`), `GET /coaching/classrooms/:classroomId/students/:studentId/pages/:pageId/attempts`(교사). 횟수 제한/리셋: `POST /coaching/classrooms/:classroomId/students/:studentId/pages/:pageId/reset`(교사 owner+member — 리셋, 기록 보존), `GET /coaching/classrooms/:classroomId/pages/:pageId/students`(교사 owner — 시도 학생 목록+횟수). 기록 조회: `GET /coaching/history`(본인, authenticate), `GET /coaching/classrooms/:classroomId/students/:studentId/history`(교사 — requireRole+isClassroomOwner+isClassroomMember, 해당 클래스 챕터 범위 한정). 모두 정답·해설 select 제외 |
 | dashboard | routes/dashboard.ts | `GET /dashboard/classrooms/:classroomId`(authenticate + requireRole('teacher') + isClassroomOwner 403). 집계 전용 — 학생×챕터 코칭 정답률·필기 진도 + 반 요약. 정답·해설 select 제외(카운트만) |
@@ -226,7 +226,9 @@ packages/
 ## 데이터 모델 (Drizzle 스키마: `packages/server/src/db/schema.ts`)
 | 테이블 | 관계 | 비고 |
 |---|---|---|
-| `profiles` | — | googleId/email unique, role, isAdmin, authMethod(google\|email), passwordHash |
+| `profiles` | — | googleId/email unique(소문자), role(서버가 정함 — 아래 `allowed_teachers`), isAdmin, authMethod(google\|email), passwordHash |
+| `allowed_teachers` | createdBy→profiles(set null) | 관리자가 등록한 교사 이메일(소문자 unique, note). 여기 있어야 교사. 기동 시 테이블이 새로 생기면 기존 `role='teacher'` 이메일을 1회 이관 |
+| `classroom_invites` | classroomId→classrooms(cascade), createdBy→profiles(set null) | 교사가 학급에 미리 올린 학생 이메일(소문자). (classroom, email) unique, 인덱스 (email). 학생이 로그인/가입하면 `classroom_members` 로 옮기고 삭제 |
 | `classrooms` | teacherId→profiles | classCode unique, **color**(text NULL — 여섯 색 이름, 공책 표지·사이드바 탭 색. startupMigrate 가 칸을 추가하고 색 없는 학급만 교사별로 채움(저장된 색은 유지)) |
 | `classroom_members` | classroomId, studentId | (classroom, student) unique |
 | `chapters` | classroomId, sourceChapterId(self), **unitId→units(set null)** | position, sourceChapterId(복제 출처), createdAt(최신순/등록순 정렬용 — startupMigrate 가 보강). 새 챕터는 position 0 에 삽입되고 기존 챕터는 +1 shift(새 항목이 맨 위) |

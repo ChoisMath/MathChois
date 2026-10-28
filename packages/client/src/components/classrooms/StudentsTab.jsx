@@ -2,15 +2,19 @@ import { lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, History } from 'lucide-react';
 import IconButton from '../common/IconButton';
+import StudentInvitesCard from './StudentInvitesCard';
 
 const ClassroomGroupSettings = lazy(() => import('../whiteboard/ClassroomGroupSettings'));
 
 /* ─── 학생 탭: 모둠 설정(교사) + 참여 학생 목록 ─── */
-export default function StudentsTab({ classroomId, members, isTeacher }) {
+export default function StudentsTab({ classroomId, members, isTeacher, onMembersChanged }) {
   const navigate = useNavigate();
 
   return (
     <div>
+      {isTeacher && (
+        <StudentInvitesCard classroomId={classroomId} onMembersChanged={onMembersChanged} />
+      )}
       {isTeacher && members.length > 0 && (
         <Suspense fallback={<p className="text-gray-400 text-sm mb-4">모둠 설정 로딩 중...</p>}>
           <ClassroomGroupSettings classroomId={classroomId} members={members} />
