@@ -47,10 +47,13 @@
 
 SD 카드의 원천 폴더가 없으므로 `ai:pull` + `ai:push` 가 기본 경로다(`*:import`·`prepare` 는 앞으로 자료를 더할 때).
 
+0. Railway ChoisClass 서비스에 `AI_MEDIA_UPLOAD_TOKEN`(`openssl rand -hex 32`)을 추가하고 배포가 끝났는지 확인
+   (비어 있으면 서버가 업로드를 503 으로 거절한다). 이 값을 3 번의 `AI_MEDIA_UPLOAD_TOKEN` 으로 쓴다.
 1. me.chois.pro 쪽 `GET /api/media/file` 이 배포돼 있는지 확인(프롬프트·브랜드 파일을 받는 데 필요).
 2. `export ME_MEDIA_UPLOAD_TOKEN=…` → `npm run ai:pull -- --dry-run` 으로 개수 확인 → `npm run ai:pull`
    (끝에 `set motion: 150 files, 288 MB, 0 failed …` 처럼 묶음마다 요약이 나온다. failed 가 있으면 다시 실행하면 된다)
 3. `export AI_PUSH_URL=https://class.chois.pro AI_MEDIA_UPLOAD_TOKEN=…`
 4. `npm run ai:push -- --set motion` → `--set slide` → `--set brand`
    (다시 실행하면 `0 changed of N`)
-5. class.chois.pro 의 AI활용 화면에서 확인 → (별도 작업) me.chois.pro 정리.
+5. class.chois.pro 에 교사로 로그인해 `/ai/motion`(50편)·`/ai/slide`(113종)·`/ai/brand`(룩북)를 확인한다.
+   `.media-out/` 은 지우지 않는다(원천 백업). me.chois.pro `/ai` 정리는 별도 작업.

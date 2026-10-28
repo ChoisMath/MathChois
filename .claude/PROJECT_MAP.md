@@ -20,16 +20,19 @@ packages/
 │       ├── app.ts              # Fastify 인스턴스·플러그인·라우트 등록·정적서빙
 │       ├── config/             # env.ts(zod), database.ts(drizzle)
 │       ├── db/                 # schema.ts(Drizzle), startupMigrate.ts(기동 시 idempotent DDL)
-│       ├── middleware/         # auth.ts(JWT), roleGuard.ts(requireRole)
+│       ├── middleware/         # auth.ts(JWT), roleGuard.ts(requireRole), aiHub.ts(requireAiHub — 교사·관리자 또는 허용 학급 학생)
 │       ├── routes/             # auth, classrooms, chapters, pages, storage, posts,
 │       │                       #   assignments, notes, comments, admin, problems, coaching, dashboard, visualizations,
 │       │                       #   classroomGroups(학급 기본 모둠), whiteboards(화이트보드 — 페이지 뷰/배정/설정/보드/잠금/초기화/복원/템플릿 원자 적용),
 │       │                       #   videos(영상자료 라이브러리+스트리밍 업로드), videoSubtitles(영상 자막 조회/업로드/삭제), classroomVideos(학급 영상 배정+댓글),
-│       │                       #   units(학급 단원 — 목록/생성/수정/삭제/순서/항목 일괄 배정)
+│       │                       #   units(학급 단원 — 목록/생성/수정/삭제/순서/항목 일괄 배정),
+│       │                       #   aiHub(AI활용 허브 — 접근 권한·모션/슬라이드 목록·원본 프롬프트 저장·브랜드 사본 서빙·토큰 업로드/manifest/프롬프트 가져오기)
 │       ├── services/           # *.service.ts (DB 접근 로직) + ai.service.ts(Gemini), problem.service.ts, coaching.service.ts, dashboard.service.ts, visualization.service.ts, video.service.ts, videoSubtitle.service.ts, classroomVideo.service.ts, unit.service.ts(단원 CRUD·순서·`assignItemsToUnit` 전부-아니면-전무),
 │       │                       #   pageAccess.service.ts(페이지↔학급 접근 헬퍼 — socket/routes 공용), classroomGroup.service.ts(기본 모둠), whiteboard.service.ts(보드 지연 생성·설정·배정·장면 저장/직전본·권한)
+│       │                       #   aiHub.service.ts(manifest 읽기[mtime 캐시]·목록 조립·프롬프트 upsert), aiHubAccess.service.ts(허용 학급 수 → 권한), aiHubUpload.service.ts(스트림 업로드·sha256·허용 경로), brandSite.service.ts(브랜드 사본 파일 서빙)
 │       ├── scripts/            # seed-test-accounts.ts, wb-smoke.ts(화이트보드 소켓/REST 스모크), wb-e2e-setup.ts(브라우저 E2E 픽스처),
-│       │                       #   units-smoke.ts(단원 REST 스모크), units-e2e-setup.ts(단원 브라우저 픽스처 — TEST0001 단원 u1/u2/uh + `--cleanup`)
+│       │                       #   units-smoke.ts(단원 REST 스모크), units-e2e-setup.ts(단원 브라우저 픽스처 — TEST0001 단원 u1/u2/uh + `--cleanup`),
+│       │                       #   ai-hub-e2e-setup.ts(AI활용 허브 브라우저 픽스처 — 자기 교사·학생·학급(AIHUB001)·01-pixel 프롬프트 행·Volume 파일 + `--cleanup`)
 │       └── socket/             # index.ts + handlers/(notes, comments, assignments, presence, videos, whiteboard(메모리 권위 장면 + 요소 단위 병합))
 ├── client/                 # @mathchois/client (React SPA)
 │   └── src/
@@ -38,17 +41,20 @@ packages/
 │       ├── components/         # ProtectedRoute, Navbar(남색 상단 바 — 햄버거·체크 노트 로고·관리자 패널·아바타·이름+역할·로그아웃, MainLayout 과 공용), shell/(BrandMark 체크 노트 로고, SideTab(SideTab 메뉴 탭·ClassTab 학급 색 탭), shell.css — 상단 바·사이드바·`--shell-main-fill`), classrooms/(ClassroomColorPicker — 44px 색 원 6개 `role=group`+`aria-pressed`, `size="sm"`(보이는 원 30px·누르는 영역 44px — 학급 상세 헤더, 그룹 `aria-label="표지 색"`)·`ariaLabel`(글자 라벨 없이 그룹 이름만 줄 때) props; 교사 헤더의 작은 색 원은 `#`(클래스 코드) 버튼을 누르면 코드와 함께 나타나고 누르면 바로 저장, classrooms.css), assignment/, board/, common/(IconButton — 아이콘만 있는 공통 버튼: `label` 하나로 title+aria-label, 누르는 영역 44px, variant ghost/primary(남색)/danger/danger-solid, size sm/md/lg, busy·busyLabel, `as`(Link 등); 글자 버튼을 아이콘으로 바꿀 때 사용(설계 `docs/superpowers/specs/2026-10-20-icon-buttons-design.md`), ProblemView, CoachingPanel, SortablePageItem, SplitPane(2분할 컨테이너 — 손잡이 드래그/키보드로 비율 조정, 드래그 중 투명 오버레이), FileDropZone — 클릭/드래그 앤 드롭 파일 선택 영역, SortOrderSelect — 정렬 순서 선택), problems/(ProblemPickerModal), coaching/(CoachingHistoryView, AttemptStack), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal),
 │       │                       #   videos/(VideoPlayer, SubtitleOverlay, VideoPreviewModal, VideoForm, SubtitleField, VideoPickerModal, ClassroomVideoTab, VideoComments),
 │       │                       #   units/(UnitBrowser — 단원 없음=평면 / 단원 목록 / 단원 안 3화면을 고르는 공용 틀, UnitCard·UnitGrid(재생목록 카드·드래그 순서)·UnitHeader·UnitFormModal·UnitDeleteModal·UnitItemPickerModal(기존 항목 가져오기)·UnitSelect(카드별 단원 선택 칸)), classrooms/ChapterTab(챕터 탭 — UnitBrowser 사용)
+│       │   ├── aiHub/          # AI활용 허브 — MotionGallery·MotionCard·PromptCopy(복사 단추)·KeyNav, SlideGallery·SlideCard·SlideViewer·SlidePrompt·SlideSortMenu·FilterPicker, OriginalBadge·OriginalCredit(오빠두 출처), editor/(PromptPane·BlankRow·OptionRows·PromptPreview·RowsTable·OriginalEditor — 모션 프롬프트 편집기)
 │       │   ├── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay, HtmlToolOverlay
 │       │   └── whiteboard/     # WhiteboardCanvas(Excalidraw 기본 UI + 협업), WhiteboardTopBar, BackgroundColorPicker, TemplatePickerDialog, TemplateThumb(SVG 미리보기),
 │       │                       #   WhiteboardTile(격자 정적 썸네일), WhiteboardSettingsDrawer(교사 설정), GroupAssignmentPanel, ClassroomGroupSettings(학급 학생 탭 모둠 설정)
 │       ├── layouts/            # MainLayout(public), DashboardLayout(인증 — 남색 상단 바 + 색 인덱스 탭 사이드바(`#EEF2F8`, 폭 280px; 선택 탭은 종이색 `#F8FAFD` 본문과 이어짐, 학급 탭은 학급 색 띠). 데스크톱 ≥1024px 고정 사이드바(바깥은 본문 높이만큼 늘어나 바닥까지, 안쪽 sticky; 햄버거로 접기, `mc_sidebar_collapsed`), 그 아래는 오버레이(`w-[280px] max-w-[85vw]`); 본문 종이색·유동 폭, 여백 1/1.5/2rem(shell.css `--shell-main-pad`), 남는 높이 변수 `--shell-main-fill`)
 │       ├── pages/              # Home(첫 화면·로그인 — 상단 바 없음, 모눈 노트 디자인 + components/home/LessonScene 필기 장면), Login, Classrooms(목록 = 모눈 노트 위 공책 표지 카드(화면 바닥까지 채움), components/classrooms/classrooms.css; 새 학급 창에 표지 색 고르기, 상세 제목에 색 띠 + 교사에게는 헤더에 항상 보이는 작은 색 원(누르면 바로 저장)), Chapters, Study, Monitor,
 │       │                       #   Assignment, Board, Admin, Problems(문제은행), Visualizations(시각화자료), Videos(영상자료 VideosPage + 학급 시청 ClassroomVideoWatch + 영상 2분할 필기 ClassroomVideoSplit), History(코칭기록),
-│       │                       #   Whiteboard(StudentWhiteboardViewer 학생 모둠 보드, TeacherWhiteboardPage 교사 격자/단일 + 설정) 등
+│       │                       #   Whiteboard(StudentWhiteboardViewer 학생 모둠 보드, TeacherWhiteboardPage 교사 격자/단일 + 설정),
+│       │                       #   AiHub(AiHubRoute 가드+데이터 공급자, AiHubLayout 허브 머리글·탭, MotionGalleryPage/MotionDetailPage/MotionEditorPage, SlideGalleryPage, BrandPage) 등
 │       ├── hooks/              # useVideoSubtitles(플레이어 자막 목록·문장 로딩), useMediaQuery(matchMedia 구독), useSortOrder(목록 정렬 순서 — 사용자별 localStorage), useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
 │       │                       #   useScribbleErase(문지르기 지우개), useFreedrawSmoothing, usePenDiagnostics,
 │       │                       #   useWetInk(웻잉크 오버레이 — 펜 라이브 렌더), useOrientation(세로 화면 → 위/아래 분할),
-│       │                       #   useWhiteboardCollab(보드 1개 소켓 협업 — 변경 요소 100ms 스로틀 전송/포인터/파일), useWhiteboardGrid(교사 격자 — 소켓 하나로 N 보드 장면 유지)
+│       │                       #   useWhiteboardCollab(보드 1개 소켓 협업 — 변경 요소 100ms 스로틀 전송/포인터/파일), useWhiteboardGrid(교사 격자 — 소켓 하나로 N 보드 장면 유지),
+│       │                       #   useAiHubData(AI활용 허브 데이터 컨텍스트 — access/motion/slide/status/reload/from), useCopyFeedback(복사 단추 상태)
 │       └── lib/                # api.ts, socket.ts, toolUrl.js, excalidrawUtils, pdfDownloader,
 │                               #   inputMode.js, penToggles.js, excalidrawHistory.js,
 │                               #   wetInkStroke.js(인라인 perfect-freehand + freedraw element 생성),
@@ -59,6 +65,7 @@ packages/
 │                               #   visualizations.js(list/facets/CRUD/upload + buildVisualizationQuery),
 │                               #   videos.js(라이브러리/학급배정/댓글/자막 API + 자막 캐시 + XHR 진행률 업로드 + 썸네일 캡처/길이 측정), subtitleFile.js(자막 업로드 전 검사),
 │                               #   units.js(단원 API 래퍼), unitBrowser.js(`resolveUnitView` — 단원 화면 판단: shared 규칙을 엮음),
+│                               #   aiHub/(guard.js 접근 리다이렉트 판단, editorStore.js 편집기 상태·`promptModel`, clipboard.js, motionNav.js 이전/다음, slideHash.js·slideOrder.js 슬라이드 주소·정렬),
 │                               #   videoPlayer.js(플레이어 설정 localStorage, SEEK_STEPS/PLAYBACK_RATES, formatTime, 이어보기 위치, 길게 누름 제스처 축/좌우/드래그→값 순수 함수),
 │                               #   splitLayout.js(영상 2분할 — 비율/영상 위치 `mc_video_split`, 마지막 페이지 `mc_video_split_page:<cv>`, ratioFromPointer/stepRatio),
 │                               #   swUpdate.js(PWA SW 자동 업데이트 — setupSwAutoUpdate),
@@ -74,6 +81,7 @@ packages/
     ├── classroom/         # color.ts — 학급 색 6가지(`CLASSROOM_COLORS` 고정 순서: coral·mustard·sage·sky·lavender·rose), `isClassroomColor`, `classroomColor(id)`, `assignClassroomColors`(저장 색 우선·사용 수 반영, 나머지는 만든 순서대로 고유 색/덜 쓴 색), `pickLeastUsedColor` — 서버(부팅 채움·기본값)·클라이언트 공용
     ├── chapter/           # title.ts — `chapterTitleKey`(NFC·앞뒤 공백 제거·연속 공백 하나로, 대소문자 구분)·`hasSameChapterTitle` — 챕터 공유 시 같은 이름 중복 방지(서버 409·클라이언트 표시 공용)
     ├── whiteboard/        # merge.ts — 요소 단위 병합 순수 함수(서버·클라이언트 공용, version→versionNonce, 작성자 보존, 변경 추출, 삭제 정리)
+    ├── ai-hub/            # AI활용 허브 공용 — catalog(모션 106·슬라이드 748 `*.data.ts` + 검증, `source: chois|oppadu`)·source(출처 문구)·paths(ai-hub 버킷 허용 경로·mediaUrl)·access(`aiHubAbilities`)·promptEngine+motionOpts(오빠두 ms-prompt.js v2 이식)·render(manifest+프롬프트 → 열람 응답)·upload(토큰 비교·manifest 검증)·brandEmbed(브랜드 사본 HTML 가공)·merge(이전 스크립트용 합치기)
     └── curriculum/        # math2022.ts — 2022 개정 수학과 교육과정 MAP(과목→대단원→소단원+성취기준) + buildCurriculumPromptBlock()
 ```
 (제외: `node_modules/`, `dist/`, `.next/`, `drizzle/` 마이그레이션 SQL, `legacy_rails/`)
@@ -121,6 +129,16 @@ packages/
 - **교사 화면**(`TeacherWhiteboardPage`): 격자(모든 모둠 타일 — `useWhiteboardGrid` 가 소켓 하나로 N 보드 join, 타일은 `exportToCanvas` 2초 스로틀 정적 렌더, 화면 밖 타일은 미렌더) ↔ 단일(모둠 드롭다운, 편집, 요소 선택 시 작성자 표시). 설정 드로어: 배정·열람 허용·전체/보드 잠금·기본 템플릿(빈 보드에 재적용)·초기화/직전 상태 복원·PNG/PDF(가로 A4) 내보내기. ChapterMonitor 는 화이트보드 페이지를 진도 집계에서 빼고 "보드 열기" 칩으로 연결.
 - 테스트: `npm test -w @mathchois/client`(병합·배분·템플릿 범위·내보내기 범위·이미지 유틸), `packages/server/scripts/wb-smoke.ts`(소켓 2클라이언트 + REST 36개), `packages/client/e2e/whiteboard.smoke.mjs`(Chromium 17개 — 교사 격자/학생 동시 편집/작성자/잠금/템플릿 오버레이/타일 렌더).
 - 전제: **단일 서버 인스턴스**(메모리 장면). 다중 인스턴스는 Redis 어댑터 등 별도 작업 필요.
+
+## AI활용 허브 — me.chois.pro 에서 이전 (설계 `docs/superpowers/specs/2026-10-28-ai-hub-migration-design.md`)
+
+me.chois.pro 의 AI활용 세 갤러리를 옮겼다(오빠두엑셀 출처 표시 조건 — 배지·링크·푸터 `creditLine`). **모션**(Chois 가 HyperFrames 로 다시 만든 인트로 + 프롬프트), **슬라이드**(학교 상황 덱 + 프롬프트), **브랜드**(디자인 시스템 룩북 iframe).
+- **접근**: `@mathchois/shared` `ai-hub/access.ts` 한 함수(`aiHubAbilities`)를 서버 `requireAiHub`·`GET /api/ai/access` 와 클라이언트 `lib/aiHub/guard.js`(`resolveAiHubRedirect`)가 같이 쓴다. 교사·관리자 항상, 학생은 소속 학급 중 `classrooms.ai_hub_enabled` 가 하나라도 켜졌을 때. 교사 스위치 **"학생에게 AI활용 열기"** 는 ClassroomDetail 의 `#` 패널, 켜진 학급 헤더에 **AI활용**(Sparkles) 단추. 클라이언트 가드(`AiHubRoute`)는 화면 이동마다 access 를 다시 확인하고 목록은 브라우저 세션 동안 캐시(`lib/dataCache.js`).
+- **자료 위치**: 목록(카탈로그)은 git `packages/shared/src/ai-hub/{motion,slide}.data.ts`(`ai:*:import` 가 통째로 다시 씀), 프롬프트는 Postgres, 미디어·`manifest/{motion,slide,brand}.json` 은 Volume `ai-hub/`(공개 `/api/files/ai-hub/<rel>?v=<sha8>`, 브랜드 사본은 `/api/ai/brand/site/*`). manifest 에 파일이 다 있는 항목만 목록에 나온다 — 자료를 올리기 전에는 갤러리가 "준비하고 있어요" 빈 상태.
+- **편집기**(`MotionEditorPage`): 오빠두 v2 엔진(`ms-prompt.js`)을 `shared promptEngine` 으로 이식. 옛 틀(01–50)은 「세부 설정」 접이식, v2 는 방식·길이·화면 옵션. 칸 값은 브라우저 저장, **원본 틀·장면표·소리 큐 편집은 관리자만**(`PUT /api/ai/motion/:id/prompt`).
+- **자료 추가·이전 스크립트**(`scripts/ai-hub/`, 루트 `npm run ai:pull|ai:push|ai:prepare|ai:motion:import|ai:slide:import|ai:brand:import`): 사용법·환경 변수·**첫 이전 순서는 `scripts/ai-hub/README.md`**. `.media-out/` 은 `.gitignore`(원천 백업 — 지우지 않는다).
+- 테스트: 순수 함수는 `packages/shared` 에 두고 `npm test -w @mathchois/client`(Vitest — `lib/aiHub/*.test.js` 등)로, 브라우저는 `packages/server/scripts/ai-hub-e2e-setup.ts`(자기 교사·학생·학급 AIHUB001·픽스처 + `--cleanup`)와 `packages/client/e2e/ai-hub.smoke.mjs`(Chromium — 스위치 꺼짐 시 학생 /ai 차단 → 켬 → AI활용 단추·모션 카드·복사 단추·슬라이드 빈 상태·브랜드 iframe → 교사 편집기 세부 설정·글자 수, 콘솔 오류 0).
+- 2단계(별도 설계): 오빠두 원본(모션 51번~·슬라이드 630종) 재수집·병합, me.chois.pro `/ai` 정리·리다이렉트.
 
 ## AI 수학 코칭 페이지 (#3, `feat/ai-coaching-page`)
 
@@ -193,6 +211,8 @@ packages/
 | `/teacher/.../assignments/:assignmentId/monitor/:studentId` | **AssignmentWorkViewer** (⑤) | 전체화면 |
 | `/teacher/classrooms/:classroomId/students/:studentId/coaching-history` | Monitor/StudentCoachingHistory | DashboardLayout, 교사가 학생 AI 코칭 풀이 기록 조회 |
 | `/admin` | AdminPanel | requireAdmin |
+| `/ai`(→`/ai/motion`), `/ai/motion`, `/ai/motion/:id`, `/ai/slide`, `/ai/brand` | AiHub/AiHubRoute → AiHubLayout → MotionGalleryPage·MotionDetailPage·SlideGalleryPage·BrandPage | DashboardLayout 밖(허브 머리글 + 푸터 출처). 접근: 교사·관리자 항상 / 학생은 `ai_hub_enabled` 학급 소속일 때만(아니면 `/{role}/classrooms`). 학급 상세 AI활용 단추가 `state.from` 으로 돌아갈 주소를 넘긴다 |
+| `/ai/motion/:id/edit` | AiHub/MotionEditorPage | 전체화면, 교사·관리자(`canEdit`). 빈칸·옵션·복사 = 교사(브라우저 저장) / **원본 편집**(스위치) = 관리자 |
 | `/student/classrooms`, `/student/classrooms/:id` | ClassroomList, ClassroomDetail | DashboardLayout |
 | `/student/study/:chapterId/page/:pageId` | **StudyPageRouter** → StudyViewer(①, ③열람) 또는 CoachingViewer(AI 코칭) 또는 StudentWhiteboardViewer(화이트보드 — 학급 = 챕터의 classroomId) | 전체화면 |
 | `/student/assignments/:assignmentId/page/:pageId` | **AssignmentStudyViewer** (④, ⑤열람) | 전체화면 |
@@ -221,13 +241,14 @@ packages/
 | units | routes/units.ts | `GET /classrooms/:cid/units`(교사·소속 학생 — 학생에게는 숨긴 단원 제외, 항목 개수 `chapterCount`/`videoCount` 포함), `POST`(교사 소유 — `{title, description?, isHidden?}`, 이름 trim 1~100자·설명 ≤ 500자 아니면 400 `단원 이름을 입력하세요`, 새 단원은 맨 뒤 position), `PUT /classrooms/:cid/units/reorder`(`{ids}` — 학급 단원 전부가 아니면 400), `PATCH /units/:id`, `DELETE /units/:id`(204, 항목은 미분류로), `POST /units/:id/items`(`{chapterIds?, classroomVideoIds?}` — 다른 학급 항목이 섞이면 400 `이 학급의 항목이 아닙니다` + 아무것도 옮기지 않음). `POST/PATCH` 챕터·학급 영상에 `unitId`(같은 학급 단원이 아니면 400 `이 학급의 단원이 아닙니다`), 학생의 챕터·영상 목록·영상 siblings 는 숨긴 단원 항목 제외(**목록에서만** — 상세 주소는 막지 않음) |
 | classroomGroups | routes/classroomGroups.ts | 학급 기본 모둠. `GET /classrooms/:id/groups`(소유 교사/소속 학생), `PUT`(교사 — `{groups:[{id?,name,position,studentIds[]}]}` 전체 교체, 누락 id 삭제, 학생당 한 모둠), `POST /classrooms/:id/groups/auto`(`{count}` 가입순 셔플 균등 배분) |
 | whiteboards | routes/whiteboards.ts | 모두 `?classroomId=` 로 (페이지, 학급) 접근 검증(교사 = 학급 소유 && 페이지 관련, 학생 = 소속 && 관련). `GET /whiteboards/page/:pageId`(보드 지연 생성 + 뷰: settings/groups(구성원·elementCount·hasPrevious)/myGroupId(학생)/unassigned(교사)/templateKey/isSourceChapter), `PUT /whiteboards/page/:pageId/groups`(교사 — 페이지별 배정 교체, 삭제된 모둠 보드는 메모리 폐기 + `wb:removed`), `PATCH /whiteboards/page/:pageId/settings`(`allowCrossGroupView`/`lockedAll` → `wb:settings`/`wb:lock`), `GET /whiteboards/groups/:gid`(장면 — 메모리 우선), `PATCH /whiteboards/groups/:gid`(`name`/`locked` → `wb:lock`), `POST /whiteboards/groups/:gid/reset`·`/restore-previous`(교사 — `wb:scene`), `POST /whiteboards/groups/:gid/apply-template`(쓰기 권한자 — 살아있는 요소 0개일 때만 `{applied:true}`) |
+| aiHub | routes/aiHub.ts | `GET /ai/access`(로그인 — `{allowed, canEdit, canEditOriginal}`), `GET /ai/motion`·`/ai/slide`(`requireAiHub` — 올라간 파일이 모두 있는 항목만), `PUT /ai/motion/:id/prompt`(관리자 — 틀 검증 후 upsert), `GET /ai/brand/site/*`(**공개** 브랜드 룩북 사본 — `frame-ancestors` CSP, helmet X-Frame-Options 제거). **토큰 라우트**(`Authorization: Bearer AI_MEDIA_UPLOAD_TOKEN`, 미설정 503·불일치 401): `PUT /ai/media?path=`(스트림 업로드 — `X-Content-SHA256`, 허용 경로만, 최대 100MB), `GET /ai/media/manifest?set=`, `PUT /ai/prompts/:set`(motion\|slide 일괄 가져오기). 일반 `/files` 업로드·삭제는 `ai-hub` 버킷을 거부 |
 | health | app.ts | `GET /api/health` (DB ping) |
 
 ## 데이터 모델 (Drizzle 스키마: `packages/server/src/db/schema.ts`)
 | 테이블 | 관계 | 비고 |
 |---|---|---|
 | `profiles` | — | googleId/email unique, role, isAdmin, authMethod(google\|email), passwordHash |
-| `classrooms` | teacherId→profiles | classCode unique, **color**(text NULL — 여섯 색 이름, 공책 표지·사이드바 탭 색. startupMigrate 가 칸을 추가하고 색 없는 학급만 교사별로 채움(저장된 색은 유지)) |
+| `classrooms` | teacherId→profiles | classCode unique, **color**(text NULL — 여섯 색 이름, 공책 표지·사이드바 탭 색. startupMigrate 가 칸을 추가하고 색 없는 학급만 교사별로 채움(저장된 색은 유지)), **aiHubEnabled**(boolean NOT NULL default false — 이 학급 학생에게 AI활용 허브를 열어 줄지. 교사 `PATCH /classrooms/:id {aiHubEnabled}`, startupMigrate 가 칸 추가) |
 | `classroom_members` | classroomId, studentId | (classroom, student) unique |
 | `chapters` | classroomId, sourceChapterId(self), **unitId→units(set null)** | position, sourceChapterId(복제 출처), createdAt(최신순/등록순 정렬용 — startupMigrate 가 보강). 새 챕터는 position 0 에 삽입되고 기존 챕터는 +1 shift(새 항목이 맨 위) |
 | `units` | classroomId→classrooms(cascade) | 학급 단원(챕터·영상을 묶는 재생목록). title(1~100자)/description(≤ 500자)/position(새 단원은 max+1)/isHidden(학생 목록에서만 숨김)/createdAt. 인덱스 (classroomId, position). 삭제 시 `chapters.unit_id`·`classroom_videos.unit_id` 는 SET NULL(미분류) |
@@ -255,8 +276,10 @@ packages/
 | `video_progress` | classroomVideoId→classroom_videos(cascade), studentId→profiles(cascade) | 학생 시청 기록. positionSec(이어보기)/maxPositionSec(진도율)/completed(**80%** 도달 — `PROGRESS_COMPLETE_RATIO`, sticky). (cv, student) unique |
 | `video_comment_reads` | classroomVideoId→classroom_videos(cascade), userId→profiles(cascade) | 댓글 읽음 시각 lastSeenAt. 미읽음 = 본인이 쓰지 않은·열람 가능한·lastSeenAt 이후 댓글 수. (cv, user) unique |
 | `video_subtitles` | videoId→videos(cascade), createdBy→profiles(set null) | 영상자료 자막(영상 × 언어). lang(`SUBTITLE_LANGS` — 현재 'ko')/label/url(`videos` 버킷 `subtitles/` WebVTT)/cueCount/lastEndSec(마지막 문장 끝, 영상만 교체했을 때 길이 경고용 — 기동 시 `ADD COLUMN IF NOT EXISTS`). (video, lang) unique. 교체는 트랜잭션 + `FOR UPDATE` 로 이전 파일을 정확히 하나만 지우고, upsert 실패 시 방금 쓴 파일을 되돌린다. 영상 삭제 시 파일은 서비스가 정리 |
+| `ai_motion_prompts` | — | AI활용 모션 프롬프트(id = 카탈로그 모션 id, 예 `01-pixel`). promptEn/promptKo(틀 문법: 옛 틀 01–50 · v2), shots/cues(jsonb `[a,b,c][]`), updatedAt. 관리자 편집기·`PUT /ai/prompts/motion` 이 upsert. startupMigrate 가 생성 |
+| `ai_slide_prompts` | — | AI활용 슬라이드 프롬프트(id = 슬라이드 id, 2~3자리 숫자). prompt, updatedAt. `PUT /ai/prompts/slide` 가 upsert. startupMigrate 가 생성 |
 
-> 마이그레이션은 Drizzle Kit(`db:push`/`db:generate`). 추가로 `db/startupMigrate.ts`가 기동 시 멱등 DDL을 실행(예: `pages.html_url`·`pages.ai_problem_id`·`classrooms.color`(+색 없는 학급 채움) 컬럼, `problems`·`coaching_attempts`·`coaching_quota`(+(student,page) unique index)·`visualizations`·`videos`·`classroom_videos`·`video_comments`·`video_subtitles`(+`videos.video_url` 인덱스)·`units`(+`chapters.unit_id`/`classroom_videos.unit_id` 컬럼·인덱스)·`classroom_groups`·`whiteboard_*` 테이블, `pages.page_type`/`whiteboard_template` 컬럼 보장).
+> 마이그레이션은 Drizzle Kit(`db:push`/`db:generate`). 추가로 `db/startupMigrate.ts`가 기동 시 멱등 DDL을 실행(예: `classrooms.ai_hub_enabled`·`ai_motion_prompts`·`ai_slide_prompts`, `pages.html_url`·`pages.ai_problem_id`·`classrooms.color`(+색 없는 학급 채움) 컬럼, `problems`·`coaching_attempts`·`coaching_quota`(+(student,page) unique index)·`visualizations`·`videos`·`classroom_videos`·`video_comments`·`video_subtitles`(+`videos.video_url` 인덱스)·`units`(+`chapters.unit_id`/`classroom_videos.unit_id` 컬럼·인덱스)·`classroom_groups`·`whiteboard_*` 테이블, `pages.page_type`/`whiteboard_template` 컬럼 보장).
 
 ## 외부 의존성
 - **PostgreSQL** (Railway) — `DATABASE_URL`.
@@ -266,6 +289,7 @@ packages/
 - **앱 도메인** — 프로덕션 `https://class.chois.pro`(구 `class.chois.ai.kr` 에서 이전). HTML 도구 iframe 의 `frame-ancestors` 는 `routes/storage.ts`의 `buildFrameAncestors()`가 **이 도메인 + `APP_URL` + `FRAME_ANCESTORS`(공백 구분, 선택) + localhost:3000** 으로 조립한다. 도메인이 또 바뀌면 `APP_ORIGIN` 상수 또는 Railway 환경변수 `FRAME_ANCESTORS`/`APP_URL`을 갱신할 것(안 하면 시각화자료 iframe 이 CSP 에 막혀 빈 화면이 된다).
 - **Google Gemini(선택)** — `GEMINI_API_KEY`(@google/genai), `GEMINI_MODEL`(기본 `gemini-2.5-flash`). `services/ai.service.ts`의 OCR(문제/마크스킴)·해설 생성·필기→LaTeX 전환·풀이 검토. 429 처리는 spend-cap / rate-limit / 기타로 세분화하고 서버 로그에 실제 원인 기록. 구조화 출력은 `responseJsonSchema`. 문항 OCR meta(과목·대단원·소단원)는 **2022 개정 교육과정 MAP**(`@mathchois/shared`의 `buildCurriculumPromptBlock`)을 프롬프트에 주입해 **MAP 항목에서만 강제 선택**(subject는 enum). 본문 줄바꿈은 `<br>` 태그 + 함수식만 있는 줄은 `\qquad` 들여쓰기(`MD_LINEBREAK_RULE`). 기준 문서: `docs/curriculum/2022-math-curriculum.md`.
 - **SMTP(선택)** — `SMTP_HOST/PORT/USER/PASS/FROM`(비밀번호 초기화 메일). `APP_URL`(메일 링크).
+- **AI활용 업로드 토큰(선택)** — `AI_MEDIA_UPLOAD_TOKEN`(32자 이상, `openssl rand -hex 32`). `ai:push` 가 쓰는 `PUT /api/ai/media`·`GET /api/ai/media/manifest`·`PUT /api/ai/prompts/:set` 의 Bearer 토큰. 비우면 업로드 비활성(503). 자료·manifest 는 Volume `ai-hub/` 버킷.
 - **PORT**(기본 3001), **NODE_ENV**.
 - **클라이언트 env** — `VITE_TOOLS_ORIGIN`(HTML 도구를 서빙할 별도 origin), Vite `VITE_*` 빌드타임 주입.
 - **클라이언트 테스트** — Vitest(jsdom 환경), `vitest.config.js`, scripts `test`(vitest run)/`test:watch`. 단위 테스트는 `src/lib/*.test.js`(inputMode, excalidrawHistory, freedrawResample 등). E2E는 Playwright.
@@ -332,4 +356,4 @@ packages/
 - **`.gitignore`** — `*.tsbuildinfo`·`.superpowers/`·`.plans/`·`review.md` 무시(빌드 산출물·작업 노트는 읽지 않음).
 
 ---
-마지막 업데이트: 2026-10-25 (학급 단원: units·chapters/classroom_videos.unit_id·components/units·ChapterTab·shared units 규칙 / 직전: 2026-10-23 영상자료 자막: video_subtitles·shared 자막 파서·SubtitleOverlay·VideoForm 자막 칸 / 직전: 2026-10-20 앱 틀 리디자인 — 남색 상단 바 + 색 인덱스 탭 사이드바, `classrooms.color` + 교사 학급 색 선택, 사이드바·목록 카드 화면 높이 채움 / 직전: 화이트보드 — 모둠 공유 보드: classroom_groups·whiteboard_* 테이블, pages.page_type, 요소 단위 실시간 병합(socket wb:*), 템플릿 34종, 교사 격자/단일 화면 / 직전: 영상 2분할 필기: classroom_videos.chapter_id·ClassroomVideoSplit·SplitPane·StudyViewer 임베드 모드 / 직전: 영상자료 v2 후속: 시청 기록·force 삭제·챕터 페이지 영상 삽입·미읽음 배지 / 직전: 영상자료 라이브러리 + 학급 영상 탭/댓글, 파일 서빙 스트리밍+Range, 도메인 class.chois.pro 이전)
+마지막 업데이트: 2026-10-28 (AI활용 허브 이전: classrooms.ai_hub_enabled·ai_motion_prompts/ai_slide_prompts·routes/aiHub·pages/AiHub·components/aiHub·shared ai-hub·scripts/ai-hub·AI_MEDIA_UPLOAD_TOKEN / 직전: 2026-10-25 (학급 단원: units·chapters/classroom_videos.unit_id·components/units·ChapterTab·shared units 규칙 / 직전: 2026-10-23 영상자료 자막: video_subtitles·shared 자막 파서·SubtitleOverlay·VideoForm 자막 칸 / 직전: 2026-10-20 앱 틀 리디자인 — 남색 상단 바 + 색 인덱스 탭 사이드바, `classrooms.color` + 교사 학급 색 선택, 사이드바·목록 카드 화면 높이 채움 / 직전: 화이트보드 — 모둠 공유 보드: classroom_groups·whiteboard_* 테이블, pages.page_type, 요소 단위 실시간 병합(socket wb:*), 템플릿 34종, 교사 격자/단일 화면 / 직전: 영상 2분할 필기: classroom_videos.chapter_id·ClassroomVideoSplit·SplitPane·StudyViewer 임베드 모드 / 직전: 영상자료 v2 후속: 시청 기록·force 삭제·챕터 페이지 영상 삽입·미읽음 배지 / 직전: 영상자료 라이브러리 + 학급 영상 탭/댓글, 파일 서빙 스트리밍+Range, 도메인 class.chois.pro 이전))
