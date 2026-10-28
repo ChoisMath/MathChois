@@ -39,6 +39,29 @@ export async function resetQuota(studentId: string, pageId: string) {
     });
 }
 
+/**
+ * 교사 리셋(학생 단위): 이 학급 챕터의 모든 페이지에 대해 reset_at 을 now() 로 upsert.
+ * 시도 기록은 보존(카운트 기준만 이동). 페이지가 없으면 아무것도 쓰지 않는다.
+ */
+export async function resetQuotaForClassroom(studentId: string, classroomId: string): Promise<{ resetPages: number }> {
+  return db.transaction(async (tx) => {
+    const pageRows = await tx
+      .select({ id: pages.id })
+      .from(pages)
+      .innerJoin(chapters, eq(pages.chapterId, chapters.id))
+      .where(eq(chapters.classroomId, classroomId));
+    if (pageRows.length === 0) return { resetPages: 0 };
+    await tx
+      .insert(coachingQuota)
+      .values(pageRows.map((p) => ({ studentId, pageId: p.id })))
+      .onConflictDoUpdate({
+        target: [coachingQuota.studentId, coachingQuota.pageId],
+        set: { resetAt: sql`now()`, updatedAt: sql`now()` },
+      });
+    return { resetPages: pageRows.length };
+  });
+}
+
 /** 해당 페이지에 시도한 학생별 요약(used = reset_at 이후 카운트). 시도 0 학생은 제외. */
 export async function listPageStudents(pageId: string, classroomId: string) {
   const usedExpr = sql<number>`count(*) filter (where ${coachingQuota.resetAt} is null or ${coachingAttempts.createdAt} > ${coachingQuota.resetAt})::int`;
