@@ -12,7 +12,6 @@ import ResetPassword from './pages/ResetPassword';
 import VerifyEmail from './pages/VerifyEmail';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
-const ChooseRole      = lazy(() => import('./pages/ChooseRole'));
 const ClassroomList   = lazy(() => import('./pages/Classrooms/ClassroomList'));
 const ClassroomDetail = lazy(() => import('./pages/Classrooms/ClassroomDetail'));
 const ChapterMonitor  = lazy(() => import('./pages/Monitor/ChapterMonitor'));
@@ -113,7 +112,8 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route element={<MainLayout />}>
             <Route path="/login" element={<Navigate to="/" replace />} />
-            <Route path="/choose-role" element={<ChooseRole />} />
+            {/* 역할은 서버가 정한다(교사 허용 목록) — 예전 주소는 홈으로 */}
+            <Route path="/choose-role" element={<Navigate to="/" replace />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsOfService />} />
           </Route>

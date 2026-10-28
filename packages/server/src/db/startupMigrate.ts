@@ -272,7 +272,57 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
     )`;
   log.info('startup migration: ai hub ensured');
 
+  await ensureAccessTables(log);
   await backfillClassroomColors(log);
+}
+
+/**
+ * 교사 허용 목록·학생 사전 등록 테이블.
+ * allowed_teachers 가 이번 기동에서 처음 만들어졌다면 기존 교사(role='teacher', 이메일 있음)를 한 번 옮겨 넣어
+ * 배포 직후 아무도 잠기지 않게 한다. 이미 있던 테이블은 건드리지 않는다(관리자가 지운 교사가 되살아나지 않게).
+ */
+async function ensureAccessTables(log: FastifyBaseLogger): Promise<void> {
+  const [{ existed }] = await pgClient<{ existed: boolean }[]>`
+    SELECT to_regclass('public.allowed_teachers') IS NOT NULL AS existed`;
+
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS allowed_teachers (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      email text NOT NULL UNIQUE,
+      note text,
+      created_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`;
+
+  await pgClient`
+    CREATE TABLE IF NOT EXISTS classroom_invites (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      classroom_id uuid NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE,
+      email text NOT NULL,
+      created_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      CONSTRAINT uq_classroom_invites_classroom_email UNIQUE (classroom_id, email)
+    )`;
+  await pgClient`CREATE INDEX IF NOT EXISTS idx_classroom_invites_email ON classroom_invites (email)`;
+
+  // 이메일은 소문자로 비교한다. 대소문자만 다른 두 행이 있으면(사실상 없음) 그 행은 건너뛰고 경고만 남긴다.
+  try {
+    const res = await pgClient`UPDATE profiles SET email = lower(email) WHERE email IS NOT NULL AND email <> lower(email)`;
+    if (res.count > 0) log.info(`startup migration: profiles.email lowercased (${res.count})`);
+  } catch (err) {
+    log.warn({ err }, 'startup migration: profiles.email lowercase failed (continuing)');
+  }
+
+  if (!existed) {
+    const res = await pgClient`
+      INSERT INTO allowed_teachers (email, note)
+      SELECT lower(email), '기존 교사(자동 이관)' FROM profiles
+      WHERE role = 'teacher' AND email IS NOT NULL
+      ON CONFLICT (email) DO NOTHING`;
+    log.info(`startup migration: allowed_teachers created, backfilled ${res.count} existing teacher(s)`);
+  } else {
+    log.info('startup migration: access tables ensured');
+  }
 }
 
 /**

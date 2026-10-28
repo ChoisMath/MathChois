@@ -13,6 +13,10 @@ export const getStudentPageAttempts = (classroomId, studentId, pageId) =>
 export const resetStudentQuota = (classroomId, studentId, pageId) =>
   api.post(`/api/coaching/classrooms/${classroomId}/students/${studentId}/pages/${pageId}/reset`, {});
 
+/** 교사: 학생의 이 학급 모든 페이지 AI 풀이 횟수 리셋(기록 보존) → { resetPages } */
+export const resetStudentClassroomQuota = (classroomId, studentId) =>
+  api.post(`/api/coaching/classrooms/${classroomId}/students/${studentId}/reset`, {});
+
 /** 교사: 해당 페이지에 시도한 학생 목록 → CoachingStudentSummary[] */
 export const getPageStudents = (classroomId, pageId) =>
   api.get(`/api/coaching/classrooms/${classroomId}/pages/${pageId}/students`);

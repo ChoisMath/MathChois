@@ -16,17 +16,16 @@ const ProtectedRoute = ({ allowedRole, requireAdmin }) => {
     return <Navigate to="/" replace />;
   }
 
-  if (!profile?.role) {
-    return <Navigate to="/choose-role" replace />;
-  }
+  // 역할은 서버가 로그인·갱신 때 정해 준다(교사 허용 목록). 혹시 비어 있으면 학생으로 본다.
+  const role = profile.role ?? 'student';
 
   // 관리자 전용 라우트 체크
   if (requireAdmin && !profile?.isAdmin) {
-    return <Navigate to={`/${profile.role}/classrooms`} replace />;
+    return <Navigate to={`/${role}/classrooms`} replace />;
   }
 
-  if (allowedRole && profile.role !== allowedRole) {
-    return <Navigate to={`/${profile.role}/classrooms`} replace />;
+  if (allowedRole && role !== allowedRole) {
+    return <Navigate to={`/${role}/classrooms`} replace />;
   }
 
   return <Outlet />;

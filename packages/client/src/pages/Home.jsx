@@ -73,11 +73,7 @@ const Home = () => {
   // 인증 후 자동 이동
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
-    if (profile?.role) {
-      navigate(`/${profile.role}/classrooms`, { replace: true });
-    } else {
-      navigate('/choose-role', { replace: true });
-    }
+    navigate(`/${profile?.role ?? 'student'}/classrooms`, { replace: true });
   }, [isAuthenticated, isLoading, profile, navigate]);
 
   // 페이지 모눈을 장면의 칸 크기·위치에 맞춰 좌표평면이 모눈 위에 그려진 것처럼 보이게 한다
@@ -171,10 +167,10 @@ const Home = () => {
             환영합니다, <span className="font-bold">{profile?.name || '사용자'}</span>님!
           </p>
           <Link
-            to={profile?.role ? `/${profile.role}/classrooms` : '/choose-role'}
+            to={`/${profile?.role ?? 'student'}/classrooms`}
             className="primary-btn inline-flex items-center h-12 px-6 rounded-full font-medium"
           >
-            {profile?.role ? '클래스룸으로 가기' : '역할 선택'}
+            클래스룸으로 가기
           </Link>
         </div>
       );
@@ -191,6 +187,9 @@ const Home = () => {
             <GoogleIcon />
             Google 계정으로 로그인
           </button>
+          <p className="text-[13px] text-[#56627c] leading-snug max-w-[34ch]">
+            교사는 관리자가 등록한 계정으로만 로그인할 수 있습니다. 그 외 계정은 학생으로 시작합니다.
+          </p>
           <button
             type="button"
             onClick={() => { resetForm(); setMode('email-login'); }}

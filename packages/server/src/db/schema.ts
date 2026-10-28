@@ -546,3 +546,27 @@ export const aiSlidePrompts = pgTable('ai_slide_prompts', {
   prompt: text('prompt').notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
+// ─── allowed_teachers (관리자가 등록한 교사 이메일 — 여기 있어야 교사) ──
+
+export const allowedTeachers = pgTable('allowed_teachers', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  /** 소문자 */
+  email: text('email').notNull().unique(),
+  note: text('note'),
+  createdBy: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── classroom_invites (교사가 학급에 미리 올린 학생 이메일 — 가입 시 classroom_members 로 소비) ──
+
+export const classroomInvites = pgTable('classroom_invites', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  classroomId: uuid('classroom_id').notNull().references(() => classrooms.id, { onDelete: 'cascade' }),
+  /** 소문자 */
+  email: text('email').notNull(),
+  createdBy: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  unique('uq_classroom_invites_classroom_email').on(t.classroomId, t.email),
+  index('idx_classroom_invites_email').on(t.email),
+]);

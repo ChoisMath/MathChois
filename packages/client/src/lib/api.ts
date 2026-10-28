@@ -190,21 +190,6 @@ export async function verifyResetToken(token: string): Promise<{ success: boolea
   }, false);
 }
 
-export async function updateRole(role: 'teacher' | 'student'): Promise<{
-  token: string;
-  profile: Profile;
-}> {
-  const result = await apiFetch<{ token: string; profile: Profile }>(
-    '/api/profiles/role',
-    {
-      method: 'PATCH',
-      body: JSON.stringify({ role }),
-    },
-  );
-  _accessToken = result.token;
-  return result;
-}
-
 // ─── In-flight GET deduplication ─────────────────
 
 const _inflightGets = new Map<string, Promise<any>>();
