@@ -12,8 +12,10 @@ const FILTER_FIELDS = [
  * 학급에 배정할 영상자료 선택/등록 모달 (모든 교사의 자료에서 검색).
  * onSelect(video) / onClose(). excludeIds: 이미 배정된 영상 id(배정됨 표시).
  * selectLabel: 선택 버튼 문구(기본 '배정', 챕터 편집기에서는 '삽입').
+ * multiple: 여러 개를 이어서 고르는 창 — 골라도 닫지 않고, 바깥(배경)을 눌러도 닫히지 않아 X 로만 닫는다.
+ *   onSelect 가 끝날 때까지 그 영상 버튼을 잠근다(두 번 눌러 중복 배정 방지). 새로 등록한 뒤엔 목록으로 돌아온다.
  */
-export default function VideoPickerModal({ onSelect, onClose, excludeIds = [], selectLabel = '배정' }) {
+export default function VideoPickerModal({ onSelect, onClose, excludeIds = [], selectLabel = '배정', multiple = false }) {
   const [mode, setMode] = useState('list'); // 'list' | 'register'
   const [facets, setFacets] = useState({});
   const [filters, setFilters] = useState({});
@@ -21,7 +23,18 @@ export default function VideoPickerModal({ onSelect, onClose, excludeIds = [], s
   const [mine, setMine] = useState(false);
   const [result, setResult] = useState({ items: [], total: 0, page: 1, pageSize: 20 });
   const [loading, setLoading] = useState(false);
+  const [pendingIds, setPendingIds] = useState(() => new Set()); // multiple: 처리 중인 영상 id
   const excluded = new Set(excludeIds);
+
+  const select = async (video) => {
+    if (!multiple) { onSelect(video); return; }
+    setPendingIds((prev) => new Set(prev).add(video.id));
+    try {
+      await onSelect(video);
+    } finally {
+      setPendingIds((prev) => { const next = new Set(prev); next.delete(video.id); return next; });
+    }
+  };
 
   useEffect(() => { getVideoFacets().then(setFacets).catch(() => {}); }, []);
 
@@ -34,7 +47,7 @@ export default function VideoPickerModal({ onSelect, onClose, excludeIds = [], s
   useEffect(() => { if (mode === 'list') fetchList(1); }, [fetchList, mode]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-2" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-2" onClick={multiple ? undefined : onClose}>
       <div className="bg-white rounded-lg w-full max-w-3xl max-h-[90dvh] flex flex-col p-3" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-2 gap-2">
           <h3 className="font-bold whitespace-nowrap">{mode === 'list' ? '영상자료 선택' : '새 영상 등록'}</h3>
@@ -49,7 +62,10 @@ export default function VideoPickerModal({ onSelect, onClose, excludeIds = [], s
         {mode === 'register' ? (
           <div className="overflow-y-auto">
             <VideoForm
-              onSaved={(video) => onSelect(video)}
+              onSaved={async (video) => {
+                await select(video);
+                if (multiple) setMode('list');
+              }}
               onCancel={() => setMode('list')}
             />
           </div>
@@ -76,6 +92,7 @@ export default function VideoPickerModal({ onSelect, onClose, excludeIds = [], s
             <div className="flex-1 overflow-y-auto flex flex-col gap-2">
               {result.items.map((v) => {
                 const already = excluded.has(v.id);
+                const pending = pendingIds.has(v.id);
                 return (
                   <div key={v.id} className="border rounded-md p-2 flex gap-3">
                     <div className="w-28 aspect-video bg-gray-100 rounded overflow-hidden shrink-0 relative flex items-center justify-center">
@@ -92,7 +109,7 @@ export default function VideoPickerModal({ onSelect, onClose, excludeIds = [], s
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <span className="font-medium whitespace-nowrap truncate">{v.title}</span>
                         <IconButton icon={already ? CircleCheck : Check} variant="primary" label={already ? `${selectLabel}됨` : selectLabel}
-                          onClick={() => onSelect(v)} disabled={already} />
+                          onClick={() => select(v)} disabled={already || pending} />
                       </div>
                       <p className="text-xs text-gray-500 whitespace-nowrap truncate">
                         {[v.subject, v.majorUnit, v.minorUnit].filter(Boolean).join(' · ')}

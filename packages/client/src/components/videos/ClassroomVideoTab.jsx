@@ -249,11 +249,11 @@ export default function ClassroomVideoTab({ classroomId, isTeacher, units, unitP
     navigate(`/${isTeacher ? 'teacher' : 'student'}/classrooms/${classroomId}/videos/${cv.id}`);
   };
 
+  /* 창은 닫지 않는다 — 여러 영상을 이어서 추가하고 교사가 X 로 닫는다. 목록을 다시 읽어 '배정됨' 표시 */
   const handleSelect = async (video) => {
     try {
       await addClassroomVideo(classroomId, video.id, undefined, addUnitId);
-      setShowPicker(false);
-      fetchList();
+      await fetchList();
       if (addUnitId) onUnitsChanged();
     } catch (err) {
       alert(err.message ?? '배정에 실패했습니다.');
@@ -403,6 +403,7 @@ export default function ClassroomVideoTab({ classroomId, isTeacher, units, unitP
 
       {showPicker && (
         <VideoPickerModal
+          multiple
           excludeIds={items.map((x) => x.videoId)}
           onSelect={handleSelect}
           onClose={() => setShowPicker(false)}
