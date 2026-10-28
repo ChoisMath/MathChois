@@ -36,12 +36,12 @@ async function main() {
   const needsDownload = async (dest: string, sha: string, size: number) =>
     !(existsSync(dest) && statSync(dest).size === size && (await sha256File(dest)) === sha);
 
-  const download = async (url: string, dest: string, sha: string): Promise<void> => {
+  const download = async (url: string, token: boolean, dest: string, sha: string): Promise<void> => {
     let lastError = 'unknown';
     for (let t = 1; t <= TRIES; t++) {
       const tmp = `${dest}.part`;
       try {
-        const res = await fetchRetry(url, () => ({}), { label: path.basename(dest) });
+        const res = await fetchRetry(url, () => (token ? { headers: auth } : {}), { label: path.basename(dest) });
         if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
         await mkdir(path.dirname(dest), { recursive: true });
         const hash = createHash('sha256');
@@ -64,13 +64,20 @@ async function main() {
     if (!res.ok) throw new Error(`manifest ${set}: HTTP ${res.status}`);
     const remote = (await res.json()) as Record<string, { size: number; sha256: string; updatedAt: string }>;
 
-    const jobs: { key: string; rel: string; url: string; entry: Manifest[string] }[] = [];
+    // me 의 manifest 라우트는 파일이 없으면 200 {} 를 돌려준다 — 빈 채로 "성공"하면 이전이 조용히 빠지므로 실패로 본다.
+    if (Object.keys(remote).length === 0) {
+      console.error(`FAILED set ${set}: ${me} returned an empty manifest (the manifest file is missing on its volume, or the wrong URL/token)`);
+      totalFailed++;
+      continue;
+    }
+
+    const jobs: { key: string; rel: string; url: string; token: boolean; entry: Manifest[string] }[] = [];
     const skipped: string[] = [];
     for (const [key, entry] of Object.entries(remote)) {
       const rel = toAiHubRel(key);
-      const urlPath = meUrlPath(key);
-      if (rel === null || urlPath === null) skipped.push(key);
-      else jobs.push({ key, rel, url: `${me}${urlPath}`, entry });
+      const from = meUrlPath(key);
+      if (rel === null || from === null) skipped.push(key);
+      else jobs.push({ key, rel, url: `${me}${from.path}`, token: from.token, entry });
     }
     if (skipped.length) console.warn(`set ${set}: ${skipped.length} path(s) MathChois does not accept were skipped, e.g. ${skipped.slice(0, 3).join(', ')}`);
 
@@ -84,7 +91,7 @@ async function main() {
       let done = 0;
       await mapLimit(jobs.filter((j) => todo.has(j.rel)), CONCURRENCY, async (j) => {
         try {
-          await download(j.url, path.join(AI_DIR, j.rel), j.entry.sha256);
+          await download(j.url, j.token, path.join(AI_DIR, j.rel), j.entry.sha256);
           if (++done % 25 === 0) console.info(`  ${set}: ${done}/${todo.size}`);
         } catch (err) {
           failed.push(j.rel);
@@ -109,12 +116,9 @@ async function main() {
   // 비공개 프롬프트(motion/slide)는 파일이 아니라 JSON 한 벌 — 토큰이 있어야 받을 수 있다.
   for (const set of (only ? [only] : SETS).filter((s): s is 'motion' | 'slide' => s !== 'brand')) {
     const res = await tokenGet(`/api/media/file?path=${encodeURIComponent(ADMIN_FILES[set])}`, `prompts ${set}`);
-    if (res.status === 404) {
-      console.warn(`prompts ${set}: ${ADMIN_FILES[set]} not found on ${me}`);
-      continue;
-    }
-    if (!res.ok) {
-      console.error(`FAILED prompts ${set}: HTTP ${res.status}`);
+    // 프롬프트는 me.chois.pro 폐쇄 뒤에는 되찾을 수 없는 유일한 비공개 자료라, 404 를 포함한 모든 200 아님은 실패다.
+    if (res.status !== 200) {
+      console.error(`FAILED prompts ${set}: ${ADMIN_FILES[set]} → HTTP ${res.status} from ${me} (is GET /api/media/file deployed there?)`);
       totalFailed++;
       continue;
     }

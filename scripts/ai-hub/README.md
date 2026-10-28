@@ -7,8 +7,8 @@
 
 | 명령 | 하는 일 |
 |---|---|
-| `npm run ai:pull` | **1회성 이전.** me.chois.pro 에서 manifest 3개·파일 전부·비공개 프롬프트를 `.media-out/` 으로 내려받는다. sha256 대조(실패 시 3회 재시도), 같은 sha 는 건너뜀. `-- --dry-run` 은 받을 개수만, `-- --set motion` 은 한 묶음만 |
-| `npm run ai:push -- --set motion\|slide\|brand` | 서버 manifest 와 sha 를 비교해 바뀐 파일만 올리고(동시 4개, 429 는 기다렸다 재시도), 프롬프트 JSON 을 보내고, 마지막에 manifest 를 올린다. `--dry-run` 은 올릴 목록만 |
+| `npm run ai:pull` | **1회성 이전.** me.chois.pro 에서 manifest 3개·파일 전부·비공개 프롬프트를 `.media-out/` 으로 내려받는다. sha256 대조(실패 시 3회 재시도), 같은 sha 는 건너뜀. `-- --dry-run` 은 받을 개수만, `-- --set motion` 은 한 묶음만. 모션·슬라이드 파일은 공개 `/media/…`, **브랜드 파일과 프롬프트는 토큰 경로 `/api/media/file?path=…`**(공개 `/ai/brand/site` 는 HTML 을 가공해 sha 가 어긋남). 묶음의 manifest 가 비었거나 프롬프트(`private/*-admin.json`)가 200 이 아니면 실패(종료 코드 1) |
+| `npm run ai:push -- --set motion\|slide\|brand` | 서버 manifest 와 sha 를 비교해 바뀐 파일만 올리고(동시 4개, 429 는 기다렸다 재시도), 프롬프트 JSON 을 보내고, 마지막에 manifest 를 올린다. `--dry-run` 은 올릴 목록만. motion·slide 는 `.media-out/prompts/<set>.json` 이 없으면 아무것도 올리기 전에 멈춘다 — 미디어만 올릴 때만 `--no-prompts` |
 | `npm run ai:prepare` | 새 모션 렌더 mp4 → `video.mp4`·`preview.mp4`·`poster.webp` + manifest (`MOTION_SRC`, ffmpeg·cwebp 필요) |
 | `npm run ai:motion:import` | 원천 JSON → `packages/shared/src/ai-hub/motion.data.ts`(git) + `.media-out/prompts/motion.json` |
 | `npm run ai:slide:import` | 학교 덱 PDF·오빠두 원본 그림 → `slide.data.ts`(git) + `.media-out/ai-hub/slide/…` + `prompts/slide.json` + manifest (`pdftoppm`·`cwebp` 필요) |
@@ -47,7 +47,7 @@
 
 SD 카드의 원천 폴더가 없으므로 `ai:pull` + `ai:push` 가 기본 경로다(`*:import`·`prepare` 는 앞으로 자료를 더할 때).
 
-1. me.chois.pro 쪽 `GET /api/media/file` 이 배포돼 있는지 확인(프롬프트를 받는 데 필요).
+1. me.chois.pro 쪽 `GET /api/media/file` 이 배포돼 있는지 확인(프롬프트·브랜드 파일을 받는 데 필요).
 2. `export ME_MEDIA_UPLOAD_TOKEN=…` → `npm run ai:pull -- --dry-run` 으로 개수 확인 → `npm run ai:pull`
    (끝에 `set motion: 150 files, 288 MB, 0 failed …` 처럼 묶음마다 요약이 나온다. failed 가 있으면 다시 실행하면 된다)
 3. `export AI_PUSH_URL=https://class.chois.pro AI_MEDIA_UPLOAD_TOKEN=…`

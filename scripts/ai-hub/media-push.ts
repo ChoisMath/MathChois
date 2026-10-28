@@ -21,12 +21,18 @@ async function main() {
   const argv = process.argv.slice(2);
   const set = parseSetArg(argv, true) as AiSet;
   const dryRun = hasFlag(argv, '--dry-run');
+  const noPrompts = hasFlag(argv, '--no-prompts');
   const base = baseUrl(process.env.AI_PUSH_URL, 'http://localhost:3001');
   const auth = { authorization: `Bearer ${requireEnv('AI_MEDIA_UPLOAD_TOKEN', 'the server\'s upload token')}` };
 
   const manifestPath = manifestFile(set);
   if (!existsSync(manifestPath)) {
     throw new Error(`${path.relative(process.cwd(), manifestPath)} missing — run ai:pull (first migration) or ai:${set === 'motion' ? 'prepare' : set + ':import'} first`);
+  }
+  // 프롬프트는 DB 에만 들어가는 유일한 비공개 자료다. 파일이 없는데 조용히 넘어가면 me.chois.pro 폐쇄 뒤 영영 잃으므로 올리기 전에 멈춘다.
+  const promptPath = set === 'brand' ? null : promptsFile(set);
+  if (promptPath && !noPrompts && !existsSync(promptPath)) {
+    throw new Error(`${path.relative(process.cwd(), promptPath)} missing — run ai:pull / ai:${set}:import first, or pass --no-prompts for a media-only push`);
   }
   const local = (await readJsonFile(manifestPath)) as Manifest;
   const localErrors = validateManifest(local);
@@ -78,9 +84,10 @@ async function main() {
 
   await mapLimit(changed, CONCURRENCY, (rel) => attempt(rel, () => putFile(rel, local[rel]?.sha256)));
 
-  if (set !== 'brand') {
-    const promptPath = promptsFile(set);
-    if (existsSync(promptPath)) {
+  if (promptPath) {
+    if (noPrompts) {
+      console.info('--no-prompts — prompts not sent');
+    } else {
       const body = JSON.stringify(await readJsonFile(promptPath));
       await attempt(`prompts/${set}`, async () => {
         const res = await fetchRetry(`${base}/api/ai/prompts/${set}`, () => ({
@@ -89,8 +96,6 @@ async function main() {
         if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
         console.info(`prompts ${set}: ${JSON.stringify(await res.json())}`);
       });
-    } else {
-      console.info(`no ${path.relative(process.cwd(), promptPath)} — prompts skipped`);
     }
   }
 

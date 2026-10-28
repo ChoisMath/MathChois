@@ -187,10 +187,16 @@ export function toAiHubRel(key: string): string | null {
   return rel !== null && isAiHubFile(rel) ? rel : null;
 }
 
-/** me.chois.pro 가 공개로 서빙하는 파일의 URL 경로(`/media/…`, 브랜드는 `/ai/brand/site/…`). 대상이 아니면 null. */
-export function meUrlPath(key: string): string | null {
+/**
+ * me.chois.pro 에서 파일 원본을 받는 주소와 토큰 필요 여부. 모션·슬라이드는 공개 `/media/…`(토큰 없음).
+ * 브랜드는 공개 `/ai/brand/site/…` 가 HTML 에 셸 숨김 스타일을 끼워 보내 sha256 이 어긋나므로, 원본 바이트를 그대로 주는
+ * 토큰 경로 `/api/media/file?path=…` 를 쓴다. 대상이 아니면 null.
+ */
+export function meUrlPath(key: string): { path: string; token: boolean } | null {
   if (ME_MANIFESTS[key] || toAiHubRel(key) === null) return null;
-  return key.startsWith(ME_BRAND) ? `/ai/brand/site/${key.slice(ME_BRAND.length)}` : `/${key}`;
+  return key.startsWith(ME_BRAND)
+    ? { path: `/api/media/file?path=${encodeURIComponent(key)}`, token: true }
+    : { path: `/${key}`, token: false };
 }
 
 // ─── 업로드 재시도 ──────────────────────────────────────────────────────────

@@ -131,11 +131,14 @@ describe('toAiHubRel / meUrlPath', () => {
   it('returns null for anything else (including path tricks)', () => {
     for (const k of ['private/motion-admin.json', 'x/y', '', 'media/other/a.png', '../media/motion/a']) expect(toAiHubRel(k), k).toBeNull();
   });
-  it('builds the public URL path on me.chois.pro', () => {
-    expect(meUrlPath('media/motion/01-pixel/video.mp4')).toBe('/media/motion/01-pixel/video.mp4');
-    expect(meUrlPath('media/slide/24/1.webp')).toBe('/media/slide/24/1.webp');
-    expect(meUrlPath('private/brand/assets/app.js')).toBe('/ai/brand/site/assets/app.js');
+  it('builds the me.chois.pro download address: public for media, token route for brand', () => {
+    expect(meUrlPath('media/motion/01-pixel/video.mp4')).toEqual({ path: '/media/motion/01-pixel/video.mp4', token: false });
+    expect(meUrlPath('media/slide/24/1.webp')).toEqual({ path: '/media/slide/24/1.webp', token: false });
+    // 공개 /ai/brand/site 는 HTML 을 가공해 sha 가 어긋난다 — 원본 바이트는 토큰 경로로만 받는다.
+    expect(meUrlPath('private/brand/assets/app.js')).toEqual({ path: '/api/media/file?path=private%2Fbrand%2Fassets%2Fapp.js', token: true });
+    expect(meUrlPath('private/brand/index.html')?.path).toBe('/api/media/file?path=private%2Fbrand%2Findex.html');
     expect(meUrlPath('private/motion-admin.json')).toBeNull();
+    expect(meUrlPath('media/motion/manifest.json')).toBeNull();
   });
 });
 
