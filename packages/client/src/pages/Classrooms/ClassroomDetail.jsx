@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import {
-  Copy, Check, Trash2, Plus, Hash, LogOut, Loader, X,
+  Copy, Check, Trash2, Plus, Hash, LogOut, Loader, X, Sparkles,
 } from 'lucide-react';
 
 const BoardTab      = lazy(() => import('../../components/board/BoardTab'));
@@ -14,6 +14,7 @@ import { refreshSidebar } from '../../lib/sidebarRefresh';
 import { getClassroomVideoUnread } from '../../lib/videos';
 import { listUnits } from '../../lib/units';
 import { resolveClassroomColor, colorVars } from '../../lib/classroomColor';
+import IconButton from '../../components/common/IconButton';
 import ClassroomColorPicker from '../../components/classrooms/ClassroomColorPicker';
 import ChapterTab from '../../components/classrooms/ChapterTab';
 import StudentsTab from '../../components/classrooms/StudentsTab';
@@ -24,6 +25,7 @@ import { resolveTab } from '../../lib/classroomTabs';
 const ClassroomDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, profile } = useAuth();
   const isTeacher = profile?.role === 'teacher';
 
@@ -40,6 +42,8 @@ const ClassroomDetail = () => {
 
   const [savingColor, setSavingColor] = useState(false);
   const [colorError, setColorError]   = useState('');
+  const [savingAi, setSavingAi]       = useState(false);
+  const [aiError, setAiError]         = useState('');
   const idRef = useRef(id); // 저장이 끝났을 때 아직 같은 학급 화면인지 확인용
 
   /* 활성 탭은 주소 쿼리(?tab=)에 둔다 — 영상·챕터를 열고 뒤로 가도 같은 탭으로 돌아온다. 알 수 없는 값(학생의 dashboard 포함)은 챕터 */
@@ -140,6 +144,8 @@ const ClassroomDetail = () => {
     idRef.current = id;
     setColorError('');
     setSavingColor(false);
+    setAiError('');
+    setSavingAi(false);
   }, [id]);
 
   /* ── 클래스 이름 인라인 편집 ── */
@@ -182,6 +188,24 @@ const ClassroomDetail = () => {
       if (idRef.current === targetId) setColorError('표지 색을 바꾸지 못했어요. 다시 시도해 주세요.');
     }
     if (idRef.current === targetId) setSavingColor(false); // 다른 학급으로 옮겼다면 이미 초기화됨
+  };
+
+  /* ── 학생에게 AI활용 열기: 먼저 바꿔 보이고, 저장에 실패하면 되돌린다 ── */
+  const handleAiHubToggle = async (enabled) => {
+    if (savingAi) return;
+    const prevEnabled = !!classroom.aiHubEnabled;
+    const targetId = id;
+    setSavingAi(true);
+    setAiError('');
+    setClassroom((prev) => ({ ...prev, aiHubEnabled: enabled }));
+    try {
+      await api.patch(`/api/classrooms/${targetId}`, { aiHubEnabled: enabled });
+    } catch (err) {
+      console.error('[ClassroomDetail] AI활용 설정 오류:', err);
+      setClassroom((prev) => (prev?.id === targetId ? { ...prev, aiHubEnabled: prevEnabled } : prev));
+      if (idRef.current === targetId) setAiError('AI활용 설정을 저장하지 못했어요');
+    }
+    if (idRef.current === targetId) setSavingAi(false);
   };
 
   const handleNameKeyDown = (e) => {
@@ -287,6 +311,13 @@ const ClassroomDetail = () => {
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            {(isTeacher || profile?.isAdmin || classroom.aiHubEnabled) && (
+              <IconButton
+                icon={Sparkles}
+                label="AI활용"
+                onClick={() => navigate('/ai', { state: { from: location.pathname + location.search } })}
+              />
+            )}
             {isTeacher ? (
               <>
                 {activeTab === 'board' && (
@@ -316,7 +347,7 @@ const ClassroomDetail = () => {
         </div>
 
         {/* 교사: '#'을 누르면 코드와 함께 색 동그라미가 나타나고, 누르면 바로 바뀐다(글자 없음) */}
-        {isTeacher && (showCode || colorError) && (
+        {isTeacher && (showCode || colorError || aiError) && (
           <div className="mt-1">
             {showCode && (
               <ClassroomColorPicker
@@ -327,8 +358,25 @@ const ClassroomDetail = () => {
                 disabled={savingColor}
               />
             )}
+            {showCode && (
+              <label className="inline-flex items-center gap-2 min-h-11 mt-1 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-checked={!!classroom.aiHubEnabled}
+                  checked={!!classroom.aiHubEnabled}
+                  onChange={(e) => handleAiHubToggle(e.target.checked)}
+                  disabled={savingAi}
+                  className="h-5 w-5 cursor-pointer"
+                />
+                학생에게 AI활용 열기
+              </label>
+            )}
             {colorError && (
               <p className="text-[14px] text-red-700 mt-1" role="alert">{colorError}</p>
+            )}
+            {aiError && (
+              <p className="text-[14px] text-red-700 mt-1" role="alert">{aiError}</p>
             )}
           </div>
         )}

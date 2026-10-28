@@ -5,6 +5,9 @@ import { Home as HomeIcon } from 'lucide-react';
 import MainLayout from './layouts/MainLayout';
 import DashboardLayout from './layouts/DashboardLayout';
 import ProtectedRoute from './components/ProtectedRoute';
+import AiHubRoute from './pages/AiHub/AiHubRoute';
+import AiHubLayout from './pages/AiHub/AiHubLayout';
+import AiHubPlaceholder from './pages/AiHub/AiHubPlaceholder';
 import { Navigate } from 'react-router-dom';
 import Home from './pages/Home';
 import OAuthCallback from './pages/OAuthCallback';
@@ -163,6 +166,19 @@ function App() {
               path="/teacher/classrooms/:classroomId/assignments/:assignmentId/monitor/:studentId"
               element={<AssignmentWorkViewer />}
             />
+          </Route>
+
+          {/* AI활용 허브 — 로그인·역할·접근 허락은 AiHubRoute 가 판정. 화면은 이후 작업이 채운다(지금은 자리표시) */}
+          <Route element={<AiHubRoute />}>
+            <Route element={<AiHubLayout />}>
+              <Route path="/ai" element={<Navigate to="/ai/motion" replace />} />
+              <Route path="/ai/motion" element={<AiHubPlaceholder />} />
+              <Route path="/ai/motion/:id" element={<AiHubPlaceholder />} />
+              <Route path="/ai/slide" element={<AiHubPlaceholder />} />
+              <Route path="/ai/brand" element={<AiHubPlaceholder />} />
+            </Route>
+            {/* 편집기: 전체 화면(레이아웃 밖), 교사·관리자 */}
+            <Route path="/ai/motion/:id/edit" element={<AiHubPlaceholder />} />
           </Route>
 
           {/* Admin Routes */}
