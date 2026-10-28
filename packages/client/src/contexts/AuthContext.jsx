@@ -2,13 +2,12 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import {
   refreshToken,
   logout as apiLogout,
-  updateRole as apiUpdateRole,
   signUpWithEmail as apiSignUp,
   signInWithEmail as apiSignIn,
   updateName as apiUpdateName,
   setAccessToken,
 } from '../lib/api';
-import { connectSocket, disconnectSocket, reconnectWithToken } from '../lib/socket';
+import { connectSocket, disconnectSocket } from '../lib/socket';
 
 const AuthContext = createContext(null);
 
@@ -87,20 +86,6 @@ export function AuthProvider({ children }) {
     return result.profile;
   }, []);
 
-  // ─── 역할 업데이트 ────────────────────────────
-
-  const updateRole = useCallback(async (role) => {
-    try {
-      const result = await apiUpdateRole(role);
-      setProfile(result.profile);
-      reconnectWithToken(); // 새 토큰으로 소켓 재연결
-      return result.profile;
-    } catch (err) {
-      console.error('역할 업데이트 실패:', err);
-      return null;
-    }
-  }, []);
-
   return (
     <AuthContext.Provider
       value={{
@@ -112,7 +97,6 @@ export function AuthProvider({ children }) {
         signUpWithEmail,
         signInWithEmail,
         signOut,
-        updateRole,
         updateName,
       }}
     >

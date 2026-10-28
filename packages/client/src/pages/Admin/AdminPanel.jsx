@@ -3,9 +3,10 @@ import {
   Users, Building2, BarChart3, Trash2, Shield, ShieldOff,
   UserCog, ChevronDown, ChevronUp, RefreshCw, AlertTriangle,
   HardDrive, Database, X, Search, KeyRound, Pencil, Check, Mail,
-  ChevronRight, GraduationCap, FolderOpen,
+  ChevronRight, GraduationCap, FolderOpen, ShieldCheck,
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import AllowedTeachersTab from '../../components/admin/AllowedTeachersTab';
 import { useAuth } from '../../contexts/AuthContext';
 
 // ─── 유틸리티 ─────────────────────────────────────
@@ -355,6 +356,7 @@ function UsersTab() {
                     value={u.role || ''}
                     onChange={e => handleRoleChange(u.id, e.target.value)}
                     disabled={actionLoading === u.id}
+                    title="교사로 바꾸면 교사 허용 목록에 함께 등록되고, 학생으로 바꾸면 목록에서 빠집니다"
                     className="text-xs border border-gray-300 rounded px-1.5 py-1 cursor-pointer"
                   >
                     <option value="" disabled>역할</option>
@@ -1007,6 +1009,7 @@ function ResetTab() {
 
 const TABS = [
   { id: 'users', label: '사용자 관리', icon: Users },
+  { id: 'allowed-teachers', label: '교사 등록', icon: ShieldCheck },
   { id: 'classrooms', label: '클래스룸', icon: Building2 },
   { id: 'stats', label: '시스템 현황', icon: BarChart3 },
   { id: 'reset', label: '데이터 초기화', icon: Trash2 },
@@ -1049,6 +1052,7 @@ export default function AdminPanel() {
 
       {/* 탭 콘텐츠 */}
       {activeTab === 'users' && <UsersTab />}
+      {activeTab === 'allowed-teachers' && <AllowedTeachersTab />}
       {activeTab === 'classrooms' && <ClassroomsTab />}
       {activeTab === 'stats' && <StatsTab />}
       {activeTab === 'reset' && <ResetTab />}

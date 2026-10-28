@@ -94,6 +94,16 @@ const ClassroomDetail = () => {
   const [unsubmittedCount, setUnsubmittedCount] = useState(0);
   const [videoUnreadCount, setVideoUnreadCount] = useState(0); // 영상 탭 미읽음 댓글 배지
 
+  /* ── 구성원만 다시 읽기(학생 사전 등록으로 바로 참여한 학생 반영) ── */
+  const reloadMembers = async () => {
+    try {
+      const mems = await api.get(`/api/classrooms/${id}/members`);
+      setMembers(mems || []);
+    } catch {
+      // 목록은 다음 로드에서 맞춰진다
+    }
+  };
+
   /* ── 데이터 로드 ── */
   const fetchData = async () => {
     setLoading(true);
@@ -388,7 +398,9 @@ const ClassroomDetail = () => {
         )}
 
         {/* ── 학생 탭 ── */}
-        {activeTab === 'students' && <StudentsTab classroomId={id} members={members} isTeacher={isTeacher} />}
+        {activeTab === 'students' && (
+          <StudentsTab classroomId={id} members={members} isTeacher={isTeacher} onMembersChanged={reloadMembers} />
+        )}
 
         {/* ── 대시보드 탭 (교사 전용) ── */}
         {activeTab === 'dashboard' && isTeacher && (
