@@ -32,7 +32,8 @@
 .ai-hub-back:hover { background: #eef2f8; }
 
 /* 탭 칩 */
-.ai-hub-tabs { display: flex; gap: 8px; margin-top: 4px; overflow-x: auto; padding-bottom: 12px; }
+/* overflow-x:auto 가 포커스 링(3px + 오프셋 2px)을 자르지 않도록 사방에 5px 여백을 두고 같은 만큼 음수 마진으로 되돌린다 */
+.ai-hub-tabs { display: flex; gap: 8px; margin: -1px -5px 0; overflow-x: auto; padding: 5px 5px 17px; }
 .ai-hub-tab {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
   min-height: 44px; padding: 0 20px; border-radius: 999px;

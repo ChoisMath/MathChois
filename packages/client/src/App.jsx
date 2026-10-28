@@ -5,8 +5,6 @@ import { Home as HomeIcon } from 'lucide-react';
 import MainLayout from './layouts/MainLayout';
 import DashboardLayout from './layouts/DashboardLayout';
 import ProtectedRoute from './components/ProtectedRoute';
-import AiHubRoute from './pages/AiHub/AiHubRoute';
-import AiHubLayout from './pages/AiHub/AiHubLayout';
 import AiHubPlaceholder from './pages/AiHub/AiHubPlaceholder';
 import { Navigate } from 'react-router-dom';
 import Home from './pages/Home';
@@ -48,6 +46,12 @@ const ClassroomVideoSplit = lazy(() => import('./pages/Videos/ClassroomVideoSpli
 /* 코칭 기록 */
 const MyCoachingHistory     = lazy(() => import('./pages/History/MyCoachingHistory'));
 const StudentCoachingHistory = lazy(() => import('./pages/Monitor/StudentCoachingHistory'));
+
+/* AI활용 허브 */
+const AiHubRoute         = lazy(() => import('./pages/AiHub/AiHubRoute'));
+const AiHubLayout        = lazy(() => import('./pages/AiHub/AiHubLayout'));
+const MotionGalleryPage  = lazy(() => import('./pages/AiHub/MotionGalleryPage'));
+const MotionDetailPage   = lazy(() => import('./pages/AiHub/MotionDetailPage'));
 
 /* 관리자 */
 const AdminPanel = lazy(() => import('./pages/Admin/AdminPanel'));
@@ -172,8 +176,8 @@ function App() {
           <Route element={<AiHubRoute />}>
             <Route element={<AiHubLayout />}>
               <Route path="/ai" element={<Navigate to="/ai/motion" replace />} />
-              <Route path="/ai/motion" element={<AiHubPlaceholder />} />
-              <Route path="/ai/motion/:id" element={<AiHubPlaceholder />} />
+              <Route path="/ai/motion" element={<MotionGalleryPage />} />
+              <Route path="/ai/motion/:id" element={<MotionDetailPage />} />
               <Route path="/ai/slide" element={<AiHubPlaceholder />} />
               <Route path="/ai/brand" element={<AiHubPlaceholder />} />
             </Route>
