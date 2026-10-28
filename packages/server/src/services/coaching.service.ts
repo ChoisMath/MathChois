@@ -40,8 +40,8 @@ export async function resetQuota(studentId: string, pageId: string) {
 }
 
 /**
- * 교사 리셋(학생 단위): 이 학급 챕터의 모든 페이지에 대해 reset_at 을 now() 로 upsert.
- * 시도 기록은 보존(카운트 기준만 이동). 페이지가 없으면 아무것도 쓰지 않는다.
+ * 교사 리셋(학생 단위): 이 학급의 AI 코칭 페이지(ai_problem_id 가 있는 페이지 — 시도는 그런 페이지에서만 생긴다)
+ * 전부에 대해 reset_at 을 now() 로 upsert. 시도 기록은 보존(카운트 기준만 이동). 해당 페이지가 없으면 아무것도 쓰지 않는다.
  */
 export async function resetQuotaForClassroom(studentId: string, classroomId: string): Promise<{ resetPages: number }> {
   return db.transaction(async (tx) => {
@@ -49,7 +49,7 @@ export async function resetQuotaForClassroom(studentId: string, classroomId: str
       .select({ id: pages.id })
       .from(pages)
       .innerJoin(chapters, eq(pages.chapterId, chapters.id))
-      .where(eq(chapters.classroomId, classroomId));
+      .where(and(eq(chapters.classroomId, classroomId), sql`${pages.aiProblemId} is not null`));
     if (pageRows.length === 0) return { resetPages: 0 };
     await tx
       .insert(coachingQuota)

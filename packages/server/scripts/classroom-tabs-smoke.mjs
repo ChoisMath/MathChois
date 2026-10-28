@@ -48,11 +48,11 @@ console.log('학생 단위 AI 풀이 초기화');
 const sid = seed.students[1].id;
 const before = await call('GET', `/api/coaching/classrooms/${cid}/students/${sid}/pages/${data.chapters[0].id}/attempts`, teacher); // 존재 확인용(페이지 id 아님 → 그냥 상태만)
 const r1 = await call('POST', `/api/coaching/classrooms/${cid}/students/${sid}/reset`, teacher, {});
-ok(r1.status === 200 && r1.json.resetPages === seed.pages, `200 resetPages=${seed.pages}`, JSON.stringify(r1.json));
+ok(r1.status === 200 && r1.json.resetPages === seed.aiPages, `200 resetPages=${seed.aiPages}(AI 페이지만, 전체 ${seed.pages}장 아님)`, JSON.stringify(r1.json));
 // 리셋 뒤 사용 횟수 0
 const pageRow = await call('GET', `/api/classrooms/${cid}/chapters`, teacher);
 const r1b = await call('POST', `/api/coaching/classrooms/${cid}/students/${sid}/reset`, teacher, {});
-ok(r1b.status === 200 && r1b.json.resetPages === seed.pages, '두 번째 리셋도 200(upsert)');
+ok(r1b.status === 200 && r1b.json.resetPages === seed.aiPages, '두 번째 리셋도 200(upsert)');
 
 // 다른 교사 403
 const other = jwt.sign({ sub: '00000000-0000-4000-8000-000000000001', role: 'teacher', email: 'other@x.com' }, process.env.JWT_SECRET, { expiresIn: '5m' });

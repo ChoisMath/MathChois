@@ -57,6 +57,15 @@ describe('moveStudent', () => {
     expect(next[1].studentIds).toEqual(['a']);
   });
 
+  it('이미 그 모둠에 있으면 같은 배열을 돌려준다(순서도 그대로, dirty 아님)', () => {
+    const groups = [{ name: 'A', position: 0, studentIds: ['x', 'y'] }, { name: 'B', position: 1, studentIds: [] }];
+    expect(moveStudent(groups, 'x', 'pos:0')).toBe(groups);
+    expect(moveStudent(groups, 'x', 'pos:0')[0].studentIds).toEqual(['x', 'y']);
+  });
+  it('미배정 학생을 미배정으로 옮겨도 같은 배열', () => {
+    const groups = [{ name: 'A', position: 0, studentIds: ['x'] }];
+    expect(moveStudent(groups, 'z', null)).toBe(groups);
+  });
   it('원본을 변경하지 않는다', () => {
     moveStudent(groups, 'a', 'g2');
     expect(groups[0].studentIds).toEqual(['a', 'b']);

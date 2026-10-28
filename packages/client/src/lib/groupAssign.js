@@ -40,6 +40,8 @@ export function groupKey(g) {
 }
 
 export function moveStudent(groups, studentId, targetKey) {
+  const current = findGroupKeyOf(groups, studentId);
+  if (current === (targetKey ?? null)) return groups; // 제자리(또는 미배정→미배정)면 아무것도 바꾸지 않는다
   return groups.map((g) => {
     const without = g.studentIds.filter((s) => s !== studentId);
     if (targetKey != null && groupKey(g) === targetKey) {

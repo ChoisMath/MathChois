@@ -70,7 +70,7 @@ export default function StudentReport({ student, groups, chapters, videos, class
                     <span className="report-title">{v.title}</span>
                     <span className="report-meta">
                       {c ? (
-                        <Meter value={pct} done={c.completed} text={pct == null ? '시청' : `${pct}%`} label={`시청률 ${pct ?? '–'}%`} />
+                        <Meter value={pct} done={c.completed} text={pct == null ? '시청' : `${pct}%`} label={pct == null ? '시청함' : `시청률 ${pct}%`} />
                       ) : (
                         <span className="num text-gray-400">안 봄</span>
                       )}

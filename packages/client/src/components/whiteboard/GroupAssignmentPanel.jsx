@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  DndContext, DragOverlay, PointerSensor, KeyboardSensor, useSensor, useSensors,
+  DndContext, DragOverlay, MouseSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
 import { Plus, Shuffle } from 'lucide-react';
 import IconButton from '../common/IconButton';
@@ -47,8 +47,10 @@ export default function GroupAssignmentPanel({
   const byId = new Map(members.map((m) => [m.studentId, m]));
   const update = (next) => { if (!readOnly) onChange(next); };
 
+  /* 마우스·펜은 6px 움직이면 바로, 손가락은 200ms 누르고 있어야 든다 — 그 전에 움직이면 평소처럼 화면이 스크롤된다 */
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: deskKeyboardCoordinates }),
   );
 
@@ -140,9 +142,9 @@ export default function GroupAssignmentPanel({
           <p className="desk-hint board-empty">아직 모둠이 없습니다. 모둠 수를 정하거나 모둠을 추가하세요.</p>
         ) : (
           <div className="desk-grid">
-            {groups.map((g) => (
+            {groups.map((g, i) => (
               <GroupDesk
-                key={groupKey(g)} id={groupKey(g)} name={g.name} count={g.studentIds.length}
+                key={groupKey(g)} id={groupKey(g)} name={g.name} fallbackName={`${i + 1}모둠`} count={g.studentIds.length}
                 readOnly={readOnly}
                 onRename={(name) => handleRename(g, name)}
                 onRemove={() => handleRemoveGroup(g)}

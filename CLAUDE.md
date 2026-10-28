@@ -175,7 +175,7 @@ additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures th
   desks via `lib/groupAssign.js` `resizeGroups`). The teacher dashboard is 보기(챕터별·영상별·학생별) × 대상
   (`?view=`, `?unit=` shared with the chapter/video tabs, `?student=`); pure calculations live in
   `lib/dashboardViews.js`. [학생] tab row-end [AI 풀이 초기화] calls
-  `POST /api/coaching/classrooms/:cid/students/:sid/reset` (resets quota for every page of the classroom, keeps
+  `POST /api/coaching/classrooms/:cid/students/:sid/reset` (resets quota for every AI-coaching page of the classroom, keeps
   attempt records). Spec: `docs/superpowers/specs/2026-10-28-classroom-tabs-tables-groups-dashboard-design.md`.
 - **Icon-only buttons** use `components/common/IconButton.jsx` (`label` → `title` + `aria-label`, 44px hit area,
   variants ghost/primary/danger/danger-solid). Icon dictionary and keep-text rules:

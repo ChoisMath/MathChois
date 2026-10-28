@@ -168,7 +168,7 @@ interface ClassroomDashboard {
 
 `POST /api/coaching/classrooms/:classroomId/students/:studentId/reset` (`routes/coaching.ts`, `authenticate + requireRole('teacher')`)
 - 담당 교사 아니면 403, 구성원 아니면 403(기존 페이지별 리셋과 같은 검사).
-- `resetQuotaForClassroom(studentId, classroomId)`(`coaching.service.ts`): 이 학급 챕터의 모든 `pages.id` 에 대해 `coaching_quota` upsert
+- `resetQuotaForClassroom(studentId, classroomId)`(`coaching.service.ts`): 이 학급 챕터의 AI 코칭 페이지(`pages.ai_problem_id IS NOT NULL` — 시도는 그런 페이지에서만 생긴다) 전부에 대해 `coaching_quota` upsert
   (`reset_at = now(), updated_at = now()`; 충돌 키 `(student_id, page_id)`). 한 트랜잭션. 응답 `{ resetPages: number }`.
 
 ## 오류 처리
