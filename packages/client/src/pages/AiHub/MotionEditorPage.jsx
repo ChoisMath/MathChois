@@ -12,6 +12,7 @@ import { loadStore, saveStore } from '../../lib/aiHub/editorStore';
 import './MotionEditorPage.css';
 
 const TABS = [['prompt', '프롬프트'], ['shots', '장면표'], ['cues', '소리 큐']];
+const DISCARD_CONFIRM = '저장하지 않은 원본 편집 내용이 있어요. 버리고 나갈까요?';
 
 const storage = () => {
   try { return window.localStorage; } catch { return null; }
@@ -33,6 +34,7 @@ export default function MotionEditorPage() {
   const [store, setStore] = useState(() => loadStore(storage()));
   const [tab, setTab] = useState('prompt');
   const [editing, setEditing] = useState(false);
+  const [draftDirty, setDraftDirty] = useState(false); // 원본 편집에 저장하지 않은 글이 있나
   const video = useRef(null);
   const tabRefs = useRef({});
 
@@ -60,6 +62,15 @@ export default function MotionEditorPage() {
     const v = video.current;
     if (v && on && v.paused) v.play().catch(() => {});
   };
+
+  // 원본 편집 초안이 남아 있으면 탭 닫기·새로 고침도 한 번 묻는다
+  const guarding = editing && draftDirty;
+  useEffect(() => {
+    if (!guarding) return undefined;
+    const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [guarding]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -105,6 +116,16 @@ export default function MotionEditorPage() {
     tabRefs.current[TABS[n][0]]?.focus();
   };
 
+  /* 원본 편집 초안을 버리는 동작(닫기·이전/다음·편집 끄기) 앞에서 묻는다. 저장한 그대로면 묻지 않는다.
+     App 이 데이터 라우터(createBrowserRouter)가 아니라 useBlocker 를 못 쓰므로 머리 단추에서 직접 막는다. */
+  const okToLeave = () => !guarding || window.confirm(DISCARD_CONFIRM);
+  const guardLink = (e) => { if (!okToLeave()) e.preventDefault(); };
+  const toggleEditing = () => {
+    if (editing && !okToLeave()) return;
+    if (editing) setDraftDirty(false);
+    setEditing(!editing);
+  };
+
   const noPrompt = (
     <p role="alert" className="ai-alert">프롬프트 데이터가 없습니다 — <code>npm run ai:push</code> 를 실행하세요</p>
   );
@@ -112,15 +133,16 @@ export default function MotionEditorPage() {
   return (
     <section className="ai-ed" aria-label={`${no} ${item.name} 프롬프트 편집`}>
       <header className="ai-ed-top">
-        <IconButton icon={X} label="닫기" as={Link} to={closeHref} />
-        <IconButton icon={ChevronLeft} label="이전 스타일" as={Link} to={prevHref ?? '#'} replace disabled={!prevHref} />
-        <IconButton icon={ChevronRight} label="다음 스타일" as={Link} to={nextHref ?? '#'} replace disabled={!nextHref} />
+        <IconButton icon={X} label="닫기" as={Link} to={closeHref} onClick={guardLink} />
+        <IconButton icon={ChevronLeft} label="이전 스타일" as={Link} to={prevHref ?? '#'} replace disabled={!prevHref} onClick={guardLink} />
+        <IconButton icon={ChevronRight} label="다음 스타일" as={Link} to={nextHref ?? '#'} replace disabled={!nextHref} onClick={guardLink} />
         <span className="ai-ed-pos" data-testid="editor-pos">{hit.index + 1} / {motion.length}</span>
         <h1 className="ai-ed-crumb"><span>{item.group}</span><span aria-hidden="true"> › </span><b>{item.name}</b></h1>
         {item.video ? (
           <button type="button" className={`ai-btn ai-snd${store.sound ? ' is-on' : ''}`} aria-pressed={store.sound} onClick={() => setSound(!store.sound)}>
             {store.sound ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}
-            <span className="ai-snd-l">{store.sound ? '소리 끄기' : '소리 켜기'}</span>
+            {/* 이름은 늘 「소리 켜기」 — 켜짐/꺼짐은 aria-pressed 가 말한다(이름까지 바꾸면 「소리 끄기, 눌림」으로 읽힌다) */}
+            <span className="ai-snd-l">소리 켜기</span>
           </button>
         ) : null}
         {access.canEditOriginal ? (
@@ -130,7 +152,7 @@ export default function MotionEditorPage() {
             aria-checked={editing}
             className={`ai-switch${editing ? ' is-on' : ''}`}
             data-testid="original-switch"
-            onClick={() => setEditing((v) => !v)}
+            onClick={toggleEditing}
           >
             <span className="ai-switch-track" aria-hidden="true"><span className="ai-switch-thumb" /></span>
             원본 편집
@@ -175,7 +197,7 @@ export default function MotionEditorPage() {
 
         <div className="ai-ed-side">
           {editing ? (
-            <OriginalEditor key={item.id} id={item.id} prompt={prompt} reload={reload} />
+            <OriginalEditor key={item.id} id={item.id} prompt={prompt} reload={reload} onDirtyChange={setDraftDirty} />
           ) : (
             <>
               <div className="ai-tabs" role="tablist" aria-label="보기" onKeyDown={onTabKey}>

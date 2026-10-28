@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { validateTemplate } from '@mathchois/shared';
 import { api } from '../../../lib/api';
@@ -73,10 +73,15 @@ function RowsEditor({ title, head, rows, onChange }) {
  * 원본 편집(관리자) — 영문·국문 틀, 장면표·소리 큐. 저장 전 validateTemplate 로 막고, 서버 400 도 줄 번호와 함께 보인다.
  * 저장하면 reload() 로 목록을 다시 받아 미리보기가 바로 바뀐다. 되돌리기 = 지금 서버 값으로.
  */
-export default function OriginalEditor({ id, prompt, reload }) {
+export default function OriginalEditor({ id, prompt, reload, onDirtyChange }) {
   const [draft, setDraft] = useState(() => fromPrompt(prompt));
   const [errors, setErrors] = useState([]);
   const [status, setStatus] = useState(''); // '' | 'saving' | 'saved'
+
+  // 초안이 서버 값과 다른가 — 편집기가 닫기·이동·편집 끄기 앞에서 묻는 데 쓴다(저장 뒤 reload 로 prompt 가 따라오면 다시 false)
+  const dirty = JSON.stringify(draft) !== JSON.stringify(fromPrompt(prompt));
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const change = (patch) => { setDraft((d) => ({ ...d, ...patch })); setStatus(''); };
 
@@ -101,7 +106,7 @@ export default function OriginalEditor({ id, prompt, reload }) {
   };
 
   return (
-    <div className="ai-oe" data-testid="original-editor">
+    <div className="ai-oe" data-testid="original-editor" data-dirty={dirty || undefined}>
       <p className="ai-lead">원본 틀은 모든 학급이 함께 봐요. 저장하면 교사 모두의 편집기에 바로 반영돼요.</p>
       <dl className="ai-oe-syntax" aria-label="틀 문법">
         {SYNTAX.map(([k, v]) => (

@@ -16,7 +16,7 @@
   --ai-pen-solid: #2f62c9;
   --ai-warn: #f5c26b;
   --ai-ok: #6fd69a;
-  --ai-pad: 24px;
+  --ai-pad: 20px;
   color-scheme: dark;
   position: fixed; inset: 0; z-index: 40;
   display: flex; flex-direction: column;
@@ -129,7 +129,7 @@
 
 /* ── 프롬프트 탭 ── */
 .ai-lead { margin: 20px 0 12px; color: var(--ai-muted); font-size: 13.5px; line-height: 1.6; word-break: keep-all; }
-.ai-fill { container-type: inline-size; padding: 10px 18px 16px; border-radius: 12px; background: var(--ai-bg-2); border: 1px solid var(--ai-line); }
+.ai-fill { container-type: inline-size; padding: 10px 14px 16px; border-radius: 12px; background: var(--ai-bg-2); border: 1px solid var(--ai-line); }
 
 .ai-rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 14px; }
 .ai-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: start; padding: 5px 0; }
@@ -195,14 +195,16 @@
   grid-column: 1 / -1; margin: 10px 0 2px; padding-top: 12px; border-top: 1px solid var(--ai-line);
   color: var(--ai-faint); font-size: 12.5px; font-weight: 600; letter-spacing: .02em;
 }
-.ai-row.is-flags { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 12px; padding: 2px 0; }
-/* 칸마다 글 + (i) 44px 가 들어갈 폭(약 185px)이 안 되면 한 열로 */
-@container (max-width: 560px) { .ai-row.is-flags { grid-template-columns: minmax(0, 1fr); } }
+.ai-row.is-flags { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px 4px; padding: 2px 0; }
+/* 「체크 3열」 — 칸은 글 폭만큼, 남는 폭은 칸 사이로. 세 칸(글 + (i) 44px)이 다 드는 468px 부터(1280 화면에서 약 490px). 더 좁으면 한 열 */
+@container (min-width: 468px) { .ai-row.is-flags { grid-template-columns: repeat(3, max-content); justify-content: space-between; } }
 .ai-flagc { position: relative; display: flex; align-items: center; min-width: 0; }
 .ai-flag {
-  display: inline-flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px;
-  font-size: 13.5px; font-weight: 500; white-space: nowrap; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; min-height: 44px;
+  font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer;
 }
+/* (i) 는 누르는 영역 44px 그대로, 보이는 36px 바깥의 투명한 4px 만 옆 칸 쪽으로 겹친다 */
+.ai-flagc .ai-info { margin: 0 -4px; }
 .ai-flagc.is-off .ai-flag { color: var(--ai-faint); cursor: default; }
 .ai-flagc.is-off .ai-cb { cursor: default; }
 
@@ -217,7 +219,7 @@
 }
 .ai-tipw--end .ai-tip { right: 0; left: auto; }
 .ai-info:hover + .ai-tip, .ai-tipw.is-open .ai-tip { display: block; }
-@container (min-width: 561px) { .ai-flagc:last-child .ai-tip { right: 0; left: auto; } }
+@container (min-width: 468px) { .ai-flagc:last-child .ai-tip { right: 0; left: auto; } }
 .ai-tip-a { color: var(--ai-pen); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
 
 /* 세부 설정(옛 틀) */
