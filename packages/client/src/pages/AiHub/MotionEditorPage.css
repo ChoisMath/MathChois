@@ -82,6 +82,14 @@
 .ai-switch.is-on .ai-switch-track { background: var(--ai-pen-solid); }
 .ai-switch.is-on .ai-switch-thumb { transform: translateX(14px); }
 
+/* 웹에서 고친 오빠두 원본 띠(관리자) — 머리 바로 밑 */
+.ai-ed-edited {
+  flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  padding: 6px 16px; border-bottom: 1px solid var(--ai-line); background: var(--ai-bg-2);
+}
+.ai-ed-edited-note { margin: 0; color: var(--ai-warn); font-size: 13.5px; font-weight: 700; word-break: keep-all; }
+.ai-ed-edited-err { flex-basis: 100%; margin: 0; color: #ffd0d0; font-size: 13px; }
+
 /* ── 몸통: 왼쪽 영상·정보 / 오른쪽 탭 ── */
 .ai-ed-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(440px, 44vw, 660px); }
 .ai-ed-main { min-width: 0; min-height: 0; overflow-y: auto; padding: var(--ai-pad); overscroll-behavior: contain; scrollbar-width: thin; }
@@ -311,9 +319,6 @@
 .ai-table--edit th:last-child, .ai-table--edit .ai-oe-del { width: 48px; }
 .ai-table--edit .ai-in { padding: 8px; border-color: var(--ai-line); background: var(--ai-bg-2); font-size: 13.5px; }
 .ai-oe-add { margin-top: 8px; }
-.ai-oe-edited-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 20px; }
-.ai-oe-edited { margin: 0; color: var(--ai-muted); font-size: 13.5px; font-weight: 700; word-break: keep-all; }
-.ai-oe-edited-row + .ai-lead { margin-top: 12px; }
 .ai-oe-errors {
   margin-top: 20px; padding: 12px 14px; border: 1px solid #f19a9a; border-radius: 10px; background: rgb(241 154 154 / .08);
   color: #ffd0d0; font-size: 13.5px;

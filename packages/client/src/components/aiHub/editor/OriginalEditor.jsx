@@ -73,11 +73,10 @@ function RowsEditor({ title, head, rows, onChange }) {
  * 원본 편집(관리자) — 영문·국문 틀, 장면표·소리 큐. 저장 전 validateTemplate 로 막고, 서버 400 도 줄 번호와 함께 보인다.
  * 저장하면 reload() 로 목록을 다시 받아 미리보기가 바로 바뀐다. 되돌리기 = 지금 서버 값으로.
  */
-export default function OriginalEditor({ id, source, editedAt, prompt, reload, onDirtyChange }) {
+export default function OriginalEditor({ id, prompt, reload, onDirtyChange }) {
   const [draft, setDraft] = useState(() => fromPrompt(prompt));
   const [errors, setErrors] = useState([]);
   const [status, setStatus] = useState(''); // '' | 'saving' | 'saved'
-  const [unmarking, setUnmarking] = useState(false);
 
   // 초안이 서버 값과 다른가 — 편집기가 닫기·이동·편집 끄기 앞에서 묻는 데 쓴다(저장 뒤 reload 로 prompt 가 따라오면 다시 false)
   const dirty = JSON.stringify(draft) !== JSON.stringify(fromPrompt(prompt));
@@ -106,31 +105,8 @@ export default function OriginalEditor({ id, source, editedAt, prompt, reload, o
     }
   };
 
-  // 웹에서 고친 오빠두 원본 — 동기화에서 빠져 있다. 되돌리면 다음 동기화가 오빠두 원본으로 덮어쓴다.
-  const webEdited = source === 'oppadu' && !!editedAt;
-  const unmark = async () => {
-    setErrors([]);
-    setUnmarking(true);
-    try {
-      await api.delete(`/api/ai/motion/${id}/edited`);
-      reload();
-    } catch (err) {
-      setErrors(errorsOf(err));
-    } finally {
-      setUnmarking(false);
-    }
-  };
-
   return (
     <div className="ai-oe" data-testid="original-editor" data-dirty={dirty || undefined}>
-      {webEdited ? (
-        <div className="ai-oe-edited-row">
-          <p className="ai-oe-edited" role="note">웹에서 고친 원본 · 오빠두 동기화에서 제외됨</p>
-          <button type="button" className="ai-btn" data-testid="original-unmark" disabled={unmarking} onClick={unmark}>
-            다음 동기화에서 오빠두 원본 받기
-          </button>
-        </div>
-      ) : null}
       <p className="ai-lead">원본 틀은 모든 학급이 함께 봐요. 저장하면 교사 모두의 편집기에 바로 반영돼요.</p>
       <dl className="ai-oe-syntax" aria-label="틀 문법">
         {SYNTAX.map(([k, v]) => (

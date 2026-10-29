@@ -6,6 +6,7 @@ import IconButton from '../../components/common/IconButton';
 import PromptPane from '../../components/aiHub/editor/PromptPane';
 import RowsTable from '../../components/aiHub/editor/RowsTable';
 import OriginalEditor from '../../components/aiHub/editor/OriginalEditor';
+import EditedNote from '../../components/aiHub/editor/EditedNote';
 import { useAiHubData } from '../../hooks/useAiHubData';
 import { neighbors } from '../../lib/aiHub/motionNav';
 import { loadStore, saveStore } from '../../lib/aiHub/editorStore';
@@ -24,7 +25,8 @@ const typing = (t) => t instanceof HTMLInputElement || t instanceof HTMLTextArea
 
 /**
  * 모션 프롬프트 편집기 `/ai/motion/:id/edit` — 오빠두 상세 창(#msl-d) 구성. 전체 화면(어두운 바탕), 허브 레이아웃 밖.
- * 머리(닫기·이전/다음·n / N·분류 › 이름·소리·원본 편집) / 왼쪽 영상·정보 / 오른쪽 탭(프롬프트·장면표·소리 큐) 또는 원본 편집.
+ * 머리(닫기·이전/다음·n / N·분류 › 이름·소리·원본 편집, 관리자에게는 그 밑에 웹에서 고친 원본 띠) / 왼쪽 영상·정보 /
+ * 오른쪽 탭(프롬프트·장면표·소리 큐) 또는 원본 편집.
  * 교사·관리자만 — 학생은 상세로 돌려보낸다(열람 API 는 학생도 되므로 이 검사가 없으면 편집기가 그대로 열린다).
  */
 export default function MotionEditorPage() {
@@ -159,6 +161,8 @@ export default function MotionEditorPage() {
           </button>
         ) : null}
       </header>
+      {/* 웹에서 고친 오빠두 원본 — 원본 편집을 켜지 않아도 머리 밑에 보인다(관리자) */}
+      {access.canEditOriginal && item.source === 'oppadu' && prompt?.editedAt ? <EditedNote id={item.id} reload={reload} /> : null}
 
       <div className="ai-ed-body">
         <div className="ai-ed-main">
@@ -197,7 +201,7 @@ export default function MotionEditorPage() {
 
         <div className="ai-ed-side">
           {editing ? (
-            <OriginalEditor key={item.id} id={item.id} source={item.source} editedAt={prompt?.editedAt ?? null} prompt={prompt} reload={reload} onDirtyChange={setDraftDirty} />
+            <OriginalEditor key={item.id} id={item.id} prompt={prompt} reload={reload} onDirtyChange={setDraftDirty} />
           ) : (
             <>
               <div className="ai-tabs" role="tablist" aria-label="보기" onKeyDown={onTabKey}>
