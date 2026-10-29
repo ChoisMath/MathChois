@@ -7,7 +7,8 @@ import { isV2, type Row } from './promptEngine.js';
 
 export type Manifest = Record<string, { size: number; sha256: string; updatedAt: string }>;
 
-export type MotionPrompt = { en: string; ko: string; shots: Row[]; cues: Row[] };
+/** `editedAt` — 관리자가 웹 편집기에서 저장한 시각(오빠두 동기화가 건드리지 않는 표시). 한 번도 안 고쳤으면 null. */
+export type MotionPrompt = { en: string; ko: string; shots: Row[]; cues: Row[]; editedAt: string | null };
 export type MotionItem = MotionPublic & {
   video: string;
   poster: string;
@@ -41,7 +42,7 @@ export function renderMotionItems(
       video,
       poster,
       preview: url(`motion/${m.id}/preview.mp4`),
-      prompt: p ? { en: p.en, ko: p.ko, shots: p.shots, cues: p.cues, v2: isV2(p.en) || isV2(p.ko) } : null,
+      prompt: p ? { en: p.en, ko: p.ko, shots: p.shots, cues: p.cues, editedAt: p.editedAt, v2: isV2(p.en) || isV2(p.ko) } : null,
     });
   }
   return out;

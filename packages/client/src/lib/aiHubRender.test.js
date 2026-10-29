@@ -11,8 +11,16 @@ it('motion: only items with video+poster, preview optional, prompt null when mis
 });
 it('motion: prompt row attached with v2 flag', () => {
   const m = { 'motion/01-pixel/video.mp4': e('a'), 'motion/01-pixel/poster.webp': e('b') };
-  const p = new Map([['01-pixel', { en: '{{#a}}x', ko: 'y', shots: [], cues: [] }]]);
-  expect(renderMotionItems(MOTION_CATALOG, m, p)[0].prompt).toEqual({ en: '{{#a}}x', ko: 'y', shots: [], cues: [], v2: true });
+  const p = new Map([['01-pixel', { en: '{{#a}}x', ko: 'y', shots: [], cues: [], editedAt: null }]]);
+  expect(renderMotionItems(MOTION_CATALOG, m, p)[0].prompt).toEqual({ en: '{{#a}}x', ko: 'y', shots: [], cues: [], editedAt: null, v2: true });
+});
+it('motion: editedAt rides along on the prompt (null when never edited)', () => {
+  const m = { 'motion/01-pixel/video.mp4': e('a'), 'motion/01-pixel/poster.webp': e('b') };
+  const base = { en: 'x', ko: 'y', shots: [], cues: [] };
+  const edited = renderMotionItems(MOTION_CATALOG, m, new Map([['01-pixel', { ...base, editedAt: '2026-10-29T00:00:00.000Z' }]]));
+  expect(edited[0].prompt.editedAt).toBe('2026-10-29T00:00:00.000Z');
+  const clean = renderMotionItems(MOTION_CATALOG, m, new Map([['01-pixel', { ...base, editedAt: null }]]));
+  expect(clean[0].prompt.editedAt).toBeNull();
 });
 it('slide: all k images + thumbs + cover/body cards required', () => {
   const s = SLIDE_CATALOG[0]; // id 24, slides 8, cover 1, body 3

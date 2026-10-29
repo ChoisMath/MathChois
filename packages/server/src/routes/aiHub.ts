@@ -1,14 +1,15 @@
 import { Readable } from 'node:stream';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { MOTION_CATALOG, validateTemplate, isV2, tokenMatches } from '@mathchois/shared';
+import { MOTION_CATALOG, SLIDE_CATALOG, validateTemplate, isV2, tokenMatches, remakeIdsIn } from '@mathchois/shared';
 import { env } from '../config/env.js';
 import { authenticate } from '../middleware/auth.js';
 import { requireAdmin } from '../middleware/roleGuard.js';
 import { requireAiHub } from '../middleware/aiHub.js';
 import { abilitiesFor } from '../services/aiHubAccess.service.js';
 import {
-  importMotionPrompts, importSlidePrompts, listMotion, listSlide, readManifest, upsertMotionPrompt,
+  clearMotionEdited, importMotionPrompts, importSlidePrompts, listMotion, listSlide, readManifest,
+  syncMotionPrompts, syncSlidePrompts, upsertMotionPrompt,
 } from '../services/aiHub.service.js';
 import { MAX_UPLOAD_BYTES, resolveAiHubPath, saveUpload } from '../services/aiHubUpload.service.js';
 import { serveBrandFile } from '../services/brandSite.service.js';
@@ -95,7 +96,20 @@ export async function aiHubRoutes(app: FastifyInstance) {
     const errors = validateTemplate(en).concat(validateTemplate(ko));
     if (errors.length) return reply.status(400).send({ error: 'invalid template', errors });
     const saved = await upsertMotionPrompt(id, { en, ko, shots, cues });
-    return { id, en, ko, shots, cues, v2: isV2(en) || isV2(ko), updatedAt: saved.updatedAt };
+    return {
+      id, en, ko, shots, cues, v2: isV2(en) || isV2(ko), updatedAt: saved.updatedAt,
+      editedAt: saved.editedAt ? saved.editedAt.toISOString() : null,
+    };
+  });
+
+  // ─── DELETE /api/ai/motion/:id/edited — 웹 편집 표시 지우기 (관리자) ───
+  // 프롬프트 내용은 그대로 두고 표시만 지운다. 다음 오빠두 동기화(?mode=sync)가 이 행을 원본으로 되돌린다.
+  app.delete<{ Params: { id: string } }>('/api/ai/motion/:id/edited', {
+    preHandler: [authenticate, requireAdmin],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    if (!(await clearMotionEdited(id))) return reply.status(404).send({ error: 'Unknown motion id' });
+    return { id, editedAt: null };
   });
 
   // ─── PUT /api/ai/media?path=<rel> — 미디어·manifest 업로드 (토큰) ───
@@ -129,15 +143,32 @@ export async function aiHubRoutes(app: FastifyInstance) {
   // ─── PUT /api/ai/prompts/:set[?overwrite=1] — 프롬프트 일괄 가져오기 (토큰) ───
   // 기본은 없는 id 만 넣는다 — ai:push 를 다시 돌려도 관리자가 웹 편집기에서 고친 원본 템플릿을 덮어쓰지 않는다.
   // ?overwrite=1 (ai:push --overwrite-prompts) 일 때만 이미 있는 행도 파일 내용으로 바꾼다.
-  app.put<{ Params: { set: string }; Querystring: { overwrite?: unknown } }>('/api/ai/prompts/:set', {
+  // ?mode=sync (ai:oppadu) 는 오빠두 원본을 행 단위로 맞춘다 — 웹에서 고친 행(edited_at)과 변형본 id 는 건드리지 않는다.
+  app.put<{ Params: { set: string }; Querystring: { overwrite?: unknown; mode?: unknown } }>('/api/ai/prompts/:set', {
     onRequest: [requireUploadToken],
     bodyLimit: 20 * 1024 * 1024,
   }, async (request, reply) => {
     const { set } = request.params;
     const overwrite = request.query.overwrite === '1';
+    const sync = request.query.mode === 'sync';
+    if (sync && request.query.overwrite !== undefined) {
+      return reply.status(400).send({ error: 'mode=sync and overwrite cannot be combined' });
+    }
     if (set === 'motion') {
       const parsed = motionImport.safeParse(request.body);
       if (!parsed.success) return reply.status(400).send({ error: 'invalid body', issues: parsed.error.issues.slice(0, 20) });
+      if (sync) {
+        const ids = remakeIdsIn(MOTION_CATALOG, parsed.data.map((m) => m.id));
+        if (ids.length) return reply.status(400).send({ error: 'remake ids in sync', ids });
+        for (const m of parsed.data) {
+          const errors = validateTemplate(m.prompt).concat(validateTemplate(m.ko));
+          if (errors.length) return reply.status(400).send({ error: 'invalid template', id: m.id, errors });
+        }
+        const result = await syncMotionPrompts(
+          parsed.data.map((m) => ({ id: m.id, en: m.prompt, ko: m.ko, shots: m.shots, cues: m.cues })),
+        );
+        return { ok: true, mode: 'sync', count: parsed.data.length, ...result };
+      }
       const result = await importMotionPrompts(
         parsed.data.map((m) => ({ id: m.id, en: m.prompt, ko: m.ko, shots: m.shots, cues: m.cues })),
         { overwrite },
@@ -147,6 +178,12 @@ export async function aiHubRoutes(app: FastifyInstance) {
     if (set === 'slide') {
       const parsed = slideImport.safeParse(request.body);
       if (!parsed.success) return reply.status(400).send({ error: 'invalid body', issues: parsed.error.issues.slice(0, 20) });
+      if (sync) {
+        const ids = remakeIdsIn(SLIDE_CATALOG, parsed.data.map((s) => s.id));
+        if (ids.length) return reply.status(400).send({ error: 'remake ids in sync', ids });
+        const result = await syncSlidePrompts(parsed.data);
+        return { ok: true, mode: 'sync', count: parsed.data.length, ...result };
+      }
       const result = await importSlidePrompts(parsed.data, { overwrite });
       return { ok: true, count: parsed.data.length, overwrite, ...result };
     }
