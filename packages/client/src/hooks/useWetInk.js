@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 import { viewportCoordsToSceneCoords } from '@excalidraw/excalidraw';
 import { buildStrokePath, makeFreedrawElement } from '../lib/wetInkStroke';
+import {
+  recognizeShape, snapLineEnd, linePoints, HOLD_MS, HOLD_RADIUS_PX, CANCEL_MOVE_PX, MIN_LINE_PX,
+} from '../lib/shapeRecognizer';
 
 /**
  * wet-ink 오버레이 (5개 필기 뷰어 공용, 기본 ON · ?wetink=0 비상 차단).
@@ -16,14 +19,29 @@ import { buildStrokePath, makeFreedrawElement } from '../lib/wetInkStroke';
  * 가로채는 조건: 그리기 모드 ON + 논리 도구가 펜(자유필기) + pointerType==='pen' + 주버튼 + .excalidraw 내부.
  * (삼각형 모드도 Excalidraw activeTool 은 freedraw 이므로 penActiveRef 로 논리 도구를 구분한다.
  *  마우스/손가락/배럴버튼/지우개·도형은 가로채지 않아 기존 동작 유지.)
+ *
+ * 펜 멈춤 → 도형 보정(docs/superpowers/specs/2026-10-29-pen-shape-snap-design.md): 획 끝에서 HOLD_MS 동안
+ * HOLD_RADIUS_PX 안에 머물면 lib/shapeRecognizer 로 선분/원·타원/삼각형/사각형을 판정해 미리보기·commit 점을
+ * 바꾼다(저장은 여전히 freedraw). 선분은 이후 펜을 끌면 끝점이 따라오고, 닫힌 도형은 CANCEL_MOVE_PX 넘게
+ * 움직이면 취소된다. 판정은 성공할 때까지 멈출 때마다 시도하고, 성공한 뒤에는 그 획에서 다시 하지 않는다.
+ * 비상 끄기 ?shapesnap=0 (localStorage mc_shape_snap_off).
+ *
+ * @param {object} opts
+ * @param {import('@excalidraw/excalidraw').CaptureUpdateAction[keyof import('@excalidraw/excalidraw').CaptureUpdateAction]} [opts.captureUpdate]
+ *   commit 의 updateScene captureUpdate (화이트보드처럼 Excalidraw 내장 undo 를 쓰는 곳은 IMMEDIATELY; 생략 시 기본값)
  */
-export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActiveRef }) {
+export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActiveRef, captureUpdate }) {
   useEffect(() => {
     // 기본 ON. 비상 차단 스위치: ?wetink=0 으로 끄고(localStorage 유지) ?wetink=1 로 되켠다.
-    const wp = new URLSearchParams(window.location.search).get('wetink');
+    const params = new URLSearchParams(window.location.search);
+    const wp = params.get('wetink');
     if (wp === '0') localStorage.setItem('mc_wetink_off', '1');
     else if (wp === '1') localStorage.removeItem('mc_wetink_off');
     if (localStorage.getItem('mc_wetink_off') === '1') return undefined;
+    const sp = params.get('shapesnap');
+    if (sp === '0') localStorage.setItem('mc_shape_snap_off', '1');
+    else if (sp === '1') localStorage.removeItem('mc_shape_snap_off');
+    const shapeSnapEnabled = localStorage.getItem('mc_shape_snap_off') !== '1';
 
     let drawing = false;
     let pointerId = null;
@@ -32,6 +50,46 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
     let rect = null;       // 오버레이/컨테이너 bounding rect (down 시점)
     let dpr = 1;
     let rafId = 0;
+
+    /* ── 도형 보정 상태 (획마다 초기화) ── */
+    let snapped = null;    // { kind, points } — 판정 성공 시 미리보기·commit 에 쓰는 점(화면 px)
+    let snapAnchor = null; // 닫힌 도형 확정 위치 (여기서 CANCEL_MOVE_PX 넘게 움직이면 취소)
+    let holdAnchor = null; // 멈춤 판정 기준점
+    let holdTimer = 0;
+    let travel = 0;        // 획 누적 길이(화면 px)
+
+    const clearHold = () => { if (holdTimer) { clearTimeout(holdTimer); holdTimer = 0; } };
+
+    const onHold = () => {
+      holdTimer = 0;
+      if (!drawing || snapped || !shapeSnapEnabled) return;
+      if (travel < MIN_LINE_PX / 2) return; // 펜을 대고 생각만 하는 동안은 판정할 것이 없다
+      const result = recognizeShape(pts);
+      if (!result) return;
+      snapped = result;
+      snapAnchor = pts[pts.length - 1];
+      scheduleRender();
+    };
+
+    const armHold = (p) => {
+      holdAnchor = p;
+      clearHold();
+      if (shapeSnapEnabled) holdTimer = setTimeout(onHold, HOLD_MS);
+    };
+
+    /** 새 점이 들어올 때의 보정 상태 갱신 */
+    const trackPoint = (p, prev) => {
+      travel += Math.hypot(p[0] - prev[0], p[1] - prev[1]);
+      if (snapped) {
+        if (snapped.kind === 'line') {
+          snapped = { kind: 'line', points: linePoints(snapped.points[0], snapLineEnd(snapped.points[0], p)) };
+        } else if (Math.hypot(p[0] - snapAnchor[0], p[1] - snapAnchor[1]) > CANCEL_MOVE_PX) {
+          snapped = null; // 글자를 쓰다 멈춘 경우 — 손글씨로 복귀
+        }
+        return;
+      }
+      if (!holdAnchor || Math.hypot(p[0] - holdAnchor[0], p[1] - holdAnchor[1]) > HOLD_RADIUS_PX) armHold(p);
+    };
 
     const ctx = () => overlayRef.current?.getContext('2d');
 
@@ -60,8 +118,9 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       const zoom = app?.zoom?.value || 1;
       const size = (app?.currentItemStrokeWidth || 1) * zoom * 10; // 화면 px (vite excalidrawPenTweak 의 size 배수와 동일)
       const color = app?.currentItemStrokeColor || '#000000';
-      const screenPts = pts.map((p) => [p[0] - rect.left, p[1] - rect.top]);
-      const path = buildStrokePath(screenPts, pressures, { size, simulatePressure: true, last: true });
+      const src = snapped ? snapped.points : pts;
+      const screenPts = src.map((p) => [p[0] - rect.left, p[1] - rect.top]);
+      const path = buildStrokePath(screenPts, snapped ? src.map(() => 0.5) : pressures, { size, simulatePressure: true, last: true });
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
       c.clearRect(0, 0, rect.width, rect.height);
       if (path) { c.fillStyle = color; c.fill(path); }
@@ -82,6 +141,8 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       pointerId = e.pointerId;
       pts = [[e.clientX, e.clientY]];
       pressures = [e.pressure || 0.5];
+      snapped = null; snapAnchor = null; holdAnchor = null; travel = 0;
+      armHold(pts[0]);
       scheduleRender();
     };
 
@@ -91,27 +152,35 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       e.preventDefault();
       const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
       for (const ev of evs.length ? evs : [e]) {
-        pts.push([ev.clientX, ev.clientY]);
+        const p = [ev.clientX, ev.clientY];
+        trackPoint(p, pts[pts.length - 1]);
+        pts.push(p);
         pressures.push(ev.pressure || 0.5);
       }
       scheduleRender();
     };
 
     const commit = () => {
+      clearHold();
       const api = excalidrawAPIRef.current;
-      if (api && pts.length >= 2) {
+      const src = snapped ? snapped.points : pts;
+      if (api && src.length >= 2) {
         const app = api.getAppState();
         const simulatePressure = true; // S-Pen 실제 필압 미사용(균일 젤펜 thinning 0 — pressures 미저장)
-        const scenePoints = pts.map(([cx, cy]) => viewportCoordsToSceneCoords({ clientX: cx, clientY: cy }, app));
-        const el = makeFreedrawElement(scenePoints, pressures, {
+        const scenePoints = src.map(([cx, cy]) => viewportCoordsToSceneCoords({ clientX: cx, clientY: cy }, app));
+        const el = makeFreedrawElement(scenePoints, snapped ? src.map(() => 0.5) : pressures, {
           strokeColor: app?.currentItemStrokeColor || '#000000',
           strokeWidth: app?.currentItemStrokeWidth || 1,
           simulatePressure,
         });
-        api.updateScene({ elements: [...api.getSceneElements(), el], commitToHistory: false });
+        api.updateScene({
+          elements: [...api.getSceneElements(), el],
+          ...(captureUpdate ? { captureUpdate } : { commitToHistory: false }),
+        });
       }
       if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
       drawing = false; pointerId = null; pts = []; pressures = [];
+      snapped = null; snapAnchor = null; holdAnchor = null; travel = 0;
       // commit 직후 Excalidraw 가 같은 프레임에 요소를 그리므로 다음 프레임에 오버레이 클리어(겹침/깜빡임 방지)
       requestAnimationFrame(clear);
     };
@@ -127,11 +196,12 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
     window.addEventListener('pointerup', onUp, { capture: true, passive: false });
     window.addEventListener('pointercancel', onUp, { capture: true, passive: false });
     return () => {
+      clearHold();
       if (rafId) cancelAnimationFrame(rafId);
       window.removeEventListener('pointerdown', onDown, { capture: true });
       window.removeEventListener('pointermove', onMove, { capture: true });
       window.removeEventListener('pointerup', onUp, { capture: true });
       window.removeEventListener('pointercancel', onUp, { capture: true });
     };
-  }, [excalidrawAPIRef, overlayRef, drawModeRef, penActiveRef]);
+  }, [excalidrawAPIRef, overlayRef, drawModeRef, penActiveRef, captureUpdate]);
 }
