@@ -81,7 +81,7 @@ shared 에 두고 테스트하며, 북마클릿 빌드가 그 함수를 함께 �
 - `window.OPD_MOTION_L`(설정)을 읽는다. `member` 가 거짓이거나 `rest`·`nonce` 가 없으면 "로그인·멤버십 확인" 알림 후 끝.
 - 오빠두 화면(`light.js`)과 같은 방식으로 회원 전문을 받는다:
   `fetch(rest, { credentials: 'same-origin', headers: { 'X-WP-Nonce': nonce } })` → `{ items: { <id>: { prompt, ko, v2: { en, ko }, shots, cues } } }`.
-- 묶음 `{ kind: 'oppadu-motion', fetchedAt, page: location.href, config: { a, mv, add, groups }, gallery: { items, v2opts }, full }` 을
+- 묶음 `{ kind: 'oppadu-motion', fetchedAt, page: location.href, config: { a, mv, data, member, add, groups }, gallery: { items, v2opts }, full }` 을
   저장한다. `window.GALLERY.items` 는 화면 스크립트가 `add` 를 이미 이어 붙였을 수 있으므로 id 로 중복을 없앤다.
 - 점검: 모든 편(`gallery.items` ∪ `add`)에 `full.items[id].v2.en/ko`·`shots`·`cues` 가 있어야 한다. 빠지면
   "N편의 전문이 없습니다 — 로그인·멤버십 확인" 알림, 저장하지 않음.
@@ -125,9 +125,15 @@ shared 에 두고 테스트하며, 북마클릿 빌드가 그 함수를 함께 �
 `brand/<slug>.html`(상세 틀 페이지를 slug 마다), `assets/…`, `data/…`. 그 다음 `brand-import` 의 바꿔 넣기 로직을
 `BRAND_SRC` 만 바꿔 그대로 부른다. 빌더 규칙(구현 때 확정·테스트):
 - 페이지 설정 `OPD_DSG` 의 `base` 를 사본 기준 상대 경로로, `member: true`(회원 잠금은 화면만이고 자료는 공개 JSON — 2026-10-13 메모).
-- 광고·분석·채팅·알림 등 사본에 불필요한 외부 스크립트를 뺀다. 남는 스크립트·스타일은 `BRAND_FILE` 허용 목록 안이어야 한다.
+- 목록 페이지의 `<body>` 는 허브 틀 `div.aih` 하나만 남긴다(오빠두 사이트 머리글 `pcf-*`·푸터·모바일 메뉴 제외).
+- **남기는 자산(keep list)** — 그 밖의 `<script>`·스타일시트·광고·분석·채팅·알림은 뺀다:
+  스크립트 `shell.js`·`ai-hub-static.js`·`app.js`·`pcf-resources.js`, 스타일 `shell.css`·`tokens.css`·`app.css`·`ai-hub.css`·
+  `pcf-resources.css`·`pcf-ui.css`, 글꼴 `PretendardVariable.woff2`, 인라인 `#oppadu-dsg-js-before`·`#oppadu-pcf-resources-js-before`·
+  `script[data-otl-help-data]`. 2026-10-29 오빠두 목록 화면의 색 탭(`pcfrs-dsg-bar`)·찾기 칸(`pcf-listq`)은 `pcf-resources.js/.css`·
+  `pcf-ui.css` 가 그리므로 1단계 사본(2026-10-13)보다 셋이 늘었다 → `paths.ts` 의 `BRAND_FILE` 과 `brand-import` 의 자산 목록을
+  shared 상수 `BRAND_ASSETS` 하나로 맞춰 넓힌다.
 - **구조 검증**: 결과 파일 목록이 `BRAND_FILE` 를 모두 통과하고, 지금 사본(`.media-out/ai-hub/brand/`, `ai:pull` 결과)과
-  같은 종류의 파일을 갖추는지(목록·상세·assets 9개·data) 확인한다. 어긋나면 멈춘다.
+  같은 종류의 파일을 갖추는지(목록·상세·`BRAND_ASSETS`·data) 확인한다. 어긋나면 멈춘다. 마지막으로 Playwright 로 사본을 열어 카드 293장·색 탭 거르기·찾기·상세 열기가 동작하는지 본다.
 
 ## ② 병합 규칙 — `packages/shared/src/ai-hub/oppaduSync.ts` (순수 함수)
 
