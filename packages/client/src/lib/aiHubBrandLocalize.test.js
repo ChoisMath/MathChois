@@ -92,6 +92,36 @@ describe('localizeBrandHtml index', () => {
       for (const s of ['alt="k1"', 'alt="k2"', 'class="k4"', 'class="k5"', "src='y'", 'data-view="index"']) expect(out).toContain(s);
     }
   });
+  it('sanitizes the <html> open tag like the body tag', () => {
+    const evil = index.replace('<html lang="ko-KR" class="dsg-wp">', '<html lang="ko-KR" class="dsg-wp" onload="alert(1)"/onclick=alert(2) xlink:href="javascript:alert(4)">');
+    const out = localizeBrandHtml(evil, 'index');
+    expect(out.toLowerCase()).not.toMatch(/onload|onclick|alert\(|javascript:/);
+    expect(out).toContain('<html lang="ko-KR" class="dsg-wp"');
+  });
+  it('finds <html>/<head>/<body> open tags past a quoted ">" so a later handler cannot leak', () => {
+    const evil = index
+      .replace('<html lang="ko-KR" class="dsg-wp">', '<html data-h=">" onload="alert(1)" lang="ko-KR">')
+      .replace(/<head>/, '<head data-x=">" onclick="alert(2)">')
+      .replace(/<body [^>]*>/, '<body data-x=">" onload="alert(3)" data-view="index">');
+    const out = localizeBrandHtml(evil, 'index');
+    expect(out.toLowerCase()).not.toMatch(/onload|onclick|alert\(/);
+    expect(out).toContain('<body data-x=">" data-view="index">');
+    expect(out).toContain('<html data-h=">" lang="ko-KR">');
+    const det = detail.replace('<body ', '<body data-x=">" onload="alert(4)" ');
+    expect(localizeBrandHtml(det, 'detail').toLowerCase()).not.toMatch(/onload|alert\(/);
+  });
+  it('removes svg animate/set and base/meta elements from kept markup', () => {
+    const svg = `<svg class="keep-svg"><a href="#ok"><animate attributeName="href" values="javascript:alert(1)"/><set attributeName="href" to="javascript:alert(2)"></set>`
+      + `<ANIMATE attributeName="xlink:href" to="javascript:alert(3)"></ANIMATE><text>t</text></a></svg>`
+      + `<base href="https://x.example/"><meta http-equiv="refresh" content="0;url=https://x.example/r"><p class="keep-p" data-set="1">p</p>`;
+    const out = localizeBrandHtml(index.replace('<main class="otl-body">', `<main class="otl-body">${svg}`), 'index');
+    expect(out.toLowerCase()).not.toMatch(/<\/?animate|<\/?set\b|<base\b|http-equiv|x\.example|javascript:|alert\(/);
+    for (const s of ['<svg class="keep-svg">', '<a href="#ok">', '<text>t</text>', '<p class="keep-p" data-set="1">p</p>']) expect(out).toContain(s);
+    // <head> 의 charset·viewport meta 는 그대로 둔다.
+    expect(out).toMatch(/<meta charset/i);
+    const det = detail.replace('<h2>Sources</h2>', '<h2>Sources</h2><svg><set attributeName="href" to="javascript:alert(5)"/></svg><meta http-equiv="refresh" content="0">');
+    expect(localizeBrandHtml(det, 'detail').toLowerCase()).not.toMatch(/<set\b|http-equiv|javascript:/);
+  });
   it('leaves attribute values that merely contain on…= or href= byte-identical', () => {
     const values = `<div title="turn once=1 online=2 on=3" data-x='{"a":"b onfoo=1"}' data-y="see href=javascript:x" class="kv">v</div>`;
     const out = localizeBrandHtml(index.replace('<main class="otl-body">', `<main class="otl-body">${values}`), 'index');

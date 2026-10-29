@@ -191,6 +191,8 @@ const TAG_RE = /<[a-zA-Z][^\s/>]*(?:"[^"]*"|'[^']*'|[^'">])*>/g;
 /** 내용째 지우는 요소(짝 태그)와 여는 태그만 있는 요소. 스크립트 밖에서 코드를 실행하거나 다른 문서를 끼워 넣는 길이다. */
 const EMBED_PAIRED = ['iframe', 'object', 'noscript', 'frameset'];
 const EMBED_ANY = /<\/?(?:iframe|object|embed|noscript|frame|frameset)\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi;
+/** SVG `animate`·`set` 은 다른 요소의 href 를 `javascript:` 로 바꿀 수 있고, `base`·`meta`(refresh)는 주소 해석·이동을 바꾼다 — 여는·닫는 태그를 지운다. */
+const DROP_TAGS = /<\/?(?:animate|set|base|meta)\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi;
 const URL_ATTRS = new Set(['href', 'src', 'action', 'formaction', 'xlink:href']);
 /** 속성 하나(앞 구분자 포함) — HTML 토크나이저처럼 공백뿐 아니라 `/`·닫는 따옴표 뒤에서도 다음 속성이 시작된다. */
 const ATTR_TOKEN = /[\s/]*([^\s"'>/=]+)(?:(\s*=\s*)("[^"]*"|'[^']*'|[^\s"'>]*))?/y;
@@ -245,12 +247,13 @@ function isScriptUrl(raw: string): boolean {
 
 /**
  * 남긴 본문(스크립트를 이미 뺀 것)에서 스크립트 태그 말고도 코드를 돌릴 수 있는 길을 막는다:
- * 이벤트 속성(`on…=`)을 지우고, iframe·object·embed·noscript·frame·frameset 을 내용째 지우고, `javascript:` 주소는 `#` 으로.
+ * 이벤트 속성(`on…=`)을 지우고, iframe·object·embed·noscript·frame·frameset 을 내용째 지우고, animate·set·base·meta 태그를 지우고,
+ * `javascript:` 주소는 `#` 으로.
  */
 function sanitizeMarkup(html: string): string {
   let out = html;
   for (const tag of EMBED_PAIRED) out = removeElements(out, tag, () => true);
-  out = out.replace(EMBED_ANY, '');
+  out = out.replace(EMBED_ANY, '').replace(DROP_TAGS, '');
   return out.replace(TAG_RE, (tag) =>
     mapAttrs(tag, (name, value) => {
       if (name.startsWith('on')) return null;
@@ -276,6 +279,11 @@ function rewriteSiteLinks(html: string, page: Page, prefix: string): string {
     }));
 }
 
+/** 첫 `<tag …>` 여는 태그 — 따옴표 안의 `>` 에서 끊지 않는다(`data-x=">" onload=…` 의 뒤쪽 속성이 본문 글자로 새지 않게). */
+function openTag(html: string, tag: string): RegExpExecArray | null {
+  return new RegExp(`<${tag}\\b(?:"[^"]*"|'[^']*'|[^'">])*>`, 'i').exec(html);
+}
+
 /**
  * 오빠두 페이지 → 사본 페이지. `index` 는 목록(사본 루트의 index.html), `detail` 은 브랜드 상세 틀(`brand/<slug>.html`).
  * - `<head>`: charset·viewport·title 과 keep list 의 스타일시트·글꼴·인라인 블록만.
@@ -289,9 +297,9 @@ export function localizeBrandHtml(html: string, page: Page): string {
   const { text, scripts } = maskScripts(html);
   const doc = text.replace(COMMENT_RE, '');
 
-  const headOpen = /<head\b[^>]*>/i.exec(doc);
+  const headOpen = openTag(doc, 'head');
   const headEnd = doc.search(/<\/head\s*>/i);
-  const bodyOpen = /<body\b[^>]*>/i.exec(doc);
+  const bodyOpen = openTag(doc, 'body');
   const bodyEnd = doc.search(/<\/body\s*>/i);
   if (!headOpen || headEnd < 0 || !bodyOpen || bodyEnd < 0) throw new Error(`brand ${page} page: <head>/<body> not found`);
   const head = doc.slice(headOpen.index + headOpen[0].length, headEnd);
@@ -339,7 +347,7 @@ export function localizeBrandHtml(html: string, page: Page): string {
   main = sanitizeMarkup(main);
   main = rewriteSiteLinks(main, page, prefix);
 
-  const htmlOpen = /<html\b[^>]*>/i.exec(doc)?.[0] ?? '<html lang="ko">';
+  const htmlOpen = sanitizeMarkup(openTag(doc, 'html')?.[0] ?? '<html lang="ko">');
   return [
     '<!doctype html>',
     htmlOpen,
