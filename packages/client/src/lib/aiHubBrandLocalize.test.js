@@ -69,6 +69,27 @@ describe('localizeBrandHtml index', () => {
     expect(out).toContain('data-view="index"');
     expect(out.match(/<\/body>/g)).toHaveLength(1);
   });
+  it('drops event handlers, embedded frames and javascript: urls from kept markup', () => {
+    const evil = index
+      .replace(/<body /, '<body onload="x()" ')
+      .replace('<main class="otl-body">', `<main class="otl-body"><img src="x" alt="keep-img" onerror="alert(1)"><iframe src="https://x.example/ad"><p>in-frame</p></iframe>`
+        + `<a href="javascript:alert(1)" class="keep-a">a</a><a href=' JaVaScRiPt:alert(2)' class="keep-b">b</a><a href="&#106;avascript:alert(3)" class="keep-c">c</a><a href="&#99999999;x" class="keep-e">e</a>`
+        + `<div class="keep-div" title="a>b" ONCLICK='alert(4)' onmouseover=alert(5)>d</div><object data="x.swf"><embed src="x.swf"></object><embed src="y.swf">`
+        + `<noscript><img src="https://x.example/pixel.gif"></noscript><frameset><frame src="https://x.example/f"></frameset>`);
+    const out = localizeBrandHtml(evil, 'index');
+    for (const s of ['onload', 'onerror', 'onclick', 'onmouseover', 'alert(', '<iframe', 'in-frame', 'x.example', '<object', '<embed', 'x.swf', 'y.swf', '<noscript', '<frame', 'javascript:']) expect(out.toLowerCase()).not.toContain(s.toLowerCase());
+    for (const s of ['alt="keep-img"', 'class="keep-a"', 'class="keep-b"', 'class="keep-c"', 'href="&#99999999;x" class="keep-e"', 'class="keep-div"', 'title="a>b"', '>d</div>', 'data-view="index"', 'id="grid"']) expect(out).toContain(s);
+    // 스크립트 내용(설정 블록)은 건드리지 않는다.
+    expect(out).toContain('"base":"./"');
+  });
+  it('keeps help data only as JSON', () => {
+    const asJs = index.replace('<script type="application/json" data-otl-help-data>', '<script data-otl-help-data>alert(1);');
+    expect(localizeBrandHtml(asJs, 'index')).not.toContain('data-otl-help-data');
+    const asModule = index.replace('<script type="application/json" data-otl-help-data>', '<script type="module" data-otl-help-data>');
+    expect(localizeBrandHtml(asModule, 'index')).not.toContain('data-otl-help-data');
+    const upper = index.replace('<script type="application/json" data-otl-help-data>', '<script type="Application/JSON" data-otl-help-data>');
+    expect(localizeBrandHtml(upper, 'index')).toContain('data-otl-help-data');
+  });
   it('drops scripts it does not know', () => {
     const extra = index.replace('</head>', '<script src="https://x.example/new.js"></script>\n</head>')
       .replace('<main class="otl-body">', '<main class="otl-body"><script src="https://x.example/in-body.js"></script><script>window.y=1</script>');
@@ -84,6 +105,15 @@ describe('localizeBrandHtml index', () => {
 
 describe('localizeBrandHtml detail', () => {
   const out = localizeBrandHtml(detail, 'detail');
+  it('drops event handlers, frames and javascript: urls on detail pages too', () => {
+    const evil = detail.replace('<body ', '<body onload="x()" ')
+      .replace('<h2>Sources</h2>', '<h2 onclick="alert(1)">Sources</h2><iframe src="https://x.example/f"></iframe><a href="javascript:alert(2)">j</a>');
+    const res = localizeBrandHtml(evil, 'detail');
+    for (const s of ['onload', 'onclick', 'alert(', '<iframe', 'x.example', 'javascript:']) expect(res).not.toContain(s);
+    expect(res).toContain('<h2>Sources</h2>');
+    expect(res).toContain('>j</a>');
+    expect(res).toContain('data-view="detail"');
+  });
   it('points the shell and app assets one level up', () => {
     expect(out).toContain('href="../assets/shell.css"');
     expect(out).toContain('src="../assets/shell.js"');

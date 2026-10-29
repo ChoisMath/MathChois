@@ -125,7 +125,8 @@ function keepScript(block: string, prefix: string, base: string): string | null 
     const extra = ['defer', 'async'].filter((k) => k in a).map((k) => ` ${k}`).join('');
     return `<script${attr('id', a.id)} src="${prefix}${asset}"${extra}></script>`;
   }
-  if ('data-otl-help-data' in a) return block;
+  // 도움말 데이터는 JSON 일 때만 — 같은 표시가 붙은 실행 스크립트(type 없음·module 등)는 남기지 않는다.
+  if ('data-otl-help-data' in a) return (a.type ?? '').trim().toLowerCase() === 'application/json' ? block : null;
   if (a.id && KEEP_INLINE_SCRIPTS.includes(a.id)) return a.id === 'oppadu-dsg-js-before' ? localizeDsgConfig(block) : block;
   return null;
 }
@@ -183,6 +184,40 @@ function removeElements(html: string, tag: string, pred: (attrs: Record<string, 
   let out = html;
   for (let at = findElement(out, tag, pred); at; at = findElement(out, tag, pred, at[0])) out = out.slice(0, at[0]) + out.slice(at[1]);
   return out;
+}
+
+/** 따옴표 안의 `>` 를 넘어 태그 하나를 잡는다. */
+const TAG_RE = /<[a-zA-Z][^\s/>]*(?:"[^"]*"|'[^']*'|[^'">])*>/g;
+/** 내용째 지우는 요소(짝 태그)와 여는 태그만 있는 요소. 스크립트 밖에서 코드를 실행하거나 다른 문서를 끼워 넣는 길이다. */
+const EMBED_PAIRED = ['iframe', 'object', 'noscript', 'frameset'];
+const EMBED_ANY = /<\/?(?:iframe|object|embed|noscript|frame|frameset)\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi;
+const EVENT_ATTR = /\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+)/gi;
+const URL_ATTR = /(\s(?:href|src|action|formaction|xlink:href)\s*=\s*)("[^"]*"|'[^']*'|[^\s"'>]+)/gi;
+
+/** 주소 값이 스크립트 실행 주소인가 — 엔티티(`&#106;`)·공백·제어 문자로 가린 것도 본다. */
+const codePoint = (n: number) => (Number.isInteger(n) && n >= 0 && n <= 0x10ffff ? String.fromCodePoint(n) : '');
+function isScriptUrl(raw: string): boolean {
+  const decoded = raw
+    .replace(/&#x([0-9a-f]+);?/gi, (_m, h: string) => codePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);?/g, (_m, d: string) => codePoint(Number(d)))
+    .replace(/&(?:colon|tab|newline);/gi, (m) => ({ '&colon;': ':', '&tab;': '\t', '&newline;': '\n' })[m.toLowerCase()] ?? m);
+  // eslint-disable-next-line no-control-regex
+  return /^(?:javascript|vbscript):/i.test(decoded.replace(/[\u0000-\u0020]/g, ''));
+}
+
+/**
+ * 남긴 본문(스크립트를 이미 뺀 것)에서 스크립트 태그 말고도 코드를 돌릴 수 있는 길을 막는다:
+ * 이벤트 속성(`on…=`)을 지우고, iframe·object·embed·noscript·frame·frameset 을 내용째 지우고, `javascript:` 주소는 `#` 으로.
+ */
+function sanitizeMarkup(html: string): string {
+  let out = html;
+  for (const tag of EMBED_PAIRED) out = removeElements(out, tag, () => true);
+  out = out.replace(EMBED_ANY, '');
+  return out.replace(TAG_RE, (tag) =>
+    tag.replace(EVENT_ATTR, '').replace(URL_ATTR, (m, lead: string, value: string) => {
+      const inner = /^["']/.test(value) ? value.slice(1, -1) : value;
+      return isScriptUrl(inner) ? `${lead}"#"` : m;
+    }));
 }
 
 /**
@@ -261,6 +296,7 @@ export function localizeBrandHtml(html: string, page: Page): string {
   main = main.replace(/<ins\b[^>]*>[\s\S]*?<\/ins\s*>/gi, '');
   main = removeElements(main, 'div', (a) => classTokens(a).includes('oa-ad'));
   main = main.replace(HEAD_TAG_RE, (tag) => keepHeadTag(tag, prefix, base));
+  main = sanitizeMarkup(main);
   main = rewriteSiteLinks(main, page, prefix);
 
   const htmlOpen = /<html\b[^>]*>/i.exec(doc)?.[0] ?? '<html lang="ko">';
@@ -270,7 +306,7 @@ export function localizeBrandHtml(html: string, page: Page): string {
     '<head>',
     ...headOut.filter(once),
     '</head>',
-    bodyOpen[0],
+    sanitizeMarkup(bodyOpen[0]),
     main.trim(),
     ...(helpData ? [helpData] : []),
     ...tail.filter(once),
