@@ -1,9 +1,9 @@
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import {
-  MOTION_CATALOG, SLIDE_CATALOG, renderMotionItems, renderSlideItems, validateManifest,
-  type Manifest, type MotionPrompt, type MotionItem, type SlideItem, type Row,
+  MOTION_CATALOG, SLIDE_CATALOG, renderMotionItems, renderSlideItems, validateManifest, decidePromptSync,
+  type Manifest, type MotionPrompt, type MotionItem, type SlideItem, type Row, type PromptSyncResult,
 } from '@mathchois/shared';
 import { db } from '../config/database.js';
 import { env } from '../config/env.js';
@@ -45,7 +45,7 @@ export async function readManifest(set: ManifestSet): Promise<Manifest | null> {
 
 async function loadMotionPrompts(): Promise<Map<string, MotionPrompt>> {
   const rows = await db.select().from(aiMotionPrompts);
-  return new Map(rows.map((r) => [r.id, { en: r.promptEn, ko: r.promptKo, shots: r.shots, cues: r.cues }]));
+  return new Map(rows.map((r) => [r.id, { en: r.promptEn, ko: r.promptKo, shots: r.shots, cues: r.cues, editedAt: r.editedAt ? r.editedAt.toISOString() : null }]));
 }
 
 async function loadSlidePrompts(): Promise<Map<string, string>> {
@@ -65,10 +65,11 @@ export type MotionPromptInput = { en: string; ko: string; shots: Row[]; cues: Ro
 
 export async function upsertMotionPrompt(id: string, p: MotionPromptInput) {
   const [row] = await db.insert(aiMotionPrompts)
-    .values({ id, promptEn: p.en, promptKo: p.ko, shots: p.shots, cues: p.cues })
+    .values({ id, promptEn: p.en, promptKo: p.ko, shots: p.shots, cues: p.cues, editedAt: new Date() })
     .onConflictDoUpdate({
       target: aiMotionPrompts.id,
-      set: { promptEn: p.en, promptKo: p.ko, shots: p.shots, cues: p.cues, updatedAt: new Date() },
+      // 웹 편집기 저장 = 관리자가 직접 고친 원본 → editedAt 을 찍어 오빠두 동기화에서 제외한다.
+      set: { promptEn: p.en, promptKo: p.ko, shots: p.shots, cues: p.cues, updatedAt: new Date(), editedAt: new Date() },
     })
     .returning();
   return row;
@@ -107,6 +108,7 @@ export async function importMotionPrompts(
         shots: sql`excluded.shots`,
         cues: sql`excluded.cues`,
         updatedAt: new Date(),
+        editedAt: null, // 파일 내용으로 되돌렸으니 웹 편집 표시도 지운다
       },
     }).returning(insertedFlag)
     : await insert.onConflictDoNothing({ target: aiMotionPrompts.id }).returning(insertedFlag);
@@ -126,4 +128,86 @@ export async function importSlidePrompts(
     }).returning(insertedFlag)
     : await insert.onConflictDoNothing({ target: aiSlidePrompts.id }).returning(insertedFlag);
   return importResult(list.length, rows, overwrite);
+}
+
+// ─── 오빠두 동기화 (PUT /api/ai/prompts/:set?mode=sync) ───
+
+const motionSame = (a: MotionPromptInput, b: MotionPromptInput) =>
+  JSON.stringify([a.en, a.ko, a.shots, a.cues]) === JSON.stringify([b.en, b.ko, b.shots, b.cues]);
+
+/**
+ * 오빠두 원본 모션 프롬프트를 행 단위로 맞춘다. 한 트랜잭션 안에서 대상 행을 `FOR UPDATE` 로 잠가 읽고
+ * (동시에 도는 관리자 웹 저장과 어긋나지 않게), 웹에서 고친 행(editedAt)은 건드리지 않고, 바뀐 행만 update 한다.
+ * update 는 editedAt 을 건드리지 않는다(동기화는 "고친 것"이 아니다).
+ */
+export async function syncMotionPrompts(
+  list: (MotionPromptInput & { id: string })[],
+): Promise<PromptSyncResult<MotionPromptInput>> {
+  const result: PromptSyncResult<MotionPromptInput> = { inserted: 0, updated: 0, unchanged: 0, skippedEdited: [], replaced: [] };
+  if (!list.length) return result;
+  await db.transaction(async (tx) => {
+    const rows = await tx.select().from(aiMotionPrompts)
+      .where(inArray(aiMotionPrompts.id, list.map((p) => p.id)))
+      .for('update');
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const toInsert: (typeof aiMotionPrompts.$inferInsert)[] = [];
+    for (const p of list) {
+      const r = byId.get(p.id);
+      const before: MotionPromptInput | null = r ? { en: r.promptEn, ko: r.promptKo, shots: r.shots, cues: r.cues } : null;
+      const decision = decidePromptSync(r && before ? { value: before, editedAt: r.editedAt } : null, p, motionSame);
+      if (decision === 'insert') {
+        toInsert.push({ id: p.id, promptEn: p.en, promptKo: p.ko, shots: p.shots, cues: p.cues });
+        result.inserted++;
+      } else if (decision === 'skipEdited') {
+        result.skippedEdited.push(p.id);
+      } else if (decision === 'unchanged') {
+        result.unchanged++;
+      } else {
+        await tx.update(aiMotionPrompts)
+          .set({ promptEn: p.en, promptKo: p.ko, shots: p.shots, cues: p.cues, updatedAt: new Date() })
+          .where(eq(aiMotionPrompts.id, p.id));
+        result.updated++;
+        result.replaced.push({ id: p.id, before: before! });
+      }
+    }
+    if (toInsert.length) await tx.insert(aiMotionPrompts).values(toInsert);
+  });
+  return result;
+}
+
+/** 슬라이드 프롬프트 동기화 — 웹 편집 표시가 없으므로(편집기는 모션 전용) 값이 다르면 갱신한다. */
+export async function syncSlidePrompts(
+  list: { id: string; prompt: string }[],
+): Promise<PromptSyncResult<string>> {
+  const result: PromptSyncResult<string> = { inserted: 0, updated: 0, unchanged: 0, skippedEdited: [], replaced: [] };
+  if (!list.length) return result;
+  await db.transaction(async (tx) => {
+    const rows = await tx.select().from(aiSlidePrompts)
+      .where(inArray(aiSlidePrompts.id, list.map((p) => p.id)))
+      .for('update');
+    const byId = new Map(rows.map((r) => [r.id, r.prompt]));
+    const toInsert: { id: string; prompt: string }[] = [];
+    for (const p of list) {
+      const before = byId.get(p.id);
+      const decision = decidePromptSync(before === undefined ? null : { value: before, editedAt: null }, p.prompt, (a, b) => a === b);
+      if (decision === 'insert') {
+        toInsert.push(p);
+        result.inserted++;
+      } else if (decision === 'unchanged') {
+        result.unchanged++;
+      } else if (decision === 'update') {
+        await tx.update(aiSlidePrompts).set({ prompt: p.prompt, updatedAt: new Date() }).where(eq(aiSlidePrompts.id, p.id));
+        result.updated++;
+        result.replaced.push({ id: p.id, before: before! });
+      }
+    }
+    if (toInsert.length) await tx.insert(aiSlidePrompts).values(toInsert);
+  });
+  return result;
+}
+
+/** 웹 편집 표시를 지운다 — 다음 동기화가 오빠두 원본으로 되돌린다. 행이 없으면 false. */
+export async function clearMotionEdited(id: string): Promise<boolean> {
+  const rows = await db.update(aiMotionPrompts).set({ editedAt: null }).where(eq(aiMotionPrompts.id, id)).returning({ id: aiMotionPrompts.id });
+  return rows.length > 0;
 }

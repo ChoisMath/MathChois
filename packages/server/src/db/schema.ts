@@ -538,6 +538,8 @@ export const aiMotionPrompts = pgTable('ai_motion_prompts', {
   shots: jsonb('shots').$type<[string, string, string][]>().notNull(),
   cues: jsonb('cues').$type<[string, string, string][]>().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  /** 관리자가 웹 편집기에서 저장한 시각 — 있으면 오빠두 동기화(?mode=sync)가 이 행을 건드리지 않는다. */
+  editedAt: timestamp('edited_at', { withTimezone: true }),
 });
 
 /** 슬라이드 프롬프트 원본 (id = 프롬프트 키) */

@@ -264,6 +264,7 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
       cues jsonb NOT NULL,
       updated_at timestamptz NOT NULL DEFAULT now()
     )`;
+  await pgClient`ALTER TABLE ai_motion_prompts ADD COLUMN IF NOT EXISTS edited_at timestamptz`;
   await pgClient`
     CREATE TABLE IF NOT EXISTS ai_slide_prompts (
       id text PRIMARY KEY,
