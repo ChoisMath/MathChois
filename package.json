@@ -21,10 +21,12 @@
     "ai:prepare": "tsx scripts/ai-hub/media-prepare.ts",
     "ai:motion:import": "tsx scripts/ai-hub/motion-import.ts",
     "ai:slide:import": "tsx scripts/ai-hub/slide-import.ts",
-    "ai:brand:import": "tsx scripts/ai-hub/brand-import.ts"
+    "ai:brand:import": "tsx scripts/ai-hub/brand-import.ts",
+    "ai:oppadu": "tsx scripts/ai-hub/oppadu/main.ts"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
+    "esbuild": "0.27.3",
     "tsx": "^4",
     "typescript": "^5.8.3"
   },

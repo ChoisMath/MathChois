@@ -41,6 +41,8 @@ npm run lint         # ESLint (client)
 npm run ai:pull                       # one-time: me.chois.pro → .media-out/ (keep it, it is the backup)
 npm run ai:push -- --set motion|slide|brand   # .media-out/ → server (AI_PUSH_URL + AI_MEDIA_UPLOAD_TOKEN)
 npm run ai:prepare | ai:motion:import | ai:slide:import | ai:brand:import   # add new material later
+npm run ai:oppadu                     # sync new/changed oppadu motion/slide/brand material (bookmarklet JSON → catalogs + .media-out/ + report);
+                                      #   then `ai:push -- --set motion|slide --sync-prompts` and `--set brand` (scripts/ai-hub/README.md)
 
 # DB (run inside packages/server)
 npm run db:push -w @mathchois/server      # Push Drizzle schema to DB
@@ -143,7 +145,7 @@ YouTube playlists): `units` table, `chapters.unit_id`/`classroom_videos.unit_id`
   logged-in teachers/admins always; a student only if one of their classrooms has `classrooms.ai_hub_enabled`
   (teacher switch **"학생에게 AI활용 열기"** in the `#` panel of ClassroomDetail; the **AI활용** button shows in the header
   when allowed). Editor: blanks/options/copy for any teacher (browser-local), original template + shot/cue tables admin only
-  (`PUT /api/ai/motion/:id/prompt`). **Data**: the catalog (106 motion / 748 slide, with `source: chois|oppadu`) lives in
+  (`PUT /api/ai/motion/:id/prompt`). **Data**: the catalog (106 motion / 748 slide at stage 1; grows with `ai:oppadu`; `source: chois|school|oppadu`) lives in
   git at `packages/shared/src/ai-hub/*.data.ts`; prompts in Postgres (`ai_motion_prompts`, `ai_slide_prompts`); media +
   `manifest/{motion,slide,brand}.json` in the Volume bucket `ai-hub` (public `/api/files/ai-hub/…?v=<sha8>` serves only motion/slide
   media + manifests (`isAiHubPublicFile`), brand files 404 there; the brand copy is served only via `/api/ai/brand/site/*` with a
@@ -152,7 +154,14 @@ YouTube playlists): `units` table, `chapters.unit_id`/`classroom_videos.unit_id`
   Material goes in with `npm run ai:*` (token-authenticated upload; the generic `/api/files` upload/delete and
   `storage.service` `removeFile`/`removeDirectoryIfEmpty` refuse this bucket). `PUT /api/ai/prompts/:set` inserts missing ids
   only, so re-running `ai:push` never overwrites admin web edits; `ai:push --overwrite-prompts` (`?overwrite=1`) replaces them. Spec: `docs/superpowers/specs/2026-10-28-ai-hub-migration-design.md`; first migration steps:
-  `scripts/ai-hub/README.md`. Browser smoke: `packages/server/scripts/ai-hub-e2e-setup.ts` + `packages/client/e2e/ai-hub.smoke.mjs`.
+  `scripts/ai-hub/README.md`.
+  **Stage 2 (oppadu sync)**: `npm run ai:oppadu` folds new/changed oppadu motion/slide/brand material into the catalogs + `.media-out/`
+  (bookmarklet JSON from a logged-in Chrome → report in `.oppadu/<date>/`); remake/school items (`source: chois|school`) are never touched.
+  `ai:push --sync-prompts` sends `.media-out/prompts/<set>.oppadu.json` to `PUT /api/ai/prompts/:set?mode=sync`: it updates only oppadu rows the
+  admin has not edited on the web (`ai_motion_prompts.edited_at`, set by `PUT /api/ai/motion/:id/prompt`), backs up replaced rows, and rejects
+  remake ids with 400. Admin `DELETE /api/ai/motion/:id/edited` clears the mark ("다음 동기화에서 오빠두 원본 받기" in the editor); `GET /api/ai/motion`
+  items carry `prompt.editedAt`. Original (oppadu) v2 motions copy as 「예시 그대로」 + the item's secs. Spec:
+  `docs/superpowers/specs/2026-10-29-ai-hub-oppadu-sync-design.md`; procedure + flags: `scripts/ai-hub/README.md`. Browser smoke: `packages/server/scripts/ai-hub-e2e-setup.ts` + `packages/client/e2e/ai-hub.smoke.mjs`.
 - Server handlers: notes ①②④ → `routes/notes.ts`; comments ③⑤ → `routes/comments.ts`.
   DB logic concentrated in `services/note.service.ts`.
 - Socket handlers: `socket/handlers/notes.ts` (①②), `comments.ts` (③), `assignments.ts` (④⑤).

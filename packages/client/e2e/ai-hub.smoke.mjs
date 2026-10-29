@@ -10,9 +10,13 @@
  * 브랜드 iframe 은 앱 origin 에서만 frame 되므로 `localhost:3000` 으로 연다(127.0.0.1 은 frame-ancestors 에 없다).
  *
  * 검증: 스위치가 꺼진 학급의 학생은 /ai → /student/classrooms 로 돌아간다 → 교사가 학급 상세 `#` 패널의 스위치를 켜면
- *       학생 학급 헤더에 `AI활용` 단추가 생기고 → /ai/motion 카드 1장 → 상세에서 영문 복사 단추 활성 → /ai/slide 빈 상태 →
+ *       학생 학급 헤더에 `AI활용` 단추가 생기고 → /ai/motion 카드 2장(변형본 01-pixel + 오빠두 원본 51-pop-poster) → 상세에서 영문 복사 단추 활성 → /ai/slide 빈 상태 →
  *       /ai/brand iframe 이 로드된다. 교사는 /ai/motion/01-pixel/edit 에서 `세부 설정` 이 있고 값을 입력하면 글자 수가 바뀐다.
  *       콘솔 오류 0개.
+ *       2단계(오빠두 동기화): 학생이 오빠두 원본(51-pop-poster, v2 틀)을 복사하면 「예시 그대로」 줄(EXAMPLE LINE)만 클립보드에
+ *       들어가고 주제 줄(TOPIC)은 없다. 관리자는 같은 편의 편집기를 열면 원본 편집을 켜지 않아도 머리 밑에 「웹에서 고친 원본 ·
+ *       오빠두 동기화에서 제외됨」 이 보이고, 「다음 동기화에서 오빠두 원본 받기」 를 누르면 DELETE 200 뒤 표시가 사라진다.
+ *       변형본(01-pixel)의 편집기에는 (원본 편집을 켜도) 그 표시가 없다.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -26,6 +30,8 @@ if (shotDir) fs.mkdirSync(shotDir, { recursive: true });
 let failures = 0;
 const check = (name, ok, detail) => { console.log(`${ok ? '✓' : '✗'} ${name}${ok ? '' : ` — ${JSON.stringify(detail)}`}`); if (!ok) failures++; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const ORIGINAL_NOTE = '웹에서 고친 원본 · 오빠두 동기화에서 제외됨';
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 const errors = [];
@@ -75,6 +81,8 @@ try {
   await shot(tp, '01-teacher-switch-on');
 
   // ── 학생: 단추 → 모션 갤러리 ──
+  // 클립보드 읽기 — 헤드리스 Chromium 은 앱 origin 에 권한을 줘야 readText 가 된다
+  await S.ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
   await sp.goto(classUrl('student'));
   const aiBtn = sp.getByRole('button', { name: 'AI활용' });
   await aiBtn.waitFor({ timeout: 20000 });
@@ -85,7 +93,7 @@ try {
   check('student: AI활용 button → /ai/motion', pathOf(sp) === '/ai/motion', sp.url());
   const cards = sp.getByTestId('motion-card');
   await cards.first().waitFor({ timeout: 20000 });
-  check('student: /ai/motion shows exactly 1 card', (await cards.count()) === 1, await cards.count());
+  check('student: /ai/motion shows exactly 2 cards (chois + oppadu fixtures)', (await cards.count()) === 2, await cards.count());
   await shot(sp, '02-student-motion');
 
   await cards.first().click();
@@ -96,6 +104,17 @@ try {
   check('student: detail copy-prompt-ko is enabled', await sp.getByTestId('copy-prompt-ko').isEnabled());
   check('student: no edit link for students', (await sp.getByRole('link', { name: '빈칸 편집·장면표' }).count()) === 0);
   await shot(sp, '03-student-motion-detail');
+
+  // ── 학생: 오빠두 원본(v2 틀)은 「예시 그대로」 로 복사된다 ──
+  await sp.goto(`${BASE}/ai/motion/${cfg.originalId}`);
+  const copyOrig = sp.getByTestId('copy-prompt-en');
+  await copyOrig.waitFor({ timeout: 20000 });
+  await copyOrig.click();
+  await sp.waitForFunction(async () => (await navigator.clipboard.readText()).length > 0, null, { timeout: 10000 }).catch(() => {});
+  const copied = await sp.evaluate(() => navigator.clipboard.readText());
+  check('student: oppadu original copies the 예시 그대로 line (EXAMPLE LINE)', copied.includes('EXAMPLE LINE'), copied);
+  check('student: oppadu original copy has no topic line (no TOPIC)', !copied.includes('TOPIC'), copied);
+  await shot(sp, '03b-student-original-copy');
 
   // ── 학생: 슬라이드(빈 상태)·브랜드 ──
   await sp.getByRole('link', { name: '슬라이드', exact: true }).click();
@@ -130,6 +149,38 @@ try {
   check('teacher: the typed value appears in the prompt preview',
     (await tp.getByTestId('prompt-preview').innerText()).includes('AI허브 스모크 채널 이름 길게 입력'));
   await shot(tp, '06-teacher-editor');
+
+  // ── 관리자: 웹에서 고친 오빠두 원본 표시와 되돌리기 ──
+  const Ad = await session(cfg.admin.email);
+  const ap = Ad.page;
+  await ap.goto(`${BASE}/ai/motion/${cfg.originalId}/edit`);
+  await ap.getByTestId('original-switch').waitFor({ timeout: 20000 });
+  // 원본 편집을 켜지 않은 채로 — 표시는 편집기 머리에 있다.
+  const note = ap.getByText(ORIGINAL_NOTE);
+  await note.waitFor({ timeout: 10000 }).catch(() => {});
+  check('admin: edited oppadu original shows the 웹에서 고친 원본 note in the header without 원본 편집',
+    (await note.count()) === 1 && (await ap.getByTestId('original-editor').count()) === 0
+      && (await ap.getByTestId('original-switch').getAttribute('aria-checked')) === 'false',
+    await note.count());
+  const unmark = ap.getByTestId('original-unmark');
+  check('admin: the 다음 동기화에서 오빠두 원본 받기 button is shown',
+    (await unmark.count()) === 1 && (await unmark.innerText()).includes('다음 동기화에서 오빠두 원본 받기'));
+  await shot(ap, '07-admin-edited-original');
+  const deleted = ap.waitForResponse((r) => r.request().method() === 'DELETE' && r.url().includes(`/api/ai/motion/${cfg.originalId}/edited`));
+  await unmark.click();
+  const delRes = await deleted;
+  check('admin: DELETE /edited returns 200', delRes.status() === 200, delRes.status());
+  await note.waitFor({ state: 'detached', timeout: 10000 }).catch(() => {});
+  check('admin: the note disappears after the unmark', (await ap.getByText(ORIGINAL_NOTE).count()) === 0);
+  check('admin: the unmark button disappears too', (await ap.getByTestId('original-unmark').count()) === 0);
+
+  await ap.goto(`${BASE}/ai/motion/${cfg.motionId}/edit`);
+  await ap.getByTestId('original-switch').waitFor({ timeout: 20000 });
+  check('admin: no edited note on the chois remake editor', (await ap.getByText(ORIGINAL_NOTE).count()) === 0);
+  await ap.getByTestId('original-switch').click();
+  await ap.getByTestId('original-editor').waitFor({ timeout: 10000 });
+  check('admin: no edited note on the chois remake editor with 원본 편집 on', (await ap.getByText(ORIGINAL_NOTE).count()) === 0);
+  check('admin: no unmark button on the chois remake editor', (await ap.getByTestId('original-unmark').count()) === 0);
 
   await sleep(500);
   check('no console errors', errors.length === 0, errors);
