@@ -24,7 +24,14 @@ export function excalidrawPenTweak() {
   const REPLACEMENT =
     'simulatePressure:false,size:$1.strokeWidth*10,thinning:0,smoothing:.12,streamline:.16,' +
     'easing:t=>t,start:{taper:0,cap:true},end:{taper:0,cap:true},last:!!$1.lastCommittedPoint};' +
-    'var k=10/$5.size;$5.size=10;return $2($3($4.map(p=>[p[0]*k,p[1]*k,p[2]]),$5).map(p=>[p[0]/k,p[1]/k]))'
+    'var k=10/$5.size;$5.size=10;return $2($3(__mcR($4,2*10/k).map(p=>[p[0]*k,p[1]*k,p[2]]),$5).map(p=>[p[0]/k,p[1]/k]))'
+  // 미세 역행 점 제거(src/lib/penSamples.js dropMicroReversals 와 동일, 임계값 = size × RENDER_REVERSAL_FACTOR(2)):
+  // 진행 방향과 반대로 임계값보다 짧게 물러난 점은 perfect-freehand 가 되돌림으로 보고 부채꼴 캡을 그려
+  // 가는 획에 흰 구멍·끊김을 만든다(iPad Safari coalesced 샘플 순서 뒤섞임, 2026-10-30). 청크 맨 앞에 정의를 넣는다.
+  const MCR_DEF =
+    'var __mcR=function(a,s){if(!(s>0)||a.length<3)return a;var o=[],i,p,q,d,x,y,l;' +
+    'for(i=0;i<a.length;i++){p=a[i];l=o.length;if(l>=2){q=o[l-1];d=o[l-2];x=p[0]-q[0];y=p[1]-q[1];' +
+    'if(x*(q[0]-d[0])+y*(q[1]-d[1])<0&&x*x+y*y<s*s)continue}o.push(p)}return o};\n'
   let applied = 0
   let precisionApplied = 0
   return {
@@ -35,7 +42,7 @@ export function excalidrawPenTweak() {
       let out = code
       if (FREEDRAW_OPTS.test(out)) {
         applied += 1
-        out = out.replace(FREEDRAW_OPTS, REPLACEMENT)
+        out = MCR_DEF + out.replace(FREEDRAW_OPTS, REPLACEMENT)
       }
       if (out.includes(PRECISION_RE)) {
         precisionApplied += 1

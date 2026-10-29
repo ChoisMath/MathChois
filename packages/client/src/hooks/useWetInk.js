@@ -4,6 +4,7 @@ import { buildStrokePath, makeFreedrawElement } from '../lib/wetInkStroke';
 import {
   recognizeShape, snapLineEnd, linePoints, HOLD_MS, HOLD_RADIUS_PX, CANCEL_MOVE_PX, MIN_LINE_PX,
 } from '../lib/shapeRecognizer';
+import { orderCoalesced, isMicroReversal, MICRO_REVERSAL_PX } from '../lib/penSamples';
 
 /**
  * wet-ink 오버레이 (5개 필기 뷰어 공용, 기본 ON · ?wetink=0 비상 차단).
@@ -150,9 +151,12 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       if (!drawing || e.pointerId !== pointerId) return;
       e.stopPropagation();
       e.preventDefault();
-      const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
-      for (const ev of evs.length ? evs : [e]) {
+      // iPad Safari 는 coalesced 샘플 순서가 뒤섞여 올 수 있다 → 시간순 정렬 + 미세 역행 점 제거 (lib/penSamples.js)
+      const raw = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+      const evs = orderCoalesced(raw.length ? raw : [e], pts[pts.length - 1]);
+      for (const ev of evs) {
         const p = [ev.clientX, ev.clientY];
+        if (isMicroReversal(pts, p, MICRO_REVERSAL_PX)) continue;
         trackPoint(p, pts[pts.length - 1]);
         pts.push(p);
         pressures.push(ev.pressure || 0.5);

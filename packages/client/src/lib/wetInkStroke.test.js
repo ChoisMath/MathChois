@@ -37,3 +37,25 @@ describe('getFreedrawOutlineNormalized', () => {
     expect(FREEDRAW_NORMALIZED_SIZE).toBeGreaterThan(3); // perfect-freehand 의 3단위 끝 생략이 획 두께보다 작아야 한다
   });
 });
+
+describe('getFreedrawOutlineNormalized — 미세 역행 점 (아이패드 핀홀)', () => {
+  it('프레임 경계마다 size 보다 짧게 물러나는 점이 있어도 외곽선 폭이 균일하다', () => {
+    const size = 1.2;
+    const clean = []; const dirty = [];
+    for (let d = 0; d <= 400; d += 4) {
+      clean.push([d, 0, .5]); dirty.push([d, 0, .5]);
+      if (d % 16 === 0 && d > 0) dirty.push([d - 0.8, 0, .5]);
+    }
+    const opts = { ...PF, size };
+    const outClean = getFreedrawOutlineNormalized(clean, opts);
+    const outDirty = getFreedrawOutlineNormalized(dirty, opts);
+    // 외곽선의 |y| 최대값: 역행 점이 부채꼴(반지름 size/2)을 만들면 x 방향으로도 튀고 폭이 들쭉날쭉해진다
+    const widthProfile = (o) => o.filter((p) => p[0] > 20 && p[0] < 380).map((p) => Math.abs(p[1]));
+    const maxClean = Math.max(...widthProfile(outClean));
+    const maxDirty = Math.max(...widthProfile(outDirty));
+    const minDirty = Math.min(...widthProfile(outDirty));
+    expect(maxDirty).toBeLessThanOrEqual(maxClean + 0.05);
+    expect(minDirty).toBeGreaterThanOrEqual(size / 2 - 0.05);
+    expect(outDirty.length).toBe(outClean.length);
+  });
+});

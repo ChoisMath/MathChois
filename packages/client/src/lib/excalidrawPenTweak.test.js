@@ -57,4 +57,18 @@ describe('excalidrawPenTweak scale normalization', () => {
     expect(out).toMatch(/p\[0\]\/k,p\[1\]\/k/);
     expect(out).not.toMatch(/return \w+\(\w+\(t,n\)\)\}/);
   });
+
+  it('injects the micro-reversal filter and applies it before the outline (iPad pinholes)', () => {
+    expect(out).toMatch(/var __mcR=function\(a,s\)\{/);
+    expect(out).toContain('__mcR(');
+    const m = out.match(/var __mcR=(function\(a,s\)\{[^]*?\});/);
+    expect(m).not.toBeNull();
+    const mcR = new Function('return ' + m[1])();
+    const pts = [];
+    for (let d = 0; d <= 64; d += 4) { pts.push([d, 0, .5]); if (d % 16 === 0 && d > 0) pts.push([d - 0.8, 0, .5]); }
+    const kept = mcR(pts, 1.2);
+    expect(kept.length).toBe(17);
+    for (let i = 1; i < kept.length; i++) expect(kept[i][0]).toBeGreaterThan(kept[i - 1][0]);
+    expect(mcR([[0, 0], [10, 0], [2, 0]], 1.2)).toEqual([[0, 0], [10, 0], [2, 0]]); // 진짜 되돌림 보존
+  });
 });
