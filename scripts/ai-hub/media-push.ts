@@ -16,6 +16,9 @@ import { sha256File } from './manifest.js';
 import { AI_DIR, OPPADU_DIR, hasFlag, latestOppaduDir, manifestFile, parseSetArg, promptsFile, syncPromptsFile, type AiSet } from './volumeLayout.js';
 
 const CONCURRENCY = 4;
+// 파일이 수천 개면(오빠두 슬라이드 그림 1만여 장) 분당 300 요청 한도에 계속 걸려 기본 6번으로는 일부가 떨어진다.
+// 하나라도 떨어지면 manifest 를 못 올려 다음 실행이 전부 다시 올리므로, 파일 PUT 은 Retry-After 를 따라 더 오래 기다린다.
+const MEDIA_ATTEMPTS = 30;
 
 async function readJsonFile(file: string): Promise<unknown> {
   return JSON.parse(await readFile(file, 'utf8'));
@@ -107,7 +110,7 @@ async function main() {
       headers: { ...auth, 'x-content-sha256': sha, 'content-length': String(size), 'content-type': 'application/octet-stream' },
       body: Readable.toWeb(createReadStream(file)) as ReadableStream,
       duplex: 'half',
-    } as RequestInit), { label: rel });
+    } as RequestInit), { label: rel, attempts: MEDIA_ATTEMPTS });
     if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   };
 
