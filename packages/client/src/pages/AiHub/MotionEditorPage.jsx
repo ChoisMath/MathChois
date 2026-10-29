@@ -197,7 +197,7 @@ export default function MotionEditorPage() {
 
         <div className="ai-ed-side">
           {editing ? (
-            <OriginalEditor key={item.id} id={item.id} prompt={prompt} reload={reload} onDirtyChange={setDraftDirty} />
+            <OriginalEditor key={item.id} id={item.id} source={item.source} editedAt={prompt?.editedAt ?? null} prompt={prompt} reload={reload} onDirtyChange={setDraftDirty} />
           ) : (
             <>
               <div className="ai-tabs" role="tablist" aria-label="보기" onKeyDown={onTabKey}>

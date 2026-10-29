@@ -44,7 +44,7 @@ export default function MotionDetailPage() {
         <p className="ai-detail-use">{item.use}</p>
         <p className="ai-detail-concept">{item.concept}</p>
         {item.source === 'oppadu' ? <OriginalCredit tab="motion" /> : null}
-        <PromptCopy key={item.id} id={item.id} prompt={item.prompt} canEdit={access.canEdit} />
+        <PromptCopy key={item.id} item={item} canEdit={access.canEdit} />
         <nav className="ai-detail-nav" aria-label="모션 이동">
           {prev ? <Link to={href(prev)} className="ai-pill ai-pill--ghost">← 이전</Link> : null}
           <Link to="/ai/motion" className="ai-pill ai-pill--ghost">목록</Link>
