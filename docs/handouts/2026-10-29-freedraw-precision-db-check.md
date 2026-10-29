@@ -41,30 +41,28 @@ git fetch origin claude/youthful-planck-bjwgau && git checkout claude/youthful-p
 npm install
 ```
 
-### 2-2. DB 에서 필기 내보내기 (읽기 전용)
+### 2-2. DB 에서 필기 내보내기 (읽기 전용, psql 불필요)
 
-대상: 챕터 제목에 `AA20_0` 이 들어가는 챕터의 교사 필기 전체 (영상의 "AA20_0_미분 단원 도입",
-1페이지 칠판 + 5페이지 흰 영역에 "가나다라…").
+대상: 챕터 제목에 `AA20_0` 이 들어가는 챕터의 교사 필기 전체 (영상의 "AA20_0_미분 단원 도입").
 
-Railway Postgres 공개 접속 URL 은 `railway variables -s Postgres` 의 `DATABASE_PUBLIC_URL`
-(프로젝트 ChoisClass, 환경 production, TCP 프록시 `yamabiko.proxy.rlwy.net:15002`).
-URL 값은 문서·채팅·커밋에 적지 말 것.
+1. Railway 대시보드 → 프로젝트 **ChoisClass** → **Postgres** 서비스 → **Variables** 탭 →
+   `DATABASE_PUBLIC_URL` 의 값을 복사한다 (`postgresql://postgres:…@yamabiko.proxy.rlwy.net:15002/railway` 모양).
+   CLI 로그인 상태면 `railway variables -s Postgres` 로도 볼 수 있다. URL 은 문서·채팅·커밋에 적지 말 것.
+2. 터미널(저장소 루트)에서 값을 환경 변수로 넣는다 (작은따옴표 유지):
 
 ```bash
-psql "$DATABASE_PUBLIC_URL" -At -c "select json_agg(t) from (select n.excalidraw_data from teacher_notes n join pages p on p.id = n.page_id join chapters c on c.id = p.chapter_id where c.title like '%AA20_0%' order by n.updated_at desc) t" > notes.json
+export DATABASE_PUBLIC_URL='여기에_복사한_URL'
 ```
 
-psql 이 없으면 `railway connect Postgres` 로 들어가 같은 쿼리를 `\o notes.json` 뒤에 실행해도 된다.
+3. 내보내기 스크립트 실행 (SELECT 하나만 실행, `notes.json` 생성):
+
+```bash
+node packages/client/scripts/freedraw-precision-export.mjs
+```
+
+페이지마다 `AA20_0_미분 단원 도입 / 페이지 1 / 저장 … / 요소 N개 (freedraw M개)` 가 찍히고 마지막에
+`K개 페이지 → notes.json` 이 나오면 성공. SSL 인증서 오류가 나면 `PGSSL=insecure` 를 앞에 붙여 다시 실행.
 `notes.json` 은 커밋하지 말 것 (필기 데이터).
-
-페이지별로 나누고 싶으면:
-
-```sql
-select c.title, p.position, p.id as page_id, n.updated_at,
-       jsonb_array_length(n.excalidraw_data->'elements') as elements
-from teacher_notes n join pages p on p.id = n.page_id join chapters c on c.id = p.chapter_id
-where c.title like '%AA20_0%' order by p.position;
-```
 
 ### 2-3. 진단 스크립트 실행
 
