@@ -76,6 +76,21 @@ describe('checkMotionBundle', () => {
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/gallery\.items/);
   });
+  it('needs the gallery-data.js address (config.data) as a non-empty string', () => {
+    for (const data of [undefined, '', '  ', 5]) {
+      const b = bundle();
+      b.config.data = data;
+      expect(checkMotionBundle(b)).toEqual({ ok: false, error: '묶음 설정이 잘못되었습니다 (config.data)' });
+    }
+  });
+  it('needs the media base (config.a) to end with a slash, since file names are appended to it', () => {
+    const b = bundle();
+    b.config.a = 'https://cdn.example';
+    expect(checkMotionBundle(b)).toEqual({ ok: false, error: '묶음 설정이 잘못되었습니다 (config.a)' });
+    const c = bundle();
+    c.config.a = '';
+    expect(checkMotionBundle(c).error).toBe('묶음 설정이 잘못되었습니다 (config.a)');
+  });
 });
 
 describe('motionUpstream', () => {
@@ -230,6 +245,13 @@ describe('checkSlideBundle', () => {
     expect(r.error).toMatch(/styles\[3\]/);
     expect(checkSlideBundle({ ...slideBundle(), styles: 'x' }).ok).toBe(false);
     expect(checkSlideBundle({ ...slideBundle(), img: 5 }).ok).toBe(false);
+  });
+  it('needs the image folder (img) to end with a slash, since file names are appended to it', () => {
+    expect(checkSlideBundle({ ...slideBundle(), img: 'https://cdn.example/img' })).toEqual({ ok: false, error: '묶음 설정이 잘못되었습니다 (img)' });
+    expect(checkSlideBundle({ ...slideBundle(), img: '' }).error).toBe('묶음 설정이 잘못되었습니다 (img)');
+  });
+  it('rejects an empty style list', () => {
+    expect(checkSlideBundle({ ...slideBundle(), styles: [] })).toEqual({ ok: false, error: '스타일 목록이 비었습니다' });
   });
 });
 

@@ -36,6 +36,7 @@ const isStr = (v: unknown): v is string => typeof v === 'string';
 const isTable = (v: unknown): v is Triple[] => Array.isArray(v) && v.every((r) => Array.isArray(r) && r.length === 3 && r.every(isStr));
 
 const MEMBER_ERROR = '로그인·멤버십 확인 — 회원 전문을 받지 못했습니다';
+const CONFIG_ERROR = '묶음 설정이 잘못되었습니다';
 const nonEmpty = (v: unknown): v is string => isStr(v) && v.trim() !== '';
 
 /** 오류 문장에 넣는 id 목록 — 수집본 전체가 비회원이면 수백 개라 앞 10개만 보이고 나머지는 개수로 줄인다. */
@@ -66,6 +67,9 @@ export function checkMotionBundle(raw: unknown): BundleCheck<OppaduMotionBundle>
   if (!isObj(config) || !isObj(gallery) || !isObj(full) || !isObj(full.items)) return fail('수집본 형식이 맞지 않습니다 (config·gallery·full)');
   if (config.member === false) return fail(MEMBER_ERROR);
   if (!isStr(config.a) || !(isStr(config.mv) || typeof config.mv === 'number')) return fail('수집본 형식이 맞지 않습니다 (config.a·mv)');
+  // 미디어 주소는 `${a}v/<id>.mp4` 처럼 이어 붙이고, gallery-data.js 는 원본 보관용으로 받으므로 둘 다 쓸 수 있는 값이어야 한다.
+  if (!config.a.endsWith('/')) return fail(`${CONFIG_ERROR} (config.a)`);
+  if (!nonEmpty(config.data)) return fail(`${CONFIG_ERROR} (config.data)`);
   if (!Array.isArray(gallery.items)) return fail('수집본 형식이 맞지 않습니다 (gallery.items)');
   if (config.add !== undefined && !Array.isArray(config.add)) return fail('수집본 형식이 맞지 않습니다 (config.add)');
 
@@ -226,6 +230,9 @@ export function checkSlideBundle(raw: unknown): BundleCheck<OppaduSlideBundle> {
   if (raw.kind !== 'oppadu-slide') return fail(`슬라이드 수집본이 아닙니다 (kind: ${String(raw.kind)})`);
   if (!isStr(raw.img) || !Array.isArray(raw.styles)) return fail('수집본 형식이 맞지 않습니다 (img·styles)');
   if (raw.tags !== undefined && !isObj(raw.tags)) return fail('수집본 형식이 맞지 않습니다 (tags)');
+  // 그림 주소는 `${img}s/<id>-<k>.webp` 처럼 이어 붙인다. 빈 목록은 화면이 덜 열린 상태라 그대로 병합하면 안 된다.
+  if (!raw.img.endsWith('/')) return fail(`${CONFIG_ERROR} (img)`);
+  if (!raw.styles.length) return fail('스타일 목록이 비었습니다');
   for (const [at, item] of raw.styles.entries()) {
     const bad = styleProblems(item);
     if (bad.length) return fail(`styles[${at}] 형식이 맞지 않습니다 (${bad.join(', ')})`);

@@ -11,3 +11,4 @@ export * from './brandLocalize.js';
 export * from './merge.js';
 export * from './oppaduSync.js';
 export * from './promptSync.js';
+export * from './oppaduReport.js';

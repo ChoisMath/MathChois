@@ -15,6 +15,8 @@ export const AI_DIR = path.join(OUT_DIR, 'ai-hub');
 export const manifestFile = (set: AiSet) => path.join(AI_DIR, 'manifest', `${set}.json`);
 /** 프롬프트 JSON(PUT /api/ai/prompts/:set 본문). 서버 파일이 아니라 DB 로 가므로 ai-hub/ 밖에 둔다. */
 export const promptsFile = (set: 'motion' | 'slide') => path.join(OUT_DIR, 'prompts', `${set}.json`);
+/** `ai:oppadu` 가 만드는 동기화 대상(오빠두 원본 행만) 프롬프트 JSON — `ai:push --sync-prompts` 가 `?mode=sync` 로 보낸다. */
+export const syncPromptsFile = (set: 'motion' | 'slide') => path.join(OUT_DIR, 'prompts', `${set}.oppadu.json`);
 
 export function parseSetArg(argv: readonly string[], required: boolean): AiSet | null {
   const at = argv.indexOf('--set');
