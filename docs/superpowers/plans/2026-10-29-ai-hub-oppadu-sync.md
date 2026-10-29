@@ -168,9 +168,9 @@
 **Interfaces:**
 - Produces:
   ```ts
-  // paths.ts — 사본이 갖는 자산(1단계 9개 + pcf-resources.js · pcf-resources.css · pcf-ui.css). BRAND_FILE 은 이 목록에서 만든다.
+  // paths.ts — 사본이 갖는 자산(13개: 1단계 9개 + pcf-resources.js · pcf-resources.css · pcf-ui.css · base.css). BRAND_FILE 은 이 목록에서 만든다.
   export const BRAND_ASSETS: readonly string[] = ['assets/app.js','assets/ai-hub-static.js','assets/shell.js','assets/pcf-resources.js',
-    'assets/app.css','assets/ai-hub.css','assets/shell.css','assets/tokens.css','assets/pcf-resources.css','assets/pcf-ui.css',
+    'assets/app.css','assets/ai-hub.css','assets/shell.css','assets/tokens.css','assets/base.css','assets/pcf-resources.css','assets/pcf-ui.css',
     'assets/fonts/PretendardVariable.woff2','data/brands-index.json'];
   // brandLocalize.ts
   export const BRAND_PAGE_URL = 'https://www.oppadu.com/ai/design-systems-site/';
@@ -190,7 +190,7 @@
   - `aiHubPaths.test.js`: `BRAND_ASSETS.every(a => isAiHubFile('brand/' + a))`, `'brand/assets/pcf.js'` 는 false.
 - [ ] **Step 3: 실패 확인** → **Step 4: 구현** — 태그 단위 정규식 + `div.aih` 는 `<div`/`</div>` 깊이 세기로 잘라낸다(본문의 나머지는 버리고 `<script type="application/json" data-otl-help-data>` 는 위치와 상관없이 본문 끝에 둔다). 인라인 `<script>` 는 id `oppadu-dsg-js-before`·`oppadu-pcf-resources-js-before` 와 `data-otl-help-data` 만 남긴다. `BRAND_FILE` 는 `BRAND_ASSETS` 를 이스케이프해 만든 정규식 + `index.html`·`brand/<slug>.html`·`data/(hero|detail)/<slug>.json`.
 - [ ] **Step 5: 빌더·import** — `brand-build.ts`: 목록 페이지 → `brandAssetUrls` → 자산 받기(css 는 `localizeBrandCss` 거침) → `brands-index.json` → slug 마다 `data/hero/<slug>.json`·`data/detail/<slug>.json`·`brand/<slug>.html`(`localizeBrandHtml(…,'detail')`) → `index.html`(`localizeBrandHtml(…,'index')`). 결과 파일이 모두 `isAiHubFile('brand/'+rel)` 을 통과하고, slug 수 = `brands.length` 가 아니면 던진다. `brand-import.ts` 를 `importBrand(src)` 로 바꾼다(동작·메시지 그대로, `SIBLING_LINKS` 는 유지해도 무해).
-- [ ] **Step 6: 실제 사본 확인** — 스크래치 스크립트로 오빠두에서 `buildBrandSite('<scratch>/brand-site', …)` 를 실행하고, 그 폴더를 Node `http` 정적 서버(스크래치 스크립트, `.json` 은 `application/json`)로 띄워 Playwright 로 `index.html` 을 열어: 카드(`[role=listitem]`) 293개, 색 탭 「빨강」 누르면 카드 수 43, 찾기 칸에 `11st` 입력 시 1개, 카드 클릭 시 `body[data-view=detail]`, 콘솔 오류 0(외부 차단 요청 제외). 깨지면 원인 파일을 keep list(`BRAND_ASSETS`·인라인 id)에 더하고 Step 2 테스트를 갱신한 뒤 다시 확인.
+- [ ] **Step 6: 실제 사본 확인** — 스크래치 스크립트로 오빠두에서 `buildBrandSite('<scratch>/brand-site', …)` 를 실행하고, 그 폴더를 Node `http` 정적 서버(스크래치 스크립트, `.json` 은 `application/json`)로 띄워 Playwright 로 `index.html` 을 열어: 카드(`[role=listitem]`) 293개, 색 탭 「빨강」 누르면 카드 수 43, 찾기 칸에 `11st` 입력 시 1개, 카드 클릭 시 상세가 룩북 모달 `dialog.dsv` 로 열림, 콘솔 오류 0(외부 차단 요청 제외). 깨지면 원인 파일을 keep list(`BRAND_ASSETS`·인라인 id — 인라인 `<style id="pretendard-face">` 포함)에 더하고 Step 2 테스트를 갱신한 뒤 다시 확인.
 - [ ] **Step 7: 검증·Commit** — `npx vitest run` PASS, `npx tsc -p scripts/tsconfig.json` 통과 → `feat(ai-hub): 오빠두 공개 자료로 브랜드 룩북 사본 만들기(색 탭·찾기 자산 포함)`
 
 ---

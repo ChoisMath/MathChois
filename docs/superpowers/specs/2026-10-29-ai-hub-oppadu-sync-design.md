@@ -128,12 +128,12 @@ shared 에 두고 테스트하며, 북마클릿 빌드가 그 함수를 함께 �
 - 목록 페이지의 `<body>` 는 허브 틀 `div.aih` 하나만 남긴다(오빠두 사이트 머리글 `pcf-*`·푸터·모바일 메뉴 제외).
 - **남기는 자산(keep list)** — 그 밖의 `<script>`·스타일시트·광고·분석·채팅·알림은 뺀다:
   스크립트 `shell.js`·`ai-hub-static.js`·`app.js`·`pcf-resources.js`, 스타일 `shell.css`·`tokens.css`·`app.css`·`ai-hub.css`·
-  `pcf-resources.css`·`pcf-ui.css`, 글꼴 `PretendardVariable.woff2`, 인라인 `#oppadu-dsg-js-before`·`#oppadu-pcf-resources-js-before`·
-  `script[data-otl-help-data]`. 2026-10-29 오빠두 목록 화면의 색 탭(`pcfrs-dsg-bar`)·찾기 칸(`pcf-listq`)은 `pcf-resources.js/.css`·
-  `pcf-ui.css` 가 그리므로 1단계 사본(2026-10-13)보다 셋이 늘었다 → `paths.ts` 의 `BRAND_FILE` 과 `brand-import` 의 자산 목록을
+  `base.css`·`pcf-resources.css`·`pcf-ui.css`, 글꼴 `PretendardVariable.woff2`, 인라인 `#oppadu-dsg-js-before`·`#oppadu-pcf-resources-js-before`·
+  `script[data-otl-help-data]`·`<style id="pretendard-face">`. 2026-10-29 오빠두 목록 화면의 색 탭(`pcfrs-dsg-bar`)·찾기 칸(`pcf-listq`)은 `pcf-resources.js/.css`·
+  `pcf-ui.css` 가 그리고 `base.css` 가 바탕 서식을 깔므로 1단계 사본(2026-10-13)보다 넷이 늘었다(`BRAND_ASSETS` 13개) → `paths.ts` 의 `BRAND_FILE` 과 `brand-import` 의 자산 목록을
   shared 상수 `BRAND_ASSETS` 하나로 맞춰 넓힌다.
 - **구조 검증**: 결과 파일 목록이 `BRAND_FILE` 를 모두 통과하고, 지금 사본(`.media-out/ai-hub/brand/`, `ai:pull` 결과)과
-  같은 종류의 파일을 갖추는지(목록·상세·`BRAND_ASSETS`·data) 확인한다. 어긋나면 멈춘다. 마지막으로 Playwright 로 사본을 열어 카드 293장·색 탭 거르기·찾기·상세 열기가 동작하는지 본다.
+  같은 종류의 파일을 갖추는지(목록·상세·`BRAND_ASSETS`·data) 확인한다. 어긋나면 멈춘다. 마지막으로 Playwright 로 사본을 열어 카드 293장·색 탭 거르기·찾기·상세 열기가 동작하는지 본다(상세는 룩북의 모달 `dialog.dsv` 로 열린다).
 
 ## ② 병합 규칙 — `packages/shared/src/ai-hub/oppaduSync.ts` (순수 함수)
 
