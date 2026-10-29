@@ -17,10 +17,14 @@
 export function excalidrawPenTweak() {
   const PRECISION_RE = '/(\\s?[A-Z]?,?-?[0-9]*\\.[0-9]{0,2})(([0-9]|e|-)*)/g'
   const PRECISION_FIX = '/(\\s?[A-Z]?,?-?[0-9]*\\.[0-9]{0,2})([0-9]*)/g'
-  const FREEDRAW_OPTS = /simulatePressure:\s*(\w+)\.simulatePressure,\s*size:\s*\1\.strokeWidth\s*\*\s*4\.25,\s*thinning:\s*0?\.6,\s*smoothing:\s*0?\.5,\s*streamline:\s*0?\.5,\s*easing:\s*\w+\s*=>\s*Math\.sin\([^)]*\)\s*,\s*last:\s*!!\s*\1\.lastCommittedPoint/
+  // 옵션 객체 뒤의 `};return Om(vm(t,n))` 까지 잡아 size 정규화를 심는다(식별자는 난독화 산물이라 캡처).
+  const FREEDRAW_OPTS = /simulatePressure:\s*(\w+)\.simulatePressure,\s*size:\s*\1\.strokeWidth\s*\*\s*4\.25,\s*thinning:\s*0?\.6,\s*smoothing:\s*0?\.5,\s*streamline:\s*0?\.5,\s*easing:\s*\w+\s*=>\s*Math\.sin\([^)]*\)\s*,\s*last:\s*!!\s*\1\.lastCommittedPoint\s*\};\s*return\s+(\w+)\((\w+)\((\w+),\s*(\w+)\)\)/
+  // perfect-freehand 의 절대 상수(끝 3단위 생략 등) 때문에 scene 단위가 작은 고배율 화면에서 획이 무너진다 —
+  // src/lib/wetInkStroke.js getFreedrawOutlineNormalized 와 같은 변환: size 가 10 이 되도록 점을 키워 계산 후 되돌림.
   const REPLACEMENT =
     'simulatePressure:false,size:$1.strokeWidth*10,thinning:0,smoothing:.12,streamline:.16,' +
-    'easing:t=>t,start:{taper:0,cap:true},end:{taper:0,cap:true},last:!!$1.lastCommittedPoint'
+    'easing:t=>t,start:{taper:0,cap:true},end:{taper:0,cap:true},last:!!$1.lastCommittedPoint};' +
+    'var k=10/$5.size;$5.size=10;return $2($3($4.map(p=>[p[0]*k,p[1]*k,p[2]]),$5).map(p=>[p[0]/k,p[1]/k]))'
   let applied = 0
   let precisionApplied = 0
   return {

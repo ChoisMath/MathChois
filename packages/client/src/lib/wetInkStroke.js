@@ -14,6 +14,27 @@ const getStroke = ae;
 /** perfect-freehand getStroke 그대로 (scripts/freedraw-precision-check.mjs 등 Node 진단용). */
 export const getFreedrawOutline = getStroke;
 
+/**
+ * perfect-freehand 는 size 에 비례하지 않는 상수를 몇 개 품고 있다 — 끝에서 runningLength 3 단위 미만 점 생략,
+ * 반지름 하한 .01 등. Excalidraw 는 외곽선을 scene 단위로 계산하는데 이 앱은 펜 두께를 zoom 으로 나눠
+ * (하한 0.05) 화면 두께를 고정하므로, 폰처럼 zoom≈10 이면 글자 하나가 2~5 scene 단위라 획 끝 3 단위가
+ * 통째로 사라져 쐐기·점+실선으로 무너진다(갤럭시 S Pen 실측). 점을 size 가 FREEDRAW_NORMALIZED_SIZE 가
+ * 되도록 키워 계산하고 외곽선을 되돌리면 어떤 zoom·두께에서도 같은 모양이 된다.
+ * vite/excalidrawPenTweak.js 가 Excalidraw 번들의 getFreeDrawSvgPath 에 같은 변환을 심는다 — 두 곳의 값이 같아야 미리보기=commit.
+ */
+export const FREEDRAW_NORMALIZED_SIZE = 10;
+
+/**
+ * @param {number[][]} points  [[x,y,(pressure)], ...]
+ * @param {object} opts  getStroke 옵션 (size 필수)
+ * @returns {number[][]} 입력 단위의 외곽선
+ */
+export function getFreedrawOutlineNormalized(points, opts) {
+  const k = FREEDRAW_NORMALIZED_SIZE / opts.size;
+  const scaled = points.map((p) => [p[0] * k, p[1] * k, p[2]]);
+  return getStroke(scaled, { ...opts, size: FREEDRAW_NORMALIZED_SIZE }).map((p) => [p[0] / k, p[1] / k]);
+}
+
 /* ── Excalidraw 의 getSvgPathFromStroke (median Q-curve) — 동일 복제 ── */
 function med(p, q) { return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]; }
 function getSvgPathFromStroke(points) {
@@ -52,7 +73,7 @@ function toInputPoints(points, pressures, simulatePressure) {
  */
 export function buildStrokePath(points, pressures, { size, simulatePressure, last = false }) {
   if (!points.length) return null;
-  const outline = getStroke(toInputPoints(points, pressures, simulatePressure), {
+  const outline = getFreedrawOutlineNormalized(toInputPoints(points, pressures, simulatePressure), {
     ...PF_BASE, size, simulatePressure, last,
   });
   if (!outline.length) return null;

@@ -45,3 +45,16 @@ describe('excalidrawPenTweak', () => {
     expect(out).not.toContain('strokeWidth*4.25');
   });
 });
+
+describe('excalidrawPenTweak scale normalization', () => {
+  const { id, code } = loadFreedrawChunk();
+  const out = excalidrawPenTweak().transform(code, id);
+
+  it('runs perfect-freehand at a fixed size and scales the outline back', () => {
+    // 외곽선은 scene 단위로 계산되는데 perfect-freehand 의 3단위 끝 생략 등 상수가 절대값이라
+    // zoom 10 × 두께 하한 0.05 인 폰에서는 획(2~5단위)이 통째로 무너진다 — 점을 size 기준으로 키워 계산한다.
+    expect(out).toMatch(/\.size=10;/);
+    expect(out).toMatch(/p\[0\]\/k,p\[1\]\/k/);
+    expect(out).not.toMatch(/return \w+\(\w+\(t,n\)\)\}/);
+  });
+});
