@@ -82,6 +82,21 @@ describe('localizeBrandHtml index', () => {
     // 스크립트 내용(설정 블록)은 건드리지 않는다.
     expect(out).toContain('"base":"./"');
   });
+  it('drops handlers and script urls separated by a quote or a slash instead of a space', () => {
+    const body = `<img src="x"onerror="alert(1)" alt="k1"><img/onerror=alert(2) alt="k2"><a title="x"href="javascript:alert(4)" class="k4">a</a>`
+      + `<a/href="javascript:alert(5)" class="k5">a</a><img src='y'ONLOAD='alert(6)'/>`;
+    for (const open of ['<body/onload=alert(1) data-view="index">', '<body class="a"onload=alert(1) data-view="index">']) {
+      const evil = index.replace(/<body [^>]*>/, open).replace('<main class="otl-body">', `<main class="otl-body">${body}`);
+      const out = localizeBrandHtml(evil, 'index');
+      expect(out.toLowerCase()).not.toMatch(/onerror|onload|alert\(|javascript:/);
+      for (const s of ['alt="k1"', 'alt="k2"', 'class="k4"', 'class="k5"', "src='y'", 'data-view="index"']) expect(out).toContain(s);
+    }
+  });
+  it('leaves attribute values that merely contain on…= or href= byte-identical', () => {
+    const values = `<div title="turn once=1 online=2 on=3" data-x='{"a":"b onfoo=1"}' data-y="see href=javascript:x" class="kv">v</div>`;
+    const out = localizeBrandHtml(index.replace('<main class="otl-body">', `<main class="otl-body">${values}`), 'index');
+    expect(out).toContain(values);
+  });
   it('keeps help data only as JSON', () => {
     const asJs = index.replace('<script type="application/json" data-otl-help-data>', '<script data-otl-help-data>alert(1);');
     expect(localizeBrandHtml(asJs, 'index')).not.toContain('data-otl-help-data');
@@ -113,6 +128,13 @@ describe('localizeBrandHtml detail', () => {
     expect(res).toContain('<h2>Sources</h2>');
     expect(res).toContain('>j</a>');
     expect(res).toContain('data-view="detail"');
+  });
+  it('drops quote- or slash-separated handlers on detail pages too', () => {
+    const evil = detail.replace('<body ', '<body/onload=alert(1) ')
+      .replace('<h2>Sources</h2>', '<h2 class="s"onclick="alert(2)">Sources</h2><a/href="javascript:alert(3)">j</a><img src="z"onerror=alert(4)>');
+    const res = localizeBrandHtml(evil, 'detail');
+    expect(res.toLowerCase()).not.toMatch(/onload|onclick|onerror|alert\(|javascript:/);
+    for (const s of ['<h2 class="s">Sources</h2>', '>j</a>', 'src="z"', 'data-view="detail"']) expect(res).toContain(s);
   });
   it('points the shell and app assets one level up', () => {
     expect(out).toContain('href="../assets/shell.css"');

@@ -191,8 +191,46 @@ const TAG_RE = /<[a-zA-Z][^\s/>]*(?:"[^"]*"|'[^']*'|[^'">])*>/g;
 /** 내용째 지우는 요소(짝 태그)와 여는 태그만 있는 요소. 스크립트 밖에서 코드를 실행하거나 다른 문서를 끼워 넣는 길이다. */
 const EMBED_PAIRED = ['iframe', 'object', 'noscript', 'frameset'];
 const EMBED_ANY = /<\/?(?:iframe|object|embed|noscript|frame|frameset)\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi;
-const EVENT_ATTR = /\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+)/gi;
-const URL_ATTR = /(\s(?:href|src|action|formaction|xlink:href)\s*=\s*)("[^"]*"|'[^']*'|[^\s"'>]+)/gi;
+const URL_ATTRS = new Set(['href', 'src', 'action', 'formaction', 'xlink:href']);
+/** 속성 하나(앞 구분자 포함) — HTML 토크나이저처럼 공백뿐 아니라 `/`·닫는 따옴표 뒤에서도 다음 속성이 시작된다. */
+const ATTR_TOKEN = /[\s/]*([^\s"'>/=]+)(?:(\s*=\s*)("[^"]*"|'[^']*'|[^\s"'>]*))?/y;
+
+/**
+ * 태그 하나의 속성을 하나씩 잘라 `fn` 에 넘긴다. `fn` 이 null 이면 그 속성을 빼고, 문자열이면 값(따옴표 뺀 것)을 바꾸고,
+ * undefined 면 그대로 둔다. 손대지 않은 속성은 원문 바이트 그대로 다시 붙인다 — 값 안의 글자(`on=3`·`href=` 등)는 건드리지 않는다.
+ */
+function mapAttrs(tag: string, fn: (name: string, value: string | null) => string | null | undefined): string {
+  const name = /^<[a-zA-Z][^\s/>]*/.exec(tag);
+  if (!name) return tag;
+  let out = name[0];
+  let changed = false;
+  let pos = name[0].length;
+  const end = tag.length - 1; // 마지막 '>'
+  while (pos < end) {
+    ATTR_TOKEN.lastIndex = pos;
+    const m = ATTR_TOKEN.exec(tag);
+    if (!m || m.index !== pos || m[0].length === 0 || m.index + m[0].length > end) {
+      out += tag[pos]; // 속성이 아닌 글자(끝의 공백·'/', 짝 없는 따옴표 등)는 그대로
+      pos++;
+      continue;
+    }
+    pos += m[0].length;
+    const raw = m[3];
+    const quote = raw && /^["']/.test(raw) ? raw[0] : '';
+    const value = raw === undefined ? null : quote ? raw.slice(1, -1) : raw;
+    const next = fn((m[1] ?? '').toLowerCase(), value);
+    if (next === undefined) {
+      out += m[0];
+    } else if (next === null) {
+      changed = true;
+    } else {
+      changed = true;
+      const q = quote || '"';
+      out += m[0].slice(0, m[0].length - (raw ?? '').length) + (raw === undefined ? `=${q}${next}${q}` : `${q}${next}${q}`);
+    }
+  }
+  return changed ? out + tag.slice(end) : tag;
+}
 
 /** 주소 값이 스크립트 실행 주소인가 — 엔티티(`&#106;`)·공백·제어 문자로 가린 것도 본다. */
 const codePoint = (n: number) => (Number.isInteger(n) && n >= 0 && n <= 0x10ffff ? String.fromCodePoint(n) : '');
@@ -214,9 +252,10 @@ function sanitizeMarkup(html: string): string {
   for (const tag of EMBED_PAIRED) out = removeElements(out, tag, () => true);
   out = out.replace(EMBED_ANY, '');
   return out.replace(TAG_RE, (tag) =>
-    tag.replace(EVENT_ATTR, '').replace(URL_ATTR, (m, lead: string, value: string) => {
-      const inner = /^["']/.test(value) ? value.slice(1, -1) : value;
-      return isScriptUrl(inner) ? `${lead}"#"` : m;
+    mapAttrs(tag, (name, value) => {
+      if (name.startsWith('on')) return null;
+      if (URL_ATTRS.has(name) && value !== null && isScriptUrl(value)) return '#';
+      return undefined;
     }));
 }
 
@@ -226,14 +265,15 @@ function sanitizeMarkup(html: string): string {
  */
 function rewriteSiteLinks(html: string, page: Page, prefix: string): string {
   const toIndex = `${prefix}index.html`;
-  return html.replace(/(\s(?:href|src|action)\s*=\s*)(["'])(.*?)\2/gi, (m, lead: string, q: string, url: string) => {
-    let next = url;
-    const abs = url.startsWith(SITE_ORIGIN + '/') ? url.slice(SITE_ORIGIN.length) : url;
-    if (abs === GALLERY_PATH || abs.startsWith(GALLERY_PATH + '#') || abs.startsWith(GALLERY_PATH + '?')) next = toIndex + abs.slice(GALLERY_PATH.length);
-    else if (page === 'detail' && url === './') next = toIndex;
-    else if (/^\/(?!\/)/.test(url)) next = SITE_ORIGIN + url;
-    return next === url ? m : `${lead}${q}${next}${q}`;
-  });
+  return html.replace(TAG_RE, (tag) =>
+    mapAttrs(tag, (name, url) => {
+      if (url === null || !(name === 'href' || name === 'src' || name === 'action')) return undefined;
+      const abs = url.startsWith(SITE_ORIGIN + '/') ? url.slice(SITE_ORIGIN.length) : url;
+      if (abs === GALLERY_PATH || abs.startsWith(GALLERY_PATH + '#') || abs.startsWith(GALLERY_PATH + '?')) return toIndex + abs.slice(GALLERY_PATH.length);
+      if (page === 'detail' && url === './') return toIndex;
+      if (/^\/(?!\/)/.test(url)) return SITE_ORIGIN + url;
+      return undefined;
+    }));
 }
 
 /**
