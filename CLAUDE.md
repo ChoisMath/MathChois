@@ -25,8 +25,6 @@ The core of the app is **5 annotation pages** (see the table below).
 Deploy: **Railway** (`packages/server/Dockerfile`, healthcheck `/api/health`). In
 production the server serves `client/dist` statically with SPA fallback.
 
-`legacy_rails/` is an old Ruby on Rails app — **unused, do not read or modify**.
-
 ## Commands
 
 ```bash

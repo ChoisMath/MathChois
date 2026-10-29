@@ -85,7 +85,7 @@ packages/
     ├── ai-hub/            # AI활용 허브 공용 — catalog(모션 106·슬라이드 748 `*.data.ts` + 검증, `source: chois|oppadu`)·source(출처 문구)·paths(ai-hub 버킷 허용 경로·mediaUrl)·access(`aiHubAbilities`)·promptEngine+motionOpts(오빠두 ms-prompt.js v2 이식)·render(manifest+프롬프트 → 열람 응답)·upload(토큰 비교·manifest 검증)·brandEmbed(브랜드 사본 HTML 가공)·merge(이전 스크립트용 합치기)
     └── curriculum/        # math2022.ts — 2022 개정 수학과 교육과정 MAP(과목→대단원→소단원+성취기준) + buildCurriculumPromptBlock()
 ```
-(제외: `node_modules/`, `dist/`, `.next/`, `drizzle/` 마이그레이션 SQL, `legacy_rails/`)
+(제외: `node_modules/`, `dist/`, `.next/`, `drizzle/` 마이그레이션 SQL)
 
 ## 핵심 기능: 5개 필기(annotation) 페이지
 
@@ -346,7 +346,6 @@ me.chois.pro 의 AI활용 세 갤러리를 옮겼다(오빠두엑셀 출처 표�
   - 배포 감지: `sw.js`에 `__BUILD_VERSION__` 플레이스홀더 → `vite.config.js`의 **`swBuildVersion()` 플러그인**이 closeBundle에서 `dist/sw.js`를 빌드 시각으로 치환 → 배포마다 sw.js 바이트가 바뀌어 브라우저가 SW 업데이트(=새 배포)를 감지.
   - 서버(`app.ts`) 정적 서빙 `setHeaders`: `/assets/` 외 파일(index.html·sw.js·manifest 등)에 `Cache-Control: no-cache` 명시(해시 없는 파일의 stale 캐시 방지).
 - **화이트보드 실시간 병합**(`feat/whiteboard`): 다른 필기 페이지의 "알림 → 전체 재조회·통째 저장" 방식을 쓰면 동시 편집에서 서로 덮어쓰므로 **요소 단위**로만 동기화한다. 원격 변경을 `updateScene` 할 때 반드시 `captureUpdate: CaptureUpdateAction.NEVER`(0.18: `commitToHistory` 는 deprecated). 발표 영역 안내선 `__wb_guide__` 는 로컬 전용이라 `withoutGuide()` 로 걸러 보내고, 템플릿 적용은 클라이언트가 요소를 만들어도 **서버 `applyTemplateAtomic` 이 빈 보드일 때만** 넣는다(서버는 Excalidraw 를 import 하지 않는다). `WhiteboardCanvas` 는 `key={boardId}` 리마운트로 보드 전환 시 파일/버전 기록/협업자 상태를 초기화한다. Excalidraw 도형 도구를 고르면 좌측에 속성 패널(x<250px)이 뜨므로 E2E 드래그는 그 오른쪽에서 시작한다.
-- **legacy_rails/** — 구버전 Ruby on Rails 앱. **사용하지 않음. 탐색·수정 금지.**
 - 프로덕션에서 server가 `client/dist` 정적 서빙 + SPA fallback(`/api/*` 외 → index.html, 민감 경로 차단).
 
 ## Claude Code 개발 환경 (로컬 + 클라우드 세션)
