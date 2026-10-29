@@ -8,7 +8,7 @@
 | 명령 | 하는 일 |
 |---|---|
 | `npm run ai:pull` | **1회성 이전.** me.chois.pro 에서 manifest 3개·파일 전부·비공개 프롬프트를 `.media-out/` 으로 내려받는다. sha256 대조(실패 시 3회 재시도), 같은 sha 는 건너뜀. `-- --dry-run` 은 받을 개수만, `-- --set motion` 은 한 묶음만. 모션·슬라이드 파일은 공개 `/media/…`, **브랜드 파일과 프롬프트는 토큰 경로 `/api/media/file?path=…`**(공개 `/ai/brand/site` 는 HTML 을 가공해 sha 가 어긋남). 묶음의 manifest 가 비었거나 프롬프트(`private/*-admin.json`)가 200 이 아니면 실패(종료 코드 1) |
-| `npm run ai:push -- --set motion\|slide\|brand` | 서버 manifest 와 sha 를 비교해 바뀐 파일만 올리고(동시 4개, 429 는 기다렸다 재시도), 프롬프트 JSON 을 보내고, 마지막에 manifest 를 올린다. `--dry-run` 은 올릴 목록만. motion·slide 는 `.media-out/prompts/<set>.json` 이 없으면 아무것도 올리기 전에 멈춘다 — 미디어만 올릴 때만 `--no-prompts`. 프롬프트는 **서버에 없는 id 만 넣는다**(끝에 `N inserted, M skipped`) — 관리자가 웹 편집기(`/ai/motion/:id/edit`)에서 고친 원본 템플릿은 다시 push 해도 그대로다. 파일 내용으로 덮어써야 할 때만 `--overwrite-prompts`(`N inserted, M updated`) |
+| `npm run ai:push -- --set motion\|slide\|brand` | 서버 manifest 와 sha 를 비교해 바뀐 파일만 올리고(동시 4개, 429 는 기다렸다 재시도), 프롬프트 JSON 을 보내고, 마지막에 manifest 를 올린다. `--dry-run` 은 올릴 목록만. motion·slide 는 `.media-out/prompts/<set>.json` 이 없으면 아무것도 올리기 전에 멈춘다 — 미디어만 올릴 때만 `--no-prompts`. 프롬프트는 **서버에 없는 id 만 넣는다**(끝에 `N inserted, M skipped`) — 관리자가 웹 편집기(`/ai/motion/:id/edit`)에서 고친 원본 템플릿은 다시 push 해도 그대로다. 파일 내용으로 덮어써야 할 때만 `--overwrite-prompts`(`N inserted, M updated`). **2단계 이후 주의:** `--overwrite-prompts` 는 오빠두 원본 프롬프트까지 모두 1단계 `<set>.json` 내용으로 되돌리고 보낸 모션 행의 웹 편집 표시(`edited_at`)를 모두 지운다 — 일부러 그럴 때만 쓴다(오빠두 원본 갱신은 `--sync-prompts`) |
 | `npm run ai:push -- --set motion\|slide --sync-prompts` | **`ai:oppadu` 뒤에 쓴다.** `.media-out/prompts/<set>.oppadu.json` 을 `PUT /api/ai/prompts/:set?mode=sync` 로 보낸다. 서버는 원본(`source: oppadu`) 행만 맞춘다 — 바뀐 행은 갱신, 같은 행은 그대로, **웹에서 고친 행(`edited_at`)은 건너뜀**(`skippedEdited`). 갱신된 행의 이전 내용은 `.oppadu/<날짜>/replaced-prompts-<set>.json` 에 백업(같은 날 여러 번 push 해도 합쳐 쌓임)하고, 결과 줄은 그날 `report.md` 끝에 덧붙인다. 변형본(`chois`·`school`) id 가 섞여 있으면 요청 전체가 400. `--overwrite-prompts`·`--no-prompts` 와는 함께 못 쓴다 |
 | `npm run ai:oppadu` | **오빠두 새 자료 반영.** 북마클릿 수집본·오빠두 공개 페이지에서 새·바뀐 모션·슬라이드·브랜드를 모아 카탈로그(`*.data.ts`, git)·`.media-out/`·보고서에 증분 반영한다. 아래 「오빠두 새 자료 반영」 참고 |
 | `npm run ai:prepare` | 새 모션 렌더 mp4 → `video.mp4`·`preview.mp4`·`poster.webp` + manifest (`MOTION_SRC`, ffmpeg·cwebp 필요) |
@@ -71,6 +71,11 @@ SD 카드의 원천 폴더가 없으므로 `ai:pull` + `ai:push` 가 기본 경�
 어떤 경로로도 바뀌지 않고, 오빠두에서 사라진 id 는 카탈로그에 남긴다(보고서에 알리기만 한다). 설계: `docs/superpowers/specs/2026-10-29-ai-hub-oppadu-sync-design.md`.
 
 사전 조건: 1단계 첫 이전(`ai:pull` → `ai:push` 셋)이 끝나 `.media-out/ai-hub/manifest/*.json` 이 있어야 한다(없으면 멈춘다).
+
+> **처음 한 번은 배포가 먼저다.** 첫 `ai:oppadu`·`--sync-prompts` 전에 이 2단계 코드를 main 에 합쳐 Railway 배포까지 끝낸다.
+> 서버에 `edited_at` 열·`?mode=sync`·새 브랜드 파일 허용 목록(`BRAND_FILE`)이 있어야 하기 때문이다. 배포 전 서버에 `--sync-prompts` 를 보내면
+> `server does not support ?mode=sync — deploy stage 2 (merge to main) first` 로 멈추고(종료 코드 1, 백업·manifest 안 씀) 바뀐 원본은 반영되지 않는다.
+> 그 뒤부터는 아래 5(push) → 6(배포) 순서로 해도 된다. 첫 실행은 `npm run ai:oppadu -- --dry-run` 으로 보고서부터 보는 것을 권한다.
 
 1. **북마클릿 설치(처음 한 번)** — `npm run ai:oppadu -- --bookmarklets` 가 `.oppadu/bookmarklets.html` 을 만든다. Chrome 으로 열어 링크 둘
    (모션·슬라이드)을 즐겨찾기 막대로 끌어다 놓는다.

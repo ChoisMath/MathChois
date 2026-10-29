@@ -35,3 +35,18 @@ export type PromptSyncResult<B> = {
   skippedEdited: string[];
   replaced: { id: string; before: B }[];
 };
+
+/** `ai:push --sync-prompts` 가 받는 응답 — 동기화 결과 + 보낸 개수. */
+export type PromptSyncResponse = PromptSyncResult<unknown> & { mode: 'sync'; count: number };
+
+/**
+ * `PUT /api/ai/prompts/:set?mode=sync` 응답을 확인한다. 2단계 코드가 배포되지 않은 서버는 `mode` 를 모르고 없는 id 만 넣은 뒤
+ * 1단계 응답(`replaced` 없음)을 돌려주므로, 그대로 성공으로 보면 바뀐 원본이 반영되지 않은 채 백업·보고가 빈 채로 남는다.
+ */
+export function readSyncResponse(body: unknown): PromptSyncResponse {
+  const r = body as Partial<PromptSyncResponse> | null;
+  if (!r || typeof r !== 'object' || r.mode !== 'sync' || !Array.isArray(r.replaced)) {
+    throw new Error('server does not support ?mode=sync — deploy stage 2 (merge to main) first');
+  }
+  return r as PromptSyncResponse;
+}

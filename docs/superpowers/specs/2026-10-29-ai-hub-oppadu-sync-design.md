@@ -251,6 +251,7 @@ diffBrandIndex(prev: BrandIndex | null, next: BrandIndex): { added: string[]; re
 
 ### 실행 순서 (README 에 적음)
 
+0. **처음 한 번만:** 이 2단계 코드를 main 에 합쳐 배포를 먼저 끝낸다(서버에 `edited_at`·`?mode=sync`·새 브랜드 파일 허용이 있어야 함 — 배포 전 서버에는 `--sync-prompts` 가 `server does not support ?mode=sync` 로 멈춘다). 첫 실행은 `ai:oppadu -- --dry-run` 부터. 그 뒤로는 아래 3·4 순서가 자유롭다.
 1. 로그인 Chrome 에서 북마클릿 둘.
 2. `npm run ai:oppadu` → 보고서·`git diff packages/shared/src/ai-hub/*.data.ts` 확인.
 3. `npm run ai:push -- --set motion --sync-prompts` → `--set slide --sync-prompts` → `--set brand`.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatReport, formatPushResult } from '@mathchois/shared';
+import { formatReport, formatPushResult, formatPushBlock, keepPushSections } from '@mathchois/shared';
 
 const set = (over = {}) => ({ added: [], updated: {}, keptRemake: 0, gone: [], media: 0, ...over });
 const brand = (over = {}) => ({ added: [], removed: [], total: 293, generatedAt: '2026-10-14T03:00:00+09:00', ...over });
@@ -88,5 +88,27 @@ describe('formatPushResult', () => {
   it('names the ids skipped because they were edited on the web', () => {
     expect(formatPushResult('slide', { ...result, skippedEdited: ['51-a', '57-x'] }, 'b.json'))
       .toBe('slide: 넣음 3 · 바뀜 56 · 같음 0 · 웹에서 고쳐 건너뜀 2 (51-a, 57-x) · 백업 b.json');
+  });
+});
+
+describe('report.md push sections', () => {
+  const report = '# 오빠두 동기화 2026-10-29\n\n- 변경 없음\n- 다음 할 일: …\n';
+  it('formatPushBlock is a "## push" section appended after the report', () => {
+    expect(formatPushBlock('motion: 넣음 1')).toBe('\n## push\nmotion: 넣음 1\n');
+  });
+  it('a fresh report keeps every earlier push section of the same day, in order', () => {
+    const old = '# 오빠두 동기화 2026-10-29\n\n- 모션: 추가 1\n' + formatPushBlock('motion: A') + formatPushBlock('slide: B');
+    const out = keepPushSections(report, old);
+    expect(out.startsWith(report)).toBe(true);
+    expect(out).not.toContain('모션: 추가 1');
+    expect(out.indexOf('motion: A')).toBeGreaterThan(out.indexOf('다음 할 일'));
+    expect(out.indexOf('slide: B')).toBeGreaterThan(out.indexOf('motion: A'));
+    expect(out.match(/^## push$/gm)).toHaveLength(2);
+    // 두 번째 실행에도 그대로 이어진다.
+    expect(keepPushSections(report, out)).toBe(out);
+  });
+  it('no old file or no push sections → the new report as is', () => {
+    expect(keepPushSections(report, null)).toBe(report);
+    expect(keepPushSections(report, '# 오빠두 동기화 2026-10-29\n\n- 변경 없음\n')).toBe(report);
   });
 });

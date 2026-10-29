@@ -4,6 +4,7 @@
 //   [--dry-run]                       보고서만 찍고 아무것도 쓰지 않음
 //   [--refresh-media]                 버전 쿼리 없는 슬라이드 그림도 다시 받음(기본은 캐시 재사용)
 //   [--bookmarklets]                  .oppadu/bookmarklets.html 만 만들고 끝
+//   그 밖의 인자는 무엇이든 하기 전에 거절한다(종료 코드 1).
 // 순서: manifest 확인 → 수집본 점검 → 병합(순수 함수) → 내려받기(.oppadu/cache) → 엔진 해시 → 브랜드 사본 → 보고서
 //       → (--dry-run 이 아니면) 쓰기: 미디어 → manifest → 브랜드 바꿔 넣기 → 동기화 프롬프트 → *.data.ts → .oppadu/<날짜>/ 보관.
 // 쓰기는 모든 내려받기·병합·검증이 끝난 뒤에만 한다. 그 전에 실패하면 종료 코드 1, .media-out/·카탈로그는 그대로.
@@ -13,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  MOTION_CATALOG, SLIDE_CATALOG, checkMotionBundle, checkSlideBundle, diffBrandIndex, formatCatalogSource, formatReport, mergeMotion, mergeSlide,
+  MOTION_CATALOG, SLIDE_CATALOG, checkMotionBundle, checkSlideBundle, diffBrandIndex, formatCatalogSource, formatReport, keepPushSections, mergeMotion, mergeSlide,
   type BrandIndexLike, type MediaFile, type RunReport,
 } from '@mathchois/shared';
 import { importBrand } from '../brand-import.js';
@@ -49,6 +50,23 @@ function argValue(argv: readonly string[], flag: string): string | null {
   const value = argv[at + 1];
   if (!value || value.startsWith('--')) throw new Stop(`${flag} 다음에 파일 경로가 필요합니다`);
   return path.resolve(value);
+}
+
+const VALUE_ARGS = ['--set', '--motion', '--slide'];
+const FLAG_ARGS = ['--dry-run', '--refresh-media', '--bookmarklets'];
+
+/** 모르는 인자(오타 `--dryrun` 등)를 조용히 무시하면 쓰지 않을 줄 알았던 실행이 실제로 쓴다 — 무엇이든 하기 전에 멈춘다. */
+function checkArgs(argv: readonly string[]): void {
+  const usage = `쓸 수 있는 인자: --set motion|slide|brand, --motion <파일>, --slide <파일>, ${FLAG_ARGS.join(', ')}`;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i] as string;
+    if (FLAG_ARGS.includes(a)) continue;
+    if (!VALUE_ARGS.includes(a)) throw new Stop(`알 수 없는 인자: ${a} — ${usage}`);
+    const value = argv[i + 1];
+    if (!value || value.startsWith('--')) throw new Stop(`${a} 다음에 값이 필요합니다 — ${usage}`);
+    if (a === '--set' && !['motion', 'slide', 'brand'].includes(value)) throw new Stop(`--set 은 motion, slide, brand 중 하나입니다 (받은 값: ${value})`);
+    i++;
+  }
 }
 
 /** ~/Downloads 에서 가장 최근 수집본 — 이름의 날짜 내림차순, 같은 날이면 Chrome 이 붙인 ` (n)` 이 큰 것. */
@@ -132,6 +150,7 @@ async function readBrandIndex(file: string): Promise<BrandIndexLike | null> {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
+  checkArgs(argv);
   if (hasFlag(argv, '--bookmarklets')) {
     const file = path.join(OPPADU_DIR, 'bookmarklets.html');
     await writeBookmarkletsPage(file);
@@ -250,7 +269,9 @@ async function main(): Promise<void> {
       await copyFile(cachePath(enginePromptUrl), path.join(dayDir, 'ms-prompt.js'));
     }
     if (brandDir) await copyFile(path.join(brandDir, BRAND_INDEX), path.join(dayDir, 'brands-index.json'));
-    await writeFile(path.join(dayDir, 'report.md'), markdown);
+    // 같은 날 앞서 ai:push --sync-prompts 가 덧붙인 `## push` 구역(서버 반영 결과·백업 위치)은 새 보고서 뒤에 남긴다.
+    const reportFile = path.join(dayDir, 'report.md');
+    await writeFile(reportFile, keepPushSections(markdown, existsSync(reportFile) ? await readFile(reportFile, 'utf8') : null));
 
     // ⑧
     console.info(['', ...summary, `보고서: ${rel(path.join(dayDir, 'report.md'))}`].join('\n'));

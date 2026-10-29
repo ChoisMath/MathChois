@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decidePromptSync, remakeIdsIn } from '@mathchois/shared';
+import { decidePromptSync, remakeIdsIn, readSyncResponse } from '@mathchois/shared';
 
 const eq = (a, b) => a === b;
 
@@ -25,5 +25,22 @@ describe('remakeIdsIn', () => {
     expect(remakeIdsIn(catalog, ['51-a', '01-x', '99-new'])).toEqual(['01-x']);
     expect(remakeIdsIn(catalog, ['60-s', '01-x'])).toEqual(['60-s', '01-x']);
     expect(remakeIdsIn(catalog, ['51-a', '99-new'])).toEqual([]);
+  });
+});
+
+describe('readSyncResponse', () => {
+  const ok = { ok: true, mode: 'sync', count: 2, inserted: 1, updated: 1, unchanged: 0, skippedEdited: [], replaced: [{ id: 'a', before: 'x' }] };
+  it('returns the body of a stage-2 sync response', () => {
+    expect(readSyncResponse(ok)).toBe(ok);
+  });
+  it('rejects a stage-1 server response (no mode, no replaced) with a deploy hint', () => {
+    const old = { ok: true, count: 1, overwrite: false, inserted: 1, skipped: 0 };
+    expect(() => readSyncResponse(old)).toThrow('server does not support ?mode=sync — deploy stage 2 (merge to main) first');
+  });
+  it('rejects mode=sync without a replaced array, and non-objects', () => {
+    expect(() => readSyncResponse({ ...ok, replaced: undefined })).toThrow(/does not support \?mode=sync/);
+    expect(() => readSyncResponse({ ...ok, mode: 'other' })).toThrow(/does not support \?mode=sync/);
+    expect(() => readSyncResponse(null)).toThrow(/does not support \?mode=sync/);
+    expect(() => readSyncResponse('nope')).toThrow(/does not support \?mode=sync/);
   });
 });

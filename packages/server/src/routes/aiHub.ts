@@ -140,7 +140,7 @@ export async function aiHubRoutes(app: FastifyInstance) {
     return (await readManifest(set)) ?? {};
   });
 
-  // ─── PUT /api/ai/prompts/:set[?overwrite=1] — 프롬프트 일괄 가져오기 (토큰) ───
+  // ─── PUT /api/ai/prompts/:set[?overwrite=1|?mode=sync] — 프롬프트 일괄 가져오기 (토큰) ───
   // 기본은 없는 id 만 넣는다 — ai:push 를 다시 돌려도 관리자가 웹 편집기에서 고친 원본 템플릿을 덮어쓰지 않는다.
   // ?overwrite=1 (ai:push --overwrite-prompts) 일 때만 이미 있는 행도 파일 내용으로 바꾼다.
   // ?mode=sync (ai:oppadu) 는 오빠두 원본을 행 단위로 맞춘다 — 웹에서 고친 행(edited_at)과 변형본 id 는 건드리지 않는다.
@@ -150,6 +150,10 @@ export async function aiHubRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const { set } = request.params;
     const overwrite = request.query.overwrite === '1';
+    // 모르는 mode 를 조용히 기본(없는 id 만 넣기)으로 처리하면 호출한 쪽이 동기화된 줄 안다 — 거절한다.
+    if (request.query.mode !== undefined && request.query.mode !== 'sync') {
+      return reply.status(400).send({ error: 'unknown mode' });
+    }
     const sync = request.query.mode === 'sync';
     if (sync && request.query.overwrite !== undefined) {
       return reply.status(400).send({ error: 'mode=sync and overwrite cannot be combined' });

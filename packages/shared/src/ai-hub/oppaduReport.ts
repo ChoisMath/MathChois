@@ -75,3 +75,18 @@ export function formatReport(r: RunReport): { markdown: string; summary: string[
 export function formatPushResult(set: 'motion' | 'slide', r: PromptSyncResult<unknown>, backup: string): string {
   return `${set}: 넣음 ${r.inserted} · 바뀜 ${r.updated} · 같음 ${r.unchanged} · 웹에서 고쳐 건너뜀 ${counted(r.skippedEdited)} · 백업 ${backup}`;
 }
+
+/** `ai:push --sync-prompts` 가 그날 report.md 끝에 덧붙이는 구역 하나. */
+export function formatPushBlock(line: string): string {
+  return `\n## push\n${line}\n`;
+}
+
+/**
+ * 같은 날 `ai:oppadu` 를 다시 돌려 report.md 를 새로 쓸 때, 앞서 덧붙은 `## push` 구역(서버 반영 결과·백업 위치)을 잃지 않게
+ * 새 보고서 뒤에 그대로 이어 붙인다. push 구역은 언제나 보고서 뒤에 쌓이므로 첫 `## push` 부터 끝까지가 곧 push 기록이다.
+ */
+export function keepPushSections(report: string, old: string | null): string {
+  const at = old ? old.search(/^## push$/m) : -1;
+  if (!old || at < 0) return report;
+  return `${report}\n${old.slice(at)}`;
+}

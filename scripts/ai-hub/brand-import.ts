@@ -4,7 +4,7 @@
 // .media-out/ 은 me.chois.pro 폐쇄 뒤 유일한 원천 백업이다. 그래서 기존 brand/ 를 먼저 지우지 않는다:
 // ① 복사할 원천을 모두 확인하고(없으면 아무것도 건드리지 않고 멈춤) ② 옆 임시 폴더에 새 사본을 다 만든 뒤
 // ③ 기존 brand/ 를 잠시 옆으로 옮기고 새 사본을 그 자리에 넣고 manifest 를 만든다. ③ 이 실패하면 기존 것을 되돌려 놓는다.
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { BRAND_ASSETS } from '@mathchois/shared';
@@ -49,7 +49,7 @@ function planImport(src: string): Entry[] {
     for (const name of names) entries.push({ rel: `${dir}/${name}`, kind: dir === 'brand' ? 'html' : 'copy' });
   }
   if (missing.length) {
-    throw new Error(`${src}: ${missing.length} source(s) missing — run node brand/scripts/build.cjs in motion/ first. Nothing was changed.\n  ${missing.join('\n  ')}`);
+    throw new Error(`${src}: ${missing.length} source(s) missing — build a fresh copy with npm run ai:oppadu -- --set brand, or point BRAND_SRC at a complete brand copy. Nothing was changed.\n  ${missing.join('\n  ')}`);
   }
   for (const e of entries) {
     if (e.kind === 'html' && !readFileSync(path.join(src, e.rel), 'utf8').includes('</body>')) {
@@ -108,7 +108,8 @@ export async function importBrand(src: string): Promise<{ files: number }> {
   }
 }
 
-// npm run ai:brand:import — 직접 실행했을 때만(다른 스크립트가 import 하면 돌지 않는다).
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// npm run ai:brand:import — 직접 실행했을 때만(ai:oppadu 가 import 하면 돌지 않는다). import.meta.url 은 심볼릭 링크를 푼 실제 경로라
+// argv[1] 도 풀어서 비교한다 — 안 그러면 링크로 연 체크아웃에서 아무것도 하지 않고 조용히 끝난다.
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   await importBrand(process.env.BRAND_SRC ?? '/Volumes/Chois_SD2/dev/motion/brand');
 }

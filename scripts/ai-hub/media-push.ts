@@ -10,7 +10,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import { diffManifest, formatPushResult, validateManifest, type Manifest, type PromptSyncResult } from '@mathchois/shared';
+import { diffManifest, formatPushBlock, formatPushResult, readSyncResponse, validateManifest, type Manifest, type PromptSyncResult } from '@mathchois/shared';
 import { baseUrl, fetchRetry, mapLimit, requireEnv } from './http.js';
 import { sha256File } from './manifest.js';
 import { AI_DIR, OPPADU_DIR, hasFlag, latestOppaduDir, manifestFile, parseSetArg, promptsFile, syncPromptsFile, type AiSet } from './volumeLayout.js';
@@ -44,7 +44,7 @@ async function writeSyncBackup(set: 'motion' | 'slide', r: PromptSyncResult<unkn
   }
   await writeFile(backup, `${JSON.stringify([...entries, ...r.replaced], null, 2)}\n`);
   const shown = path.relative(process.cwd(), backup);
-  await appendFile(path.join(dir, 'report.md'), `\n## push\n${formatPushResult(set, r, shown)}\n`);
+  await appendFile(path.join(dir, 'report.md'), formatPushBlock(formatPushResult(set, r, shown)));
   return shown;
 }
 
@@ -136,7 +136,8 @@ async function main() {
         }), { label: `prompts/${set}` });
         if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
         if (syncPrompts && set !== 'brand') {
-          const r = (await res.json()) as PromptSyncResult<unknown> & { count: number };
+          // 2단계 이전 서버는 mode 를 무시하고 1단계 응답을 준다 — 백업을 쓰지 않고 이 단계를 실패로 둔다(manifest 보류, 종료 코드 1).
+          const r = readSyncResponse(await res.json());
           try {
             console.info(formatPushResult(set, r, await writeSyncBackup(set, r)));
           } catch (err) {
