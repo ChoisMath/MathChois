@@ -50,7 +50,7 @@ packages/
 │       ├── pages/              # Home(첫 화면·로그인 — 상단 바 없음, 모눈 노트 디자인 + components/home/LessonScene 필기 장면), Login, Classrooms(목록 = 모눈 노트 위 공책 표지 카드(화면 바닥까지 채움), components/classrooms/classrooms.css; 새 학급 창에 표지 색 고르기, 상세 제목에 색 띠 + 교사에게는 헤더에 항상 보이는 작은 색 원(누르면 바로 저장)), Chapters, Study, Monitor,
 │       │                       #   Assignment, Board, Admin, Problems(문제은행), Visualizations(시각화자료), Videos(영상자료 VideosPage + 학급 시청 ClassroomVideoWatch + 영상 2분할 필기 ClassroomVideoSplit), History(코칭기록),
 │       │                       #   Whiteboard(StudentWhiteboardViewer 학생 모둠 보드, TeacherWhiteboardPage 교사 격자/단일 + 설정),
-│       │                       #   AiHub(AiHubRoute 가드+데이터 공급자, AiHubLayout 허브 머리글·탭, MotionGalleryPage/MotionDetailPage/MotionEditorPage, SlideGalleryPage, BrandPage) 등
+│       │                       #   AiHub(AiHubRoute 가드+데이터 공급자, AiHubLayout 상단 바 가운데 슬롯의 제목·탭 칩 + 소개 머리글(학급으로), MotionGalleryPage/MotionDetailPage/MotionEditorPage, SlideGalleryPage, BrandPage) 등
 │       ├── hooks/              # useVideoSubtitles(플레이어 자막 목록·문장 로딩), useMediaQuery(matchMedia 구독), useSortOrder(목록 정렬 순서 — 사용자별 localStorage), useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
 │       │                       #   useScribbleErase(문지르기 지우개), useFreedrawSmoothing, usePenDiagnostics,
 │       │                       #   useWetInk(웻잉크 오버레이 — 펜 라이브 렌더), useOrientation(세로 화면 → 위/아래 분할),
