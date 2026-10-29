@@ -20,6 +20,7 @@ import { useExcalidrawUndo } from '../../hooks/useExcalidrawUndo';
 import { useIntervalRefresh } from '../../hooks/useIntervalRefresh';
 import { getProblemForCoaching } from '../../lib/problems';
 import { convertSolution, reviewSolution, listAttempts, getStudentPageAttempts, uploadWorkImage } from '../../lib/coaching';
+import { sceneStrokeWidth } from '../../lib/penWidth';
 
 const PANEL_KEY = 'coachingRightPanelWidth';
 const MIN_W = 300;
@@ -156,7 +157,7 @@ export default function CoachingViewer({
       if (tool === 'freedraw' && baseStrokeWidthRef.current) {
         isAdjustingWidthRef.current = true;
         excalidrawAPIRef.current?.updateScene({
-          appState: { currentItemStrokeWidth: Math.max(baseStrokeWidthRef.current / appState.zoom.value, 0.05) },
+          appState: { currentItemStrokeWidth: sceneStrokeWidth(baseStrokeWidthRef.current, appState.zoom.value) },
           commitToHistory: false,
         });
         requestAnimationFrame(() => { isAdjustingWidthRef.current = false; });
@@ -228,7 +229,7 @@ export default function CoachingViewer({
         baseStrokeWidthRef.current = savedWidth;
         const zoom = api2.getAppState()?.zoom?.value || 1;
         lastZoomRef.current = zoom;
-        api2.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+        api2.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: sceneStrokeWidth(savedWidth, zoom), currentItemRoundness: 'sharp' }, commitToHistory: false });
         api2.setActiveTool({ type: 'freedraw' });
       }, 0);
     }

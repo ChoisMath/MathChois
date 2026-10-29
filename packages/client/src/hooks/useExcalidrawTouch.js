@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { getInputMode, shouldBlockTouchDraw } from '../lib/inputMode';
 import { BG_ELEMENT_ID } from '../lib/excalidrawUtils';
+import { sceneStrokeWidth } from '../lib/penWidth';
 
 /**
  * Excalidraw 터치/제스처 제어 훅
@@ -324,7 +325,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         ps.lastCenterX = cx;
         ps.lastCenterY = cy;
         const strokeWidth = baseStrokeWidthRef?.current
-          ? Math.max(baseStrokeWidthRef.current / newZoom, 0.05)
+          ? sceneStrokeWidth(baseStrokeWidthRef.current, newZoom)
           : null;
         scheduleViewport({ zoom: newZoom, scrollX: vp.scrollX, scrollY: vp.scrollY, strokeWidth });
       }

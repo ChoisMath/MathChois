@@ -13,6 +13,7 @@ import {
   TOOLS,
 } from '../../lib/excalidrawUtils';
 import { getInputMode, setInputMode, subscribeInputMode } from '../../lib/inputMode';
+import { sceneStrokeWidth, PEN_WIDTH_MIN, PEN_WIDTH_MAX, PEN_WIDTH_STEP, PEN_WIDTH_DEFAULT } from '../../lib/penWidth';
 
 const TOOL_ICONS = {
   selection: MousePointer,
@@ -34,7 +35,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked
   const [activeTool, setActiveTool]       = useState('freedraw');
   const [color, setColor]                 = useState('#000000');
   const [strokeWidth, setStrokeWidth]     = useState(() =>
-    parseFloat(localStorage.getItem('mc_stroke_width') || '0.2')
+    parseFloat(localStorage.getItem('mc_stroke_width') || String(PEN_WIDTH_DEFAULT))
   );
   const [imageMoveMode, setImageMoveMode] = useState(false);
   const [inputMode, setInputModeState] = useState(() => getInputMode());
@@ -284,7 +285,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked
       api?.updateScene({
         appState: {
           activeTool: { type: 'freedraw', locked: false },
-          currentItemStrokeWidth: Math.max(strokeWidthRef.current / zoom, 0.05),
+          currentItemStrokeWidth: sceneStrokeWidth(strokeWidthRef.current, zoom),
         },
         commitToHistory: false,
       });
@@ -321,7 +322,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked
     localStorage.setItem('mc_stroke_width', String(w));
     if (onBaseWidthChange) onBaseWidthChange(w);
     const zoom = apiRef.current?.getAppState()?.zoom?.value || 1;
-    apiRef.current?.updateScene({ appState: { currentItemStrokeWidth: Math.max(w / zoom, 0.05) }, commitToHistory: false });
+    apiRef.current?.updateScene({ appState: { currentItemStrokeWidth: sceneStrokeWidth(w, zoom) }, commitToHistory: false });
   };
 
   const handleToggleInputMode = () => {
@@ -639,7 +640,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked
       {/* ④ 선 굵기 슬라이더 */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
         <input
-          type="range" min="0.1" max="2" step="0.1"
+          type="range" min={PEN_WIDTH_MIN} max={PEN_WIDTH_MAX} step={PEN_WIDTH_STEP}
           value={strokeWidth}
           title={`굵기: ${strokeWidth}`}
           onChange={(e) => applyWidth(parseFloat(e.target.value))}

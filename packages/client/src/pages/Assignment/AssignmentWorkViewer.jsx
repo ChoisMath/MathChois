@@ -12,6 +12,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
 import PageNavOverlay from '../../components/study/PageNavOverlay';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
+import { sceneStrokeWidth } from '../../lib/penWidth';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 import {
   BG_ELEMENT_ID, BG_FILE_ID,
@@ -122,7 +123,7 @@ const AssignmentWorkViewer = () => {
         baseStrokeWidthRef.current = savedWidth;
         const zoom = apiRef.getAppState()?.zoom?.value || 1;
         lastZoomRef.current = zoom;
-        apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+        apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: sceneStrokeWidth(savedWidth, zoom), currentItemRoundness: 'sharp' }, commitToHistory: false });
         apiRef.setActiveTool({ type: 'freedraw' });
       }
     }
@@ -314,7 +315,7 @@ const AssignmentWorkViewer = () => {
     await rebuildScene();
     /* 펜+검정으로 초기화 — rebuildScene 이후 + 렌더 사이클 충돌 방지 (도구가 selection 으로 덮이지 않도록) */
     setTimeout(() => {
-      apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+      apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: sceneStrokeWidth(savedWidth, zoom), currentItemRoundness: 'sharp' }, commitToHistory: false });
       apiRef.setActiveTool({ type: 'freedraw' });
     }, 0);
   }, [rebuildScene]);
@@ -337,7 +338,7 @@ const AssignmentWorkViewer = () => {
       if (tool === 'freedraw' && baseStrokeWidthRef.current) {
         isAdjustingWidthRef.current = true;
         excalidrawAPIRef.current?.updateScene({
-          appState: { currentItemStrokeWidth: Math.max(baseStrokeWidthRef.current / appState.zoom.value, 0.05) },
+          appState: { currentItemStrokeWidth: sceneStrokeWidth(baseStrokeWidthRef.current, appState.zoom.value) },
           commitToHistory: false,
         });
         requestAnimationFrame(() => { isAdjustingWidthRef.current = false; });
