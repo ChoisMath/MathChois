@@ -2,15 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { MOTION_CATALOG, SLIDE_CATALOG, validateMotionCatalog, validateSlideCatalog, MOTION_SOURCES } from '@mathchois/shared';
 
 describe('ai-hub catalog', () => {
-  it('motion catalog: 106 items, ids unique, 01-pixel first', () => {
-    expect(MOTION_CATALOG.length).toBe(106);
-    expect(new Set(MOTION_CATALOG.map((m) => m.id)).size).toBe(106);
+  it('motion catalog: 110 items, ids unique, 01-pixel first', () => {
+    expect(MOTION_CATALOG.length).toBe(110);
+    expect(new Set(MOTION_CATALOG.map((m) => m.id)).size).toBe(110);
     expect(MOTION_CATALOG[0].id).toBe('01-pixel');
     expect(validateMotionCatalog(MOTION_CATALOG)).toEqual([]);
     expect(MOTION_SOURCES).toEqual(['chois', 'oppadu']);
   });
-  it('slide catalog: 748 items, popularity order kept, 118 school', () => {
-    expect(SLIDE_CATALOG.length).toBe(748);
+  it('slide catalog: 798 items, popularity order kept, 118 school', () => {
+    expect(SLIDE_CATALOG.length).toBe(798);
     expect(SLIDE_CATALOG.filter((s) => s.source === 'school').length).toBe(118);
     expect(SLIDE_CATALOG[0].id).toBe('24');
     expect(validateSlideCatalog(SLIDE_CATALOG)).toEqual([]);
