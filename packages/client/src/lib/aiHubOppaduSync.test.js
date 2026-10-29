@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkMotionBundle, motionUpstream, mergeMotion } from '@mathchois/shared';
+import { checkMotionBundle, motionUpstream, mergeMotion, checkSlideBundle, mergeSlide, diffBrandIndex } from '@mathchois/shared';
 
 const table = [['0.0–1.0', '장면', '이유']];
 const cues = [['0.000', 'kick', 'hit']];
@@ -54,6 +54,20 @@ describe('checkMotionBundle', () => {
     const c = bundle();
     c.full.items['53-new'].cues = 'x';
     expect(checkMotionBundle(c).error).toBe('1편의 전문이 없습니다 — 로그인·멤버십 확인 (53-new)');
+  });
+  it('treats an empty (after trim) v2 template as missing, so it cannot overwrite a working prompt', () => {
+    const b = bundle();
+    b.full.items['51-a'].v2.en = '  \n ';
+    expect(checkMotionBundle(b)).toEqual({ ok: false, error: '1편의 전문이 없습니다 — 로그인·멤버십 확인 (51-a)' });
+    const c = bundle();
+    c.full.items['53-new'].v2.ko = '';
+    expect(checkMotionBundle(c).error).toBe('1편의 전문이 없습니다 — 로그인·멤버십 확인 (53-new)');
+  });
+  it('caps the id list in the missing-template message', () => {
+    const b = bundle();
+    for (let n = 60; n < 75; n++) { b.gallery.items.push(up(`${n}-x`, n)); }
+    const r = checkMotionBundle(b);
+    expect(r.error).toMatch(/^15편의 전문이 없습니다 — 로그인·멤버십 확인 \(.*…외 5\)$/);
   });
   it('reports a malformed list item without throwing', () => {
     const b = bundle();
@@ -159,5 +173,166 @@ describe('mergeMotion', () => {
     const b = bundle();
     b.gallery.items[2] = up('53-new', 'x');
     expect(() => mergeMotion(catalog, b)).toThrow(/motion sync: bad no/);
+  });
+});
+
+// ─── 슬라이드 ─────────────────────────────────────────────────────────────
+
+const style = (id, no, extra = {}) => ({
+  id, no, family: 'work', name: `스타일 ${id}`, look: '깔끔', use: '보고', slides: 3, cover: 1, body: 2, added: '2026-10-01',
+  prompt: `  프롬프트 ${id}\n`, ...extra,
+});
+const deck = { id: '24', no: 5, family: 'hand', name: '학교 덱', look: '손글씨', use: '수업', topic: '확률', slides: 8, cover: 1, body: 3, added: '2026-09-01', source: 'school' };
+const slideCatalog = [
+  deck,
+  { id: '30', no: 2, family: 'work', name: '스타일 30', look: '옛 look', use: '보고', slides: 3, cover: 1, body: 2, added: '2026-10-01', source: 'oppadu' },
+  { id: '99', no: 9, family: 'work', name: '사라짐', look: 'l', use: 'u', slides: 3, cover: 1, body: 2, added: '2026-10-01', source: 'oppadu' },
+];
+const IMG = 'https://cdn.example/img/';
+const slideBundle = (over = {}) => ({
+  kind: 'oppadu-slide', fetchedAt: '2026-10-29T00:00:00Z', page: 'https://www.oppadu.com/ai/slide-styles/', img: IMG,
+  styles: [style('30', 2, { look: '새 look' }), style('31', 3), style('24', 5, { family: 'hand', slides: 8, name: '오빠두 쪽 이름' })],
+  ...over,
+});
+
+describe('checkSlideBundle', () => {
+  it('accepts a complete bundle (tags and sub optional)', () => {
+    const b = slideBundle({ tags: { '30': ['a'] } });
+    b.styles[0].sub = '부제';
+    const r = checkSlideBundle(b);
+    expect(r.ok).toBe(true);
+    expect(r.bundle.styles).toHaveLength(3);
+  });
+  it('rejects another kind and non-objects', () => {
+    expect(checkSlideBundle({ ...slideBundle(), kind: 'oppadu-motion' }).ok).toBe(false);
+    expect(checkSlideBundle(null).ok).toBe(false);
+    expect(checkSlideBundle([]).ok).toBe(false);
+  });
+  it('names the styles whose prompt is empty (missing, blank or non-string)', () => {
+    const b = slideBundle();
+    b.styles[0].prompt = '';
+    delete b.styles[1].prompt;
+    expect(checkSlideBundle(b)).toEqual({ ok: false, error: '2개 스타일의 프롬프트가 없습니다 — 로그인·멤버십 확인 (30, 31)' });
+    const c = slideBundle();
+    c.styles[2].prompt = '  \n';
+    expect(checkSlideBundle(c).error).toBe('1개 스타일의 프롬프트가 없습니다 — 로그인·멤버십 확인 (24)');
+  });
+  it('caps the id list in that message', () => {
+    const b = slideBundle();
+    for (let n = 40; n < 55; n++) b.styles.push(style(String(n), n, { prompt: '' }));
+    expect(checkSlideBundle(b).error).toMatch(/^15개 스타일의 프롬프트가 없습니다 — 로그인·멤버십 확인 \(.*…외 5\)$/);
+  });
+  it('reports a malformed style without throwing', () => {
+    const b = slideBundle();
+    b.styles.push({ id: 7 });
+    const r = checkSlideBundle(b);
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/styles\[3\]/);
+    expect(checkSlideBundle({ ...slideBundle(), styles: 'x' }).ok).toBe(false);
+    expect(checkSlideBundle({ ...slideBundle(), img: 5 }).ok).toBe(false);
+  });
+});
+
+describe('mergeSlide', () => {
+  const r = mergeSlide(slideCatalog, slideBundle());
+
+  it('orders by upstream popularity, keeps the school deck object in its slot, vanished originals last', () => {
+    expect(r.list.map((s) => s.id)).toEqual(['30', '31', '24', '99']);
+    expect(r.list[2]).toBe(slideCatalog[0]);
+    expect(r.list[3]).toEqual(slideCatalog[2]);
+  });
+  it('puts school decks missing from upstream after the upstream list, in their current order, before vanished originals', () => {
+    const cat = [slideCatalog[2], { ...deck, id: '25', no: 6 }, slideCatalog[1], { ...deck, id: '24', no: 5 }];
+    const out = mergeSlide(cat, slideBundle({ styles: [style('30', 2), style('31', 3)] }));
+    expect(out.list.map((s) => s.id)).toEqual(['30', '31', '25', '24', '99']);
+  });
+  it('reports changed fields in the fixed order and counts remakes', () => {
+    expect(r.report).toEqual({ added: ['31'], updated: { '30': ['look'] }, keptRemake: 1, gone: ['99'] });
+  });
+  it('adds a new style as an oppadu original without topic or sub', () => {
+    expect(r.list[1]).toEqual({ id: '31', no: 3, family: 'work', name: '스타일 31', look: '깔끔', use: '보고', slides: 3, cover: 1, body: 2, added: '2026-10-01', source: 'oppadu' });
+  });
+  it('never touches a remake (list, prompt, media)', () => {
+    expect(r.prompts.map((p) => p.id)).toEqual(['30', '31']);
+    expect(r.media.some((m) => m.rel.startsWith('slide/24/'))).toBe(false);
+  });
+  it('stores the trimmed prompt', () => {
+    expect(r.prompts[1]).toEqual({ id: '31', prompt: '프롬프트 31' });
+  });
+  it('lists every page, every thumbnail and the cover/body cards', () => {
+    const m = r.media.filter((f) => f.rel.startsWith('slide/31/'));
+    expect(m).toHaveLength(8);
+    expect(m).toContainEqual({ rel: 'slide/31/1.webp', url: `${IMG}31-1.webp` });
+    expect(m).toContainEqual({ rel: 'slide/31/3.webp', url: `${IMG}31-3.webp` });
+    expect(m).toContainEqual({ rel: 'slide/31/s/2.webp', url: `${IMG}s/31-2.webp` });
+    expect(m).toContainEqual({ rel: 'slide/31/t/2.webp', url: `${IMG}t/31-2.webp` });
+    expect(m).toContainEqual({ rel: 'slide/31/t/1.webp', url: `${IMG}t/31-1.webp` });
+    expect(r.media).toHaveLength(16);
+  });
+  it('asks for a single card when cover and body are the same page', () => {
+    const b = slideBundle({ styles: [style('31', 3, { cover: 2, body: 2 })] });
+    const m = mergeSlide([], b).media;
+    expect(m.filter((f) => f.rel.includes('/t/'))).toEqual([{ rel: 'slide/31/t/2.webp', url: `${IMG}t/31-2.webp` }]);
+    expect(m).toHaveLength(7);
+  });
+  it('does not mutate the input catalog and is stable on a second merge', () => {
+    expect(slideCatalog[1].look).toBe('옛 look');
+    const again = mergeSlide(r.list, slideBundle());
+    expect(again.list).toEqual(r.list);
+    expect(again.report).toEqual({ added: [], updated: {}, keptRemake: 1, gone: ['99'] });
+  });
+  it('updates slides/cover/body/added/no too', () => {
+    const b = slideBundle({ styles: [style('30', 7, { slides: 5, cover: 2, body: 4, added: '2026-10-20' })] });
+    expect(mergeSlide(slideCatalog, b).report.updated['30']).toEqual(['no', 'look', 'slides', 'cover', 'body', 'added']);
+  });
+
+  it('throws on a family outside the seven known ones', () => {
+    const b = slideBundle();
+    b.styles[1].family = 'neon';
+    expect(() => mergeSlide(slideCatalog, b)).toThrow(/slide sync: .*unknown family "neon" \(31\)/);
+  });
+  it('throws on more than 12 slides', () => {
+    const b = slideBundle();
+    b.styles[1].slides = 13;
+    expect(() => mergeSlide(slideCatalog, b)).toThrow(/more than 12 slides \(31\)/);
+  });
+  it('throws when cover/body fall outside the deck', () => {
+    const b = slideBundle();
+    b.styles[1].cover = 5;
+    expect(() => mergeSlide(slideCatalog, b)).toThrow(/cover\/body out of range \(31\)/);
+  });
+  it('throws on a bad id, a non-integer no and an empty prompt', () => {
+    const a = slideBundle();
+    a.styles[1].id = 'x1';
+    expect(() => mergeSlide(slideCatalog, a)).toThrow(/slide sync: bad id "x1"/);
+    const b = slideBundle();
+    b.styles[1].no = 0;
+    expect(() => mergeSlide(slideCatalog, b)).toThrow(/bad no "0" \(31\)/);
+    const c = slideBundle();
+    c.styles[1].prompt = ' ';
+    expect(() => mergeSlide(slideCatalog, c)).toThrow(/prompt 31/);
+  });
+  it('throws when the merged catalog is invalid (duplicate no)', () => {
+    const b = slideBundle();
+    b.styles[1].no = 2;
+    expect(() => mergeSlide(slideCatalog, b)).toThrow(/slide sync: .*duplicate slide no/);
+  });
+  it('does not complain about a remake id whose upstream copy would be invalid', () => {
+    const b = slideBundle();
+    b.styles[2].family = 'neon';
+    expect(() => mergeSlide(slideCatalog, b)).not.toThrow();
+  });
+});
+
+describe('diffBrandIndex', () => {
+  const idx = (slugs, generated_at) => ({ generated_at, brands: slugs.map((slug) => ({ slug })) });
+  it('lists added and removed slugs', () => {
+    expect(diffBrandIndex(idx(['a', 'b']), idx(['b', 'c'], 'G'))).toEqual({ added: ['c'], removed: ['a'], total: 2, generatedAt: 'G' });
+  });
+  it('treats every brand as added when there is no previous index', () => {
+    expect(diffBrandIndex(null, idx(['a', 'b'], 'G'))).toEqual({ added: ['a', 'b'], removed: [], total: 2, generatedAt: 'G' });
+  });
+  it('falls back to an empty generatedAt', () => {
+    expect(diffBrandIndex(null, idx(['a'])).generatedAt).toBe('');
   });
 });
