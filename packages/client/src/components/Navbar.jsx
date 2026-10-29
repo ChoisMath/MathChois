@@ -10,7 +10,11 @@ import './shell/shell.css';
 
 const ROLE_LABEL = { teacher: '선생님', student: '학생' };
 
-const Navbar = ({ onToggleSidebar, sidebarOpen = false }) => {
+/**
+ * 상단 바. `children` 을 주면 로고와 사용자 영역 사이의 가운데 슬롯(.shell-top-c)에 그린다 —
+ * AI활용 허브가 제목·탭 칩을 로고와 같은 줄에 두는 데 쓴다. 좁은 화면에서는 슬롯이 둘째 줄로 내려간다(shell.css).
+ */
+const Navbar = ({ onToggleSidebar, sidebarOpen = false, children }) => {
   const { profile, isAuthenticated, signOut, updateName } = useAuth();
   const navigate = useNavigate();
   const [editingName, setEditingName] = useState(false);
@@ -41,7 +45,7 @@ const Navbar = ({ onToggleSidebar, sidebarOpen = false }) => {
   };
 
   return (
-    <nav className="shell-top">
+    <nav className={`shell-top${children ? ' shell-top--with-center' : ''}`}>
       {/* 전폭 네비게이션 — 햄버거가 항상 화면 왼쪽 끝에 붙는다 (가운데 정렬 max-w 없음) */}
       <div className="shell-top-inner">
         <div className="shell-top-l">
@@ -60,6 +64,7 @@ const Navbar = ({ onToggleSidebar, sidebarOpen = false }) => {
             <span>ChoisClass</span>
           </Link>
         </div>
+        {children ? <div className="shell-top-c">{children}</div> : null}
         <div className="shell-top-r">
           {isAuthenticated && (
             <>

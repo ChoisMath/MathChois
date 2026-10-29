@@ -1,6 +1,6 @@
 /* --ai-head-h/--ai-foot-h 는 AiHubLayout 이 측정해 둔다. 측정 전(첫 그림)에는 대략값으로 깜빡임을 줄인다. */
 .ai-brand-frame {
   display: block; width: 100%; border: 0; background: #fff;
-  height: calc(100dvh - var(--ai-head-h, 240px) - var(--ai-foot-h, 50px));
+  height: calc(100dvh - var(--ai-head-h, 130px) - var(--ai-foot-h, 50px));
   min-height: 320px;
 }

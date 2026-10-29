@@ -31,7 +31,7 @@ const TABS = [
 
 /**
  * 화면을 가득 채우는 자식(브랜드 iframe)을 위해 두 CSS 변수를 .ai-hub 에 둔다.
- *   --ai-head-h  main 위쪽에 쌓인 높이 전부(Navbar + 허브 머리글)
+ *   --ai-head-h  main 위쪽에 쌓인 높이 전부(Navbar(제목·탭 포함) + 소개 머리글)
  *   --ai-foot-h  푸터 높이
  * 머리글은 모바일에서 소개가 접히고 펼쳐지며 높이가 바뀌므로 ResizeObserver 로 따라간다.
  */
@@ -71,28 +71,24 @@ export default function AiHubLayout() {
 
   return (
     <div className="ai-hub" ref={rootRef}>
-      <Navbar />
+      {/* 제목·탭 칩은 상단 바의 가운데 슬롯(로고와 같은 줄)에 — 머리글이 낮아져 본문이 넓어진다 */}
+      <Navbar>
+        <h1 className="ai-hub-title">
+          <Sparkles aria-hidden="true" className="ai-hub-title-icon" />
+          AI활용
+        </h1>
+        <div className="ai-hub-tabs" role="group" aria-label="AI활용 분류">
+          {TABS.map((t) => (
+            <NavLink key={t.id} to={t.href} className="ai-hub-tab">
+              {t.label}
+            </NavLink>
+          ))}
+        </div>
+      </Navbar>
+
+      {/* 머리글: 탭 소개 한 줄 + 같은 줄 오른쪽 끝의 [학급으로] */}
       <header className="ai-hub-head">
         <div className="ai-hub-head-inner">
-          <div className="ai-hub-title-row">
-            <h1 className="ai-hub-title">
-              <Sparkles aria-hidden="true" className="ai-hub-title-icon" />
-              AI활용
-            </h1>
-            <Link to={backTo} className="ai-hub-back">
-              <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-              학급으로
-            </Link>
-          </div>
-
-          <nav className="ai-hub-tabs" aria-label="AI활용 분류">
-            {TABS.map((t) => (
-              <NavLink key={t.id} to={t.href} className="ai-hub-tab">
-                {t.label}
-              </NavLink>
-            ))}
-          </nav>
-
           <div className="ai-hub-intro">
             <button
               type="button"
@@ -108,6 +104,10 @@ export default function AiHubLayout() {
               {tab.intro}
             </p>
           </div>
+          <Link to={backTo} className="ai-hub-back">
+            <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+            학급으로
+          </Link>
         </div>
       </header>
 
