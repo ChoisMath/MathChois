@@ -2,6 +2,19 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { getToggles, setToggle, subscribeToggles } from '../../lib/penToggles';
 import { usePenDiagnostics } from '../../hooks/usePenDiagnostics';
+import { getPenStrokeSamples } from '../../lib/penSampleLog';
+
+/** 최근 펜 획의 원시 샘플(메인/coalesced 좌표·timeStamp)을 JSON 파일로 내려받는다 (iPad: 파일 앱에 저장) */
+function downloadPenSamples() {
+  const data = getPenStrokeSamples();
+  if (!data.length) { alert('기록된 펜 획이 없습니다. 펜으로 한 획 그은 뒤 다시 누르세요.'); return; }
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `pen-samples-${Date.now()}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
 
 /**
  * 온디바이스 펜 진단 오버레이. `?penlog=1` 또는 토글로 활성화.
@@ -31,6 +44,9 @@ export default function PenDiagnosticsOverlay({ containerRef }) {
         <label>pendingMs
           <input type="number" className="w-12 text-black ml-1" value={toggles.pendingDiscardMs}
             onChange={(e) => setToggle('pendingDiscardMs', parseInt(e.target.value, 10) || 0)} /></label>
+        <button type="button" className="px-1.5 py-0.5 rounded bg-green-700 text-white" onClick={downloadPenSamples}>
+          획 샘플 저장
+        </button>
         <button type="button" title="닫기" aria-label="닫기" className="inline-flex items-center" onClick={() => setToggle('diagnostics', false)}>
           <X className="h-3.5 w-3.5" />
         </button>

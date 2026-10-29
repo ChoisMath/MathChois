@@ -5,6 +5,7 @@ import {
   recognizeShape, snapLineEnd, linePoints, HOLD_MS, HOLD_RADIUS_PX, CANCEL_MOVE_PX, MIN_LINE_PX,
 } from '../lib/shapeRecognizer';
 import { orderCoalesced, isMicroReversal, MICRO_REVERSAL_PX } from '../lib/penSamples';
+import { beginPenStroke, recordPenMove, endPenStroke } from '../lib/penSampleLog';
 
 /**
  * wet-ink 오버레이 (5개 필기 뷰어 공용, 기본 ON · ?wetink=0 비상 차단).
@@ -140,6 +141,10 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       sizeCanvas();
       drawing = true;
       pointerId = e.pointerId;
+      {
+        const app = excalidrawAPIRef.current?.getAppState?.();
+        beginPenStroke(e, { zoom: app?.zoom?.value, strokeWidth: app?.currentItemStrokeWidth });
+      }
       pts = [[e.clientX, e.clientY]];
       pressures = [e.pressure || 0.5];
       snapped = null; snapAnchor = null; holdAnchor = null; travel = 0;
@@ -154,13 +159,16 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       // iPad Safari 는 coalesced 샘플 순서가 뒤섞여 올 수 있다 → 시간순 정렬 + 미세 역행 점 제거 (lib/penSamples.js)
       const raw = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
       const evs = orderCoalesced(raw.length ? raw : [e], pts[pts.length - 1]);
+      let used = 0;
       for (const ev of evs) {
         const p = [ev.clientX, ev.clientY];
         if (isMicroReversal(pts, p, MICRO_REVERSAL_PX)) continue;
         trackPoint(p, pts[pts.length - 1]);
         pts.push(p);
         pressures.push(ev.pressure || 0.5);
+        used += 1;
       }
+      recordPenMove(e, raw, used);
       scheduleRender();
     };
 
@@ -168,6 +176,7 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       clearHold();
       const api = excalidrawAPIRef.current;
       const src = snapped ? snapped.points : pts;
+      endPenStroke({ committedPoints: src.length, rawPoints: pts.length, snapped: snapped?.kind || null });
       if (api && src.length >= 2) {
         const app = api.getAppState();
         const simulatePressure = true; // S-Pen 실제 필압 미사용(균일 젤펜 thinning 0 — pressures 미저장)

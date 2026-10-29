@@ -36,6 +36,8 @@ import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { sceneStrokeWidth } from '../../lib/penWidth';
+import PenDiagnosticsOverlay from '../../components/study/PenDiagnosticsOverlay';
+import { setToggle } from '../../lib/penToggles';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 import { PageVideoEmbed, PageVideoThumb } from '../../components/videos/PageVideo';
 
@@ -91,6 +93,11 @@ const TeacherStudyViewer = () => {
   }, [screenLocked, currentPage?.htmlUrl]);
 
   const { isGesturingRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef: lockActiveRef, baseStrokeWidthRef });
+
+  /* 펜 진단 오버레이: ?penlog=1 진입 시 활성화 (StudyViewer 와 동일) */
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('penlog') === '1') setToggle('diagnostics', true);
+  }, []);
   useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef });
@@ -637,6 +644,7 @@ const TeacherStudyViewer = () => {
           className="w-full h-full relative overflow-hidden"
         >
           <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{showExcalidrawPanel ? '' : PANEL_HIDE_CSS}</style>
+          <PenDiagnosticsOverlay containerRef={containerRef} />
 
           {currentPage ? (
             <ExcalidrawErrorBoundary key={currentPage.id}>
