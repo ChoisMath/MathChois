@@ -46,6 +46,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
   const rafIdRef             = useRef(0);
   const pendingViewportRef   = useRef(null);  // { zoom?, scrollX, scrollY, strokeWidth? } — 다음 프레임에 반영할 값
   const touchPointerIdsRef   = useRef(new Set());
+  const touchLastPosRef      = useRef(new Map()); // pointerId → [clientX, clientY] — 핀치 진입 시 합성 pointerup 좌표
+  const touchDrawRef         = useRef(null);      // { pointerId, downTime } — 차단되지 않고 그리기로 전달된 1손가락
   const isSyntheticUpRef     = useRef(false);
   const barrelEraserRef      = useRef(false);  // S Pen 배럴버튼 지우개 활성 중
   const prevToolRef          = useRef('freedraw');
@@ -141,6 +143,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
 
       if (e.pointerType === 'touch') {
         touchPointerIdsRef.current.add(e.pointerId);
+        touchLastPosRef.current.set(e.pointerId, [e.clientX, e.clientY]);
         const count = touchPointerIdsRef.current.size;
 
         // 결정적 모드 규칙: 스타일러스 모드에서 1손가락 그리기 차단
@@ -167,18 +170,31 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
           if (firstPointerId !== undefined) {
             const canvas = containerRef.current?.querySelector('.excalidraw canvas');
             if (canvas) {
+              // Excalidraw 는 pointerup 의 clientX/Y 를 scene 좌표로 바꿔 freedraw 마지막 점으로 덧붙인다.
+              // 좌표 없이 합성하면 (0,0)=화면 왼쪽 위로 긴 삐침선이 생기므로 첫 손가락의 마지막 위치를 넣는다.
+              const [clientX, clientY] = touchLastPosRef.current.get(firstPointerId) || [e.clientX, e.clientY];
               isSyntheticUpRef.current = true;
               canvas.dispatchEvent(new PointerEvent('pointerup', {
-                pointerId: firstPointerId, pointerType: 'touch', bubbles: true, cancelable: true,
+                pointerId: firstPointerId, pointerType: 'touch', clientX, clientY, bubbles: true, cancelable: true,
               }));
               isSyntheticUpRef.current = false;
+            }
+            // 손가락 모드에서 첫 손가락이 이미 획을 시작했다면 그 획은 줌 의도였으므로 제거
+            // (커밋이 React 배치 이후 settle 되므로 지연 — discardLeakedStroke 주석 참조)
+            const drawn = touchDrawRef.current;
+            if (drawn && drawn.pointerId === firstPointerId) {
+              touchDrawRef.current = null;
+              setTimeout(() => discardLeakedStroke(drawn.downTime), 80);
             }
           }
           return;
         }
 
         // 차단되지 않은 1손가락 그리기 → 필기모드 자동 ON 후보
-        if (count === 1) notifyDrawStart();
+        if (count === 1) {
+          touchDrawRef.current = { pointerId: e.pointerId, downTime: Date.now() };
+          notifyDrawStart();
+        }
         return;
       }
 
@@ -189,6 +205,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
     const handlePointerMove = (e) => {
       if (!e.target.closest?.('.excalidraw')) return;
       if (e.pointerType !== 'touch') return;
+      if (touchLastPosRef.current.has(e.pointerId)) touchLastPosRef.current.set(e.pointerId, [e.clientX, e.clientY]);
       const count = touchPointerIdsRef.current.size;
 
       if (shouldBlockTouchDraw(getInputMode(), getActiveTool(), count)) {
@@ -221,6 +238,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
           setTimeout(() => discardLeakedStroke(armTime), 80);
         }
         touchPointerIdsRef.current.delete(e.pointerId);
+        touchLastPosRef.current.delete(e.pointerId);
+        if (touchDrawRef.current?.pointerId === e.pointerId) touchDrawRef.current = null;
       }
     };
 

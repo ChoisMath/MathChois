@@ -296,7 +296,7 @@ me.chois.pro 의 AI활용 세 갤러리를 옮겼다(오빠두엑셀 출처 표�
 - **AI활용 업로드 토큰(선택)** — `AI_MEDIA_UPLOAD_TOKEN`(32자 이상, `openssl rand -hex 32`; 더 짧으면 기동 때 경고하고 없는 것으로 친다). `ai:push` 가 쓰는 `PUT /api/ai/media`·`GET /api/ai/media/manifest`·`PUT /api/ai/prompts/:set` 의 Bearer 토큰. 비우면 업로드 비활성(503). 자료·manifest 는 Volume `ai-hub/` 버킷.
 - **PORT**(기본 3001), **NODE_ENV**.
 - **클라이언트 env** — `VITE_TOOLS_ORIGIN`(HTML 도구를 서빙할 별도 origin), Vite `VITE_*` 빌드타임 주입.
-- **클라이언트 테스트** — Vitest(jsdom 환경), `vitest.config.js`, scripts `test`(vitest run)/`test:watch`. 단위 테스트는 `src/lib/*.test.js`(inputMode, excalidrawHistory, freedrawResample 등). E2E는 Playwright.
+- **클라이언트 테스트** — Vitest(jsdom 환경), `vitest.config.js`, scripts `test`(vitest run)/`test:watch`. 단위 테스트는 `src/lib/*.test.js` + `src/hooks/*.test.js`(useExcalidrawTouch — jsdom 에서 createRoot 로 훅을 마운트해 pointer 이벤트 디스패치)(inputMode, excalidrawHistory, freedrawResample 등). E2E는 Playwright.
 
 ## 주의사항 / 특이 패턴
 - **루트 `CLAUDE.md`는 현재 스택 기준으로 최신**(모노레포/Fastify/Drizzle). 구조 상세는 이 PROJECT_MAP 참조.
@@ -312,6 +312,7 @@ me.chois.pro 의 AI활용 세 갤러리를 옮겼다(오빠두엑셀 출처 표�
   - 차단 리스너는 **`window` 캡처**에 부착한다. React 19가 이벤트를 앱 루트(`#root`)에 위임하는데, `#root`가 container 상위라 container 캡처는 React가 Excalidraw 핸들러를 디스패치한 뒤에 실행되어 `stopPropagation`이 늦다. `window` 캡처는 `#root`보다 먼저 실행되어 실제로 차단된다.
   - `useExcalidrawTouch`의 `window` 리스너는 container 마운트와 무관하게 **즉시** 부착하고, container 의존 설정(`touchAction`/gesture/contextmenu)만 **`requestAnimationFrame`으로 container 마운트까지 대기**한다. 뷰어가 로딩 스피너를 먼저 렌더하는 동안 마운트되면 `containerRef.current`가 null이라, 과거처럼 container 기준으로 부착하면 영영 등록되지 않던 버그를 피한다.
   - 스타일러스 모드에서 새어든 획은 pointerup 후 **~80ms 지연 백스톱**으로 히스토리 오염 없이 제거(`commitToHistory: false`).
+  - **핀치 진입 시 합성 pointerup 좌표**: 손가락 모드에서 두 번째 손가락이 닿으면 첫 손가락의 freedraw 를 `pointerup` 합성으로 끊는데, Excalidraw 0.18 은 pointerup 의 `clientX/Y`를 scene 좌표로 바꿔 **freedraw 마지막 점으로 덧붙인다**. 좌표 없이 합성하면 (0,0)=화면 왼쪽 위로 긴 삐침선이 생기므로(갤럭시 실측, 2026-10-29) 첫 손가락의 마지막 위치(`touchLastPosRef`)를 넣고, 그 손가락이 이미 시작한 획은 줌 의도이므로 `discardLeakedStroke` 로 80ms 뒤 제거한다(`touchDrawRef`). 테스트 `src/hooks/useExcalidrawTouch.test.js`.
   - **1손가락 팬**: 스타일러스 모드에서 그리기가 차단되는 1손가락 터치를 죽이지 않고 캔버스 좌우/상하 팬으로 쓴다(잠금/HTML 오버레이는 제외 — 뷰포트 고정). 이미지·AI코칭 페이지에 적용. **펜 우선**: 일부 기기(S Pen)는 펜 입력이 pointer(그리기) + touch 를 동시에 발생시키므로, `penDownRef`(`pointerType==='pen'`)가 켜진 동안엔 손가락 팬/줌을 전부 무시한다(펜=그리기, 손가락=이동). 팜 리젝션도 펜이 닿은 동안 유지.
   - **줌/팬 성능**: 핀치줌·1손가락 팬의 `updateScene` 는 `requestAnimationFrame` 으로 코얼레싱(프레임당 1회). 누적 뷰포트는 훅 내부 `viewportRef` 가 단일 출처. 훅이 노출하는 `isGesturingRef` 가 제스처 중임을 알려, 6개 뷰어 onChange 가 penMode 가드 직후 early-return 해 무거운 저장/지우개/히스토리/직렬화 파이프라인을 건너뛴다. (과거: touchmove 마다 updateScene 2회 + 전체 element `JSON.stringify` → 메인 스레드 포화로 줌이 끊기고 Socket.IO 하트비트가 굶어 접속 끊김.)
 - **자체 undo/redo**(`hooks/useExcalidrawUndo.js` + `lib/excalidrawHistory.js`): Excalidraw 0.18이 undo/redo API/키보드를 노출하지 않아 씬 스냅샷 스택으로 구현. onChange 끝에서 350ms debounce 후 확정 상태 기록, Ctrl+Z / Ctrl+Shift+Z(또는 Ctrl+Y) 키바인딩. DrawingToolbar의 `onUndo/onRedo/canUndo/canRedo` prop.

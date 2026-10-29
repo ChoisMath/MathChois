@@ -557,20 +557,20 @@ const StudentWorkViewer = () => {
 
       {/* ── 내비게이션 바 ── */}
       <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor`)} title="뒤로 가기"
             className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer flex items-center justify-center"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <span className="font-semibold text-gray-900">{chapter?.title}</span>
-          <span className="text-sm text-gray-500">— {studentProfile?.name || '학생'}</span>
+          <span className="font-semibold text-gray-900 truncate">{chapter?.title}</span>
+          <span className="text-sm text-gray-500 whitespace-nowrap shrink-0">— {studentProfile?.name || '학생'}</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {commentMode && !currentPage?.videoUrl && (
-            <span className={`text-xs ${saveStatus === 'saved' ? 'text-green-600' : 'text-gray-400'}`}>
+            <span className={`text-xs whitespace-nowrap ${saveStatus === 'saved' ? 'text-green-600' : 'text-gray-400'}`}>
               {saveStatus === 'saved' ? '저장됨' : '저장 중...'}
             </span>
           )}
