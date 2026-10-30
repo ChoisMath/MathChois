@@ -27,15 +27,20 @@ packages/
 │       │                       #   videos(영상자료 라이브러리+스트리밍 업로드), classroomVideos(학급 영상 배정+댓글)
 │       ├── services/           # *.service.ts (DB 접근 로직) + ai.service.ts(Gemini), problem.service.ts, coaching.service.ts, dashboard.service.ts, visualization.service.ts, video.service.ts, classroomVideo.service.ts,
 │       │                       #   pageAccess.service.ts(페이지↔학급 접근 헬퍼 — socket/routes 공용), classroomGroup.service.ts(기본 모둠), whiteboard.service.ts(보드 지연 생성·설정·배정·장면 저장/직전본·권한)
-│       ├── scripts/            # seed-test-accounts.ts, wb-smoke.ts(화이트보드 소켓/REST 스모크), wb-e2e-setup.ts(브라우저 E2E 픽스처)
+│       ├── utils/              # uploadPolicy.ts(버킷별 MIME·용량 — HTML 전용·`chapter-pdfs` PDF 전용 100MB·화이트보드 2MB), pageBody.ts(`pdfUrl`·`pdfPage` 쌍 검증),
+│       │                       #   fileUrls.ts(행들의 imageUrl·pdfUrl 수집·중복 제거 — 저장소 정리용), videoUrl.ts (*.test.ts = Vitest, `npm test -w @mathchois/server`)
+│       ├── scripts/            # seed-test-accounts.ts, wb-smoke.ts(화이트보드 소켓/REST 스모크), wb-e2e-setup.ts(브라우저 E2E 픽스처),
+│       │                       #   pdf-e2e-setup.ts(PDF 페이지 브라우저 E2E 픽스처 — 교사·학생·학급·빈 챕터, `--cleanup <chapterId>`)
 │       └── socket/             # index.ts + handlers/(notes, comments, assignments, presence, videos, whiteboard(메모리 권위 장면 + 요소 단위 병합))
 ├── client/                 # @mathchois/client (React SPA)
+│   ├── vite-plugin-pdfjs-assets.js  # pdf.js cmaps/standard_fonts 를 /pdfjs/ 로 제공(dev 미들웨어, 빌드 시 dist/pdfjs/ 복사)
+│   ├── e2e/                # Playwright 스모크: whiteboard.smoke.mjs, pdf-pages.smoke.mjs(+ fixtures/교재 테스트.pdf — 한글·공백 파일명 일부러)
 │   └── src/
 │       ├── App.jsx             # 라우팅 정의
 │       ├── contexts/AuthContext.jsx
-│       ├── components/         # ProtectedRoute, Navbar(남색 상단 바 — 햄버거·체크 노트 로고·관리자 패널·아바타·이름+역할·로그아웃, MainLayout 과 공용), shell/(BrandMark 체크 노트 로고, SideTab(SideTab 메뉴 탭·ClassTab 학급 색 탭), shell.css — 상단 바·사이드바·`--shell-main-fill`), classrooms/(ClassroomColorPicker — 44px 색 원 6개 `role=group`+`aria-pressed`, `size="sm"`(보이는 원 30px·누르는 영역 44px — 학급 상세 헤더, 그룹 `aria-label="표지 색"`)·`ariaLabel`(글자 라벨 없이 그룹 이름만 줄 때) props; 교사 헤더의 작은 색 원은 `#`(클래스 코드) 버튼을 누르면 코드와 함께 나타나고 누르면 바로 저장, classrooms.css), assignment/, board/, common/(IconButton — 아이콘만 있는 공통 버튼: `label` 하나로 title+aria-label, 누르는 영역 44px, variant ghost/primary(남색)/danger/danger-solid, size sm/md/lg, busy·busyLabel, `as`(Link 등); 글자 버튼을 아이콘으로 바꿀 때 사용(설계 `docs/superpowers/specs/2026-10-20-icon-buttons-design.md`), ProblemView, CoachingPanel, SortablePageItem, SplitPane(2분할 컨테이너 — 손잡이 드래그/키보드로 비율 조정, 드래그 중 투명 오버레이), FileDropZone — 클릭/드래그 앤 드롭 파일 선택 영역, SortOrderSelect — 정렬 순서 선택), problems/(ProblemPickerModal), coaching/(CoachingHistoryView, AttemptStack), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal),
+│       ├── components/         # ProtectedRoute, Navbar(남색 상단 바 — 햄버거·체크 노트 로고·관리자 패널·아바타·이름+역할·로그아웃, MainLayout 과 공용), shell/(BrandMark 체크 노트 로고, SideTab(SideTab 메뉴 탭·ClassTab 학급 색 탭), shell.css — 상단 바·사이드바·`--shell-main-fill`), classrooms/(ClassroomColorPicker — 44px 색 원 6개 `role=group`+`aria-pressed`, `size="sm"`(보이는 원 30px·누르는 영역 44px — 학급 상세 헤더, 그룹 `aria-label="표지 색"`)·`ariaLabel`(글자 라벨 없이 그룹 이름만 줄 때) props; 교사 헤더의 작은 색 원은 `#`(클래스 코드) 버튼을 누르면 코드와 함께 나타나고 누르면 바로 저장, classrooms.css), assignment/, board/, common/(IconButton — 아이콘만 있는 공통 버튼: `label` 하나로 title+aria-label, 누르는 영역 44px, variant ghost/primary(남색)/danger/danger-solid, size sm/md/lg, busy·busyLabel, `as`(Link 등); 글자 버튼을 아이콘으로 바꿀 때 사용(설계 `docs/superpowers/specs/2026-10-20-icon-buttons-design.md`), ProblemView, CoachingPanel, SortablePageItem, PageThumb(페이지 썸네일 — PDF 쪽이면 PdfPageThumb(화면에 들어올 때 pdf.js 래스터, 한 번에 하나씩, 썸네일 LRU), 아니면 imageUrl `<img>`), SplitPane(2분할 컨테이너 — 손잡이 드래그/키보드로 비율 조정, 드래그 중 투명 오버레이), FileDropZone — 클릭/드래그 앤 드롭 파일 선택 영역, SortOrderSelect — 정렬 순서 선택), problems/(ProblemPickerModal), coaching/(CoachingHistoryView, AttemptStack), dashboard/(ClassroomDashboard), visualizations/(VisualizationForm, VisualizationPickerModal),
 │       │                       #   videos/(VideoPlayer, VideoPreviewModal, VideoForm, VideoPickerModal, ClassroomVideoTab, VideoComments)
-│       │   ├── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay, HtmlToolOverlay
+│       │   ├── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay, HtmlToolOverlay, PdfPageLayer(Excalidraw 아래 PDF 벡터 레이어 — 뷰포트 추적·보이는 영역만 재렌더·오류 카드)
 │       │   └── whiteboard/     # WhiteboardCanvas(Excalidraw 기본 UI + 협업), WhiteboardTopBar, BackgroundColorPicker, TemplatePickerDialog, TemplateThumb(SVG 미리보기),
 │       │                       #   WhiteboardTile(격자 정적 썸네일), WhiteboardSettingsDrawer(교사 설정), GroupAssignmentPanel, ClassroomGroupSettings(학급 학생 탭 모둠 설정)
 │       ├── layouts/            # MainLayout(public), DashboardLayout(인증 — 남색 상단 바 + 색 인덱스 탭 사이드바(`#EEF2F8`, 폭 280px; 선택 탭은 종이색 `#F8FAFD` 본문과 이어짐, 학급 탭은 학급 색 띠). 데스크톱 ≥1024px 고정 사이드바(바깥은 본문 높이만큼 늘어나 바닥까지, 안쪽 sticky; 햄버거로 접기, `mc_sidebar_collapsed`), 그 아래는 오버레이(`w-[280px] max-w-[85vw]`); 본문 종이색·유동 폭, 여백 1/1.5/2rem(shell.css `--shell-main-pad`), 남는 높이 변수 `--shell-main-fill`)
@@ -45,7 +50,9 @@ packages/
 │       ├── hooks/              # useMediaQuery(matchMedia 구독), useSortOrder(목록 정렬 순서 — 사용자별 localStorage), useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
 │       │                       #   useScribbleErase(문지르기 지우개), useFreedrawSmoothing, usePenDiagnostics,
 │       │                       #   useWetInk(웻잉크 오버레이 — 펜 라이브 렌더), useOrientation(세로 화면 → 위/아래 분할),
-│       │                       #   useWhiteboardCollab(보드 1개 소켓 협업 — 변경 요소 100ms 스로틀 전송/포인터/파일), useWhiteboardGrid(교사 격자 — 소켓 하나로 N 보드 장면 유지)
+│       │                       #   useWhiteboardCollab(보드 1개 소켓 협업 — 변경 요소 100ms 스로틀 전송/포인터/파일), useWhiteboardGrid(교사 격자 — 소켓 하나로 N 보드 장면 유지),
+│       │                       #   usePdfDocument(usePdfPage — 문서 캐시에서 쪽 열기·고정·재시도, prefetchPdfNeighbors), usePdfBackground(뷰어용 PDF 배경 — 종이 사각형=bgPosition·레이어 props·applyPdfScene),
+│       │                       #   useElementWidth(콜백 ref + ResizeObserver 폭 — 편집기 미리보기 썸네일 폭)
 │       └── lib/                # api.ts, socket.ts, toolUrl.js, excalidrawUtils, pdfDownloader,
 │                               #   inputMode.js, penToggles.js, excalidrawHistory.js,
 │                               #   wetInkStroke.js(인라인 perfect-freehand + freedraw element 생성),
@@ -64,10 +71,15 @@ packages/
 │                               #   sortOrder.js(학급 상세 [챕터]·[영상] 탭 정렬 — 최신순/등록순/교사 지정순, sortItems + localStorage 저장),
 │                               #   layout.js(CARD_GRID 카드 목록 반응형 열 규칙 1/2/3/4/5열 · DESKTOP_MEDIA_QUERY · SIDEBAR_COLLAPSED_KEY),
 │                               #   groupAssign.js(모둠 자동 배분/이동), whiteboardTemplates.js(템플릿 34종 skeleton, 3200×1800), whiteboardTemplateBuild.js(convertToExcalidrawElements + groupId),
-│                               #   whiteboardExport.js(발표 영역 안내선·범위 계산, 순수), whiteboardExportBrowser.js(썸네일/PNG/PDF — Excalidraw import), whiteboardImage.js(축소 업로드·파일 ref↔dataURL·커서 색) (*.test.js = Vitest)
+│                               #   whiteboardExport.js(발표 영역 안내선·범위 계산, 순수), whiteboardExportBrowser.js(썸네일/PNG/PDF — Excalidraw import), whiteboardImage.js(축소 업로드·파일 ref↔dataURL·커서 색),
+│                               #   pdfjs.js(pdf.js 지연 로더 — legacy 빌드, 앱은 pdfjs-dist 를 직접 import 하지 않음), pdfLayerMath.js(레이어 좌표·렌더 계획 순수 함수),
+│                               #   pdfDocCache.js(문서 LRU 2개 + pin), pdfRaster.js(쪽 → JPEG dataURL), pdfThumbCache.js(썸네일 LRU),
+│                               #   pdfImport.js(PDF 검사 — 100MB·500쪽·암호·손상 메시지, 쪽 위치 배치), pageUpload.js(편집기 이미지·PDF 업로드 공용 흐름),
+│                               #   pageStorage.js(페이지 삭제 시 지울 파일 — 공유 PDF 는 마지막 쪽에서만), pdfBackground.js(내보내기 배경 서술자 — 이미지 / PDF 래스터) (*.test.js = Vitest)
 └── shared/src/
-    ├── types/             # api, auth, excalidraw, models(+ Whiteboard* 타입), socket(+ wb:* 페이로드), problem, coaching, dashboard, visualization, video
+    ├── types/             # api, auth, excalidraw, models(+ Whiteboard* 타입, Page/AssignmentPage `pdfUrl`·`pdfPage`), socket(+ wb:* 페이로드), problem, coaching, dashboard, visualization, video
     ├── classroom/         # color.ts — 학급 색 6가지(`CLASSROOM_COLORS` 고정 순서: coral·mustard·sage·sky·lavender·rose), `isClassroomColor`, `classroomColor(id)`, `assignClassroomColors`(저장 색 우선·사용 수 반영, 나머지는 만든 순서대로 고유 색/덜 쓴 색), `pickLeastUsedColor` — 서버(부팅 채움·기본값)·클라이언트 공용
+    ├── page/              # kind.ts — `isPdfPage(page)`(pdfUrl·pdfPage 가 있으면 PDF 쪽, 서버·클라이언트 공용)
     ├── whiteboard/        # merge.ts — 요소 단위 병합 순수 함수(서버·클라이언트 공용, version→versionNonce, 작성자 보존, 변경 추출, 삭제 정리)
     └── curriculum/        # math2022.ts — 2022 개정 수학과 교육과정 MAP(과목→대단원→소단원+성취기준) + buildCurriculumPromptBlock()
 ```
@@ -108,6 +120,15 @@ packages/
 - **교사 화면**(`TeacherWhiteboardPage`): 격자(모든 모둠 타일 — `useWhiteboardGrid` 가 소켓 하나로 N 보드 join, 타일은 `exportToCanvas` 2초 스로틀 정적 렌더, 화면 밖 타일은 미렌더) ↔ 단일(모둠 드롭다운, 편집, 요소 선택 시 작성자 표시). 설정 드로어: 배정·열람 허용·전체/보드 잠금·기본 템플릿(빈 보드에 재적용)·초기화/직전 상태 복원·PNG/PDF(가로 A4) 내보내기. ChapterMonitor 는 화이트보드 페이지를 진도 집계에서 빼고 "보드 열기" 칩으로 연결.
 - 테스트: `npm test -w @mathchois/client`(병합·배분·템플릿 범위·내보내기 범위·이미지 유틸), `packages/server/scripts/wb-smoke.ts`(소켓 2클라이언트 + REST 36개), `packages/client/e2e/whiteboard.smoke.mjs`(Chromium 17개 — 교사 격자/학생 동시 편집/작성자/잠금/템플릿 오버레이/타일 렌더).
 - 전제: **단일 서버 인스턴스**(메모리 장면). 다중 인스턴스는 Redis 어댑터 등 별도 작업 필요.
+
+## PDF 교재 페이지 — 벡터 배경 필기 (설계 `docs/superpowers/specs/2026-10-30-pdf-pages-design.md`, 계획 `docs/superpowers/plans/2026-10-30-pdf-pages.md`)
+
+챕터·과제 편집기에서 PDF 를 등록하면 쪽수만큼 페이지 행이 생긴다(`pages`/`assignment_pages` 의 `pdfUrl` + `pdfPage`, 같은 PDF 의 쪽들은 `pdfUrl` 하나를 공유, `imageUrl` 은 null). 5개 필기 뷰어 모두 쪽을 **벡터로** 그려 어느 배율에서도 선명하다.
+- **등록**(`lib/pageUpload.js` + `lib/pdfImport.js`): 브라우저에서 pdf.js 로 검사(100MB·500쪽·암호·손상 → 안내 메시지) → `chapter-pdfs` 버킷에 1회 업로드 → `POST …/pages { pages }` 배치 생성(이미지와 섞여 파일명 순, 연속 position). 서버는 PDF 를 열지 않는다(`utils/uploadPolicy.ts` MIME·용량, `utils/pageBody.ts` 필드 쌍 검증). 페이지 삭제는 같은 `pdfUrl` 을 쓰는 다른 페이지가 남아 있으면 파일을 지우지 않는다(`lib/pageStorage.js`, 서버 챕터/과제/학급 정리는 `utils/fileUrls.ts`).
+- **뷰어**(`usePdfBackground` + `components/study/PdfPageLayer.jsx`): PDF 쪽에는 배경 image element 가 **없다**. 레이어가 Excalidraw 아래(z-0, `pointer-events:none`)에서 `onChange` 뷰포트를 따라가며 마지막 비트맵을 CSS transform 으로 옮기고, 뷰포트가 멈추면 **보이는 clip 만** zoom×DPR 로 다시 렌더한다. 종이 사각형 = 노트의 `bgPosition`(데이터 계약 그대로 — ③⑤는 학생의 `bgPosition`). 문서·쪽 로드 실패 시 Excalidraw 위(zIndex 4) 오류 카드 + "다시 시도".
+- **pdf.js**(`lib/pdfjs.js`): `pdfjs-dist` 6.4.299 를 **legacy 빌드**로 지연 로드(모던 빌드는 `Map.prototype.getOrInsertComputed` 를 요구해 Chromium 141·태블릿 브라우저에서 렌더 실패). cmaps/standard_fonts 는 `vite-plugin-pdfjs-assets.js` 가 `/pdfjs/` 로 제공. 문서는 `lib/pdfDocCache.js` **LRU 2개**로 공유하고 화면에 그린 문서는 **pin** 해 썸네일·이웃 프리패치가 밀어내지 못하게 한다.
+- **썸네일·내보내기**: 래스터 보관 없이 pdf.js 로 그린다 — `PageThumb`/`PdfPageThumb`(보일 때 JPEG dataURL, `pdfThumbCache`), PDF 내보내기 배경은 `lib/pdfBackground.js` → `pdfRaster.js`.
+- 테스트: `npm test -w @mathchois/client`(레이어 수학·문서 캐시·검사·업로드 흐름·삭제 판정·래스터·내보내기 배경), `npm test -w @mathchois/server`(uploadPolicy·pageBody), `packages/client/e2e/pdf-pages.smoke.mjs`(Chromium — 등록·썸네일·레이어 픽셀·줌 재렌더·필기 저장·가로 쪽·오류 카드 재시도·공유 파일 삭제 보호; 준비 `packages/server/scripts/pdf-e2e-setup.ts`, `LANG=C.UTF-8` 필요).
 
 ## AI 수학 코칭 페이지 (#3, `feat/ai-coaching-page`)
 
@@ -191,8 +212,8 @@ packages/
 | auth | routes/auth.ts | `GET /auth/google`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`, `GET /profiles/:id` |
 | classrooms | routes/classrooms.ts | `GET/POST /classrooms`, `GET /classrooms/:id`, `/:id/members`, 클래스코드 가입. **색 계약**: `POST {name, color?}` — color 생략 시 교사의 가장 적게 쓴 색(`pickLeastUsedColor`), 여섯 색이 아니면 400 `{error:'Invalid color'}`. `PATCH /classrooms/:id {name?, color?}` — 소유 교사만, 본문에서 `name`/`color` 만 반영(`teacherId`·`classCode` 등은 무시), 잘못된 색 400 `Invalid color`, 바꿀 것이 없으면 400 `Nothing to update`. 목록·상세 응답에 `color` 포함 |
 | chapters | routes/chapters.ts | `GET /classrooms/:cid/chapters`, `GET/PATCH/DELETE /chapters/:id` |
-| pages | routes/pages.ts | `GET /chapters/:chapterId/pages`, `POST` 생성(`htmlUrl`/`aiProblemId`/**`fromVisualizationId`**(시각화자료 복제 삽입) 허용; `videoUrl` 은 YouTube 또는 `/api/files/videos/library/…` 만 — `utils/videoUrl.ts`, 아니면 400), `PATCH /pages/:id`, `DELETE /pages/:id` |
-| storage | routes/storage.ts | `POST /files/upload`(+multiple; `whiteboard-files` 버킷은 학생 허용·래스터 이미지만·2MB), `GET /files/*`(**스트리밍 + HTTP Range 206/416 + HEAD** — 영상 탐색/배속용, 전체 Buffer 읽기 없음), `DELETE /files/*` |
+| pages | routes/pages.ts | `GET /chapters/:chapterId/pages`, `POST` 생성(배치 `{ pages }` 지원, **`pdfUrl`+`pdfPage`** 쌍 — `utils/pageBody.ts`; `htmlUrl`/`aiProblemId`/**`fromVisualizationId`**(시각화자료 복제 삽입) 허용; `videoUrl` 은 YouTube 또는 `/api/files/videos/library/…` 만 — `utils/videoUrl.ts`, 아니면 400), `PATCH /pages/:id`, `DELETE /pages/:id` |
+| storage | routes/storage.ts | `POST /files/upload`(+multiple; `whiteboard-files` 버킷은 학생 허용·래스터 이미지만·2MB, `chapter-pdfs` 는 교사 전용·PDF 만·100MB — `utils/uploadPolicy.ts`), `GET /files/*`(**스트리밍 + HTTP Range 206/416 + HEAD** — 영상 탐색/배속용, 전체 Buffer 읽기 없음), `DELETE /files/*` |
 | posts | routes/posts.ts | `GET /posts`, `GET /classrooms/:cid/posts`, `GET/DELETE /posts/:id` (+파일) |
 | assignments | routes/assignments.ts | `GET /classrooms/:cid/assignments`, `GET/DELETE /assignments/:id`, `/:id/pages`, `/:id/submissions` |
 | notes | routes/notes.ts | ①② 및 ④ 필기 (위 표 참조) + `student-summary`, `student-notes-for/:studentId` |
@@ -215,7 +236,7 @@ packages/
 | `classrooms` | teacherId→profiles | classCode unique, **color**(text NULL — 여섯 색 이름, 공책 표지·사이드바 탭 색. startupMigrate 가 칸을 추가하고 색 없는 학급만 교사별로 채움(저장된 색은 유지)) |
 | `classroom_members` | classroomId, studentId | (classroom, student) unique |
 | `chapters` | classroomId, sourceChapterId(self) | position, sourceChapterId(복제 출처), createdAt(최신순/등록순 정렬용 — startupMigrate 가 보강). 새 챕터는 position 0 에 삽입되고 기존 챕터는 +1 shift(새 항목이 맨 위) |
-| `pages` | chapterId, aiProblemId→problems(set null) | imageUrl / videoUrl / **htmlUrl**(HTML 도구) / position / **pageType**('whiteboard' \| null) / **whiteboardTemplate**(기본 템플릿 key). `aiProblemId` 설정 시 배경 없는 AI 코칭 페이지 |
+| `pages` | chapterId, aiProblemId→problems(set null) | imageUrl / videoUrl / **htmlUrl**(HTML 도구) / position / **pageType**('whiteboard' \| null) / **whiteboardTemplate**(기본 템플릿 key) / **pdfUrl**·**pdfPage**(PDF 쪽 — 같은 PDF 의 쪽들이 pdfUrl 공유, 함께 채우거나 함께 null). `aiProblemId` 설정 시 배경 없는 AI 코칭 페이지 |
 | `student_notes` ① | studentId, pageId | (student, page) unique, excalidrawData |
 | `classroom_groups` / `classroom_group_members` | classroomId→classrooms(cascade) / groupId(cascade), studentId(cascade) | 학급 기본 모둠. name/position. (classroom, student) unique — 학생은 학급당 한 모둠 |
 | `whiteboard_page_settings` | pageId→pages(cascade), classroomId→classrooms(cascade) | 화이트보드 페이지×학급 설정: allowCrossGroupView(다른 모둠 읽기 전용 열람), lockedAll. (page, classroom) unique |
@@ -224,7 +245,7 @@ packages/
 | `teacher_student_comments` ③ | teacherId, studentId, pageId | (teacher, student, page) unique |
 | `posts` / `post_files` / `post_classrooms` | teacherId / postId / (post,classroom) | 게시판 |
 | `assignments` | classroomId, teacherId | deadline, maxScore, position |
-| `assignment_pages` | assignmentId | imageUrl/videoUrl/position |
+| `assignment_pages` | assignmentId | imageUrl/videoUrl/**pdfUrl**·**pdfPage**/position |
 | `assignment_submissions` | assignmentId, studentId | status(draft/submitted/late_submitted/rejected/graded), score |
 | `assignment_submission_files` | submissionId | 제출 첨부파일 |
 | `assignment_notes` ④ | assignmentId, pageId(→assignment_pages), studentId | (assignment, page, student) unique |
@@ -245,13 +266,14 @@ packages/
 - **PostgreSQL** (Railway) — `DATABASE_URL`.
 - **Google OAuth** — `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
 - **JWT** — `JWT_SECRET`, `JWT_REFRESH_SECRET`.
-- **파일 스토리지(Volume)** — `VOLUME_PATH` → 없으면 Railway 가 자동 주입하는 `RAILWAY_VOLUME_MOUNT_PATH` → 둘 다 없으면 `./local-storage`(프로덕션에서는 경고 로그 — 컨테이너 내부라 재배포 시 파일 소실). `env.VOLUME_PATH_SOURCE` 가 어느 것이 쓰였는지 알려주고 `/api/admin/storage-info` 에 노출된다. 버킷: `chapter-pages`, `chapter-tools`(HTML 전용), `visualizations`(시각화자료 원본 HTML, HTML 전용), `videos`(영상자료 — 교사 전용, `POST /api/videos/upload` 스트리밍 라우트로만 업로드, `library/` 영상 + `thumbnails/` JPEG), `submission-files`, `problem-bank`(문제은행 이미지), `ai-coaching`(코칭 필기 스냅샷, 학생 업로드 허용), post 첨부 등. `/api/files/*`로 서빙(스트리밍 + Range). HTML 전용 버킷(`chapter-tools`/`visualizations`)은 `text/html`만 허용.
+- **파일 스토리지(Volume)** — `VOLUME_PATH` → 없으면 Railway 가 자동 주입하는 `RAILWAY_VOLUME_MOUNT_PATH` → 둘 다 없으면 `./local-storage`(프로덕션에서는 경고 로그 — 컨테이너 내부라 재배포 시 파일 소실). `env.VOLUME_PATH_SOURCE` 가 어느 것이 쓰였는지 알려주고 `/api/admin/storage-info` 에 노출된다. 버킷: `chapter-pages`, `chapter-pdfs`(PDF 교재 — PDF 전용·100MB·교사 전용, 한 파일을 여러 페이지가 공유), `chapter-tools`(HTML 전용), `visualizations`(시각화자료 원본 HTML, HTML 전용), `videos`(영상자료 — 교사 전용, `POST /api/videos/upload` 스트리밍 라우트로만 업로드, `library/` 영상 + `thumbnails/` JPEG), `submission-files`, `problem-bank`(문제은행 이미지), `ai-coaching`(코칭 필기 스냅샷, 학생 업로드 허용), post 첨부 등. `/api/files/*`로 서빙(스트리밍 + Range). HTML 전용 버킷(`chapter-tools`/`visualizations`)은 `text/html`만 허용.
 - **앱 도메인** — 프로덕션 `https://class.chois.pro`(구 `class.chois.ai.kr` 에서 이전). HTML 도구 iframe 의 `frame-ancestors` 는 `routes/storage.ts`의 `buildFrameAncestors()`가 **이 도메인 + `APP_URL` + `FRAME_ANCESTORS`(공백 구분, 선택) + localhost:3000** 으로 조립한다. 도메인이 또 바뀌면 `APP_ORIGIN` 상수 또는 Railway 환경변수 `FRAME_ANCESTORS`/`APP_URL`을 갱신할 것(안 하면 시각화자료 iframe 이 CSP 에 막혀 빈 화면이 된다).
 - **Google Gemini(선택)** — `GEMINI_API_KEY`(@google/genai), `GEMINI_MODEL`(기본 `gemini-2.5-flash`). `services/ai.service.ts`의 OCR(문제/마크스킴)·해설 생성·필기→LaTeX 전환·풀이 검토. 429 처리는 spend-cap / rate-limit / 기타로 세분화하고 서버 로그에 실제 원인 기록. 구조화 출력은 `responseJsonSchema`. 문항 OCR meta(과목·대단원·소단원)는 **2022 개정 교육과정 MAP**(`@mathchois/shared`의 `buildCurriculumPromptBlock`)을 프롬프트에 주입해 **MAP 항목에서만 강제 선택**(subject는 enum). 본문 줄바꿈은 `<br>` 태그 + 함수식만 있는 줄은 `\qquad` 들여쓰기(`MD_LINEBREAK_RULE`). 기준 문서: `docs/curriculum/2022-math-curriculum.md`.
 - **SMTP(선택)** — `SMTP_HOST/PORT/USER/PASS/FROM`(비밀번호 초기화 메일). `APP_URL`(메일 링크).
 - **PORT**(기본 3001), **NODE_ENV**.
 - **클라이언트 env** — `VITE_TOOLS_ORIGIN`(HTML 도구를 서빙할 별도 origin), Vite `VITE_*` 빌드타임 주입.
-- **클라이언트 테스트** — Vitest(jsdom 환경), `vitest.config.js`, scripts `test`(vitest run)/`test:watch`. 단위 테스트는 `src/lib/*.test.js`(inputMode, excalidrawHistory, freedrawResample 등). E2E는 Playwright.
+- **클라이언트 테스트** — Vitest(jsdom 환경), `vitest.config.js`, scripts `test`(vitest run)/`test:watch`. 단위 테스트는 `src/lib/*.test.js`(inputMode, excalidrawHistory, freedrawResample 등). E2E는 Playwright(`packages/client/e2e/*.smoke.mjs` — 서버·Vite 실행 중에 `node` 로 실행).
+- **서버 테스트** — Vitest(`packages/server/vitest.config.ts`), `npm test -w @mathchois/server`(`src/utils/*.test.ts` — uploadPolicy, pageBody).
 
 ## 주의사항 / 특이 패턴
 - **루트 `CLAUDE.md`는 현재 스택 기준으로 최신**(모노레포/Fastify/Drizzle). 구조 상세는 이 PROJECT_MAP 참조.
@@ -314,4 +336,4 @@ packages/
 - **`.gitignore`** — `*.tsbuildinfo`·`.superpowers/`·`.plans/`·`review.md` 무시(빌드 산출물·작업 노트는 읽지 않음).
 
 ---
-마지막 업데이트: 2026-10-20 (앱 틀 리디자인 — 남색 상단 바 + 색 인덱스 탭 사이드바, `classrooms.color` + 교사 학급 색 선택, 사이드바·목록 카드 화면 높이 채움 / 직전: 화이트보드 — 모둠 공유 보드: classroom_groups·whiteboard_* 테이블, pages.page_type, 요소 단위 실시간 병합(socket wb:*), 템플릿 34종, 교사 격자/단일 화면 / 직전: 영상 2분할 필기: classroom_videos.chapter_id·ClassroomVideoSplit·SplitPane·StudyViewer 임베드 모드 / 직전: 영상자료 v2 후속: 시청 기록·force 삭제·챕터 페이지 영상 삽입·미읽음 배지 / 직전: 영상자료 라이브러리 + 학급 영상 탭/댓글, 파일 서빙 스트리밍+Range, 도메인 class.chois.pro 이전)
+마지막 업데이트: 2026-10-30 (PDF 교재 페이지 — `chapter-pdfs` 버킷, pages/assignment_pages `pdfUrl`·`pdfPage`, Excalidraw 아래 PdfPageLayer 벡터 배경(보이는 영역만 재렌더, pdf.js legacy 빌드), 썸네일·내보내기 pdf.js 래스터, 서버 vitest, PDF E2E 스모크 / 직전: 앱 틀 리디자인 — 남색 상단 바 + 색 인덱스 탭 사이드바, `classrooms.color` + 교사 학급 색 선택, 사이드바·목록 카드 화면 높이 채움 / 직전: 화이트보드 — 모둠 공유 보드: classroom_groups·whiteboard_* 테이블, pages.page_type, 요소 단위 실시간 병합(socket wb:*), 템플릿 34종, 교사 격자/단일 화면 / 직전: 영상 2분할 필기: classroom_videos.chapter_id·ClassroomVideoSplit·SplitPane·StudyViewer 임베드 모드 / 직전: 영상자료 v2 후속: 시청 기록·force 삭제·챕터 페이지 영상 삽입·미읽음 배지 / 직전: 영상자료 라이브러리 + 학급 영상 탭/댓글, 파일 서빙 스트리밍+Range, 도메인 class.chois.pro 이전)

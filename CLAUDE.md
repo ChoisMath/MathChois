@@ -127,10 +127,10 @@ Beyond annotation, the teacher sidebar also has shared libraries: **문제은행
 ### Data model (Drizzle: `packages/server/src/db/schema.ts`)
 
 Tables: `profiles`, `classrooms`, `classroom_members`, `chapters`, `pages`
-(`imageUrl`/`videoUrl`/**`htmlUrl`**/`pageType`/`whiteboardTemplate`/position), the 5 annotation tables above,
+(`imageUrl`/`videoUrl`/**`htmlUrl`**/**`pdfUrl`**/`pdfPage`/`pageType`/`whiteboardTemplate`/position), the 5 annotation tables above,
 `classroom_groups`/`classroom_group_members` (default groups), `whiteboard_page_settings`/
 `whiteboard_groups`/`whiteboard_group_members` (shared boards),
-`posts`/`post_files`/`post_classrooms` (board), `assignments`/`assignment_pages`/
+`posts`/`post_files`/`post_classrooms` (board), `assignments`/`assignment_pages` (also `pdfUrl`/`pdfPage`)/
 `assignment_submissions`/`assignment_submission_files`. Migrations via Drizzle Kit;
 additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures the
 `pages.html_url` column).
@@ -151,12 +151,16 @@ additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures th
   Template application goes through `POST /api/whiteboards/groups/:gid/apply-template`, which
   only succeeds on an empty board (the server never imports Excalidraw). The server keeps board
   scenes in memory → single-instance deployment assumption.
+- **PDF pages have no background image element.** `PdfPageLayer` sits under Excalidraw, follows the viewport and
+  re-renders only the visible clip; the paper rect is `bgPosition`. pdf.js is loaded from its legacy build (the modern
+  build needs `Map.prototype.getOrInsertComputed`). Spec: `docs/superpowers/specs/2026-10-30-pdf-pages-design.md`.
 - **Icon-only buttons** use `components/common/IconButton.jsx` (`label` → `title` + `aria-label`, 44px hit area,
   variants ghost/primary/danger/danger-solid). Icon dictionary and keep-text rules:
   `docs/superpowers/specs/2026-10-20-icon-buttons-design.md`. `DrawingToolbar` keeps its own buttons.
 - **Pen/eraser input** is custom-handled: `hooks/useExcalidrawTouch.js`,
   `hooks/useScribbleErase.js` (S-Pen barrel button, scribble-to-erase, palm rejection).
-- File storage uses `VOLUME_PATH`; buckets: `chapter-pages`, `chapter-tools` (HTML only),
+- File storage uses `VOLUME_PATH`; buckets: `chapter-pages`, `chapter-pdfs` (PDF only, 100MB, teacher-only; one file shared by
+  all of its pages), `chapter-tools` (HTML only),
   `visualizations` (HTML only), `whiteboard-files` (raster images ≤ 2MB, students allowed), `videos` (teacher-only, uploaded through the streaming route
   `POST /api/videos/upload`, not `/api/files/upload` which buffers whole files in memory),
   `submission-files`, post attachments. Served via `/api/files/*` as a stream with HTTP Range
