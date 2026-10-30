@@ -129,7 +129,7 @@ packages/
 - **pdf.js**(`lib/pdfjs.js`): `pdfjs-dist` 6.4.299 를 **legacy 빌드**로 지연 로드(모던 빌드는 `Map.prototype.getOrInsertComputed` 를 요구해 Chromium 141·태블릿 브라우저에서 렌더 실패). cmaps/standard_fonts 는 `vite-plugin-pdfjs-assets.js` 가 `/pdfjs/` 로 제공. 문서는 `lib/pdfDocCache.js` **LRU 2개**로 공유하고 화면에 그린 문서는 **pin** 해 썸네일·이웃 프리패치가 밀어내지 못하게 한다.
 - **PDF 받기**: pdf.js 기본값(스트리밍 `fetch` 지원 시) — 처음 열 때 **파일 전체를 한 요청으로 점진적으로** 받고(다 받기 전 첫 쪽 렌더), 이후는 `immutable` 캐시. Range 206 은 스트림보다 앞선 빈 구간 요청에만 쓰인다("필요한 범위만 받는다"가 아님). 지연 범위 모드(`disableStream`+`disableAutoFetch`)는 태블릿 미측정이라 미적용. `GET /api/files/*` 는 **인증 없음**(모든 버킷 공통, 기존) — 뷰어는 URL 만으로 받는다.
 - **썸네일·내보내기**: 래스터 보관 없이 pdf.js 로 그린다 — `PageThumb`/`PdfPageThumb`(보일 때 JPEG dataURL, 폭은 120px 단위로 올려(`bucketWidth`) 키·래스터, `pdfThumbCache` = 200개·24MB 이중 한도 LRU), PDF 내보내기 배경은 `lib/pdfBackground.js` → `pdfRaster.js`.
-- 테스트: `npm test -w @mathchois/client`(레이어 수학·문서 캐시·검사·업로드 흐름·삭제 판정·래스터·내보내기 배경), `npm test -w @mathchois/server`(uploadPolicy·pageBody), `packages/client/e2e/pdf-pages.smoke.mjs`(Chromium — 등록·썸네일·레이어 픽셀·줌 재렌더·필기 저장·가로 쪽·오류 카드 재시도·공유 파일 삭제 보호; 준비 `packages/server/scripts/pdf-e2e-setup.ts`, `LANG=C.UTF-8` 필요).
+- 테스트: `npm test -w @mathchois/client`(레이어 수학·문서 캐시·검사·업로드 흐름·삭제 판정·래스터·내보내기 배경), `npm test -w @mathchois/server`(uploadPolicy·pageBody), `packages/client/e2e/pdf-pages.smoke.mjs`(Chromium — 등록·썸네일·레이어 픽셀·줌 재렌더·필기 저장·③ 모니터 종이 = 학생 bgPosition·코멘트 수신·가로 쪽·오류 카드 재시도·공유 파일 삭제 보호; 준비 `packages/server/scripts/pdf-e2e-setup.ts`, `LANG=C.UTF-8` 필요).
 
 ## AI 수학 코칭 페이지 (#3, `feat/ai-coaching-page`)
 

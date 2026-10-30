@@ -13,7 +13,8 @@
  * (클라우드 세션은 session-start 훅이 설정), 둘 다 없으면 Playwright 기본 브라우저.
  *
  * 검증: 교사 PDF 등록(2쪽 → 페이지 2행, 같은 pdfUrl, pdfPage 1·2) → 편집기 썸네일(pdf.js 래스터) →
- *       학생 1쪽 레이어 픽셀 · 휠 줌 재렌더 · 사각형 필기 저장(bgPosition) → 2쪽 가로 종이 →
+ *       학생 1쪽 레이어 픽셀 · 휠 줌 재렌더 · 사각형 필기 저장(bgPosition) →
+ *       교사 ③ 학생 필기 보기: 종이 = 학생의 저장된 bgPosition · 코멘트 사각형 → 학생이 종이 안의 코멘트 수신 → 2쪽 가로 종이 →
  *       문서 로드 실패 카드 · 다시 시도 → 교사 페이지 삭제(공유 파일 보호 → 마지막 쪽 삭제 시 파일 제거) →
  *       콘솔/페이지 오류 없음.
  */
@@ -59,7 +60,8 @@ const shot = (page, name) => (shotDir ? page.screenshot({ path: path.join(shotDi
 const diskPathOf = (url) => path.join(VOLUME, decodeURIComponent(url).replace(/^\/api\/files\//, ''));
 
 /**
- * 보이는 PDF 레이어 상태: 캔버스 width 속성, 캔버스 중앙 50×50 영역의 흰색이 아닌 픽셀 수, 종이(흰 div) 크기.
+ * 보이는 PDF 레이어 상태: 캔버스 width 속성, 캔버스 중앙 50×50 영역의 흰색이 아닌 픽셀 수, 종이(흰 div) 상자.
+ * paper.x/y 는 화면 좌표, paper.lx/ly 는 레이어(= Excalidraw 컨테이너) 기준 — 줌 1·스크롤 0 이면 scene 좌표와 같다.
  * 캔버스가 숨겨져 있으면(렌더 전·실패) ok=false.
  */
 const layerInfo = (page) => page.evaluate(() => {
@@ -72,9 +74,13 @@ const layerInfo = (page) => page.evaluate(() => {
   let ink = 0;
   for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 0 && (d[i] < 200 || d[i + 1] < 200 || d[i + 2] < 200)) ink++;
   const paper = c.parentElement.querySelector('div.bg-white')?.getBoundingClientRect();
+  const layer = c.parentElement.getBoundingClientRect();
   return {
     ok: true, width: c.width, height: c.height, ink,
-    paper: paper ? { x: paper.left, y: paper.top, w: Math.round(paper.width), h: Math.round(paper.height) } : null,
+    paper: paper ? {
+      x: paper.left, y: paper.top, w: Math.round(paper.width), h: Math.round(paper.height),
+      lx: paper.left - layer.left, ly: paper.top - layer.top,
+    } : null,
   };
 });
 /** 레이어가 그려질 때까지(잉크가 보일 때까지) 최대 20초 대기 — `accept` 로 추가 조건 */
@@ -162,14 +168,51 @@ try {
     { elements: els.map((e) => e.type), bgPosition: note?.bgPosition });
   await shot(S.page, '02-student-page1');
 
-  // 4. 학생 2쪽(가로): 다음 페이지 → 가로 종이 + 잉크
+  // 4. 교사 ③ 학생 필기 보기(모니터): 1쪽 종이 = 학생의 저장된 bgPosition → 코멘트 사각형 → 학생이 종이 안에서 받는다
+  const bg = note?.bgPosition;
+  await T.page.goto(`${BASE}/teacher/classrooms/${cfg.classroomId}/chapters/${cfg.chapterId}/monitor/${cfg.student.id}`);
+  await T.page.locator('.excalidraw').waitFor({ timeout: 20000 });
+  const counter = await T.page.getByText(/^1 \/ 2$/).first().waitFor({ timeout: 10000 }).then(() => true, () => false);
+  check('monitor opens on page 1 of 2', counter); // 모니터 뷰어는 첫 페이지(인덱스 0)에서 시작한다
+  info = await waitLayer(T.page, (x) => !!x.paper && !!bg && Math.abs(x.paper.lx - bg.x) <= 1 && Math.abs(x.paper.ly - bg.y) <= 1);
+  check('monitor page 1: layer visible with ink', info.ok && info.ink > 0, info);
+  const paperMatches = !!bg && !!info.paper
+    && Math.abs(info.paper.lx - bg.x) <= 1 && Math.abs(info.paper.ly - bg.y) <= 1
+    && Math.abs(info.paper.w - bg.width) <= 1 && Math.abs(info.paper.h - bg.height) <= 1;
+  check("monitor page 1: paper box equals the student's saved bgPosition (±1px)", paperMatches, { paper: info.paper, studentBg: bg });
+  await T.page.locator('button[title="보기 모드 (클릭하여 코멘트 모드로)"]').click();
+  await sleep(500);
+  if (info.paper) {
+    // 종이 가운데 부근(화면 좌표)을 interactive 캔버스 기준 오프셋으로 바꿔 그린다
+    const cbox = await T.page.locator('.excalidraw canvas.interactive').first().boundingBox();
+    const at = (fx, fy) => [info.paper.x + info.paper.w * fx - cbox.x, info.paper.y + info.paper.h * fy - cbox.y];
+    await drawRect(T.page, ...at(0.35, 0.55), ...at(0.65, 0.65));
+  }
+  await sleep(3000); // 1500ms 디바운스 저장
+  await shot(T.page, '03-teacher-monitor-comment');
+  await S.page.goto(studyUrl(p1.id));
+  await S.page.locator('.excalidraw').waitFor({ timeout: 20000 });
+  info = await waitLayer(S.page);
+  check('student page 1 reloads with the layer', info.ok && info.ink > 0, info);
+  const comments = (await api(S.ctx, 'GET', `/api/comments/${p1.id}/for-student`)).json ?? [];
+  const cEls = comments.flatMap((c) => c.excalidrawData?.elements ?? []).filter((e) => !e.isDeleted);
+  const cRect = cEls.length === 1 && cEls[0].type === 'rectangle' ? cEls[0] : null;
+  check('student receives exactly 1 teacher comment rectangle', !!cRect, { rows: comments.length, elements: cEls.map((e) => e.type) });
+  const inside = !!cRect && !!bg && cRect.width > 0 && cRect.height > 0
+    && cRect.x >= bg.x && cRect.y >= bg.y
+    && cRect.x + cRect.width <= bg.x + bg.width && cRect.y + cRect.height <= bg.y + bg.height;
+  check('comment rectangle lies inside the paper rect (scene)', inside,
+    { rect: cRect && { x: cRect.x, y: cRect.y, w: cRect.width, h: cRect.height }, bg });
+  await shot(S.page, '04-student-sees-comment');
+
+  // 5. 학생 2쪽(가로): 다음 페이지 → 가로 종이 + 잉크
   await S.page.locator('button[title="다음 페이지"]:visible').first().click();
   info = await waitLayer(S.page, (x) => x.paper && x.paper.w > x.paper.h);
   check('page 2: layer visible with ink', info.ok && info.ink > 0, info);
   check('page 2: paper is landscape', !!info.paper && info.paper.w > info.paper.h, info.paper);
-  await shot(S.page, '03-student-page2');
+  await shot(S.page, '05-student-page2');
 
-  // 5. 문서 로드 실패 → 안내 카드 · 다시 시도 (Excalidraw 위에서 눌려야 한다)
+  // 6. 문서 로드 실패 → 안내 카드 · 다시 시도 (Excalidraw 위에서 눌려야 한다)
   const isPdf = (u) => decodeURIComponent(u.pathname) === pdfUrl;
   await S.page.route(isPdf, (route) => route.fulfill({ status: 500, body: 'e2e: forced failure' }));
   await S.page.goto(studyUrl(p1.id));
@@ -178,14 +221,17 @@ try {
   const retryBtn = S.page.getByRole('button', { name: '다시 시도' });
   const clickable = await retryBtn.click({ trial: true, timeout: 5000 }).then(() => true, () => false);
   check('retry button is clickable (not covered by Excalidraw)', clickable);
-  await shot(S.page, '04-student-error-card');
+  await shot(S.page, '06-student-error-card');
   await S.page.unroute(isPdf);
   if (clickable) await retryBtn.click();
   info = await waitLayer(S.page);
   check('retry renders the layer', info.ok && info.ink > 0, info);
   check('error card gone after retry', (await S.page.getByText('PDF를 불러오지 못했습니다').count()) === 0);
 
-  // 6. 교사 페이지 삭제: 1쪽 삭제 → 공유 파일 유지, 2쪽 삭제 → 파일 제거
+  // 7. 교사 페이지 삭제: 1쪽 삭제 → 공유 파일 유지, 2쪽 삭제 → 파일 제거 (4단계에서 모니터로 떠났으므로 편집기로 돌아간다)
+  await T.page.goto(`${BASE}/teacher/chapters/${cfg.chapterId}/edit`);
+  await T.page.waitForFunction(() => document.querySelectorAll('[aria-label="페이지 삭제"]').length === 2, null, { timeout: 20000 })
+    .catch(() => {});
   const deletePageAt = async (index) => {
     T.page.once('dialog', (d) => d.accept());
     const before = await items.count();
@@ -206,9 +252,9 @@ try {
   left = (await api(T.ctx, 'GET', `/api/chapters/${cfg.chapterId}/pages`)).json ?? [];
   check('delete page 2 → no pages left', left.length === 0, left.length);
   check('PDF file removed after last page deleted', !fs.existsSync(diskPathOf(pdfUrl)), diskPathOf(pdfUrl));
-  await shot(T.page, '05-teacher-editor-empty');
+  await shot(T.page, '07-teacher-editor-empty');
 
-  // 7. 콘솔/페이지 오류 (5단계의 강제 500 은 "Failed to load resource" 로 걸러진다)
+  // 8. 콘솔/페이지 오류 (6단계의 강제 500 은 "Failed to load resource" 로 걸러진다)
   const realErrors = errors.filter((e) => !/favicon|manifest|sw\.js|Service Worker|DevTools|net::ERR_|Failed to load resource/i.test(e.msg));
   check('no page/console errors', realErrors.length === 0, realErrors.slice(0, 5));
 
