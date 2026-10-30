@@ -46,8 +46,10 @@ Excalidraw 0.18.1 에는 올가미 도구가 없다(번들에 `lasso` 없음). �
   - 그리는 동안 오버레이에 **점선**(회색 `#4b5563`, 1.5px, dash 6/4)으로 경로를 그리고 끝점→시작점을 옅은 점선으로 닫아 보여준다.
   - 떼면: 경로 점을 scene 좌표로 바꿔 `lib/lasso.js` `lassoSelection(elements, polygon, opts)` 로 선택 집합을 구하고
     `updateScene({ appState: { selectedElementIds, selectedGroupIds } })`. 이동 거리 < 6px(탭) 또는 점 3개 미만이면 선택 해제만.
-  - 선택이 있는 상태에서 다시 누르면: 누른 점이 **선택 묶음의 화면 bbox(여백 8px) 안**이면 가로채지 않는다(Excalidraw 가 이동·크기
-    조절·회전 처리). 밖이면 새 올가미(이전 선택은 지워진다).
+  - 선택이 있는 상태에서 다시 누르면: 누른 점이 **선택 묶음의 화면 bbox + 핸들 여백 안**이면 가로채지 않는다(Excalidraw 가 이동·크기
+    조절·회전 처리). 밖이면 새 올가미(이전 선택은 지워진다). 여백은 Excalidraw 핸들 기하(상자 밖 여백 4 + 핸들 한 변 마우스 8 /
+    펜 16 / 손가락 28 − 안쪽 겹침, +2 허용; 위쪽은 회전 핸들 16 더)를 포인터 종류별로 계산한다(`selectionPad`, 2026-10-30 아이패드
+    확인에서 8px 고정 여백으로는 펜·손가락 핸들을 누를 때 새 올가미가 시작되던 문제 수정).
 - `lib/lasso.js`(순수): `pointInPolygon(p, poly)`(ray casting), `lassoSelection(elements, poly, { excludeIds, excludePrefixes })`:
   - 제외: `isDeleted`, `locked`, 배경 `__bg_image__`, 교사 코멘트 접두사 등 `excludePrefixes`, `excludeIds`.
   - freedraw/line/arrow: `el.x + p[0], el.y + p[1]` 점들 중 **50% 이상**이 안에 있으면 선택.

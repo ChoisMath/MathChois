@@ -95,6 +95,14 @@ describe('useLasso', () => {
     canvas.dispatchEvent(ev('pointermove', 50, 50));
     canvas.dispatchEvent(ev('pointerup', 50, 50));
     expect(api.updateScene).not.toHaveBeenCalled();
+    // 모서리 핸들 자리(요소 bbox 10..30 의 오른쪽 아래 밖 +12px)를 펜으로 누르면 통과 → Excalidraw 크기 조절
+    const down3 = ev('pointerdown', 42, 42);
+    canvas.dispatchEvent(down3);
+    expect(down3.defaultPrevented).toBe(false);
+    // 회전 핸들 자리(위쪽 −24px)도 통과
+    const down4 = ev('pointerdown', 20, -14);
+    canvas.dispatchEvent(down4);
+    expect(down4.defaultPrevented).toBe(false);
     // 밖을 누르면 새 올가미
     const down2 = ev('pointerdown', 200, 200);
     canvas.dispatchEvent(down2);

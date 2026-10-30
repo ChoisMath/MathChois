@@ -3,7 +3,7 @@
  *
  * 논리 도구가 lasso(Excalidraw 는 selection)일 때 window-capture 로 포인터를 가로채 오버레이 캔버스에 점선 경로를 그리고,
  * 떼면 lib/lasso.js 로 안에 든 요소를 골라 Excalidraw 선택 상태(selectedElementIds/selectedGroupIds)로 넘긴다.
- * 이후 이동·크기 조절·삭제는 Excalidraw 가 처리한다: 선택 묶음의 화면 bbox(+여백) 안을 누르면 가로채지 않고,
+ * 이후 이동·크기 조절·회전·삭제는 Excalidraw 가 처리한다: 선택 묶음의 화면 bbox(+핸들 여백, lib/lasso.js selectionPad) 안을 누르면 가로채지 않고,
  * 밖을 누르면 새 올가미를 시작한다. 탭(이동 거리 < TAP_MAX_PX)은 선택 해제.
  *
  * 가로채는 입력: 펜·마우스 주버튼, 손가락은 입력 모드 finger 일 때만(스타일러스 모드의 손가락은 팬/줌). 두 번째 손가락이 닿으면 취소.
@@ -12,7 +12,7 @@
  */
 import { useEffect } from 'react';
 import { viewportCoordsToSceneCoords } from '@excalidraw/excalidraw';
-import { lassoSelection, selectionScreenBounds, isTapPath } from '../lib/lasso';
+import { lassoSelection, selectionScreenBounds, selectionPad, isTapPath } from '../lib/lasso';
 import { getInputMode } from '../lib/inputMode';
 
 export const LASSO_STROKE = '#4b5563';
@@ -83,7 +83,8 @@ export function useLasso({ excalidrawAPIRef, overlayRef, drawModeRef, lassoActiv
       const app = api.getAppState();
       const ids = app?.selectedElementIds || {};
       if (!Object.keys(ids).length) return false;
-      const b = selectionScreenBounds(api.getSceneElements(), ids, app);
+      // 핸들은 상자 밖에 있으므로 포인터 종류별 핸들 크기만큼 여백을 둔다 (펜 16·손가락 28px, 위쪽은 회전 핸들까지)
+      const b = selectionScreenBounds(api.getSceneElements(), ids, app, selectionPad(e.pointerType));
       if (!b) return false;
       const r = overlayRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
       const x = e.clientX - r.left, y = e.clientY - r.top;

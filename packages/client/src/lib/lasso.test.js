@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pointInPolygon, lassoSelection, selectionScreenBounds, isTapPath, TAP_MAX_PX, SELECTION_PAD_PX } from './lasso';
+import { pointInPolygon, lassoSelection, selectionScreenBounds, selectionPad, isTapPath, TAP_MAX_PX, SELECTION_PAD_PX, HANDLE_SIZE_PX } from './lasso';
 
 const square = [[0, 0], [100, 0], [100, 100], [0, 100]];
 const fd = (id, x, y, pts, extra = {}) => ({ id, type: 'freedraw', x, y, points: pts, width: 10, height: 10, isDeleted: false, locked: false, groupIds: [], ...extra });
@@ -77,6 +77,28 @@ describe('selectionScreenBounds / isTapPath', () => {
     const el = fd('a', 10, 10, [[0, 0], [-5, 30], [40, 2]]);
     expect(selectionScreenBounds([el], { a: true }, app)).toEqual({ left: 5 - SELECTION_PAD_PX, top: 10 - SELECTION_PAD_PX, right: 50 + SELECTION_PAD_PX, bottom: 40 + SELECTION_PAD_PX });
   });
+  it('selectionPad 는 Excalidraw 핸들 기하를 덮는다: 핸들 바깥 끝 + 2px, 위쪽은 회전 핸들까지', () => {
+    // 핸들 바깥 끝 = 여백 4 − (p−4)/2 + p  →  mouse 10, pen 14, touch 20 (+2 허용)
+    expect(selectionPad('mouse')).toEqual({ side: 12, top: 28 });
+    expect(selectionPad('pen')).toEqual({ side: 16, top: 32 });
+    expect(selectionPad('touch')).toEqual({ side: 22, top: 38 });
+    expect(selectionPad(undefined)).toEqual(selectionPad('mouse'));
+    expect(HANDLE_SIZE_PX).toEqual({ mouse: 8, pen: 16, touch: 28 });
+    expect(SELECTION_PAD_PX).toBe(12);
+  });
+
+  it('객체 pad 를 주면 위쪽만 top 만큼 넓어진다 (펜으로 모서리/회전 핸들을 누르면 통과)', () => {
+    const app = { zoom: { value: 1 }, scrollX: 0, scrollY: 0 };
+    const el = box('a', 'image', 100, 100, 50, 50);
+    const b = selectionScreenBounds([el], { a: true }, app, selectionPad('pen'));
+    expect(b).toEqual({ left: 84, top: 68, right: 166, bottom: 166 });
+    // 오른쪽 아래 모서리 핸들 중심 (150+4−6+8 = 156, 156) 과 회전 핸들 중심 (125, 100−4−16+6−16+8 = 78) 이 안에 든다
+    const inside = (x, y) => x >= b.left && x <= b.right && y >= b.top && y <= b.bottom;
+    expect(inside(156, 156)).toBe(true);
+    expect(inside(125, 78)).toBe(true);
+    expect(inside(125, 60)).toBe(false);
+  });
+
   it('이동 거리가 TAP_MAX_PX 미만이거나 점이 3개 미만이면 탭', () => {
     expect(TAP_MAX_PX).toBe(6);
     expect(isTapPath([[0, 0], [2, 2], [3, 1]])).toBe(true);

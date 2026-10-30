@@ -6,8 +6,26 @@ import { BG_ELEMENT_ID } from './excalidrawUtils';
 
 /** 이 거리(px) 미만으로 움직이면 탭 → 선택 해제만 */
 export const TAP_MAX_PX = 6;
-/** 선택 묶음 bbox 바깥 여백(px): 이 안을 누르면 Excalidraw 이동/크기 조절로 넘긴다 */
-export const SELECTION_PAD_PX = 8;
+/**
+ * Excalidraw 변형 핸들 기하(화면 px, 0.18.1 `transformHandleSizes`): 핸들 한 변 mouse 8 / pen 16 / touch 28,
+ * 선택 상자 바깥 여백 4, 핸들 간격 2, 회전 핸들은 위 핸들보다 16 더 위. 핸들은 상자 밖에 놓이므로 그 영역을 누르면
+ * 가로채지 않고 Excalidraw 에 넘겨야 크기 조절·회전이 된다.
+ */
+export const HANDLE_SIZE_PX = { mouse: 8, pen: 16, touch: 28 };
+const HANDLE_MARGIN_PX = 4;
+const HANDLE_SPACING_PX = 2;
+const ROTATION_HANDLE_GAP_PX = 16;
+const HANDLE_TOLERANCE_PX = 2;
+
+/** 포인터 종류별 통과 여백 { side, top } (화면 px). top 은 회전 핸들까지 덮는다. */
+export function selectionPad(pointerType) {
+  const p = HANDLE_SIZE_PX[pointerType] ?? HANDLE_SIZE_PX.mouse;
+  const w = (p - HANDLE_SPACING_PX * 2) / 2;            // 핸들이 상자 안쪽으로 겹치는 양
+  const side = HANDLE_MARGIN_PX - w + p + HANDLE_TOLERANCE_PX;
+  return { side, top: side + ROTATION_HANDLE_GAP_PX };
+}
+/** 기본 여백(마우스 기준) — 숫자 pad 를 넘기던 호출과의 호환 */
+export const SELECTION_PAD_PX = selectionPad('mouse').side;
 /** 점 요소(freedraw/line/arrow)가 선택되려면 안에 들어야 하는 점의 비율 */
 export const INSIDE_RATIO = 0.5;
 
@@ -72,8 +90,13 @@ export function lassoSelection(elements, polygon, { excludeIds = [], excludePref
   return { selectedElementIds, selectedGroupIds };
 }
 
-/** 선택 요소들의 화면 bbox (+여백). screen = (scene + scroll) × zoom. 선택이 없으면 null */
+/**
+ * 선택 요소들의 화면 bbox (+여백). screen = (scene + scroll) × zoom. 선택이 없으면 null.
+ * @param {number|{side:number, top:number}} pad  숫자면 사방 동일, 객체면 위쪽만 top(회전 핸들)
+ */
 export function selectionScreenBounds(elements, selectedElementIds, appState, pad = SELECTION_PAD_PX) {
+  const padSide = typeof pad === 'number' ? pad : pad.side;
+  const padTop = typeof pad === 'number' ? pad : pad.top;
   const zoom = appState?.zoom?.value || 1;
   const sx = appState?.scrollX || 0;
   const sy = appState?.scrollY || 0;
@@ -93,10 +116,10 @@ export function selectionScreenBounds(elements, selectedElementIds, appState, pa
   }
   if (!Number.isFinite(minX)) return null;
   return {
-    left: (minX + sx) * zoom - pad,
-    top: (minY + sy) * zoom - pad,
-    right: (maxX + sx) * zoom + pad,
-    bottom: (maxY + sy) * zoom + pad,
+    left: (minX + sx) * zoom - padSide,
+    top: (minY + sy) * zoom - padTop,
+    right: (maxX + sx) * zoom + padSide,
+    bottom: (maxY + sy) * zoom + padSide,
   };
 }
 
