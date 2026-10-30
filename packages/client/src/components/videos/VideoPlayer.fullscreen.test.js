@@ -62,7 +62,7 @@ describe('VideoPlayer fullscreen button', () => {
     // 같은 단추로 종료, Esc 로도 종료
     act(() => { m.fsButton.click(); });
     expect(m.container.className).toContain('relative');
-    expect(m.host.querySelector('video').style.touchAction).toBe('pan-y pinch-zoom');
+    expect(m.host.querySelector('video').style.touchAction).toBe('none');
     expect(document.documentElement.style.touchAction).toBe('');
     expect(document.documentElement.style.overflow).toBe('');
     act(() => { m.fsButton.click(); });
@@ -116,7 +116,7 @@ describe('VideoPlayer fullscreen button', () => {
     delete document.webkitFullscreenElement;
     act(() => { document.dispatchEvent(new Event('webkitfullscreenchange')); });
     expect(document.documentElement.style.touchAction).toBe('');
-    expect(m.host.querySelector('video').style.touchAction).toBe('pan-y pinch-zoom');
+    expect(m.host.querySelector('video').style.touchAction).toBe('none');
     m.unmount();
   });
 
@@ -131,7 +131,7 @@ describe('VideoPlayer fullscreen button', () => {
     expect(m.container.className).not.toContain('fixed');
     // 2분할은 필기창 목록을 스크롤해야 하므로 페이지를 잠그지 않는다
     expect(document.documentElement.style.touchAction).toBe('');
-    expect(m.host.querySelector('video').style.touchAction).toBe('pan-y pinch-zoom');
+    expect(m.host.querySelector('video').style.touchAction).toBe('none');
     m.unmount();
   });
 });
