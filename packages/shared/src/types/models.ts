@@ -39,6 +39,10 @@ export interface Page {
   imageUrl: string | null;
   videoUrl: string | null;
   htmlUrl: string | null;
+  /** PDF 교재 파일 URL (pdfPage 와 함께 있을 때만 PDF 페이지) */
+  pdfUrl: string | null;
+  /** PDF 안의 페이지 번호 (1부터) */
+  pdfPage: number | null;
   position: number;
   aiProblemId: string | null;
   pageType: PageType | null;
@@ -185,6 +189,10 @@ export interface AssignmentPage {
   assignmentId: string;
   imageUrl: string | null;
   videoUrl: string | null;
+  /** PDF 교재 파일 URL (pdfPage 와 함께 있을 때만 PDF 페이지) */
+  pdfUrl: string | null;
+  /** PDF 안의 페이지 번호 (1부터) */
+  pdfPage: number | null;
   position: number;
   createdAt: string;
 }
