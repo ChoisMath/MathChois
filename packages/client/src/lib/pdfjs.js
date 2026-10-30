@@ -15,9 +15,10 @@ let pdfjsPromise = null
 /** pdfjs-dist 를 1회 로드하고 워커 경로를 설정한다(이후 같은 Promise 재사용). */
 export function loadPdfjs() {
   if (!pdfjsPromise) {
-    pdfjsPromise = import('pdfjs-dist')
+    /* legacy 빌드 = core-js 폴리필 포함. 모던 빌드는 2025 Map.prototype.getOrInsertComputed 를 요구해 Chromium 141·태블릿 브라우저에서 렌더가 실패한다 */
+    pdfjsPromise = import('pdfjs-dist/legacy/build/pdf.mjs')
       .then((pdfjs) => {
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString()
         return pdfjs
       })
       .catch((err) => {
