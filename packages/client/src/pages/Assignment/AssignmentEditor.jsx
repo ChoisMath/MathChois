@@ -22,6 +22,8 @@ import SortablePageItem from '../../components/common/SortablePageItem';
 import VideoPickerModal from '../../components/videos/VideoPickerModal';
 import { PageVideoEmbed } from '../../components/videos/PageVideo';
 import { extractYouTubeId } from '../../lib/youtubeUtils';
+import { uploadPagesWithPdf } from '../../lib/pageUpload';
+import { fileUrlsToDeleteFor, storagePathOf } from '../../lib/pageStorage';
 
 
 const AssignmentEditor = () => {
@@ -34,7 +36,7 @@ const AssignmentEditor = () => {
   const [selectedPage, setSelectedPage] = useState(null);
   const [loading, setLoading]       = useState(true);
   const [uploading, setUploading]   = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
+  const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0, label: null });
   const [deleting, setDeleting]     = useState(false);
 
   const [title, setTitle]           = useState('');
@@ -186,42 +188,34 @@ const AssignmentEditor = () => {
   const handleUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
-    files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
     setUploading(true);
-    setUploadProgress({ done: 0, total: files.length });
+    setUploadProgress({ done: 0, total: files.length, label: null });
 
     const basePosition = pages.length > 0 ? Math.max(...pages.map((p) => p.position)) + 1 : 0;
-    let lastPage = null;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    const uploadFile = async (bucket, file) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const uploadResult = await api.upload(`/api/files/upload?bucket=${bucket}&directory=assignments/${assignmentId}`, formData);
+      return uploadResult.url;
+    };
 
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const uploadResult = await api.upload(
-          `/api/files/upload?bucket=chapter-pages&directory=assignments/${assignmentId}`,
-          formData
-        );
-
-        const newPage = await api.post(`/api/assignments/${assignmentId}/pages`, {
-          imageUrl: uploadResult.url,
-          position: basePosition + i,
-        });
-
-        if (newPage) lastPage = newPage;
-      } catch (err) {
-        console.error(`업로드 실패 (${file.name}):`, err.message);
-      }
-
-      setUploadProgress((prev) => ({ ...prev, done: prev.done + 1 }));
-    }
+    // 파일명 순 정렬 + PDF 검사 + 순차 업로드(PDF 는 쪽수만큼 연속 position)
+    const lastPage = await uploadPagesWithPdf({
+      files,
+      basePosition,
+      uploadImage: async (file, position) =>
+        api.post(`/api/assignments/${assignmentId}/pages`, { imageUrl: await uploadFile('chapter-pages', file), position }),
+      uploadPdf: (file) => uploadFile('chapter-pdfs', file),
+      createPages: (items) => api.post(`/api/assignments/${assignmentId}/pages`, { pages: items }),
+      onProgress: setUploadProgress,
+      onRejected: (_file, message) => alert(message),
+    });
 
     e.target.value = '';
     setUploading(false);
-    setUploadProgress({ done: 0, total: 0 });
+    setUploadProgress({ done: 0, total: 0, label: null });
     await fetchData();
     if (lastPage) setSelectedPage(lastPage);
   };
@@ -277,18 +271,14 @@ const AssignmentEditor = () => {
     if (!confirm('이 페이지를 삭제하시겠습니까?')) return;
     setDeleting(true);
 
-    // Storage 파일 삭제 (영상 페이지는 스킵)
-    try {
-      const imageUrl = page.imageUrl;
-      if (imageUrl) {
-        const apiMarker = '/api/files/';
-        const apiIdx = imageUrl.indexOf(apiMarker);
-        if (apiIdx !== -1) {
-          const filePath = imageUrl.slice(apiIdx);
-          await api.delete(filePath);
-        }
-      }
-    } catch { /* Storage 삭제 실패 시 DB만 삭제 */ }
+    // Storage 파일 삭제 (영상 페이지는 스킵, 공유 PDF 는 마지막 쪽을 지울 때만)
+    for (const url of fileUrlsToDeleteFor(page, pages.filter((p) => p.id !== page.id))) {
+      const filePath = storagePathOf(url);
+      if (!filePath) continue;
+      try {
+        await api.delete(filePath);
+      } catch { /* Storage 삭제 실패 시 DB만 삭제 */ }
+    }
 
     try {
       await api.delete(`/api/assignment-pages/${page.id}`);
@@ -361,11 +351,11 @@ const AssignmentEditor = () => {
           >
             <Upload className="h-5 w-5" />
           </button>
-          <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleUpload} className="hidden" />
+          <input ref={fileInputRef} type="file" accept="image/*,application/pdf" multiple onChange={handleUpload} className="hidden" />
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            title={uploading ? `업로드 중... (${uploadProgress.done}/${uploadProgress.total})` : "이미지 페이지 추가"}
+            title={uploading ? (uploadProgress.label ?? `업로드 중... (${uploadProgress.done}/${uploadProgress.total})`) : "이미지·PDF 페이지 추가"}
             className="inline-flex items-center justify-center p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
           >
             {uploading ? <Loader className="animate-spin h-5 w-5" /> : <Plus className="h-5 w-5" />}
@@ -427,7 +417,7 @@ const AssignmentEditor = () => {
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-gray-400">
               <p className="text-lg">페이지를 추가하세요</p>
-              <p className="text-sm mt-1">이미지, YouTube 영상, 영상자료를 추가할 수 있습니다</p>
+              <p className="text-sm mt-1">이미지, PDF, YouTube 영상, 영상자료를 추가할 수 있습니다</p>
             </div>
           )}
         </div>
