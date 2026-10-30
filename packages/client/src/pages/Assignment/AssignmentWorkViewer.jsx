@@ -613,7 +613,7 @@ const AssignmentWorkViewer = () => {
                 const title = `${studentProfile?.name || '학생'}_${assignment?.title || '과제'}_${currentPage.position + 1}p`;
                 const elsToDownload = [...studentEls.current, ...teacherEls.current];
                 const filesToDownload = { ...savedStudentFilesRef.current, ...savedTeacherFilesRef.current };
-                downloadPage(title, elsToDownload, filesToDownload, currentPage.imageUrl, bgPositionRef.current);
+                downloadPage(title, elsToDownload, filesToDownload, currentPage, bgPositionRef.current);
               }}
               onDownloadAll={async () => {
                 const title = `${studentProfile?.name || '학생'}_${assignment?.title || '과제'}_전체`;
@@ -644,7 +644,7 @@ const AssignmentWorkViewer = () => {
                     const tEls = (tNote.elements || []).map(el => ({ ...el, id: TEACHER_COMMENT_PREFIX + el.id, locked: true, opacity: 60 }));
 
                     return {
-                      bgUrl: pg.imageUrl,
+                      bg: pg,
                       elements: [...sEls, ...tEls],
                       files: { ...(sNote.files || {}), ...(tNote.files || {}) },
                       bgPosition: sNote.bgPosition,

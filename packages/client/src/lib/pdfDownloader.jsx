@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { exportToBlob } from '@excalidraw/excalidraw';
 import { jsPDF } from 'jspdf';
-import { fetchAsDataUrl, getImageNaturalSize, createBgElement, BG_FILE_ID } from './excalidrawUtils';
+import { createBgElement, BG_FILE_ID } from './excalidrawUtils';
+import { resolveBackground, loadBackgroundBitmap, pinBackgrounds } from './pdfBackground';
 
 // A4 @ 150 DPI = 1240 × 1754 px. 긴 쪽 기준으로 해상도 제한.
 const PDF_MAX_DIMENSION = 1754;
@@ -12,16 +13,18 @@ const PDF_MARGIN_SIDE = 10;  // mm (좌우 각각)
 /**
  * Creates a hidden Excalidraw-like PDF from element arrays
  * It fetches the background image and correctly positions the objects.
+ * `bg` — 배경: 페이지 객체(PDF 쪽이면 pdf.js 래스터), 이미지 URL 문자열, 또는 null.
  */
-export const downloadElementsAsPdf = async (elements, files, bgImageUrl, filename, bgPosition = null) => {
+export const downloadElementsAsPdf = async (elements, files, bg, filename, bgPosition = null) => {
+    const unpinAll = pinBackgrounds([bg]);
     try {
         let finalElements = [...elements];
         let finalFiles = { ...files };
 
-        // 1. 백그라운드 이미지가 있으면 로드해서 제일 뒤(첫번째)에 넣는다.
-        if (bgImageUrl) {
-            const { dataUrl, mimeType } = await fetchAsDataUrl(bgImageUrl);
-            const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
+        // 1. 배경이 있으면 로드해서 제일 뒤(첫번째)에 넣는다.
+        const bgDesc = resolveBackground(bg);
+        if (bgDesc) {
+            const { dataUrl, mimeType, w: iW, h: iH } = await loadBackgroundBitmap(bgDesc, { longSide: PDF_MAX_DIMENSION });
 
             const bgW = bgPosition ? bgPosition.width : iW;
             const bgH = bgPosition ? bgPosition.height : iH;
@@ -87,6 +90,8 @@ export const downloadElementsAsPdf = async (elements, files, bgImageUrl, filenam
     } catch (err) {
         console.error('PDF 내보내기 오류:', err);
         return false;
+    } finally {
+        unpinAll();
     }
 };
 
@@ -96,10 +101,11 @@ export const downloadElementsAsPdf = async (elements, files, bgImageUrl, filenam
 export function usePdfDownloader() {
     const [isDownloading, setIsDownloading] = useState(false);
 
-    const downloadPage = async (pageTitle, elements, files, bgUrl, bgPosition = null) => {
+    /** `bg` — 페이지 객체 또는 이미지 URL 문자열(downloadElementsAsPdf 참고). */
+    const downloadPage = async (pageTitle, elements, files, bg, bgPosition = null) => {
         setIsDownloading(true);
         try {
-            await downloadElementsAsPdf(elements, files, bgUrl, pageTitle, bgPosition);
+            await downloadElementsAsPdf(elements, files, bg, pageTitle, bgPosition);
         } catch (e) {
             console.error(e);
             alert('다운로드 중 오류가 발생했습니다.');
@@ -108,22 +114,25 @@ export function usePdfDownloader() {
         }
     };
 
+    /** pageDataList: `[{ elements, files, bg, bgPosition, backgroundColor? }]` — 예전 `bgUrl` 키도 받는다. */
     const downloadMultiplePages = async (docTitle, pageDataList, { orientation = 'portrait' } = {}) => {
         setIsDownloading(true);
+        const pageBg = (item) => item.bg ?? item.bgUrl;
+        const unpinAll = pinBackgrounds(pageDataList.map(pageBg));
         try {
             const pdf = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
             const a4Width = pdf.internal.pageSize.getWidth();
             const a4Height = pdf.internal.pageSize.getHeight();
 
             for (let i = 0; i < pageDataList.length; i++) {
-                const { elements, files, bgUrl, bgPosition } = pageDataList[i];
+                const { elements, files, bgPosition } = pageDataList[i];
                 
                 let finalElements = [...(elements || [])];
                 let finalFiles = { ...(files || {}) };
 
-                if (bgUrl) {
-                    const { dataUrl, mimeType } = await fetchAsDataUrl(bgUrl);
-                    const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
+                const bgDesc = resolveBackground(pageBg(pageDataList[i]));
+                if (bgDesc) {
+                    const { dataUrl, mimeType, w: iW, h: iH } = await loadBackgroundBitmap(bgDesc, { longSide: PDF_MAX_DIMENSION });
                     finalFiles[BG_FILE_ID] = { id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() };
                     
                     const bgW = bgPosition ? bgPosition.width : iW;
@@ -180,6 +189,7 @@ export function usePdfDownloader() {
             console.error(e);
             alert('여러 페이지 다운로드 중 오류가 발생했습니다.');
         } finally {
+            unpinAll();
             setIsDownloading(false);
         }
     }

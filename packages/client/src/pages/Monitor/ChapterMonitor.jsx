@@ -179,7 +179,7 @@ const ChapterMonitor = () => {
       const pageDataList = pages.map((p) => ({
         elements: notesMap[p.id]?.elements || [],
         files: notesMap[p.id]?.files || {},
-        bgUrl: p.imageUrl
+        bg: p
       }));
 
       await downloadMultiplePages(`${student.profile?.name || '학생'}_${chapter?.title || '챕터'}_필기`, pageDataList);

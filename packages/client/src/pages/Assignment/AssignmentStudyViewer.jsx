@@ -112,7 +112,7 @@ function TeacherNotesModal({ page, onClose }) {
           <span className="font-semibold text-gray-800">교사 필기</span>
           <div className="flex items-center gap-2">
             <PdfDownloadButton
-              onClick={() => downloadPage('교사_필기', noteElements, noteFiles, page.imageUrl, bgPositionRef.current)}
+              onClick={() => downloadPage('교사_필기', noteElements, noteFiles, page, bgPositionRef.current)}
               isDownloading={isDownloading}
               label="PDF 다운로드"
               className="py-1 px-2 text-xs"
@@ -795,7 +795,7 @@ const AssignmentStudyViewer = () => {
             <PdfDownloadButton
               onClick={() => {
                 const title = `${user?.name || '학생'}_${assignment?.title || '과제'}_${currentPage.position + 1}p`;
-                downloadPage(title, noteElements, savedFilesRef.current, currentPage.imageUrl, bgPositionRef.current);
+                downloadPage(title, noteElements, savedFilesRef.current, currentPage, bgPositionRef.current);
               }}
               onDownloadAll={async () => {
                 const title = `${user?.name || '학생'}_${assignment?.title || '과제'}_전체`;
@@ -808,7 +808,7 @@ const AssignmentStudyViewer = () => {
                   const pageDataList = pages.map(pg => {
                     const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
                     return {
-                      bgUrl: pg.imageUrl,
+                      bg: pg,
                       elements: note.elements || [],
                       files: note.files || {},
                       bgPosition: note.bgPosition,

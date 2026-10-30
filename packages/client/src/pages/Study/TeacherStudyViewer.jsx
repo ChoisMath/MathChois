@@ -476,7 +476,7 @@ const TeacherStudyViewer = () => {
             <PdfDownloadButton
               onClick={() => {
                 const title = `${user?.name || '교사'}_${chapter?.title || '챕터'}_${currentPage.position + 1}p`;
-                downloadPage(title, noteElementsRef.current, savedFilesRef.current, currentPage.imageUrl, bgPositionRef.current);
+                downloadPage(title, noteElementsRef.current, savedFilesRef.current, currentPage, bgPositionRef.current);
               }}
               onDownloadAll={async () => {
                 const title = `${user?.name || '교사'}_${chapter?.title || '챕터'}_전체`;
@@ -487,7 +487,7 @@ const TeacherStudyViewer = () => {
                 const pageDataList = pages.map(pg => {
                   const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
                   return {
-                    bgUrl: pg.imageUrl,
+                    bg: pg,
                     elements: note.elements || [],
                     files: note.files || {},
                     bgPosition: note.bgPosition,

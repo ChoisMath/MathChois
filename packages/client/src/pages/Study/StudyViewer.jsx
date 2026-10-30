@@ -212,7 +212,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
           <div className="flex items-center gap-2">
             {status === 'ok' && (
               <PdfDownloadButton
-                onClick={() => downloadPage('교사_필기', noteElements, noteFiles, currentPage.imageUrl, bgPositionRef.current)}
+                onClick={() => downloadPage('교사_필기', noteElements, noteFiles, currentPage, bgPositionRef.current)}
                 onDownloadAll={async () => {
                    const title = `교사_필기_전체`;
                    const allNotesPerPage = await Promise.all(
@@ -235,7 +235,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
                    const pageDataList = pages.map(pg => {
                      const tNote = teacherNotesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
                      return {
-                       bgUrl: pg.imageUrl,
+                       bg: pg,
                        elements: tNote.elements || [],
                        files: tNote.files || {},
                        bgPosition: tNote.bgPosition,
@@ -1022,7 +1022,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
             <PdfDownloadButton
               onClick={() => {
                 const title = `${user?.name || '학생'}_${chapter?.title || '챕터'}_${currentPage.position + 1}p`;
-                downloadPage(title, noteElements, savedFilesRef.current, currentPage.imageUrl, bgPositionRef.current);
+                downloadPage(title, noteElements, savedFilesRef.current, currentPage, bgPositionRef.current);
               }}
               onDownloadAll={async () => {
                 const title = `${user?.name || '학생'}_${chapter?.title || '챕터'}_전체`;
@@ -1033,7 +1033,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
                 const pageDataList = pages.map(pg => {
                   const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
                   return {
-                    bgUrl: pg.imageUrl,
+                    bg: pg,
                     elements: note.elements || [],
                     files: note.files || {},
                     bgPosition: note.bgPosition,
