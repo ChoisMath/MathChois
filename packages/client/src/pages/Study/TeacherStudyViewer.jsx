@@ -37,6 +37,10 @@ import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 import { PageVideoEmbed, PageVideoThumb } from '../../components/videos/PageVideo';
+import { isPdfPage } from '@mathchois/shared';
+import { usePdfBackground } from '../../hooks/usePdfBackground';
+import { prefetchPdfPages } from '../../hooks/usePdfDocument';
+import PdfPageLayer from '../../components/study/PdfPageLayer';
 
 /* ── 세션 내 캐시 ── */
 const _notesCache = new Map(); // `${teacherId}_${pageId}` → { elements, bgPosition, files }
@@ -90,6 +94,9 @@ const TeacherStudyViewer = () => {
   }, [screenLocked, currentPage?.htmlUrl]);
 
   const { isGesturingRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef: lockActiveRef, baseStrokeWidthRef });
+  /* PDF 페이지 배경: 로딩이 끝나 저장된 bgPosition 이 ref 에 있고 컨테이너가 마운트된 뒤에 페이지를 넘긴다 */
+  const pdfBg = usePdfBackground({ page: loading ? null : currentPage, containerRef, bgPositionRef });
+  const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf } = pdfBg;
   useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef });
@@ -188,6 +195,8 @@ const TeacherStudyViewer = () => {
 
   /* ── onChange → teacher_notes upsert & 화면 고정 ── */
   const handleExcalidrawChange = useCallback((elements, appState) => {
+    /* PDF 레이어는 제스처·복원 중에도 뷰포트를 따라가야 하므로 모든 조기 반환보다 먼저 */
+    onPdfViewport(appState);
     if (isRestoringRef.current || isAdjustingWidthRef.current) return;
 
     /* Excalidraw 내부 penMode 비활성화 — OS 팜 리젝션에 위임 */
@@ -291,7 +300,7 @@ const TeacherStudyViewer = () => {
       }
       if (mountedRef.current) setSaveStatus('saved');
     }, 1500);
-  }, [user]);
+  }, [user, onPdfViewport]);
 
   const handleToggleScreenLock = useCallback(() => {
     setScreenLocked(prev => {
@@ -319,6 +328,17 @@ const TeacherStudyViewer = () => {
     }, 0);
 
     const page = currentPageRef.current;
+
+    /* PDF 페이지: bg element 없이 필기만 (handleHtmlOverlayMount 와 같은 순서) — 종이는 PdfPageLayer 가 그린다 */
+    if (isPdfPage(page)) {
+      await new Promise((r) => setTimeout(r, 0));
+      const userFilesList = Object.values(savedFilesRef.current);
+      if (userFilesList.length > 0) api.addFiles(userFilesList);
+      await new Promise((r) => requestAnimationFrame(r));
+      api.updateScene({ elements: [...noteElementsRef.current], commitToHistory: false });
+      return;
+    }
+
     if (!page?.imageUrl || !containerRef.current) return;
 
     try {
@@ -374,6 +394,7 @@ const TeacherStudyViewer = () => {
 
   /* ── 이미지 리로드 (원본 비율로 재배치) ── */
   const handleReloadImage = useCallback(async () => {
+    if (pdfBg.active) { rerenderPdf(); return; }
     const page = currentPageRef.current;
     const excApi = excalidrawAPIRef.current;
     if (!page?.imageUrl || !excApi || !containerRef.current) return;
@@ -393,7 +414,7 @@ const TeacherStudyViewer = () => {
     } catch (err) {
       console.error('이미지 리로드 실패:', err);
     }
-  }, []);
+  }, [pdfBg.active, rerenderPdf]);
 
   /* ── 파생 값 ── */
   const currentIndex = pages.findIndex((p) => p.id === currentPage?.id);
@@ -403,6 +424,12 @@ const TeacherStudyViewer = () => {
   /* ── 인접 페이지 이미지 백그라운드 프리패치 ── */
   useEffect(() => {
     prefetchImages([prevPage?.imageUrl, nextPage?.imageUrl].filter(Boolean));
+    /* PDF 이웃 쪽은 같은 문서일 때만 — 문서 LRU(2개)에서 화면의 문서가 밀려나지 않도록 */
+    if (isPdfPage(currentPage)) {
+      for (const pg of [prevPage, nextPage]) {
+        if (isPdfPage(pg) && pg.pdfUrl === currentPage.pdfUrl) prefetchPdfPages(pg.pdfUrl, [pg.pdfPage]);
+      }
+    }
   }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ── */
@@ -563,6 +590,7 @@ const TeacherStudyViewer = () => {
             onReloadImage={handleReloadImage}
             onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw'; }}
             onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
+            pdfMode={pdfBg.active}
           />
         ))
       )}
@@ -636,6 +664,7 @@ const TeacherStudyViewer = () => {
           className="w-full h-full relative overflow-hidden"
         >
           <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{showExcalidrawPanel ? '' : PANEL_HIDE_CSS}</style>
+          {pdfBg.active && <PdfPageLayer ref={pdfLayerRef} {...pdfBg.layerProps} containerRef={containerRef} />}
 
           {currentPage ? (
             <ExcalidrawErrorBoundary key={currentPage.id}>
