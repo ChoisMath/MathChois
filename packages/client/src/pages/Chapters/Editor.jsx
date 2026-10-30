@@ -30,6 +30,8 @@ import { toolUrl } from '../../lib/toolUrl';
 import { useAuth } from '../../contexts/AuthContext';
 import { invalidatePagesCache } from '../../lib/dataCache';
 import SortablePageItem from '../../components/common/SortablePageItem';
+import PageThumb from '../../components/common/PageThumb';
+import { useElementWidth } from '../../hooks/useElementWidth';
 import { extractYouTubeId } from '../../lib/youtubeUtils';
 import { uploadPagesWithPdf } from '../../lib/pageUpload';
 import { fileUrlsToDeleteFor, storagePathOf } from '../../lib/pageStorage';
@@ -40,6 +42,7 @@ const ChapterEditor = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const fileInputRef = useRef(null);
+  const [previewRef, previewWidth] = useElementWidth();
 
   const [chapter, setChapter] = useState(null);
   const [pages, setPages] = useState([]);
@@ -524,7 +527,7 @@ const ChapterEditor = () => {
         </div>
 
         {/* Main — 선택된 페이지 미리보기 */}
-        <div className="flex-1 bg-gray-50 rounded-lg shadow overflow-hidden p-4 relative">
+        <div ref={previewRef} className="flex-1 bg-gray-50 rounded-lg shadow overflow-hidden p-4 relative">
           {selectedPage ? (
             selectedPage.pageType === 'whiteboard' ? (
               <div className="flex flex-col gap-4 p-3 h-full overflow-y-auto">
@@ -578,8 +581,9 @@ const ChapterEditor = () => {
                 {aiPreview && <ProblemView latex={aiPreview.problemLatex} figures={aiPreview.figures} />}
               </div>
             ) : (
-              <img
-                src={selectedPage.imageUrl}
+              <PageThumb
+                page={selectedPage}
+                width={Math.max(240, previewWidth)}
                 alt="선택된 페이지"
                 className="w-full h-auto block shadow-sm bg-white"
               />

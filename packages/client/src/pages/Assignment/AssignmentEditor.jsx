@@ -19,6 +19,8 @@ import {
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import SortablePageItem from '../../components/common/SortablePageItem';
+import PageThumb from '../../components/common/PageThumb';
+import { useElementWidth } from '../../hooks/useElementWidth';
 import VideoPickerModal from '../../components/videos/VideoPickerModal';
 import { PageVideoEmbed } from '../../components/videos/PageVideo';
 import { extractYouTubeId } from '../../lib/youtubeUtils';
@@ -31,6 +33,7 @@ const AssignmentEditor = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const fileInputRef = useRef(null);
+  const [previewRef, previewWidth] = useElementWidth();
 
   const [pages, setPages]           = useState([]);
   const [selectedPage, setSelectedPage] = useState(null);
@@ -405,14 +408,14 @@ const AssignmentEditor = () => {
         </div>
 
         {/* 미리보기 */}
-        <div className="flex-1 bg-gray-50 rounded-lg shadow overflow-hidden p-4 relative">
+        <div ref={previewRef} className="flex-1 bg-gray-50 rounded-lg shadow overflow-hidden p-4 relative">
           {selectedPage ? (
             selectedPage.videoUrl ? (
               <div className="w-full h-full flex items-center justify-center bg-black rounded">
                 <PageVideoEmbed videoUrl={selectedPage.videoUrl} title="영상 미리보기" className="w-full h-full rounded" hotkeys />
               </div>
             ) : (
-              <img src={selectedPage.imageUrl} alt="선택된 페이지" className="w-full h-auto block shadow-sm bg-white" />
+              <PageThumb page={selectedPage} width={Math.max(240, previewWidth)} alt="선택된 페이지" className="w-full h-auto block shadow-sm bg-white" />
             )
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-gray-400">

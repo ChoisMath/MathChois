@@ -3,6 +3,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Trash2, GripVertical, Play, FileCode2, Sparkles, Presentation } from 'lucide-react';
 import { PageVideoThumb } from '../videos/PageVideo';
+import PageThumb from './PageThumb';
 
 const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage, isDeleting }) => {
   const {
@@ -72,13 +73,7 @@ const SortablePageItem = ({ page, index, isSelected, onSelectPage, onDeletePage,
           <span className="absolute bottom-1 inset-x-0 text-center text-[10px] text-emerald-700 font-medium">AI 코칭</span>
         </div>
       ) : (
-        <img
-          src={page.imageUrl}
-          alt={`페이지 ${index + 1}`}
-          className="w-full h-auto object-contain bg-white"
-          loading="lazy"
-          draggable={false}
-        />
+        <PageThumb page={page} alt={`페이지 ${index + 1}`} className="w-full h-auto object-contain bg-white" />
       )}
       <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
         {index + 1}
