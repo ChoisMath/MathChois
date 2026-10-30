@@ -165,14 +165,19 @@ export default function PdfPageLayer({ page, paperRect, containerRef, error, onR
     if (!sameView(view, lastViewRef.current)) placeCanvas();
   }, [cancelTask, containerRef, hideCanvas, placeCanvas, releaseOffscreen]);
 
+  /* 뷰포트·컨테이너 크기가 VIEWPORT_SETTLE_MS 동안 멈추면 한 번만 다시 렌더한다 */
+  const scheduleRender = useCallback(() => {
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(render, VIEWPORT_SETTLE_MS);
+  }, [render]);
+
   const setViewport = useCallback((view) => {
     if (sameView(lastViewRef.current, view)) return;
     lastViewRef.current = view;
     placeCanvas();
     placePaper();
-    clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(render, VIEWPORT_SETTLE_MS);
-  }, [placeCanvas, placePaper, render]);
+    scheduleRender();
+  }, [placeCanvas, placePaper, scheduleRender]);
 
   const rerender = useCallback(() => { render(); }, [render]);
 
@@ -200,10 +205,11 @@ export default function PdfPageLayer({ page, paperRect, containerRef, error, onR
   useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === 'undefined') return undefined;
-    const observer = new ResizeObserver(() => render());
+    /* 크기 변경(회전·창 조절)은 연속으로 오므로 즉시 렌더하지 않고 같은 정착 타이머로 모은다 */
+    const observer = new ResizeObserver(() => scheduleRender());
     observer.observe(container);
     return () => observer.disconnect();
-  }, [containerRef, render]);
+  }, [containerRef, scheduleRender]);
 
   useEffect(() => () => {
     clearTimeout(timerRef.current);

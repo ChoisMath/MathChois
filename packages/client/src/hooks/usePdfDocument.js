@@ -36,11 +36,15 @@ export function usePdfPage(pdfUrl, pageNumber) {
   const [result, setResult] = useState({ key: null, ...EMPTY });
   const key = pdfUrl && pageNumber ? `${attempt}|${pageNumber}|${pdfUrl}` : null;
 
-  /* 화면에 그리는 문서는 썸네일·이웃 문서가 문서 LRU 를 채워도 닫히지 않게 고정한다 */
+  /* 화면에 그리는 문서는 썸네일·이웃 문서가 문서 LRU 를 채워도 닫히지 않게 고정한다.
+     고정은 마지막으로 받은 null 이 아닌 url 에 묶는다 — 페이지 전환 중 pdfUrl 이 잠깐 null 이 되어도
+     풀지 않고(그 사이 LRU 가 문서를 닫아 같은 PDF 를 다시 받는 일 방지), 다른 url 이 오거나 언마운트될 때 푼다. */
+  const [pinUrl, setPinUrl] = useState(pdfUrl || null);
+  if (pdfUrl && pdfUrl !== pinUrl) setPinUrl(pdfUrl);
   useEffect(() => {
-    if (!pdfUrl) return undefined;
-    return pdfDocCache.pin(pdfUrl);
-  }, [pdfUrl]);
+    if (!pinUrl) return undefined;
+    return pdfDocCache.pin(pinUrl);
+  }, [pinUrl]);
 
   useEffect(() => {
     if (!key) return undefined;
