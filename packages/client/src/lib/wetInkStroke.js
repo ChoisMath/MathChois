@@ -88,9 +88,10 @@ export function buildStrokePath(points, pressures, { size, simulatePressure, las
  * scene 좌표 점들로 Excalidraw freedraw 요소를 만든다(수동 — convertToExcalidrawElements 는 freedraw 미지원).
  * @param {{x:number,y:number}[]} scenePoints  scene 좌표
  * @param {number[]} pressures
- * @param {{ strokeColor: string, strokeWidth: number, simulatePressure: boolean }} opts
+ * @param {{ strokeColor: string, strokeWidth: number, simulatePressure: boolean, groupIds?: string[], opacity?: number }} opts
+ *   opacity: 0~100 (형광펜은 40, 기본 100)
  */
-export function makeFreedrawElement(scenePoints, pressures, { strokeColor, strokeWidth, simulatePressure, groupIds = [] }) {
+export function makeFreedrawElement(scenePoints, pressures, { strokeColor, strokeWidth, simulatePressure, groupIds = [], opacity = 100 }) {
   const ox = scenePoints[0].x;
   const oy = scenePoints[0].y;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -114,7 +115,7 @@ export function makeFreedrawElement(scenePoints, pressures, { strokeColor, strok
     strokeWidth,
     strokeStyle: 'solid',
     roughness: 0,
-    opacity: 100,
+    opacity,
     groupIds: groupIds.slice(),
     frameId: null,
     roundness: null,

@@ -43,7 +43,7 @@ packages/
 │       │                       #   videos/(VideoPlayer, SubtitleOverlay, VideoPreviewModal, VideoForm, SubtitleField, VideoPickerModal, ClassroomVideoTab, VideoComments),
 │       │                       #   units/(UnitBrowser — 단원 없음=평면 / 단원 목록 / 단원 안 3화면을 고르는 공용 틀, UnitCard·UnitGrid(재생목록 카드·드래그 순서)·UnitHeader·UnitFormModal·UnitDeleteModal·UnitItemPickerModal(기존 항목 가져오기)·UnitSelect(카드별 단원 선택 칸)), classrooms/ChapterTab(챕터 탭 — UnitBrowser 사용)
 │       │   ├── aiHub/          # AI활용 허브 — MotionGallery·MotionCard·PromptCopy(복사 단추)·KeyNav, SlideGallery·SlideCard·SlideViewer·SlidePrompt·SlideSortMenu·FilterPicker, OriginalBadge·OriginalCredit(오빠두 출처), editor/(PromptPane·BlankRow·OptionRows·PromptPreview·RowsTable·OriginalEditor·EditedNote(웹에서 고친 원본 띠) — 모션 프롬프트 편집기)
-│       │   ├── study/          # DrawingToolbar, PageNavOverlay, PenDiagnosticsOverlay, HtmlToolOverlay
+│       │   ├── study/          # DrawingToolbar, ColorSlotsModal(색상 바로가기 5칸 편집), ScreenLockFab(화면고정 플로팅), PageNavOverlay, PenDiagnosticsOverlay, HtmlToolOverlay
 │       │   └── whiteboard/     # WhiteboardCanvas(Excalidraw 기본 UI + 협업), WhiteboardTopBar, BackgroundColorPicker, TemplatePickerDialog, TemplateThumb(SVG 미리보기),
 │       │                       #   WhiteboardTile(격자 정적 썸네일), WhiteboardSettingsDrawer(교사 설정), GroupAssignmentPanel(모둠 보드 — 미배정 트레이 + 방 격자, 칩 드래그(@dnd-kit/core PointerSensor+KeyboardSensor), 모둠 수 입력으로 방 개수 조정; 학급 기본 모둠·페이지별 배정 공용), GroupDesk(방/트레이 useDroppable), StudentChip(useDraggable + ChipFace), ClassroomGroupSettings(학급 학생 탭 모둠 설정)
 │       ├── layouts/            # MainLayout(public), DashboardLayout(인증 — 남색 상단 바 + 색 인덱스 탭 사이드바(`#EEF2F8`, 폭 280px; 선택 탭은 종이색 `#F8FAFD` 본문과 이어짐, 학급 탭은 학급 색 띠). 데스크톱 ≥1024px 고정 사이드바(바깥은 본문 높이만큼 늘어나 바닥까지, 안쪽 sticky; 햄버거로 접기, `mc_sidebar_collapsed`), 그 아래는 오버레이(`w-[280px] max-w-[85vw]`); 본문 종이색·유동 폭, 여백 1/1.5/2rem(shell.css `--shell-main-pad`), 남는 높이 변수 `--shell-main-fill`)
@@ -57,7 +57,7 @@ packages/
 │       │                       #   useWhiteboardCollab(보드 1개 소켓 협업 — 변경 요소 100ms 스로틀 전송/포인터/파일), useWhiteboardGrid(교사 격자 — 소켓 하나로 N 보드 장면 유지),
 │       │                       #   useAiHubData(AI활용 허브 데이터 컨텍스트 — access/motion/slide/status/reload/from), useCopyFeedback(복사 단추 상태)
 │       └── lib/                # api.ts, socket.ts, toolUrl.js, excalidrawUtils, pdfDownloader,
-│                               #   inputMode.js, penToggles.js, excalidrawHistory.js,
+│                               #   inputMode.js, penToggles.js, excalidrawHistory.js, toolPrefs.js(색 슬롯·펜/형광펜 기억·도구바 순서),
 │                               #   wetInkStroke.js(인라인 perfect-freehand + freedraw element 생성),
 │                               #   freedrawResample.js, scribbleDetect.js,
 │                               #   problemContent.js([FIGURE:n] 파서), problems.js(API),
@@ -101,6 +101,10 @@ packages/
 
 5개 뷰어 공통 펜/UI 동작(`feat/pen-input-quality`):
 - 진입 시 기본 도구는 **freedraw(펜) + 검정(`#000000`)** 으로 강제(마지막 도구/빨강 복원 폐기). `DrawingToolbar`가 `pageId` prop으로 페이지 전환 시 펜+검정 리셋.
+- **도구바 구성(2026-10-30, `docs/superpowers/specs/2026-10-30-drawing-toolbar-reorg-highlighter-design.md`)**: 순서는 `lib/toolPrefs.js` `TOOLBAR_ORDER`(되돌리기 → 펜·형광펜·손가락·레이저 → 색 5칸·🎨 → 두께 → 지우개·이미지이동/새로고침/추가 → 직선·텍스트·도형·선택 → 전체지움 → 설정)가 기준이고 `DrawingToolbar.test.js`가 `data-tb` 순서를 검증한다.
+  - **형광펜**(논리 도구 `highlighter`): Excalidraw 는 `freedraw` + `currentItemOpacity: 40`(`HL_OPACITY`) + 전용 색(`mc_hl_color`, 기본 노랑)·두께(`mc_hl_width`, 0.4~3 기본 1.2). 펜으로 돌아오거나 다른 도구로 가면 투명도 100·펜 색 복구. 웻잉크는 `currentItemOpacity` 를 미리보기·commit(`makeFreedrawElement` `opacity`)에 쓰고 반투명 획은 멈춤 도형 보정을 하지 않는다. 뷰어의 `onActiveToolChange` 는 `freedraw`/`highlighter` 둘 다 펜 활성으로 넘긴다. 두께 슬라이더 하나가 켜진 도구의 두께를 보여주고 `onBaseWidthChange` 로 넘긴다(줌 보정은 뷰어 공통).
+  - **색상 바로가기 5칸**(`mc_color_slots`, 기본 검정·빨강·파랑·초록·주황, 모두 편집 가능): 칸을 누르면 켜진 도구(펜/형광펜)의 색이 바뀐다. 편집은 🎨 → `ColorSlotsModal`(자주 쓰는 색 격자 `PRESET_COLORS`·네이티브 색상 선택기·HEX·스포이드(`EyeDropper` 없으면 비활성)·기본값 복원). 예전 `mc_custom_colors`(추가 6색)와 `excalidrawUtils` 의 `DEFAULT_COLORS/MAX_CUSTOM_COLORS/TOOLS` 는 제거.
+  - **화면 고정 버튼은 도구바 밖** `components/study/ScreenLockFab.jsx` — 이미지 페이지 Excalidraw 컨테이너 우측 상단 플로팅(보기 모드·도구바 접힘에도 보임). 영상·HTML 페이지(항상 고정)에는 없음. 6개 뷰어(5 필기 + CoachingViewer) 적용.
 - 입력 모드 게이트(`hooks/useExcalidrawTouch.js` + `lib/inputMode.js`)로 손바닥 연결선(phantom line) 차단. 자체 undo/redo(`hooks/useExcalidrawUndo.js` + `lib/excalidrawHistory.js`). 5개 뷰어 모두 사용.
 - **웻잉크(wet-ink) 펜 렌더링**(`hooks/useWetInk.js` + `lib/wetInkStroke.js`): 진행 중인 펜 획을 가벼운 `<canvas>`에 펜 전속도로 렌더하고 pointerup에서 Excalidraw freedraw element로 commit(→ 기존 저장/동기화/undo). 기본 ON, `?wetink=0`이 기기별 비상 kill switch. 5개 뷰어 + CoachingViewer(`!readOnly`) + HtmlToolOverlay에 통합. 아래 "주의사항"의 웻잉크 항목 참조.
 - 진단 오버레이(`PenDiagnosticsOverlay` + `usePenDiagnostics`)는 `?penlog=1` 진입 시 활성화, **StudyViewer·TeacherStudyViewer** 에 마운트(원시 펜 샘플 JSON 내려받기 버튼 포함).

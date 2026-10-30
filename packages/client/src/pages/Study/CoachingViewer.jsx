@@ -10,6 +10,7 @@ import ProblemView from '../../components/common/ProblemView';
 import CoachingPanel from '../../components/common/CoachingPanel';
 import AttemptStack from '../../components/coaching/AttemptStack';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
+import ScreenLockFab from '../../components/study/ScreenLockFab';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, TOUCH_CSS, GRID_STYLE, EXCALIDRAW_UI_OPTIONS } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
@@ -517,10 +518,8 @@ export default function CoachingViewer({
       pageId={pageId}
       showPanel={showExcalidrawPanel}
       onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
-      screenLocked={screenLocked}
-      onToggleScreenLock={handleToggleScreenLock}
       onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
-      onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw'; }}
+      onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw' || t === 'highlighter'; }}
       onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
     />
   );
@@ -553,6 +552,7 @@ export default function CoachingViewer({
           style={{ zIndex: 3 }}
         />
       )}
+      <ScreenLockFab locked={screenLocked} onToggle={handleToggleScreenLock} />
     </div>
   );
 

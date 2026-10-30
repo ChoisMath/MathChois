@@ -1,16 +1,7 @@
 /* ─────────── 상수 ─────────── */
-export const DEFAULT_COLORS  = ['#1e1e1e', '#e03131', '#2f9e44', '#1971c2', '#f08c00', '#9c36b5'];
-export const MAX_CUSTOM_COLORS = 6;
 /** 배경 이미지 Excalidraw element 전용 ID */
 export const BG_ELEMENT_ID   = '__bg_image__';
 export const BG_FILE_ID      = '__bg_file__';
-
-export const TOOLS = [
-  { type: 'selection', label: '선택' },
-  { type: 'freedraw',  label: '자유 필기' },
-  { type: 'line',      label: '직선' },
-  { type: 'text',      label: '텍스트' },
-];
 
 export const EXCALIDRAW_UI_OPTIONS = {
   canvasActions: {

@@ -238,6 +238,26 @@ describe('useWetInk — 펜 멈춤 도형 보정', () => {
     for (let i = 1; i < pts.length; i++) expect(pts[i][0]).toBeGreaterThan(pts[i - 1][0]); // 역행 없음
   });
 
+  it('형광펜(currentItemOpacity 40)은 획을 투명도 40 으로 commit 하고, 멈춰도 도형 보정을 하지 않는다', () => {
+    api.getAppState = () => ({ zoom: { value: 1 }, scrollX: 0, scrollY: 0, currentItemStrokeWidth: 1.2, currentItemStrokeColor: '#ffd43b', currentItemOpacity: 40 });
+    canvas.dispatchEvent(pen('pointerdown', 100, 100));
+    moveAlong(canvas, [[100, 100], [200, 103], [300, 101]]);
+    vi.advanceTimersByTime(HOLD_MS + 50);
+    canvas.dispatchEvent(pen('pointerup', 300, 101));
+    expect(last().opacity).toBe(40);
+    expect(last().strokeColor).toBe('#ffd43b');
+    const pts = absPts(last());
+    expect(pts[pts.length - 1]).toEqual([300, 101]);          // 선분 스냅이 일어나지 않음 (손글씨 그대로)
+    expect(pts.length).toBe(51);
+  });
+
+  it('펜(currentItemOpacity 미지정/100)은 투명도 100 으로 commit 한다', () => {
+    canvas.dispatchEvent(pen('pointerdown', 100, 100));
+    moveAlong(canvas, [[100, 100], [300, 110]]);
+    canvas.dispatchEvent(pen('pointerup', 300, 110));
+    expect(last().opacity).toBe(100);
+  });
+
   it('언마운트 시 멈춤 타이머가 정리되어 commit 이 일어나지 않는다', () => {
     canvas.dispatchEvent(pen('pointerdown', 100, 100));
     moveAlong(canvas, [[100, 100], [300, 100]]);

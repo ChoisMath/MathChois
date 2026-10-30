@@ -77,6 +77,12 @@ describe('makeShapeFillElement — 도형 보정 채우기', () => {
     expect(el.points[el.points.length - 1]).toEqual([0, 0]); // 닫힌 경로 → polygon 으로 채워짐
     expect(el.id.startsWith('wf_')).toBe(true);
   });
+  it('makeFreedrawElement 는 opacity 옵션을 받고 기본은 100 이다 (형광펜 = 40)', () => {
+    const pts = [{ x: 0, y: 0 }, { x: 10, y: 0 }];
+    expect(makeFreedrawElement(pts, [0.5, 0.5], { strokeColor: '#000', strokeWidth: 1, simulatePressure: true }).opacity).toBe(100);
+    expect(makeFreedrawElement(pts, [0.5, 0.5], { strokeColor: '#000', strokeWidth: 1, simulatePressure: true, opacity: 40 }).opacity).toBe(40);
+  });
+
   it('makeFreedrawElement 는 groupIds 를 받는다', () => {
     const el = makeFreedrawElement([{ x: 0, y: 0 }, { x: 10, y: 0 }], [0.5, 0.5], { strokeColor: '#000', strokeWidth: 1, simulatePressure: true, groupIds: ['g2'] });
     expect(el.groupIds).toEqual(['g2']);

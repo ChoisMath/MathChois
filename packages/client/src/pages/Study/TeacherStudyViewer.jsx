@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import HtmlToolOverlay from '../../components/study/HtmlToolOverlay';
 import { HTML_OVERLAY_LOCK_BASE } from '../../lib/htmlOverlay';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
+import ScreenLockFab from '../../components/study/ScreenLockFab';
 import PageNavOverlay from '../../components/study/PageNavOverlay';
 import {
   BG_ELEMENT_ID,
@@ -554,7 +555,7 @@ const TeacherStudyViewer = () => {
               showPanel={showExcalidrawPanel}
               onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
               onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
-              onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw'; }}
+              onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw' || t === 'highlighter'; }}
               onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
               htmlMode
             />
@@ -565,11 +566,9 @@ const TeacherStudyViewer = () => {
             pageId={currentPage?.id}
             showPanel={showExcalidrawPanel}
             onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
-            screenLocked={screenLocked}
-            onToggleScreenLock={handleToggleScreenLock}
             onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
             onReloadImage={handleReloadImage}
-            onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw'; }}
+            onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw' || t === 'highlighter'; }}
             onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
           />
         ))
@@ -677,6 +676,7 @@ const TeacherStudyViewer = () => {
               style={{ zIndex: 3 }}
             />
           )}
+          {currentPage && <ScreenLockFab locked={screenLocked} onToggle={handleToggleScreenLock} />}
         </div>
         )}
         <PageNavOverlay

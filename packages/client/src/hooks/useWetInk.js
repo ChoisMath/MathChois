@@ -20,12 +20,14 @@ import { beginPenStroke, recordPenMove, endPenStroke } from '../lib/penSampleLog
  *
  * 가로채는 조건: 그리기 모드 ON + 논리 도구가 펜(자유필기) + pointerType==='pen' + 주버튼 + .excalidraw 내부.
  * (삼각형 모드도 Excalidraw activeTool 은 freedraw 이므로 penActiveRef 로 논리 도구를 구분한다.
+ *  형광펜(논리 도구 highlighter)도 펜 활성으로 넘어오며, Excalidraw currentItemOpacity(40)를 미리보기·commit 에 그대로 쓴다.
  *  마우스/손가락/배럴버튼/지우개·도형은 가로채지 않아 기존 동작 유지.)
  *
  * 펜 멈춤 → 도형 보정(docs/superpowers/specs/2026-10-29-pen-shape-snap-design.md): 획 끝에서 HOLD_MS 동안
  * HOLD_RADIUS_PX 안에 머물면 lib/shapeRecognizer 로 선분/원·타원/삼각형/사각형을 판정해 미리보기·commit 점을
  * 바꾼다(저장은 여전히 freedraw). 선분은 이후 펜을 끌면 끝점이 따라오고, 닫힌 도형은 CANCEL_MOVE_PX 넘게
  * 움직이면 취소된다. 판정은 성공할 때까지 멈출 때마다 시도하고, 성공한 뒤에는 그 획에서 다시 하지 않는다.
+ * 반투명 획(currentItemOpacity < 100, 형광펜)은 보정하지 않는다.
  * 비상 끄기 ?shapesnap=0 (localStorage mc_shape_snap_off).
  *
  * @param {object} opts
@@ -62,11 +64,17 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
     let travel = 0;        // 획 누적 길이(화면 px)
 
     const clearHold = () => { if (holdTimer) { clearTimeout(holdTimer); holdTimer = 0; } };
+    /** Excalidraw currentItemOpacity (0~100). 형광펜 도구는 40 으로 둔다 (lib/toolPrefs.js HL_OPACITY). */
+    const currentOpacity = () => {
+      const v = excalidrawAPIRef.current?.getAppState?.()?.currentItemOpacity;
+      return Number.isFinite(v) ? v : 100;
+    };
 
     const onHold = () => {
       holdTimer = 0;
       if (!drawing || snapped || !shapeSnapEnabled) return;
       if (travel < MIN_LINE_PX / 2) return; // 펜을 대고 생각만 하는 동안은 판정할 것이 없다
+      if (currentOpacity() < 100) return;   // 형광펜(반투명 획)은 도형 보정 대상이 아니다
       const result = recognizeShape(pts);
       if (!result) return;
       snapped = result;
@@ -121,19 +129,22 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       const zoom = app?.zoom?.value || 1;
       const size = (app?.currentItemStrokeWidth || 1) * zoom * 10; // 화면 px (vite excalidrawPenTweak 의 size 배수와 동일)
       const color = app?.currentItemStrokeColor || '#000000';
+      const alpha = currentOpacity() / 100;
       const src = snapped ? snapped.points : pts;
       const screenPts = src.map((p) => [p[0] - rect.left, p[1] - rect.top]);
       const path = buildStrokePath(screenPts, snapped ? src.map(() => 0.5) : pressures, { size, simulatePressure: true, last: true });
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
       c.clearRect(0, 0, rect.width, rect.height);
+      c.globalAlpha = alpha;
       if (snapped && snapped.kind !== 'line') {
         // 닫힌 도형: 선 색의 반투명 채우기 미리보기 (commit 의 makeShapeFillElement 와 동일한 모양)
         const fill = new Path2D();
         screenPts.forEach((p, i) => (i ? fill.lineTo(p[0], p[1]) : fill.moveTo(p[0], p[1])));
         fill.closePath();
-        c.save(); c.globalAlpha = SHAPE_FILL_OPACITY / 100; c.fillStyle = color; c.fill(fill); c.restore();
+        c.save(); c.globalAlpha = alpha * SHAPE_FILL_OPACITY / 100; c.fillStyle = color; c.fill(fill); c.restore();
       }
       if (path) { c.fillStyle = color; c.fill(path); }
+      c.globalAlpha = 1;
     };
     const scheduleRender = () => { if (!rafId) rafId = requestAnimationFrame(render); };
 
@@ -193,6 +204,7 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
         const simulatePressure = true; // S-Pen 실제 필압 미사용(균일 젤펜 thinning 0 — pressures 미저장)
         const scenePoints = src.map(([cx, cy]) => viewportCoordsToSceneCoords({ clientX: cx, clientY: cy }, app));
         const strokeColor = app?.currentItemStrokeColor || '#000000';
+        const opacity = currentOpacity();
         // 닫힌 도형 보정: 선 색의 반투명 채우기를 획 아래에 깔고 같은 그룹으로 묶는다
         const closedShape = !!snapped && snapped.kind !== 'line';
         const groupId = closedShape ? `wg_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}` : null;
@@ -201,6 +213,7 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
           strokeWidth: app?.currentItemStrokeWidth || 1,
           simulatePressure,
           groupIds: groupId ? [groupId] : [],
+          opacity,
         });
         const added = closedShape ? [makeShapeFillElement(scenePoints, { strokeColor, groupId }), el] : [el];
         api.updateScene({

@@ -1,26 +1,28 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  MousePointer, Pen, Type, Square, Circle, Triangle,
-  Eraser, Minus, Trash2, Pipette, Plus,
+  MousePointer, Pen, Highlighter, Type, Square, Circle, Triangle,
+  Eraser, Minus, Trash2, Plus, Palette,
   SlidersHorizontal, Hand, Shapes, ChevronDown, ImagePlus, Dot,
-  Lock, Unlock, RefreshCw, Undo2, Redo2, Pointer,
+  RefreshCw, Undo2, Redo2, Pointer,
 } from 'lucide-react';
-import {
-  BG_ELEMENT_ID,
-  DEFAULT_COLORS,
-  MAX_CUSTOM_COLORS,
-  TOOLS,
-} from '../../lib/excalidrawUtils';
+import { BG_ELEMENT_ID } from '../../lib/excalidrawUtils';
 import { getInputMode, setInputMode, subscribeInputMode } from '../../lib/inputMode';
-import { sceneStrokeWidth, PEN_WIDTH_MIN, PEN_WIDTH_MAX, PEN_WIDTH_STEP, PEN_WIDTH_DEFAULT } from '../../lib/penWidth';
+import { sceneStrokeWidth } from '../../lib/penWidth';
+import {
+  HL_OPACITY, PEN_COLOR_DEFAULT,
+  loadColorSlots, saveColorSlots, loadToolColor, saveToolColor, loadToolWidth, saveToolWidth, widthRange,
+} from '../../lib/toolPrefs';
+import ColorSlotsModal from './ColorSlotsModal';
 
-const TOOL_ICONS = {
-  selection: MousePointer,
-  freedraw:  Pen,
-  line:      Minus,
-  text:      Type,
-};
+/**
+ * 필기 도구바 (5개 필기 뷰어 + AI 코칭 공용).
+ * 순서·형광펜·색상 슬롯·두께 규칙: docs/superpowers/specs/2026-10-30-drawing-toolbar-reorg-highlighter-design.md
+ *
+ * 논리 도구(activeTool)와 Excalidraw 도구는 다르다: 형광펜(highlighter)·삼각형(triangle)은 Excalidraw 쪽이 freedraw 이고,
+ * 레이저포인터·이미지이동은 selection 이다. 형광펜은 currentItemOpacity 40 + 전용 색·두께, 펜으로 돌아오면 100 + 펜 색·두께.
+ * 화면 고정 버튼은 여기 없다 — components/study/ScreenLockFab.jsx (필기 영역 우측 상단 플로팅).
+ */
 
 const SHAPE_TOOL_ICONS = {
   rectangle: Square,
@@ -29,29 +31,47 @@ const SHAPE_TOOL_ICONS = {
 };
 
 const SHAPE_TOOLS    = ['rectangle', 'ellipse', 'triangle'];
-const SAVEABLE_TOOLS = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse', 'triangle'];
+const SAVEABLE_TOOLS = ['freedraw', 'highlighter', 'selection', 'text', 'line', 'rectangle', 'ellipse', 'triangle'];
+/** 색·두께를 공유하는 "잉크" 도구: 형광펜이면 형광펜 설정, 그 외는 펜 설정 */
+const inkToolOf = (tool) => (tool === 'highlighter' ? 'highlighter' : 'freedraw');
 
-function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked, onToggleScreenLock, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, onActiveToolChange }) {
+/* 요소 순서는 lib/toolPrefs.js TOOLBAR_ORDER 가 기준 — 아래 JSX 의 data-tb 순서와 일치해야 한다(테스트가 검증) */
+const BTN = 'p-1.5 rounded-md transition-colors cursor-pointer flex-shrink-0 flex items-center justify-center';
+const btnCls = (active, activeCls = 'bg-blue-100 text-blue-600') =>
+  `${BTN} ${active ? activeCls : 'text-gray-600 hover:bg-gray-100'}`;
+const Divider = () => <div className="w-px h-6 bg-gray-200 mx-1 flex-shrink-0" />;
+
+function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, onActiveToolChange }) {
   const [activeTool, setActiveTool]       = useState('freedraw');
-  const [color, setColor]                 = useState('#000000');
-  const [strokeWidth, setStrokeWidth]     = useState(() =>
-    parseFloat(localStorage.getItem('mc_stroke_width') || String(PEN_WIDTH_DEFAULT))
-  );
   const [imageMoveMode, setImageMoveMode] = useState(false);
   const [inputMode, setInputModeState] = useState(() => getInputMode());
   useEffect(() => subscribeInputMode(setInputModeState), []);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
-  const [customColors, setCustomColors]   = useState(() => {
-    try { return JSON.parse(localStorage.getItem('mc_custom_colors') || '[]'); }
-    catch { return []; }
-  });
+  const [paletteOpen, setPaletteOpen]     = useState(false);
+  const [slots, setSlots]                 = useState(() => loadColorSlots());
 
-  const colorPickerRef = useRef(null);
+  /* 펜·형광펜 색/두께 — 콜백에서 최신값을 쓰도록 ref 와 state 를 함께 갱신 */
+  const [penColor, setPenColorState] = useState(() => loadToolColor('freedraw'));
+  const [hlColor,  setHlColorState]  = useState(() => loadToolColor('highlighter'));
+  const [penWidth, setPenWidthState] = useState(() => loadToolWidth('freedraw'));
+  const [hlWidth,  setHlWidthState]  = useState(() => loadToolWidth('highlighter'));
+  const inkRef = useRef({ penColor, hlColor, penWidth, hlWidth });
+  const setInk = (patch) => {
+    inkRef.current = { ...inkRef.current, ...patch };
+    if ('penColor' in patch) setPenColorState(patch.penColor);
+    if ('hlColor'  in patch) setHlColorState(patch.hlColor);
+    if ('penWidth' in patch) setPenWidthState(patch.penWidth);
+    if ('hlWidth'  in patch) setHlWidthState(patch.hlWidth);
+  };
+  const inkTool  = inkToolOf(activeTool);
+  const curColor = inkTool === 'highlighter' ? hlColor : penColor;
+  const curWidth = inkTool === 'highlighter' ? hlWidth : penWidth;
+  const range    = widthRange(inkTool);
+
   const imageInputRef  = useRef(null);
-  const colorRef       = useRef(color);
-  const strokeWidthRef = useRef(strokeWidth);
-  useEffect(() => { colorRef.current = color; },             [color]);
-  useEffect(() => { strokeWidthRef.current = strokeWidth; }, [strokeWidth]);
+  /* 레이저 포인터·삼각형 변환은 펜 색을 쓴다 */
+  const colorRef = useRef(penColor);
+  useEffect(() => { colorRef.current = penColor; }, [penColor]);
 
   /* ── 삼각형 모드용 ref ── */
   const activeToolRef = useRef(activeTool);
@@ -248,8 +268,6 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked
     };
   }, [activeTool]);
 
-  const allColors = [...DEFAULT_COLORS, ...customColors];
-
   const disableImageMove = useCallback((api) => {
     const els = api.getSceneElements().map((el) =>
       el.id === BG_ELEMENT_ID ? { ...el, locked: true } : el
@@ -264,7 +282,45 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked
     const api = apiRef.current;
     if (imageMoveMode && api) disableImageMove(api);
     setActiveTool(type);
+    activeToolRef.current = type;
     if (SAVEABLE_TOOLS.includes(type)) localStorage.setItem('mc_active_tool', type);
+    const zoom = api?.getAppState()?.zoom?.value || 1;
+    const ink = inkRef.current;
+
+    if (type === 'highlighter') {
+      /* 형광펜: Excalidraw 는 freedraw, 투명도 40 + 형광펜 색·두께(줌 보정) */
+      onBaseWidthChange?.(ink.hlWidth);
+      api?.updateScene({
+        appState: {
+          activeTool: { type: 'freedraw', locked: false },
+          currentItemStrokeColor: ink.hlColor,
+          currentItemOpacity: HL_OPACITY,
+          currentItemStrokeWidth: sceneStrokeWidth(ink.hlWidth, zoom),
+        },
+        commitToHistory: false,
+      });
+      return;
+    }
+    if (type === 'freedraw') {
+      /* 펜: 투명도 100 + 펜 색·두께 복구 (줌 보정) */
+      onBaseWidthChange?.(ink.penWidth);
+      api?.updateScene({
+        appState: {
+          activeTool: { type: 'freedraw', locked: false },
+          currentItemStrokeColor: ink.penColor,
+          currentItemOpacity: 100,
+          currentItemStrokeWidth: sceneStrokeWidth(ink.penWidth, zoom),
+        },
+        commitToHistory: false,
+      });
+      return;
+    }
+
+    /* 그 외 도구: 형광펜의 반투명·색이 새 요소에 남지 않게 펜 기준으로 되돌린다 */
+    api?.updateScene({
+      appState: { currentItemOpacity: 100, currentItemStrokeColor: ink.penColor },
+      commitToHistory: false,
+    });
 
     /* 도형 도구 공통: roughness=0 (반듯한 선) + strokeWidth=2 (중간 두께) + 도구 잠금 유지(locked: true) */
     if (SHAPE_TYPES.includes(type)) {
@@ -279,17 +335,6 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked
         commitToHistory: false,
       });
       return;
-    } else if (type === 'freedraw') {
-      /* 펜 모드 복귀 시: 기존에 사용자가 지정했던 펜 두께(strokeWidth)로 복구 (줌 보정) */
-      const zoom = api?.getAppState()?.zoom?.value || 1;
-      api?.updateScene({
-        appState: {
-          activeTool: { type: 'freedraw', locked: false },
-          currentItemStrokeWidth: sceneStrokeWidth(strokeWidthRef.current, zoom),
-        },
-        commitToHistory: false,
-      });
-      return;
     }
 
     if (type === 'laser_pointer') {
@@ -299,30 +344,44 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked
     }
   };
 
+  /** 색 적용 — 켜진 도구가 형광펜이면 형광펜 색, 아니면 펜 색. 지우개·선택·이미지이동 중이면 펜으로 돌아간다. */
   const applyColor = (hex) => {
-    setColor(hex);
-    localStorage.setItem('mc_tool_color', hex);
-    apiRef.current?.updateScene({ appState: { currentItemStrokeColor: hex } });
-    if (['eraser', 'selection', 'image_move'].includes(activeTool)) {
-      setActiveTool('freedraw');
-      localStorage.setItem('mc_active_tool', 'freedraw');
-      apiRef.current?.setActiveTool({ type: 'freedraw' });
+    const tool = activeToolRef.current;
+    if (tool === 'highlighter') {
+      setInk({ hlColor: hex });
+      saveToolColor('highlighter', hex);
+      apiRef.current?.updateScene({ appState: { currentItemStrokeColor: hex } });
+      return;
     }
+    setInk({ penColor: hex });
+    saveToolColor('freedraw', hex);
+    if (['eraser', 'selection', 'image_move'].includes(tool)) {
+      applyTool('freedraw');
+      return;
+    }
+    apiRef.current?.updateScene({ appState: { currentItemStrokeColor: hex } });
   };
 
-  /* 페이지 진입 시 항상 펜+검정으로 초기화 */
+  /* 페이지 진입 시 항상 펜+검정으로 초기화 (형광펜 색·두께는 저장값 유지) */
   useEffect(() => {
     applyTool('freedraw');
-    applyColor('#000000');
+    applyColor(PEN_COLOR_DEFAULT);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageId]);
 
+  /** 두께 적용 — 켜진 잉크 도구(펜/형광펜)의 두께를 저장하고 줌 보정해 Excalidraw 에 넣는다 */
   const applyWidth = (w) => {
-    setStrokeWidth(w);
-    localStorage.setItem('mc_stroke_width', String(w));
-    if (onBaseWidthChange) onBaseWidthChange(w);
+    const tool = inkToolOf(activeToolRef.current);
+    setInk(tool === 'highlighter' ? { hlWidth: w } : { penWidth: w });
+    saveToolWidth(tool, w);
+    onBaseWidthChange?.(w);
     const zoom = apiRef.current?.getAppState()?.zoom?.value || 1;
     apiRef.current?.updateScene({ appState: { currentItemStrokeWidth: sceneStrokeWidth(w, zoom) }, commitToHistory: false });
+  };
+
+  const handleSlotsChange = (next) => {
+    const saved = saveColorSlots(next);
+    if (saved) setSlots(saved);
   };
 
   const handleToggleInputMode = () => {
@@ -435,140 +494,93 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked
     api.updateScene({ elements: bgEl ? [bgEl] : [] });
   };
 
-  const handleEyeDropper = async () => {
-    if (!window.EyeDropper) {
-      alert('스포이드 기능은 Chrome 95 이상에서만 지원됩니다.');
-      return;
-    }
-    try {
-      const result = await new window.EyeDropper().open();
-      applyColor(result.sRGBHex);
-    } catch { /* 취소 */ }
-  };
-
-  const handleAddColor = () => colorPickerRef.current?.click();
-
-  const handleColorPickerChange = (e) => {
-    const hex  = e.target.value;
-    const next = customColors.filter((c) => c !== hex);
-    if (next.length >= MAX_CUSTOM_COLORS) next.shift();
-    next.push(hex);
-    setCustomColors(next);
-    localStorage.setItem('mc_custom_colors', JSON.stringify(next));
-    applyColor(hex);
-  };
-
   const isShapeActive   = SHAPE_TOOLS.includes(activeTool);
   const ShapeActiveIcon = isShapeActive ? SHAPE_TOOL_ICONS[activeTool] : Shapes;
+
+  const toolBtn = (type, Icon, label, activeCls) => (
+    <button key={type} data-tb={type} onClick={() => applyTool(type)} title={label}
+      aria-pressed={activeTool === type}
+      className={btnCls(activeTool === type, activeCls)}>
+      <Icon className="h-4 w-4" />
+    </button>
+  );
 
   return (
     <div className="flex items-center gap-1 px-3 h-11 bg-white border-b shadow-sm flex-shrink-0 overflow-x-auto sticky top-14 z-50">
 
       {/* ⓪ 실행 취소 / 다시 실행 */}
-      <button onClick={onUndo} disabled={!canUndo} title="실행 취소 (Ctrl+Z)"
-        className={`p-1.5 rounded-md flex-shrink-0 flex items-center justify-center ${
-          canUndo ? 'text-gray-600 hover:bg-gray-100 cursor-pointer' : 'text-gray-300 cursor-not-allowed'
-        }`}>
+      <button data-tb="undo" onClick={onUndo} disabled={!canUndo} title="실행 취소 (Ctrl+Z)"
+        className={`${BTN} ${canUndo ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-300 cursor-not-allowed'}`}>
         <Undo2 className="h-4 w-4" />
       </button>
-      <button onClick={onRedo} disabled={!canRedo} title="다시 실행 (Ctrl+Shift+Z)"
-        className={`p-1.5 rounded-md flex-shrink-0 flex items-center justify-center ${
-          canRedo ? 'text-gray-600 hover:bg-gray-100 cursor-pointer' : 'text-gray-300 cursor-not-allowed'
-        }`}>
+      <button data-tb="redo" onClick={onRedo} disabled={!canRedo} title="다시 실행 (Ctrl+Shift+Z)"
+        className={`${BTN} ${canRedo ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-300 cursor-not-allowed'}`}>
         <Redo2 className="h-4 w-4" />
       </button>
-      <div className="w-px h-6 bg-gray-200 mx-0.5 flex-shrink-0" />
+      <Divider />
 
-      {/* ① 기본 도구 */}
-      {TOOLS.map(({ type, label }) => {
-        const Icon = TOOL_ICONS[type];
-        return (
-          <button key={type} onClick={() => applyTool(type)} title={label}
-            className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-              activeTool === type ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
-            }`}>
-            <Icon className="h-4 w-4" />
-          </button>
-        );
-      })}
-
-      {/* ② 도형 버튼 + 인라인 서브메뉴 */}
-      <button
-        onClick={() => setShapeMenuOpen((v) => !v)}
-        title="도형 (사각형 / 원 / 삼각형)"
-        className={`p-1.5 rounded-md transition-colors cursor-pointer flex-shrink-0 flex items-center gap-0.5 ${
-          isShapeActive || shapeMenuOpen ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
-        }`}
-      >
-        <ShapeActiveIcon className="h-4 w-4" />
-        <ChevronDown className="h-3 w-3 opacity-60" />
-      </button>
-
-      {shapeMenuOpen && (
-        <>
-          {[
-            { type: 'rectangle', Icon: Square,   label: '사각형' },
-            { type: 'ellipse',   Icon: Circle,   label: '원' },
-            { type: 'triangle',  Icon: Triangle, label: '삼각형 (그린 후 자동 변환)' },
-          ].map(({ type, Icon: ShapeIcon, label }) => (
-            <button key={type}
-              onClick={() => { applyTool(type); setShapeMenuOpen(false); }}
-              title={label}
-              className={`p-1.5 rounded-md transition-colors cursor-pointer flex-shrink-0 ${
-                activeTool === type ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
-              }`}>
-              <ShapeIcon className="h-4 w-4" />
-            </button>
-          ))}
-          <div className="w-px h-6 bg-gray-200 mx-0.5 flex-shrink-0" />
-        </>
-      )}
-
-      {/* 레이저 포인터 */}
-      <button onClick={() => applyTool('laser_pointer')} title="레이저 포인터"
-        className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-          activeTool === 'laser_pointer' ? 'bg-red-100 text-red-500' : 'text-gray-600 hover:bg-gray-100'
-        }`}>
-        <Dot className="h-4 w-4" />
-      </button>
-
-      {/* 지우개 (획 단위) */}
-      <button onClick={() => applyTool('eraser')} title="지우개 — 획 단위"
-        className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-          activeTool === 'eraser' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
-        }`}>
-        <Eraser className="h-4 w-4" />
-      </button>
-
-      {/* 손가락 필기 모드 토글 */}
-      <button onClick={handleToggleInputMode}
+      {/* ① 펜 · 형광펜 · 손가락 필기 · 레이저 포인터 */}
+      {toolBtn('freedraw', Pen, '펜')}
+      {toolBtn('highlighter', Highlighter, '형광펜 (반투명)', 'bg-yellow-100 text-yellow-700')}
+      <button data-tb="finger" onClick={handleToggleInputMode}
+        aria-pressed={inputMode === 'finger'}
         title={inputMode === 'finger'
           ? '손가락 필기 끄기 (현재: 손가락 허용)'
           : '손가락 필기 켜기 (현재: 스타일러스 전용)'}
-        className={`p-1.5 rounded-md transition-colors cursor-pointer flex-shrink-0 ${
-          inputMode === 'finger' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
-        }`}>
+        className={btnCls(inputMode === 'finger')}>
         <Pointer className="h-4 w-4" />
       </button>
+      {toolBtn('laser_pointer', Dot, '레이저 포인터', 'bg-red-100 text-red-500')}
+      <Divider />
 
-      {/* 이미지 이동 (배경 이미지 페이지 전용) */}
+      {/* ② 색상 바로가기 5칸 + 색상 설정 */}
+      {slots.map((hex, i) => (
+        <button key={i} data-tb={`slot-${i}`} onClick={() => applyColor(hex)} title={hex}
+          aria-label={`색 ${i + 1}: ${hex}`}
+          className={`w-5 h-5 rounded-full cursor-pointer flex-shrink-0 transition-transform border border-white ${
+            curColor === hex ? 'ring-2 ring-offset-1 ring-gray-500 scale-110' : 'hover:scale-110'
+          }`}
+          style={{ backgroundColor: hex }}
+        />
+      ))}
+      <button data-tb="palette" onClick={() => setPaletteOpen(true)} title="색상 설정 — 바로가기 색 바꾸기 · 스포이드 · 직접 입력"
+        aria-haspopup="dialog" aria-expanded={paletteOpen}
+        className={btnCls(paletteOpen)}>
+        <Palette className="h-4 w-4" style={{ color: curColor }} />
+      </button>
+      <Divider />
+
+      {/* ③ 두께 슬라이더 (펜/형광펜 — 켜진 도구의 두께) */}
+      <div data-tb="width" className="flex items-center gap-1.5 flex-shrink-0">
+        <input
+          type="range" min={range.min} max={range.max} step={range.step}
+          value={curWidth}
+          title={`${inkTool === 'highlighter' ? '형광펜' : '펜'} 굵기: ${curWidth}`}
+          aria-label={`${inkTool === 'highlighter' ? '형광펜' : '펜'} 굵기`}
+          onChange={(e) => applyWidth(parseFloat(e.target.value))}
+          className={`w-32 cursor-pointer ${inkTool === 'highlighter' ? 'accent-yellow-500' : 'accent-blue-500'}`}
+        />
+        <svg width="22" height="16" className="flex-shrink-0" style={{ overflow: 'visible' }}>
+          <line x1="1" y1="8" x2="21" y2="8"
+            stroke={curColor}
+            strokeOpacity={inkTool === 'highlighter' ? HL_OPACITY / 100 : 1}
+            strokeWidth={Math.max(Math.min(inkTool === 'highlighter' ? curWidth * 3 : curWidth, 10), 0.1)}
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
+      <Divider />
+
+      {/* ④ 지우개 · 이미지 */}
+      {toolBtn('eraser', Eraser, '지우개 — 획 단위')}
+
       {!htmlMode && (
-      <button onClick={handleToggleImageMove}
+      <button data-tb="image_move" onClick={handleToggleImageMove}
+        aria-pressed={imageMoveMode}
         title={imageMoveMode ? '이미지 이동 완료 (잠금)' : '이미지 이동 — 배경 이미지를 드래그로 이동'}
-        className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-          imageMoveMode ? 'bg-green-100 text-green-600' : 'text-gray-600 hover:bg-gray-100'
-        }`}>
+        className={btnCls(imageMoveMode, 'bg-green-100 text-green-600')}>
         <Hand className="h-4 w-4" />
       </button>
-      )}
-
-      {/* 이미지 위치 초기화 (리로드) */}
-      {onReloadImage && (
-        <button onClick={onReloadImage}
-          title="이미지 위치 초기화 — 원본 비율로 재배치"
-          className="p-1.5 rounded-md text-gray-600 hover:bg-gray-100 cursor-pointer flex-shrink-0">
-          <RefreshCw className="h-4 w-4" />
-        </button>
       )}
 
       {/* 이미지 가로/세로 비율 조정 (이동 모드일 때만) */}
@@ -603,87 +615,78 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked
         </>
       )}
 
-      {/* 이미지 삽입 */}
-      <button onClick={() => imageInputRef.current?.click()} title="이미지 삽입"
-        className="p-1.5 rounded-md transition-colors cursor-pointer text-gray-600 hover:bg-gray-100 flex-shrink-0">
+      {onReloadImage && (
+        <button data-tb="image_reload" onClick={onReloadImage}
+          title="이미지 위치 초기화 — 원본 비율로 재배치"
+          className={btnCls(false)}>
+          <RefreshCw className="h-4 w-4" />
+        </button>
+      )}
+
+      <button data-tb="image_add" onClick={() => imageInputRef.current?.click()} title="이미지 삽입"
+        className={btnCls(false)}>
         <ImagePlus className="h-4 w-4" />
       </button>
       <input ref={imageInputRef} type="file" accept="image/*" className="sr-only"
         onChange={handleImageFileChange} />
+      <Divider />
 
-      <div className="w-px h-6 bg-gray-200 mx-1 flex-shrink-0" />
-
-      {/* ③ 색상 팔레트 */}
-      {allColors.map((hex) => (
-        <button key={hex} onClick={() => applyColor(hex)} title={hex}
-          className={`w-5 h-5 rounded-full cursor-pointer flex-shrink-0 transition-transform border border-white ${
-            color === hex ? 'ring-2 ring-offset-1 ring-gray-500 scale-110' : 'hover:scale-110'
-          }`}
-          style={{ backgroundColor: hex }}
-        />
-      ))}
-
-      <button onClick={handleAddColor} title="커스텀 색상 추가"
-        className="w-5 h-5 rounded-full flex items-center justify-center bg-gray-100 hover:bg-gray-200 cursor-pointer flex-shrink-0 border border-dashed border-gray-400">
-        <Plus className="h-3 w-3 text-gray-600" />
-      </button>
-      <input ref={colorPickerRef} type="color" className="sr-only"
-        value={color} onChange={handleColorPickerChange} />
-
-      <button onClick={handleEyeDropper} title="스포이드 — 화면에서 색상 추출 (Chrome 95+)"
-        className="p-1.5 rounded-md text-gray-600 hover:bg-gray-100 cursor-pointer flex-shrink-0">
-        <Pipette className="h-4 w-4" />
+      {/* ⑤ 직선 · 텍스트 · 도형 · 선택 */}
+      {toolBtn('line', Minus, '직선')}
+      {toolBtn('text', Type, '텍스트')}
+      <button data-tb="shapes"
+        onClick={() => setShapeMenuOpen((v) => !v)}
+        title="도형 (사각형 / 원 / 삼각형)"
+        aria-expanded={shapeMenuOpen}
+        className={`${btnCls(isShapeActive || shapeMenuOpen)} gap-0.5`}
+      >
+        <ShapeActiveIcon className="h-4 w-4" />
+        <ChevronDown className="h-3 w-3 opacity-60" />
       </button>
 
-      <div className="w-px h-6 bg-gray-200 mx-1 flex-shrink-0" />
-
-      {/* ④ 선 굵기 슬라이더 */}
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <input
-          type="range" min={PEN_WIDTH_MIN} max={PEN_WIDTH_MAX} step={PEN_WIDTH_STEP}
-          value={strokeWidth}
-          title={`굵기: ${strokeWidth}`}
-          onChange={(e) => applyWidth(parseFloat(e.target.value))}
-          className="w-32 accent-blue-500 cursor-pointer"
-        />
-        <svg width="22" height="16" className="flex-shrink-0" style={{ overflow: 'visible' }}>
-          <line x1="1" y1="8" x2="21" y2="8"
-            stroke={color}
-            strokeWidth={Math.max(Math.min(strokeWidth, 2), 0.1)}
-            strokeLinecap="round"
-          />
-        </svg>
-      </div>
-
-      {/* 화면 고정 */}
-      {onToggleScreenLock && (
-        <button onClick={onToggleScreenLock}
-          title={screenLocked ? '화면 고정 해제' : '화면 고정 — 확대/축소·이동 차단'}
-          className={`p-1.5 rounded-md transition-colors cursor-pointer flex-shrink-0 ${
-            screenLocked ? 'bg-amber-100 text-amber-600' : 'text-gray-600 hover:bg-gray-100'
-          }`}>
-          {screenLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
-        </button>
+      {shapeMenuOpen && (
+        <>
+          {[
+            { type: 'rectangle', Icon: Square,   label: '사각형' },
+            { type: 'ellipse',   Icon: Circle,   label: '원' },
+            { type: 'triangle',  Icon: Triangle, label: '삼각형 (그린 후 자동 변환)' },
+          ].map(({ type, Icon: ShapeIcon, label }) => (
+            <button key={type}
+              onClick={() => { applyTool(type); setShapeMenuOpen(false); }}
+              title={label}
+              className={btnCls(activeTool === type)}>
+              <ShapeIcon className="h-4 w-4" />
+            </button>
+          ))}
+        </>
       )}
+      {toolBtn('selection', MousePointer, '선택')}
+      <Divider />
 
-      <div className="w-px h-6 bg-gray-200 mx-1 flex-shrink-0" />
-
-      {/* ⑤ 전체 지우기 */}
-      <button onClick={handleClear} title="전체 지우기"
-        className="p-1.5 rounded-md text-red-500 hover:bg-red-50 cursor-pointer flex-shrink-0">
+      {/* ⑥ 전체 지우기 */}
+      <button data-tb="clear" onClick={handleClear} title="전체 지우기"
+        className={`${BTN} text-red-500 hover:bg-red-50`}>
         <Trash2 className="h-4 w-4" />
       </button>
+      <Divider />
 
-      <div className="w-px h-6 bg-gray-200 mx-1 flex-shrink-0" />
-
-      {/* ⑥ Excalidraw 세부설정 패널 토글 */}
-      <button onClick={onTogglePanel}
+      {/* ⑦ Excalidraw 세부설정 패널 토글 */}
+      <button data-tb="settings" onClick={onTogglePanel}
         title={showPanel ? 'Excalidraw 세부설정 숨기기' : 'Excalidraw 세부설정 열기'}
-        className={`p-1.5 rounded-md transition-colors cursor-pointer flex-shrink-0 ${
-          showPanel ? 'bg-violet-100 text-violet-600' : 'text-gray-400 hover:bg-gray-100'
-        }`}>
+        aria-pressed={!!showPanel}
+        className={btnCls(showPanel, 'bg-violet-100 text-violet-600').replace('text-gray-600', 'text-gray-400')}>
         <SlidersHorizontal className="h-4 w-4" />
       </button>
+
+      {paletteOpen && (
+        <ColorSlotsModal
+          slots={slots}
+          currentColor={curColor}
+          onApply={applyColor}
+          onSlotsChange={handleSlotsChange}
+          onClose={() => setPaletteOpen(false)}
+        />
+      )}
 
       {/* 레이저 포인터 캔버스 오버레이 (포털을 통해 전체화면 최상단 렌더링) */}
       {activeTool === 'laser_pointer' && createPortal(
