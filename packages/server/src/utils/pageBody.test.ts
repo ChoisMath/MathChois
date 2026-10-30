@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pdfFieldsError } from './pageBody.js';
+import { PDF_MAX_PAGES, pdfFieldsError } from './pageBody.js';
 
 describe('pdfFieldsError', () => {
   const url = '/api/files/chapter-pdfs/chapters/c1/1700_a.pdf';
@@ -16,5 +16,10 @@ describe('pdfFieldsError', () => {
   });
   it('rejects a pdfUrl that escapes the bucket with a .. segment', () => {
     expect(pdfFieldsError({ pdfUrl: '/api/files/chapter-pdfs/../videos/x.mp4', pdfPage: 1 })).toBeTypeOf('string');
+  });
+  it(`caps pdfPage at PDF_MAX_PAGES (${PDF_MAX_PAGES})`, () => {
+    expect(PDF_MAX_PAGES).toBe(500);
+    expect(pdfFieldsError({ pdfUrl: url, pdfPage: 500 })).toBeNull();
+    expect(pdfFieldsError({ pdfUrl: url, pdfPage: 501 })).toBeTypeOf('string');
   });
 });

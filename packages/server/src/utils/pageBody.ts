@@ -2,6 +2,9 @@
 
 const PDF_URL_PREFIX = '/api/files/chapter-pdfs/';
 
+/** 한 PDF 에서 등록할 수 있는 최대 쪽 수 — 클라이언트 lib/pdfImport.js 의 PDF_MAX_PAGES 와 같다 */
+export const PDF_MAX_PAGES = 500;
+
 /** 통과하면 null, 아니면 400 응답용 메시지 */
 export function pdfFieldsError(body: { pdfUrl?: unknown; pdfPage?: unknown }): string | null {
   const hasUrl = body.pdfUrl != null;
@@ -17,6 +20,9 @@ export function pdfFieldsError(body: { pdfUrl?: unknown; pdfPage?: unknown }): s
   }
   if (typeof body.pdfPage !== 'number' || !Number.isInteger(body.pdfPage) || body.pdfPage < 1) {
     return 'pdfPage는 1 이상의 정수여야 합니다.';
+  }
+  if (body.pdfPage > PDF_MAX_PAGES) {
+    return `pdfPage는 ${PDF_MAX_PAGES} 이하여야 합니다.`;
   }
   return null;
 }

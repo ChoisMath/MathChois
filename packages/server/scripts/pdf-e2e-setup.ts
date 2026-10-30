@@ -6,7 +6,8 @@
  *   npx tsx --env-file=.env scripts/pdf-e2e-setup.ts --cleanup <chapterId>
  *
  * --cleanup: 챕터 페이지들의 저장소 파일(imageUrl·pdfUrl, 중복 제거)과 빈 업로드 폴더 → 챕터 → 학급 순으로 삭제한다.
- * 사용자는 남긴다.
+ * 사용자는 남긴다. 이 스크립트가 만든 학급(이름이 `PDF E2E ` 로 시작)의 챕터가 아니면 거부하고,
+ * 챕터가 없거나 거부하면 종료 코드 1.
  */
 import { eq } from 'drizzle-orm';
 import { db, pgClient } from '../src/config/database.js';
@@ -16,6 +17,8 @@ import { removeFile, removeDirectoryIfEmpty, urlToStoragePath, urlToParentDir } 
 import { collectFileUrls } from '../src/utils/fileUrls.js';
 
 const PASSWORD = 'Test1234!';
+/** 준비가 만드는 학급·챕터 이름 접두사 — cleanup 은 이 접두사의 학급만 지운다 */
+const E2E_PREFIX = 'PDF E2E ';
 
 async function ensureUser(email: string, name: string, role: 'teacher' | 'student') {
   const existing = await db.select().from(profiles).where(eq(profiles.email, email)).limit(1);
@@ -31,11 +34,17 @@ async function ensureUser(email: string, name: string, role: 'teacher' | 'studen
   return row;
 }
 
-async function cleanup(chapterId: string) {
+/** 성공하면 true. 챕터가 없거나 E2E 학급이 아니면 아무것도 지우지 않고 false */
+async function cleanup(chapterId: string): Promise<boolean> {
   const [chapter] = await db.select().from(chapters).where(eq(chapters.id, chapterId)).limit(1);
   if (!chapter) {
     console.error(`chapter not found: ${chapterId}`);
-    return;
+    return false;
+  }
+  const [cls] = await db.select({ name: classrooms.name }).from(classrooms).where(eq(classrooms.id, chapter.classroomId)).limit(1);
+  if (!cls || !cls.name.startsWith(E2E_PREFIX)) {
+    console.error(`refusing to clean up: classroom of chapter ${chapterId} is not an E2E classroom (${JSON.stringify(cls?.name ?? null)})`);
+    return false;
   }
   const rows = await db.select({ imageUrl: pages.imageUrl, pdfUrl: pages.pdfUrl }).from(pages).where(eq(pages.chapterId, chapterId));
   const urls = collectFileUrls(rows);
@@ -54,23 +63,25 @@ async function cleanup(chapterId: string) {
   await db.delete(chapters).where(eq(chapters.id, chapterId));
   await db.delete(classrooms).where(eq(classrooms.id, chapter.classroomId));
   console.log(JSON.stringify({ removedFiles: urls.length, chapterId, classroomId: chapter.classroomId }));
+  return true;
 }
 
 async function main() {
   if (process.argv[2] === '--cleanup') {
     if (!process.argv[3]) throw new Error('usage: --cleanup <chapterId>');
-    await cleanup(process.argv[3]);
+    const ok = await cleanup(process.argv[3]);
     await pgClient.end();
+    if (!ok) process.exit(1);
     return;
   }
   const teacher = await ensureUser('pdf.teacher@chois.test', 'PDF 테스트 교사', 'teacher');
   const student = await ensureUser('pdf.student@chois.test', 'PDF 테스트 학생', 'student');
   const stamp = Date.now();
   const [cls] = await db.insert(classrooms)
-    .values({ name: `PDF E2E ${stamp}`, teacherId: teacher.id, classCode: `PDF${String(stamp).slice(-5)}` })
+    .values({ name: `${E2E_PREFIX}${stamp}`, teacherId: teacher.id, classCode: `PDF${String(stamp).slice(-5)}` })
     .returning();
   await db.insert(classroomMembers).values({ classroomId: cls.id, studentId: student.id }).onConflictDoNothing();
-  const [chapter] = await db.insert(chapters).values({ classroomId: cls.id, title: `PDF E2E ${stamp}`, position: 0 }).returning();
+  const [chapter] = await db.insert(chapters).values({ classroomId: cls.id, title: `${E2E_PREFIX}${stamp}`, position: 0 }).returning();
 
   console.log(JSON.stringify({
     classroomId: cls.id, chapterId: chapter.id,
