@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { getFreedrawOutline, getFreedrawOutlineNormalized, FREEDRAW_NORMALIZED_SIZE } from './wetInkStroke.js';
+import { getFreedrawOutline, getFreedrawOutlineNormalized, FREEDRAW_NORMALIZED_SIZE, makeFreedrawElement, makeShapeFillElement, SHAPE_FILL_OPACITY } from './wetInkStroke.js';
 
 /* Galaxy Note25 Ultra(S Pen, zoom≈10, strokeWidth 0.05 하한)에서 "ㅆ"의 짧은 한 획 — scene 단위로 0.8×0.2 크기. */
 const tick = JSON.parse(readFileSync(new URL('./__fixtures__/freedraw-android-tick.json', import.meta.url), 'utf8'));
@@ -57,5 +57,28 @@ describe('getFreedrawOutlineNormalized — 미세 역행 점 (아이패드 핀�
     expect(maxDirty).toBeLessThanOrEqual(maxClean + 0.05);
     expect(minDirty).toBeGreaterThanOrEqual(size / 2 - 0.05);
     expect(outDirty.length).toBe(outClean.length);
+  });
+});
+
+describe('makeShapeFillElement — 도형 보정 채우기', () => {
+  it('선 색으로 반투명하게 채운 닫힌 line 요소, 점은 첫 점 기준 상대좌표, 같은 그룹', () => {
+    const pts = [[100, 100], [300, 100], [300, 220], [100, 220], [100, 100]].map(([x, y]) => ({ x, y }));
+    const el = makeShapeFillElement(pts, { strokeColor: '#ff0000', groupId: 'g1' });
+    expect(el.type).toBe('line');
+    expect(el.backgroundColor).toBe('#ff0000');
+    expect(el.strokeColor).toBe('transparent');
+    expect(el.fillStyle).toBe('solid');
+    expect(el.opacity).toBe(SHAPE_FILL_OPACITY);
+    expect(SHAPE_FILL_OPACITY).toBe(15);
+    expect(el.groupIds).toEqual(['g1']);
+    expect(el.customData).toEqual({ shapeFill: true });
+    expect([el.x, el.y, el.width, el.height]).toEqual([100, 100, 200, 120]);
+    expect(el.points[0]).toEqual([0, 0]);
+    expect(el.points[el.points.length - 1]).toEqual([0, 0]); // 닫힌 경로 → polygon 으로 채워짐
+    expect(el.id.startsWith('wf_')).toBe(true);
+  });
+  it('makeFreedrawElement 는 groupIds 를 받는다', () => {
+    const el = makeFreedrawElement([{ x: 0, y: 0 }, { x: 10, y: 0 }], [0.5, 0.5], { strokeColor: '#000', strokeWidth: 1, simulatePressure: true, groupIds: ['g2'] });
+    expect(el.groupIds).toEqual(['g2']);
   });
 });

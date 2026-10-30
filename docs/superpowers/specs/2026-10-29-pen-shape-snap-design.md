@@ -40,6 +40,7 @@ pointerup 에 `makeFreedrawElement` 로 Excalidraw freedraw 요소를 commit 한
 | 원·타원 | 꼭짓점이 5개 이상이거나 다각형 적합이 나쁘면 타원 적합: 중심 = 바운딩박스 중심, 반지름 a·b = 폭/2·높이/2. 각 점의 ((x−cx)/a)²+((y−cy)/b)² 의 제곱근 r 에 대해 mean|r−1| ≤ 0.12, max|r−1| ≤ 0.30 이면 타원. a/b 가 0.85~1.18 이면 **원**(a=b=평균). 결과는 64점 폐곡선. |
 | 닫힌 도형 확정 | 판정 즉시 고정. 멈춘 뒤 펜이 **20px** 이상 더 움직이면 보정을 **취소**하고 지금까지의 손글씨 점 전부로 되돌린다(글자를 쓰다 멈춘 경우 글씨가 사라지지 않게). |
 | 커밋 | pointerup 에 기존 경로 그대로 `makeFreedrawElement(보정된 점)`. 압력은 균일(0.5). |
+| 내부 채우기 (2026-10-30 추가) | 닫힌 도형(원·타원·삼각형·사각형)은 **선 색을 불투명도 15% 로 채운** `line` 요소(`makeShapeFillElement`: 획 없음, backgroundColor = 선 색, fillStyle solid, `customData.shapeFill`)를 펜 획 **바로 아래**에 함께 commit 하고 둘을 같은 groupId 로 묶는다(선택·이동·삭제 동반). 미리보기도 같은 모양으로 반투명 채움. 선분은 채우지 않음. 문지르기 지우개는 지워지는 획과 같은 그룹의 채우기도 함께 지운다(`lib/scribbleDetect.js` `scribbleDeletionIds`). 항상 켜짐. |
 
 모든 거리는 **화면 px**(client 좌표) 기준이라 줌과 무관하다. 판정 순서: 선분 → 닫힘 검사 → 다각형(3·4) → 타원.
 다각형과 타원이 둘 다 맞으면 적합 오차가 작은 쪽.

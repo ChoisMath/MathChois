@@ -42,3 +42,41 @@ export function isScribblePattern(points) {
 
   return reversals >= 6 && density > 3.5;
 }
+
+/* ── 바운딩 박스 겹침 ── */
+function bboxOverlap(b, el) {
+  return !(b.maxX < el.x || el.x + el.width < b.minX || b.maxY < el.y || el.y + el.height < b.minY);
+}
+
+/**
+ * 문지르기 획(finalEl)이 지울 요소 id 집합. 문지르기 자신 + 바운딩 박스가 겹치는 freedraw, 그리고 지워지는 획과
+ * 같은 그룹인 도형 보정 채우기(customData.shapeFill — lib/wetInkStroke.js makeShapeFillElement)까지 포함한다.
+ * @param {object[]} elements 씬 요소 전체
+ * @param {object} finalEl 문지르기 freedraw
+ * @param {{ excludePrefixes?: string[], excludeIds?: string[] }} opts
+ */
+export function scribbleDeletionIds(elements, finalEl, { excludePrefixes = [], excludeIds = [] } = {}) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [px, py] of finalEl.points) {
+    const ax = finalEl.x + px, ay = finalEl.y + py;
+    if (ax < minX) minX = ax; if (ay < minY) minY = ay;
+    if (ax > maxX) maxX = ax; if (ay > maxY) maxY = ay;
+  }
+  const excluded = (el) => excludeIds.includes(el.id) || excludePrefixes.some((p) => el.id.startsWith(p));
+  const ids = new Set([finalEl.id]);
+  const groups = new Set();
+  for (const el of elements) {
+    if (el.isDeleted || el.id === finalEl.id || el.type !== 'freedraw' || excluded(el)) continue;
+    if (bboxOverlap({ minX, minY, maxX, maxY }, el)) {
+      ids.add(el.id);
+      for (const g of el.groupIds || []) groups.add(g);
+    }
+  }
+  if (groups.size) {
+    for (const el of elements) {
+      if (el.isDeleted || ids.has(el.id) || !el.customData?.shapeFill || excluded(el)) continue;
+      if ((el.groupIds || []).some((g) => groups.has(g))) ids.add(el.id);
+    }
+  }
+  return ids;
+}

@@ -90,7 +90,7 @@ export function buildStrokePath(points, pressures, { size, simulatePressure, las
  * @param {number[]} pressures
  * @param {{ strokeColor: string, strokeWidth: number, simulatePressure: boolean }} opts
  */
-export function makeFreedrawElement(scenePoints, pressures, { strokeColor, strokeWidth, simulatePressure }) {
+export function makeFreedrawElement(scenePoints, pressures, { strokeColor, strokeWidth, simulatePressure, groupIds = [] }) {
   const ox = scenePoints[0].x;
   const oy = scenePoints[0].y;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -115,7 +115,7 @@ export function makeFreedrawElement(scenePoints, pressures, { strokeColor, strok
     strokeStyle: 'solid',
     roughness: 0,
     opacity: 100,
-    groupIds: [],
+    groupIds: groupIds.slice(),
     frameId: null,
     roundness: null,
     seed: rnd(),
@@ -130,5 +130,60 @@ export function makeFreedrawElement(scenePoints, pressures, { strokeColor, strok
     pressures: simulatePressure ? [] : pressures.slice(),
     simulatePressure,
     lastCommittedPoint: points[points.length - 1] ?? null,
+  };
+}
+
+/** 도형 보정 채우기 불투명도(%) — 선 색과 같은 색을 많이 투명하게 */
+export const SHAPE_FILL_OPACITY = 15;
+
+/**
+ * 멈춤 보정으로 만들어진 닫힌 도형(원·타원·삼각형·사각형)의 내부 채우기 요소.
+ * freedraw 는 내부 채우기를 지원하지 않으므로, 같은 꼭짓점의 닫힌 line 요소(획 없음, 선 색으로 반투명 채움)를
+ * 펜 획 바로 아래에 둔다. Excalidraw 는 backgroundColor 가 있는 line 을 polygon 으로 채운다.
+ * 펜 획과 같은 groupId 로 묶여 선택·이동·삭제가 함께 되고, customData.shapeFill 로 문지르기 지우개가 짝을 찾는다.
+ * @param {{x:number,y:number}[]} scenePoints 마지막 점 = 첫 점인 닫힌 경로
+ */
+export function makeShapeFillElement(scenePoints, { strokeColor, groupId }) {
+  const ox = scenePoints[0].x, oy = scenePoints[0].y;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const points = scenePoints.map((p) => {
+    const rx = p.x - ox, ry = p.y - oy;
+    if (rx < minX) minX = rx; if (ry < minY) minY = ry;
+    if (rx > maxX) maxX = rx; if (ry > maxY) maxY = ry;
+    return [rx, ry];
+  });
+  const rnd = () => Math.floor(Math.random() * 2 ** 31);
+  return {
+    type: 'line',
+    id: `wf_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`,
+    x: ox, y: oy,
+    width: maxX - minX,
+    height: maxY - minY,
+    angle: 0,
+    strokeColor: 'transparent',
+    backgroundColor: strokeColor,
+    fillStyle: 'solid',
+    strokeWidth: 1,
+    strokeStyle: 'solid',
+    roughness: 0,
+    opacity: SHAPE_FILL_OPACITY,
+    groupIds: groupId ? [groupId] : [],
+    frameId: null,
+    roundness: null,
+    seed: rnd(),
+    version: 1,
+    versionNonce: rnd(),
+    isDeleted: false,
+    boundElements: null,
+    updated: Date.now(),
+    link: null,
+    locked: false,
+    points,
+    startBinding: null,
+    endBinding: null,
+    startArrowhead: null,
+    endArrowhead: null,
+    lastCommittedPoint: null,
+    customData: { shapeFill: true },
   };
 }

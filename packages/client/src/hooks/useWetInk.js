@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { viewportCoordsToSceneCoords } from '@excalidraw/excalidraw';
-import { buildStrokePath, makeFreedrawElement } from '../lib/wetInkStroke';
+import { buildStrokePath, makeFreedrawElement, makeShapeFillElement, SHAPE_FILL_OPACITY } from '../lib/wetInkStroke';
 import {
   recognizeShape, snapLineEnd, linePoints, HOLD_MS, HOLD_RADIUS_PX, CANCEL_MOVE_PX, MIN_LINE_PX,
 } from '../lib/shapeRecognizer';
@@ -126,6 +126,13 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       const path = buildStrokePath(screenPts, snapped ? src.map(() => 0.5) : pressures, { size, simulatePressure: true, last: true });
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
       c.clearRect(0, 0, rect.width, rect.height);
+      if (snapped && snapped.kind !== 'line') {
+        // 닫힌 도형: 선 색의 반투명 채우기 미리보기 (commit 의 makeShapeFillElement 와 동일한 모양)
+        const fill = new Path2D();
+        screenPts.forEach((p, i) => (i ? fill.lineTo(p[0], p[1]) : fill.moveTo(p[0], p[1])));
+        fill.closePath();
+        c.save(); c.globalAlpha = SHAPE_FILL_OPACITY / 100; c.fillStyle = color; c.fill(fill); c.restore();
+      }
       if (path) { c.fillStyle = color; c.fill(path); }
     };
     const scheduleRender = () => { if (!rafId) rafId = requestAnimationFrame(render); };
@@ -185,13 +192,19 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
         const app = api.getAppState();
         const simulatePressure = true; // S-Pen 실제 필압 미사용(균일 젤펜 thinning 0 — pressures 미저장)
         const scenePoints = src.map(([cx, cy]) => viewportCoordsToSceneCoords({ clientX: cx, clientY: cy }, app));
+        const strokeColor = app?.currentItemStrokeColor || '#000000';
+        // 닫힌 도형 보정: 선 색의 반투명 채우기를 획 아래에 깔고 같은 그룹으로 묶는다
+        const closedShape = !!snapped && snapped.kind !== 'line';
+        const groupId = closedShape ? `wg_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}` : null;
         const el = makeFreedrawElement(scenePoints, snapped ? src.map(() => 0.5) : pressures, {
-          strokeColor: app?.currentItemStrokeColor || '#000000',
+          strokeColor,
           strokeWidth: app?.currentItemStrokeWidth || 1,
           simulatePressure,
+          groupIds: groupId ? [groupId] : [],
         });
+        const added = closedShape ? [makeShapeFillElement(scenePoints, { strokeColor, groupId }), el] : [el];
         api.updateScene({
-          elements: [...api.getSceneElements(), el],
+          elements: [...api.getSceneElements(), ...added],
           ...(captureUpdate ? { captureUpdate } : { commitToHistory: false }),
         });
       }

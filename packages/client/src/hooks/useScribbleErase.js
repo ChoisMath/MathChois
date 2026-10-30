@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { isScribblePattern } from '../lib/scribbleDetect';
+import { isScribblePattern, scribbleDeletionIds } from '../lib/scribbleDetect';
 
 /**
  * 문지르기 지우개 (Scribble-to-erase) — onChange 기반
@@ -12,12 +12,6 @@ import { isScribblePattern } from '../lib/scribbleDetect';
  */
 
 const BG_ELEMENT_ID = '__bg_image__';
-
-/* ── 바운딩 박스 겹침 검사 ── */
-function bboxOverlap(scribble, el) {
-  return !(scribble.maxX < el.x || el.x + el.width < scribble.minX ||
-           scribble.maxY < el.y || el.y + el.height < scribble.minY);
-}
 
 /**
  * @param {{ excalidrawAPIRef: React.RefObject, excludePrefixes?: string[] }} opts
@@ -57,26 +51,8 @@ export function useScribbleErase({ excalidrawAPIRef, excludePrefixes = [] }) {
 
         if (!isScribblePattern(finalEl.points)) return;
 
-        // 스크리블 바운딩 박스 (절대 좌표)
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const [px, py] of finalEl.points) {
-          const ax = finalEl.x + px, ay = finalEl.y + py;
-          if (ax < minX) minX = ax;
-          if (ay < minY) minY = ay;
-          if (ax > maxX) maxX = ax;
-          if (ay > maxY) maxY = ay;
-        }
-
-        // 겹치는 스트로크 찾기
-        const deleteIds = new Set([finalEl.id]);
-        for (const el of finalElements) {
-          if (el.isDeleted || el.id === finalEl.id || el.id === BG_ELEMENT_ID) continue;
-          if (el.type !== 'freedraw') continue;
-          if (excludePrefixes.some((p) => el.id.startsWith(p))) continue;
-          if (bboxOverlap({ minX, minY, maxX, maxY }, el)) {
-            deleteIds.add(el.id);
-          }
-        }
+        // 겹치는 스트로크 + 짝이 되는 도형 보정 채우기 (lib/scribbleDetect.js)
+        const deleteIds = scribbleDeletionIds(finalElements, finalEl, { excludePrefixes, excludeIds: [BG_ELEMENT_ID] });
 
         // 삭제
         api.updateScene({

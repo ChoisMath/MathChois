@@ -128,6 +128,36 @@ describe('useWetInk — 펜 멈춤 도형 보정', () => {
     expect(raw.some(([x, y]) => !(x === 100 || x === 300 || y === 100 || y === 220))).toBe(true);
   });
 
+  it('닫힌 도형 보정은 선 색 반투명 채우기(line)를 획 아래에 같은 그룹으로 함께 commit 하고, 선분은 획만 commit 한다', () => {
+    const rect = [[100, 100], [300, 106], [296, 220], [100, 214], [102, 104]];
+    canvas.dispatchEvent(pen('pointerdown', 100, 100));
+    moveAlong(canvas, rect);
+    vi.advanceTimersByTime(HOLD_MS + 50);
+    canvas.dispatchEvent(pen('pointerup', 102, 104));
+    const call = api.updateScene.mock.calls[0][0].elements;
+    expect(call.length).toBe(2);
+    const [fill, stroke] = call;
+    expect(fill.type).toBe('line');
+    expect(fill.customData).toEqual({ shapeFill: true });
+    expect(fill.backgroundColor).toBe('#000000');
+    expect(fill.opacity).toBe(15);
+    expect(stroke.type).toBe('freedraw');
+    expect(stroke.groupIds.length).toBe(1);
+    expect(fill.groupIds).toEqual(stroke.groupIds);
+    expect(fill.points.length).toBe(stroke.points.length);
+    expect([fill.x, fill.y]).toEqual([stroke.x, stroke.y]);
+
+    committed.length = 0; api.updateScene.mockClear();
+    canvas.dispatchEvent(pen('pointerdown', 100, 400));
+    moveAlong(canvas, [[100, 400], [300, 400]]);
+    vi.advanceTimersByTime(HOLD_MS + 50);
+    canvas.dispatchEvent(pen('pointerup', 300, 400));
+    const line = api.updateScene.mock.calls[0][0].elements;
+    expect(line.length).toBe(1);
+    expect(line[0].type).toBe('freedraw');
+    expect(line[0].groupIds).toEqual([]);
+  });
+
   it('멈춤 반경 4px 안의 떨림은 멈춤으로 친다 / 반경 밖 이동은 타이머를 되돌린다', () => {
     canvas.dispatchEvent(pen('pointerdown', 100, 100));
     moveAlong(canvas, [[100, 100], [300, 100]]);
