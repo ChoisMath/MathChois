@@ -29,8 +29,8 @@ import { PageVideoEmbed, PageVideoThumb } from '../../components/videos/PageVide
 import HtmlToolOverlay from '../../components/study/HtmlToolOverlay';
 import { HTML_OVERLAY_LOCK_BASE } from '../../lib/htmlOverlay';
 import { isPdfPage } from '@mathchois/shared';
-import { usePdfBackground } from '../../hooks/usePdfBackground';
-import { prefetchPdfPages } from '../../hooks/usePdfDocument';
+import { usePdfBackground, applyPdfScene } from '../../hooks/usePdfBackground';
+import { prefetchPdfNeighbors } from '../../hooks/usePdfDocument';
 import PdfPageLayer from '../../components/study/PdfPageLayer';
 
 /* ── 세션 내 캐시 (컴포넌트 unmount 후에도 유지) ── */
@@ -165,10 +165,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
     excApiRef.current = excApi;
     /* PDF 페이지: bg element 없이 필기만 — 종이는 PdfPageLayer 가 캔버스 아래에 그린다 */
     if (isPdfPage(currentPage)) {
-      const noteFilesList = Object.values(noteFilesRef.current);
-      if (noteFilesList.length > 0) excApi.addFiles(noteFilesList);
-      await new Promise((r) => requestAnimationFrame(r));
-      excApi.updateScene({ elements: noteElementsRef.current });
+      await applyPdfScene(excApi, Object.values(noteFilesRef.current), noteElementsRef.current);
       return;
     }
     if (!currentPage?.imageUrl || !containerRef.current) return;
@@ -857,16 +854,11 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
 
     /* PDF 페이지: bg element 없이 필기·코멘트만 (handleHtmlOverlayMount 와 같은 순서) — 종이는 PdfPageLayer 가 그린다 */
     if (isPdfPage(page)) {
-      await new Promise((r) => setTimeout(r, 0));
-      const userFilesList = Object.values(savedFilesRef.current);
-      if (userFilesList.length > 0) excApi.addFiles(userFilesList);
-      const teacherFilesList = Object.values(teacherCommentFilesRef.current);
-      if (teacherFilesList.length > 0) excApi.addFiles(teacherFilesList);
-      await new Promise((r) => requestAnimationFrame(r));
-      excApi.updateScene({
-        elements: [...noteElementsRef.current, ...teacherCommentsRef.current],
-        commitToHistory: false,
-      });
+      await applyPdfScene(
+        excApi,
+        [...Object.values(savedFilesRef.current), ...Object.values(teacherCommentFilesRef.current)],
+        [...noteElementsRef.current, ...teacherCommentsRef.current],
+      );
       return;
     }
 
@@ -969,12 +961,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
   /* ── 인접 페이지 이미지 백그라운드 프리패치 ── */
   useEffect(() => {
     prefetchImages([prevPage?.imageUrl, nextPage?.imageUrl].filter(Boolean));
-    /* PDF 이웃 쪽은 같은 문서일 때만 — 문서 LRU(2개)에서 화면의 문서가 밀려나지 않도록 */
-    if (isPdfPage(currentPage)) {
-      for (const pg of [prevPage, nextPage]) {
-        if (isPdfPage(pg) && pg.pdfUrl === currentPage.pdfUrl) prefetchPdfPages(pg.pdfUrl, [pg.pdfPage]);
-      }
-    }
+    prefetchPdfNeighbors(currentPage, [prevPage, nextPage]); // PDF 는 같은 문서의 이웃 쪽만
   }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
 

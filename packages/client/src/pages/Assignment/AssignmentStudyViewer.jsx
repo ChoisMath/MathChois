@@ -29,8 +29,8 @@ import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import FileAttachmentPanel from './components/FileAttachmentPanel';
 import { PageVideoEmbed, PageVideoThumb } from '../../components/videos/PageVideo';
 import { isPdfPage } from '@mathchois/shared';
-import { usePdfBackground } from '../../hooks/usePdfBackground';
-import { prefetchPdfPages } from '../../hooks/usePdfDocument';
+import { usePdfBackground, applyPdfScene } from '../../hooks/usePdfBackground';
+import { prefetchPdfNeighbors } from '../../hooks/usePdfDocument';
 import PdfPageLayer from '../../components/study/PdfPageLayer';
 
 /* 세션 내 캐시 */
@@ -66,10 +66,7 @@ function TeacherNotesModal({ page, onClose }) {
   const handleMount = useCallback(async (apiRef) => {
     /* PDF 페이지: bg element 없이 필기만 — 종이는 PdfPageLayer 가 캔버스 아래에 그린다 */
     if (isPdfPage(page)) {
-      const noteFilesList = Object.values(noteFiles);
-      if (noteFilesList.length > 0) apiRef.addFiles(noteFilesList);
-      await new Promise((r) => requestAnimationFrame(r));
-      apiRef.updateScene({ elements: noteElements });
+      await applyPdfScene(apiRef, Object.values(noteFiles), noteElements);
       return;
     }
     if (!page.imageUrl || !containerRef.current) return;
@@ -557,16 +554,11 @@ const AssignmentStudyViewer = () => {
 
     /* PDF 페이지: bg element 없이 필기·코멘트만 — 종이는 PdfPageLayer 가 그린다 */
     if (isPdfPage(page)) {
-      await new Promise((r) => setTimeout(r, 0));
-      const userFilesList = Object.values(savedFilesRef.current);
-      if (userFilesList.length > 0) apiRef.addFiles(userFilesList);
-      const teacherFilesList = Object.values(teacherCommentFilesRef.current);
-      if (teacherFilesList.length > 0) apiRef.addFiles(teacherFilesList);
-      await new Promise((r) => requestAnimationFrame(r));
-      apiRef.updateScene({
-        elements: [...noteElementsRef.current, ...teacherCommentsRef.current],
-        commitToHistory: false,
-      });
+      await applyPdfScene(
+        apiRef,
+        [...Object.values(savedFilesRef.current), ...Object.values(teacherCommentFilesRef.current)],
+        [...noteElementsRef.current, ...teacherCommentsRef.current],
+      );
       return;
     }
 
@@ -723,12 +715,7 @@ const AssignmentStudyViewer = () => {
 
   useEffect(() => {
     prefetchImages([prevPage?.imageUrl, nextPage?.imageUrl].filter(Boolean));
-    /* PDF 이웃 쪽은 같은 문서일 때만 — 문서 LRU(2개)에서 화면의 문서가 밀려나지 않도록 */
-    if (isPdfPage(currentPage)) {
-      for (const pg of [prevPage, nextPage]) {
-        if (isPdfPage(pg) && pg.pdfUrl === currentPage.pdfUrl) prefetchPdfPages(pg.pdfUrl, [pg.pdfPage]);
-      }
-    }
+    prefetchPdfNeighbors(currentPage, [prevPage, nextPage]); // PDF 는 같은 문서의 이웃 쪽만
   }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* 사이드바 자동 스크롤 */

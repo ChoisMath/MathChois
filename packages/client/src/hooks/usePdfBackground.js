@@ -11,6 +11,20 @@ function sameRect(a, b) {
 }
 
 /**
+ * PDF 페이지의 Excalidraw scene 채우기 — bg element 없이 필기·코멘트만 올린다(종이는 PdfPageLayer 가 그린다).
+ * 한 틱 뒤 addFiles, addFiles 의 상태 커밋 뒤(rAF) updateScene — 이미지 페이지 마운트와 같은 순서.
+ * @param {any} excApi Excalidraw API
+ * @param {any[]} files 필기·코멘트에 삽입된 이미지 파일들
+ * @param {any[]} elements scene 에 올릴 요소들
+ */
+export async function applyPdfScene(excApi, files, elements) {
+  await new Promise((r) => setTimeout(r, 0));
+  if (files.length > 0) excApi.addFiles(files);
+  await new Promise((r) => requestAnimationFrame(r));
+  excApi.updateScene({ elements, commitToHistory: false });
+}
+
+/**
  * 뷰어용 PDF 배경 — PDF 쪽을 열고 종이 위치(scene 좌표)를 정해 `PdfPageLayer` 에 넘긴다.
  * 이미지 페이지의 bg element 대신 쓰며, 종이 위치는 이미지와 같은 `bgPosition` 으로 저장된다
  * (`bgPositionRef.current` 를 종이 rect 로 갱신하므로 뷰어의 기존 저장 경로가 그대로 쓴다).

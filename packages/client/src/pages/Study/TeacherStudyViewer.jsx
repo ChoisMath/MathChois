@@ -38,8 +38,8 @@ import { usePdfDownloader } from '../../lib/pdfDownloader';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 import { PageVideoEmbed, PageVideoThumb } from '../../components/videos/PageVideo';
 import { isPdfPage } from '@mathchois/shared';
-import { usePdfBackground } from '../../hooks/usePdfBackground';
-import { prefetchPdfPages } from '../../hooks/usePdfDocument';
+import { usePdfBackground, applyPdfScene } from '../../hooks/usePdfBackground';
+import { prefetchPdfNeighbors } from '../../hooks/usePdfDocument';
 import PdfPageLayer from '../../components/study/PdfPageLayer';
 
 /* ── 세션 내 캐시 ── */
@@ -331,11 +331,7 @@ const TeacherStudyViewer = () => {
 
     /* PDF 페이지: bg element 없이 필기만 (handleHtmlOverlayMount 와 같은 순서) — 종이는 PdfPageLayer 가 그린다 */
     if (isPdfPage(page)) {
-      await new Promise((r) => setTimeout(r, 0));
-      const userFilesList = Object.values(savedFilesRef.current);
-      if (userFilesList.length > 0) api.addFiles(userFilesList);
-      await new Promise((r) => requestAnimationFrame(r));
-      api.updateScene({ elements: [...noteElementsRef.current], commitToHistory: false });
+      await applyPdfScene(api, Object.values(savedFilesRef.current), [...noteElementsRef.current]);
       return;
     }
 
@@ -424,12 +420,7 @@ const TeacherStudyViewer = () => {
   /* ── 인접 페이지 이미지 백그라운드 프리패치 ── */
   useEffect(() => {
     prefetchImages([prevPage?.imageUrl, nextPage?.imageUrl].filter(Boolean));
-    /* PDF 이웃 쪽은 같은 문서일 때만 — 문서 LRU(2개)에서 화면의 문서가 밀려나지 않도록 */
-    if (isPdfPage(currentPage)) {
-      for (const pg of [prevPage, nextPage]) {
-        if (isPdfPage(pg) && pg.pdfUrl === currentPage.pdfUrl) prefetchPdfPages(pg.pdfUrl, [pg.pdfPage]);
-      }
-    }
+    prefetchPdfNeighbors(currentPage, [prevPage, nextPage]); // PDF 는 같은 문서의 이웃 쪽만
   }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ── */

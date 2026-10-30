@@ -1,8 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
+import { isPdfPage } from '@mathchois/shared';
 import { pdfDocCache } from '../lib/pdfDocCache';
 
 /** 이웃 쪽 미리 받기 — `pdfDocCache.prefetch` 그대로. */
 export const prefetchPdfPages = (pdfUrl, numbers) => pdfDocCache.prefetch(pdfUrl, numbers);
+
+/**
+ * 뷰어의 이웃 페이지 중 현재 페이지와 같은 PDF 문서의 쪽만 미리 받는다
+ * — 문서 LRU(2개)에서 화면의 문서가 밀려나지 않도록 다른 문서는 받지 않는다.
+ * 현재 페이지가 PDF 가 아니면 아무것도 하지 않는다.
+ * @param {any} currentPage
+ * @param {any[]} neighbours 이전·다음 페이지(null 허용)
+ */
+export function prefetchPdfNeighbors(currentPage, neighbours) {
+  if (!isPdfPage(currentPage)) return;
+  const numbers = neighbours
+    .filter((n) => isPdfPage(n) && n.pdfUrl === currentPage.pdfUrl)
+    .map((n) => n.pdfPage);
+  if (numbers.length > 0) prefetchPdfPages(currentPage.pdfUrl, numbers);
+}
 
 const EMPTY = { page: null, pageSize: null, error: null };
 
