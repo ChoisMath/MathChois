@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { rasterizePdfPage } from '../../lib/pdfRaster';
-import { pdfThumbCache, thumbKey } from '../../lib/pdfThumbCache';
+import { bucketWidth, pdfThumbCache, thumbKey } from '../../lib/pdfThumbCache';
 
 const PAPER_RATIO = '1 / 1.414';
 const FAILED_STYLE = {
@@ -24,10 +24,11 @@ function enqueue(task) {
  * 폭만 바뀐 경우(편집기 미리보기 크기 변경)에는 새 크기를 그리는 동안 이전 그림을 그대로 보인다.
  *
  * @param {{ pdfUrl: string, pageNumber: number, width?: number, alt?: string, className?: string, style?: object }} props
- *   width: 표시 폭(px). 래스터 긴 변 = width × 1.6
+ *   width: 표시 폭(px). 120px 단위로 올린 폭(bucketWidth)으로 캐시 키를 만들고 래스터한다 — 긴 변 = 올린 폭 × 1.6
  */
 export default function PdfPageThumb({ pdfUrl, pageNumber, width = 240, alt, className, style }) {
-  const key = thumbKey(pdfUrl, pageNumber, width);
+  const rasterWidth = bucketWidth(width);
+  const key = thumbKey(pdfUrl, pageNumber, rasterWidth);
   const [result, setResult] = useState({ key: null, pdfUrl: null, pageNumber: null, dataUrl: null, failed: false });
   const ref = useRef(null);
 
@@ -41,7 +42,7 @@ export default function PdfPageThumb({ pdfUrl, pageNumber, width = 240, alt, cla
     if (pdfThumbCache.get(key)) return undefined;
     let active = true;
     const load = () => {
-      enqueue(() => (active ? rasterizePdfPage(pdfUrl, pageNumber, { longSide: Math.round(width * 1.6) }) : null)).then(
+      enqueue(() => (active ? rasterizePdfPage(pdfUrl, pageNumber, { longSide: Math.round(rasterWidth * 1.6) }) : null)).then(
         (out) => {
           if (!out) return;
           pdfThumbCache.set(key, out.dataUrl);
@@ -69,7 +70,7 @@ export default function PdfPageThumb({ pdfUrl, pageNumber, width = 240, alt, cla
       active = false;
       observer.disconnect();
     };
-  }, [key, pdfUrl, pageNumber, width]);
+  }, [key, pdfUrl, pageNumber, rasterWidth]);
 
   if (src) {
     return (
