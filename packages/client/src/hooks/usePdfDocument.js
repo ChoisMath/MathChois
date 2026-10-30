@@ -36,6 +36,12 @@ export function usePdfPage(pdfUrl, pageNumber) {
   const [result, setResult] = useState({ key: null, ...EMPTY });
   const key = pdfUrl && pageNumber ? `${attempt}|${pageNumber}|${pdfUrl}` : null;
 
+  /* 화면에 그리는 문서는 썸네일·이웃 문서가 문서 LRU 를 채워도 닫히지 않게 고정한다 */
+  useEffect(() => {
+    if (!pdfUrl) return undefined;
+    return pdfDocCache.pin(pdfUrl);
+  }, [pdfUrl]);
+
   useEffect(() => {
     if (!key) return undefined;
     let active = true;

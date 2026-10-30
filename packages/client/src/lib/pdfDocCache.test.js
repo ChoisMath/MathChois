@@ -26,4 +26,59 @@ describe('createDocCache', () => {
     await expect(cache.get('/a.pdf')).rejects.toThrow();
     await expect(cache.get('/a.pdf')).resolves.toBeTruthy();
   });
+
+  describe('pin', () => {
+    const setup = () => {
+      const docs = {};
+      const open = vi.fn(async (url) => { const d = fakeDoc(); docs[url] = d; return d; });
+      return { docs, cache: createDocCache({ open, max: 2 }) };
+    };
+
+    it('skips a pinned document and evicts the least recently used unpinned one', async () => {
+      const { docs, cache } = setup();
+      await cache.get('/a.pdf');
+      cache.pin('/a.pdf');
+      await cache.get('/b.pdf'); await cache.get('/c.pdf');
+      expect(docs['/b.pdf'].destroy).toHaveBeenCalled();
+      expect(docs['/a.pdf'].destroy).not.toHaveBeenCalled();
+    });
+    it('lets the next overflow destroy a document after unpin', async () => {
+      const { docs, cache } = setup();
+      await cache.get('/a.pdf');
+      const unpin = cache.pin('/a.pdf');
+      await cache.get('/b.pdf'); await cache.get('/c.pdf');
+      unpin();
+      expect(docs['/a.pdf'].destroy).not.toHaveBeenCalled();
+      await cache.get('/d.pdf');
+      expect(docs['/a.pdf'].destroy).toHaveBeenCalled();
+      expect(docs['/c.pdf'].destroy).not.toHaveBeenCalled();
+    });
+    it('counts pins (two pins, one unpin → still pinned)', async () => {
+      const { docs, cache } = setup();
+      await cache.get('/a.pdf');
+      const unpin1 = cache.pin('/a.pdf');
+      cache.pin('/a.pdf');
+      unpin1();
+      unpin1(); // 같은 해제 함수를 두 번 불러도 한 번만 센다
+      await cache.get('/b.pdf'); await cache.get('/c.pdf');
+      expect(docs['/a.pdf'].destroy).not.toHaveBeenCalled();
+      expect(docs['/b.pdf'].destroy).toHaveBeenCalled();
+    });
+    it('exceeds max while everything is pinned and trims on the last unpin', async () => {
+      const { docs, cache } = setup();
+      const unpins = [];
+      for (const u of ['/a.pdf', '/b.pdf', '/c.pdf']) { await cache.get(u); unpins.push(cache.pin(u)); }
+      expect(Object.values(docs).some((d) => d.destroy.mock.calls.length)).toBe(false);
+      unpins[0]();
+      expect(docs['/a.pdf'].destroy).toHaveBeenCalled();
+      expect(docs['/b.pdf'].destroy).not.toHaveBeenCalled();
+    });
+    it('evict(url) still closes a pinned document', async () => {
+      const { docs, cache } = setup();
+      await cache.get('/a.pdf');
+      cache.pin('/a.pdf');
+      cache.evict('/a.pdf');
+      expect(docs['/a.pdf'].destroy).toHaveBeenCalled();
+    });
+  });
 });
