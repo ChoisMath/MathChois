@@ -4,7 +4,7 @@ import {
   normalizeSeekStep, normalizeRate, normalizeSettings, stepRate, formatRate, formatTime,
   loadSettings, saveSettings, loadResumePosition, saveResumePosition, isTypingTarget,
   BRIGHTNESS_MIN, BRIGHTNESS_MAX, GESTURE_AXIS_THRESHOLD,
-  decideGestureAxis, verticalGestureKind, dragToLevel,
+  decideGestureAxis, verticalGestureKind, dragToLevel, createScrubSeeker,
   SUBTITLE_SIZES, pickSubtitleTrack,
 } from './videoPlayer.js';
 
@@ -134,5 +134,97 @@ describe('long-press drag gestures', () => {
     expect(dragToLevel(1, -65, 100, BRIGHTNESS_MIN, BRIGHTNESS_MAX)).toBeCloseTo(1.5 + 0, 2); // 1 + 0.65·1.3 → 1.845 → 1.5 로 고정
     expect(dragToLevel(1, 50, 100, BRIGHTNESS_MIN, BRIGHTNESS_MAX)).toBeCloseTo(0.35, 2);
     expect(dragToLevel(5, 0, 100, BRIGHTNESS_MIN, BRIGHTNESS_MAX)).toBe(BRIGHTNESS_MAX); // 시작값도 범위 안으로
+  });
+});
+
+describe('scrub seeker (one seek in flight at a time)', () => {
+  /** <video> 흉내: currentTime 대입/fastSeek 호출을 기록하고, completeSeek() 로 seeked 를 발생시킨다 */
+  function fakeVideo({ fastSeek = false } = {}) {
+    const listeners = {};
+    let t = 0;
+    const v = {
+      seeking: false,
+      seeks: [],
+      fastSeeks: [],
+      addEventListener: (type, fn) => { (listeners[type] ||= new Set()).add(fn); },
+      removeEventListener: (type, fn) => { listeners[type]?.delete(fn); },
+      completeSeek() { v.seeking = false; listeners.seeked?.forEach((fn) => fn()); },
+      listenerCount: (type) => listeners[type]?.size ?? 0,
+    };
+    Object.defineProperty(v, 'currentTime', {
+      get: () => t,
+      set: (x) => { t = x; v.seeking = true; v.seeks.push(x); },
+    });
+    if (fastSeek) v.fastSeek = (x) => { t = x; v.seeking = true; v.fastSeeks.push(x); };
+    return v;
+  }
+
+  it('sends the first request immediately and queues the rest until seeked', () => {
+    const v = fakeVideo();
+    const s = createScrubSeeker(v);
+    expect(s.request(10)).toBe(true);
+    expect(v.seeks).toEqual([10]);
+    // 탐색 중에는 새 요청을 보내지 않고 마지막 목표만 기억한다
+    expect(s.request(20)).toBe(false);
+    expect(s.request(30)).toBe(false);
+    expect(v.seeks).toEqual([10]);
+    v.completeSeek();
+    expect(v.seeks).toEqual([10, 30]); // 끝나면 가장 최근 목표 하나만 보낸다
+    v.completeSeek();
+    expect(v.seeks).toEqual([10, 30]); // 대기 중인 목표가 없으면 아무것도 안 한다
+  });
+
+  it('ignores targets that barely differ from the last seek', () => {
+    const v = fakeVideo();
+    const s = createScrubSeeker(v, { minStep: 0.5 });
+    s.request(10);
+    v.completeSeek();
+    expect(s.request(10.2)).toBe(false);
+    expect(v.seeks).toEqual([10]);
+    expect(s.request(10.6)).toBe(true);
+    expect(v.seeks).toEqual([10, 10.6]);
+    // 대기열에 들어간 미세 변화도 seeked 뒤에 보내지 않는다
+    s.request(10.7);
+    v.completeSeek();
+    expect(v.seeks).toEqual([10, 10.6]);
+  });
+
+  it('prefers fastSeek (keyframe) while scrubbing but finishes with an exact seek', () => {
+    const v = fakeVideo({ fastSeek: true });
+    const s = createScrubSeeker(v);
+    s.request(42);
+    expect(v.fastSeeks).toEqual([42]);
+    expect(v.seeks).toEqual([]);
+    v.completeSeek();
+    s.finish(43.3);
+    expect(v.seeks).toEqual([43.3]);
+    expect(v.currentTime).toBe(43.3);
+  });
+
+  it('falls through after a stalled seek so a frozen seeked never blocks scrubbing', () => {
+    let now = 1000;
+    const v = fakeVideo();
+    const s = createScrubSeeker(v, { stallMs: 500, now: () => now });
+    s.request(10);
+    now += 200;
+    expect(s.request(20)).toBe(false);
+    now += 400; // 600ms 동안 seeked 가 안 왔다 → 막혀 있다고 보고 다시 보낸다
+    expect(s.request(30)).toBe(true);
+    expect(v.seeks).toEqual([10, 30]);
+  });
+
+  it('finish() drops the queue, detaches the listener and seeks exactly once', () => {
+    const v = fakeVideo();
+    const s = createScrubSeeker(v);
+    s.request(10);
+    s.request(20);
+    expect(v.listenerCount('seeked')).toBe(1);
+    s.finish(25);
+    expect(v.seeks).toEqual([10, 25]);
+    expect(v.listenerCount('seeked')).toBe(0);
+    v.completeSeek(); // 늦게 온 seeked 가 대기 목표를 되살리지 않는다
+    expect(v.seeks).toEqual([10, 25]);
+    s.finish(30); // 두 번 호출해도 안전
+    expect(v.seeks).toEqual([10, 25, 30]);
   });
 });

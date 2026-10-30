@@ -8,7 +8,7 @@ import {
   BRIGHTNESS_MIN, BRIGHTNESS_MAX, BRIGHTNESS_DEFAULT,
   loadSettings, saveSettings, stepRate, formatRate, formatTime, clamp,
   loadResumePosition, saveResumePosition, isTypingTarget,
-  decideGestureAxis, verticalGestureKind, dragToLevel, SUBTITLE_SIZES,
+  decideGestureAxis, verticalGestureKind, dragToLevel, SUBTITLE_SIZES, createScrubSeeker,
 } from '../../lib/videoPlayer';
 import useVideoSubtitles from '../../hooks/useVideoSubtitles';
 import SubtitleOverlay from './SubtitleOverlay';
@@ -332,7 +332,9 @@ export default function VideoPlayer({
   /* ── 길게 누른 뒤 드래그 제스처 ──
      400ms 이상 누르면 제스처 모드로 들어가고, 그 뒤 첫 이동 방향으로 종류를 정한다(`decideGestureAxis`).
      · 좌우 = 스크럽(시간 이동): delta = sign · (|dx| / 폭)^1.6 · 영상 길이 → 짧은 드래그는 몇 초(미세),
-       화면 끝까지 끌면 영상 끝까지(장거리). 스크럽 중에는 일시정지하고 미리보기 위치를 보여 주며, 떼면 복귀한다.
+       화면 끝까지 끌면 영상 끝까지(장거리). 스크럽 중에는 일시정지하고 목표 위치의 프레임을 보여 주며, 떼면 복귀한다.
+       프레임 갱신은 `createScrubSeeker` 가 맡는다 — 탐색을 한 번에 하나만 보내고 seeked 뒤에 최신 목표로 다시
+       보낸다(이전 탐색이 끝나기 전에 currentTime 을 다시 쓰면 취소되어 빨리 끌수록 화면이 멈추기 때문).
      · 상하 = 누른 위치가 화면 왼쪽 절반이면 밝기, 오른쪽 절반이면 볼륨(`verticalGestureKind`).
        위로 끌면 커지고 화면 높이만큼 끌면 전체 범위가 바뀐다(`dragToLevel`). 재생은 건드리지 않는다.
      <video> 는 `touch-action: pan-y` 라 평소엔 세로 스크롤이 되므로, 제스처 모드에 들어간 뒤의 touchmove 만
@@ -340,12 +342,15 @@ export default function VideoPlayer({
   const SCRUB_HOLD_MS = 400;
   const SCRUB_EXP = 1.6;
   const pressRef = useRef(null);      // { id, x, y, timer, held }
-  const scrubRef = useRef(null);      // { startTime, width, wasPlaying, lastApply }
+  const scrubRef = useRef(null);      // { startTime, width, wasPlaying, seeker }
   const levelRef = useRef(null);      // { kind: 'volume'|'brightness', start, height, value }
   // 오버레이용: { kind: 'pending' } | { kind: 'scrub', target, delta } | { kind: 'volume'|'brightness', value }
   const [gesture, setGesture] = useState(null);
 
-  useEffect(() => () => clearTimeout(pressRef.current?.timer), []);
+  useEffect(() => () => {
+    clearTimeout(pressRef.current?.timer);
+    scrubRef.current?.seeker.dispose();
+  }, []);
 
   // 제스처 모드 중에는 터치 스크롤을 막는다(React 의 onTouchMove 는 passive 라 preventDefault 가 안 먹음).
   useEffect(() => {
@@ -385,7 +390,7 @@ export default function VideoPlayer({
       startTime: v.currentTime,
       width: target.getBoundingClientRect().width || 1,
       wasPlaying: !v.paused,
-      lastApply: 0,
+      seeker: createScrubSeeker(v),
     };
     v.pause();
     setGesture({ kind: 'scrub', target: v.currentTime, delta: 0 });
@@ -447,12 +452,8 @@ export default function VideoPlayer({
     const sc = scrubRef.current;
     if (sc) {
       const target = scrubTarget(v, sc, dx);
-      const now = Date.now();
-      if (now - sc.lastApply > 80) {
-        sc.lastApply = now;
-        v.currentTime = target;
-        setCurrentTime(target);
-      }
+      sc.seeker.request(target); // 탐색 중이면 목표만 갱신, seeked 뒤 자동으로 이어 보낸다
+      setCurrentTime(target);
       setGesture({ kind: 'scrub', target, delta: target - sc.startTime });
       return;
     }
@@ -478,7 +479,7 @@ export default function VideoPlayer({
     const cancelled = e.type === 'pointercancel';
     if (sc) {
       const target = cancelled ? v.currentTime : scrubTarget(v, sc, e.clientX - press.x);
-      v.currentTime = target;
+      sc.seeker.finish(target); // 대기 중 탐색을 버리고 정확한 위치로 마무리
       setCurrentTime(target);
       if (sc.wasPlaying) v.play().catch(() => {});
       const d = target - sc.startTime;

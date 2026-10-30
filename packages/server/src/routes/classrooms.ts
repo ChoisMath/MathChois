@@ -14,8 +14,8 @@ import {
   joinClassroomByCode,
   removeClassroomMember,
   isClassroomOwner,
-  getClassroomImageUrls,
-  findSharedClassroomImageUrls,
+  getClassroomFileUrls,
+  findSharedClassroomFileUrls,
 } from '../services/classroom.service.js';
 import { getChaptersByClassroom, getLinkedChapterIds } from '../services/chapter.service.js';
 import { listClassroomInvites, addClassroomInvites, removeClassroomInvite } from '../services/classroomInvite.service.js';
@@ -163,13 +163,13 @@ export async function classroomRoutes(app: FastifyInstance) {
       }
     }
 
-    // Storage 파일 정리: orphan 이미지만 삭제 (다른 교실에서 공유되지 않는 것)
-    const imageUrls = await getClassroomImageUrls(request.params.id);
-    const sharedUrls = await findSharedClassroomImageUrls(imageUrls, request.params.id);
+    // Storage 파일 정리: orphan 이미지·PDF만 삭제 (다른 교실에서 공유되지 않는 것)
+    const fileUrls = await getClassroomFileUrls(request.params.id);
+    const sharedUrls = await findSharedClassroomFileUrls(fileUrls, request.params.id);
     const sharedSet = new Set(sharedUrls);
-    const orphanUrls = imageUrls.filter((url) => !sharedSet.has(url));
+    const orphanUrls = fileUrls.filter((url) => !sharedSet.has(url));
 
-    app.log.info({ classroomId: request.params.id, total: imageUrls.length, shared: sharedUrls.length, orphans: orphanUrls.length }, 'Classroom storage cleanup');
+    app.log.info({ classroomId: request.params.id, total: fileUrls.length, shared: sharedUrls.length, orphans: orphanUrls.length }, 'Classroom storage cleanup');
 
     await deleteClassroom(request.params.id);
 

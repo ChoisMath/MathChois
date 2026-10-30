@@ -1,5 +1,6 @@
-import { eq, and, inArray, ne, sql } from 'drizzle-orm';
+import { eq, and, or, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '../config/database.js';
+import { collectFileUrls } from '../utils/fileUrls.js';
 import { pages } from '../db/schema.js';
 import { resolveSourceChapterId, isLinkedChapter } from './chapter.service.js';
 import { getVisualizationById } from './visualization.service.js';
@@ -40,6 +41,8 @@ export async function createPage(data: {
   fromVisualizationId?: string | null;
   pageType?: 'whiteboard' | null;
   whiteboardTemplate?: string | null;
+  pdfUrl?: string | null;
+  pdfPage?: number | null;
   position?: number;
 }) {
   let htmlUrl = data.htmlUrl ?? null;
@@ -75,6 +78,8 @@ export async function createPage(data: {
         aiProblemId: data.aiProblemId ?? null,
         pageType: data.pageType ?? null,
         whiteboardTemplate: data.pageType === 'whiteboard' ? (data.whiteboardTemplate ?? null) : null,
+        pdfUrl: data.pdfUrl ?? null,
+        pdfPage: data.pdfPage ?? null,
         position,
       })
       .returning();
@@ -101,6 +106,8 @@ export async function createPages(items: {
   imageUrl?: string | null;
   videoUrl?: string | null;
   htmlUrl?: string | null;
+  pdfUrl?: string | null;
+  pdfPage?: number | null;
   position: number;
 }[]) {
   if (items.length === 0) return [];
@@ -111,6 +118,8 @@ export async function createPages(items: {
       imageUrl: it.imageUrl ?? null,
       videoUrl: it.videoUrl ?? null,
       htmlUrl: it.htmlUrl ?? null,
+      pdfUrl: it.pdfUrl ?? null,
+      pdfPage: it.pdfPage ?? null,
       position: it.position,
     })))
     .returning();
@@ -140,31 +149,32 @@ export async function reorderPages(items: { id: string; position: number }[]) {
   );
 }
 
-/** 챕터의 페이지 이미지 URL 목록 (null 제외, linked 챕터는 빈 배열) */
-export async function getPageImageUrls(chapterId: string): Promise<string[]> {
-  // linked 챕터는 자체 페이지가 없으므로 이미지 정리 불필요
+/** 챕터의 페이지 파일 URL 목록 (imageUrl + pdfUrl, 중복 제거, linked 챕터는 빈 배열) */
+export async function getPageFileUrls(chapterId: string): Promise<string[]> {
+  // linked 챕터는 자체 페이지가 없으므로 파일 정리 불필요
   if (await isLinkedChapter(chapterId)) return [];
   const rows = await db
-    .select({ imageUrl: pages.imageUrl })
+    .select({ imageUrl: pages.imageUrl, pdfUrl: pages.pdfUrl })
     .from(pages)
     .where(eq(pages.chapterId, chapterId));
-  return rows.map((r) => r.imageUrl).filter((url): url is string => url !== null);
+  return collectFileUrls(rows);
 }
 
-/** 특정 URL이 다른 챕터에서도 사용되는지 확인 (orphan 체크) */
-export async function findSharedImageUrls(
+/** 주어진 URL 중 다른 챕터의 imageUrl·pdfUrl 에서도 쓰이는 것 (orphan 체크) */
+export async function findSharedFileUrls(
   urls: string[],
   excludeChapterId: string,
 ): Promise<string[]> {
   if (urls.length === 0) return [];
   const rows = await db
-    .select({ imageUrl: pages.imageUrl })
+    .select({ imageUrl: pages.imageUrl, pdfUrl: pages.pdfUrl })
     .from(pages)
     .where(
       and(
-        inArray(pages.imageUrl, urls),
+        or(inArray(pages.imageUrl, urls), inArray(pages.pdfUrl, urls)),
         ne(pages.chapterId, excludeChapterId),
       ),
     );
-  return rows.map((r) => r.imageUrl).filter((url): url is string => url !== null);
+  const wanted = new Set(urls);
+  return collectFileUrls(rows).filter((url) => wanted.has(url));
 }

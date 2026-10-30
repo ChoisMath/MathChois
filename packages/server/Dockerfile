@@ -35,7 +35,8 @@ COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
-RUN npm ci --omit=dev --ignore-scripts
+# --omit=optional: pdfjs-dist 의 선택 의존성(@napi-rs/canvas 네이티브 바이너리)은 브라우저에서만 쓰는 pdf.js 에 불필요
+RUN npm ci --omit=dev --omit=optional --ignore-scripts
 
 COPY --from=build-server /app/packages/shared/dist packages/shared/dist
 COPY --from=build-server /app/packages/shared/package.json packages/shared/

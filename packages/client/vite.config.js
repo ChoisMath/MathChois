@@ -4,6 +4,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { excalidrawPenTweak } from './vite/excalidrawPenTweak.js'
+import { pdfjsAssets } from './vite-plugin-pdfjs-assets.js'
 
 /*
  * 배포마다 dist/sw.js 에 빌드 시각을 주입해 바이트를 바꾼다.
@@ -36,6 +37,7 @@ export default defineConfig({
   plugins: [
     excalidrawPenTweak(),
     swBuildVersion(),
+    pdfjsAssets(),
     react(),
     tailwindcss(),
   ],
@@ -69,6 +71,10 @@ export default defineConfig({
           /* Lucide 아이콘: 별도 캐시 */
           if (id.includes('node_modules/lucide-react')) {
             return 'vendor-lucide';
+          }
+          /* pdf.js: PDF 페이지에서만 동적 로드(lib/pdfjs.js) */
+          if (id.includes('node_modules/pdfjs-dist')) {
+            return 'vendor-pdfjs';
           }
         },
       },

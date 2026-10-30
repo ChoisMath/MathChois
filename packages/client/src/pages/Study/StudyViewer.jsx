@@ -33,7 +33,11 @@ import { PageVideoEmbed, PageVideoThumb } from '../../components/videos/PageVide
 import HtmlToolOverlay from '../../components/study/HtmlToolOverlay';
 import { HTML_OVERLAY_LOCK_BASE } from '../../lib/htmlOverlay';
 import { sceneStrokeWidth } from '../../lib/penWidth';
-import { UNASSIGNED } from '@mathchois/shared';
+import { UNASSIGNED, isPdfPage } from '@mathchois/shared';
+import { usePdfBackground, applyPdfScene } from '../../hooks/usePdfBackground';
+import { prefetchPdfNeighbors } from '../../hooks/usePdfDocument';
+import PdfPageLayer from '../../components/study/PdfPageLayer';
+import PageThumb from '../../components/common/PageThumb';
 
 /* ── 세션 내 캐시 (컴포넌트 unmount 후에도 유지) ── */
 const _notesCache    = new Map(); // `${userId}_${pageId}` → { elements, bgPosition, files }
@@ -64,6 +68,14 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
   const currentPage = pages[currentPageIndex];
   const hasPrev = currentPageIndex > 0;
   const hasNext = currentPageIndex < pages.length - 1;
+  /* PDF 페이지: 교사 필기가 로드된 뒤(dbBgPosition 확정) 종이 위치를 정한다 */
+  const pdfBg = usePdfBackground({
+    page: status === 'ok' ? currentPage : null,
+    containerRef,
+    bgPositionRef,
+    savedBgPosition: dbBgPosition,
+  });
+  const { layerRef: pdfLayerRef } = pdfBg;
 
   /* refs 동기화 */
   useEffect(() => { noteElementsRef.current = noteElements; }, [noteElements]);
@@ -157,6 +169,11 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
   /* Excalidraw 마운트: bg + 교사 필기 elements */
   const handleMount = useCallback(async (excApi) => {
     excApiRef.current = excApi;
+    /* PDF 페이지: bg element 없이 필기만 — 종이는 PdfPageLayer 가 캔버스 아래에 그린다 */
+    if (isPdfPage(currentPage)) {
+      await applyPdfScene(excApi, Object.values(noteFilesRef.current), noteElementsRef.current);
+      return;
+    }
     if (!currentPage?.imageUrl || !containerRef.current) return;
     try {
       const { dataUrl, mimeType } = await fetchAsDataUrl(currentPage.imageUrl);
@@ -179,7 +196,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
       console.error('교사 필기 모달 bg 로드 실패:', err);
       excApi.updateScene({ elements: noteElementsRef.current });
     }
-  }, [currentPage?.imageUrl, dbBgPosition]);
+  }, [currentPage, dbBgPosition]);
 
   return (
     <div
@@ -196,7 +213,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
           <div className="flex items-center gap-2">
             {status === 'ok' && (
               <PdfDownloadButton
-                onClick={() => downloadPage('교사_필기', noteElements, noteFiles, currentPage.imageUrl, bgPositionRef.current)}
+                onClick={() => downloadPage('교사_필기', noteElements, noteFiles, currentPage, bgPositionRef.current)}
                 onDownloadAll={async () => {
                    const title = `교사_필기_전체`;
                    const allNotesPerPage = await Promise.all(
@@ -219,7 +236,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
                    const pageDataList = pages.map(pg => {
                      const tNote = teacherNotesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
                      return {
-                       bgUrl: pg.imageUrl,
+                       bg: pg,
                        elements: tNote.elements || [],
                        files: tNote.files || {},
                        bgPosition: tNote.bgPosition,
@@ -295,7 +312,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
                         </div>
                       </div>
                     ) : (
-                      <img src={pg.imageUrl} alt={`p.${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                      <PageThumb page={pg} alt={`p.${idx + 1}`} className="w-full h-auto object-contain bg-white" />
                     )}
                     <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] text-center py-0.5">
                       {idx + 1}
@@ -328,6 +345,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
             {status === 'ok' && (
               <>
                 <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{PANEL_HIDE_CSS}</style>
+                {pdfBg.active && <PdfPageLayer ref={pdfLayerRef} {...pdfBg.layerProps} containerRef={containerRef} />}
                 <ExcalidrawErrorBoundary key={currentPage.id + '_tmodal'}>
                 <Excalidraw
                   excalidrawAPI={handleMount}
@@ -336,6 +354,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
                     appState: { viewBackgroundColor: 'transparent', scrollX: 0, scrollY: 0 },
                   }}
                   viewModeEnabled={true}
+                  onChange={(_, appState) => pdfBg.onViewport(appState)}
                   UIOptions={EXCALIDRAW_UI_OPTIONS}
                 />
                 </ExcalidrawErrorBoundary>
@@ -454,6 +473,9 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
+  /* PDF 페이지 배경: 로딩이 끝나 저장된 bgPosition 이 ref 에 있고 컨테이너가 마운트된 뒤에 페이지를 넘긴다 */
+  const pdfBg = usePdfBackground({ page: loading ? null : currentPage, containerRef, bgPositionRef });
+  const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf } = pdfBg;
 
 
   useEffect(() => () => { mountedRef.current = false; }, []);
@@ -686,6 +708,8 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
 
   /* ── Excalidraw onChange & 화면 고정 ── */
   const handleExcalidrawChange = useCallback((elements, appState) => {
+    /* PDF 레이어는 제스처·복원 중에도 뷰포트를 따라가야 하므로 모든 조기 반환보다 먼저 */
+    onPdfViewport(appState);
     if (isRestoringRef.current || isAdjustingWidthRef.current) return;
 
     /* Excalidraw 내부 penMode 비활성화 — OS 레벨 팜 리젝션에 위임 */
@@ -805,7 +829,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
       }
       if (mountedRef.current) setSaveStatus('saved');
     }, 1500);
-  }, [chapterId]);
+  }, [chapterId, onPdfViewport]);
 
   const handleToggleScreenLock = useCallback(() => {
     setScreenLocked(prev => {
@@ -832,6 +856,17 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
     }, 0);
 
     const page = currentPageRef.current;
+
+    /* PDF 페이지: bg element 없이 필기·코멘트만 (handleHtmlOverlayMount 와 같은 순서) — 종이는 PdfPageLayer 가 그린다 */
+    if (isPdfPage(page)) {
+      await applyPdfScene(
+        excApi,
+        [...Object.values(savedFilesRef.current), ...Object.values(teacherCommentFilesRef.current)],
+        [...noteElementsRef.current, ...teacherCommentsRef.current],
+      );
+      return;
+    }
+
     if (!page?.imageUrl || !containerRef.current) return;
 
     try {
@@ -898,6 +933,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
 
   /* ── 이미지 리로드 (원본 비율로 재배치) ── */
   const handleReloadImage = useCallback(async () => {
+    if (pdfBg.active) { rerenderPdf(); return; }
     const page = currentPageRef.current;
     const excApi = excalidrawAPIRef.current;
     if (!page?.imageUrl || !excApi || !containerRef.current) return;
@@ -919,7 +955,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
     } catch (err) {
       console.error('이미지 리로드 실패:', err);
     }
-  }, []);
+  }, [pdfBg.active, rerenderPdf]);
 
   /* ── 파생 값 ── */
   const currentIndex = pages.findIndex((p) => p.id === currentPage?.id);
@@ -929,6 +965,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
   /* ── 인접 페이지 이미지 백그라운드 프리패치 ── */
   useEffect(() => {
     prefetchImages([prevPage?.imageUrl, nextPage?.imageUrl].filter(Boolean));
+    prefetchPdfNeighbors(currentPage, [prevPage, nextPage]); // PDF 는 같은 문서의 이웃 쪽만
   }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
@@ -988,7 +1025,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
             <PdfDownloadButton
               onClick={() => {
                 const title = `${user?.name || '학생'}_${chapter?.title || '챕터'}_${currentPage.position + 1}p`;
-                downloadPage(title, noteElements, savedFilesRef.current, currentPage.imageUrl, bgPositionRef.current);
+                downloadPage(title, noteElements, savedFilesRef.current, currentPage, bgPositionRef.current);
               }}
               onDownloadAll={async () => {
                 const title = `${user?.name || '학생'}_${chapter?.title || '챕터'}_전체`;
@@ -999,7 +1036,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
                 const pageDataList = pages.map(pg => {
                   const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
                   return {
-                    bgUrl: pg.imageUrl,
+                    bg: pg,
                     elements: note.elements || [],
                     files: note.files || {},
                     bgPosition: note.bgPosition,
@@ -1103,6 +1140,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
             onReloadImage={handleReloadImage}
             onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw' || t === 'highlighter'; lassoActiveRef.current = t === 'lasso'; }}
             onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
+            pdfMode={pdfBg.active}
           />
         )
       )}
@@ -1145,7 +1183,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
                       </div>
                     </div>
                   ) : (
-                    <img src={pg.imageUrl} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                    <PageThumb page={pg} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" />
                   )}
                   <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
                     {idx + 1}
@@ -1180,6 +1218,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
         >
           <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{(drawMode && showExcalidrawPanel) ? '' : PANEL_HIDE_CSS}</style>
           <PenDiagnosticsOverlay containerRef={containerRef} />
+          {pdfBg.active && <PdfPageLayer ref={pdfLayerRef} {...pdfBg.layerProps} containerRef={containerRef} />}
 
           {currentPage ? (
             <ExcalidrawErrorBoundary key={currentPage.id}>

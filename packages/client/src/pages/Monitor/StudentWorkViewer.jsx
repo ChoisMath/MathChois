@@ -42,6 +42,11 @@ import { useIntervalRefresh } from '../../hooks/useIntervalRefresh';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { PageVideoEmbed, PageVideoThumb } from '../../components/videos/PageVideo';
 import CoachingViewer from '../Study/CoachingViewer';
+import { isPdfPage } from '@mathchois/shared';
+import { usePdfBackground, applyPdfScene } from '../../hooks/usePdfBackground';
+import { prefetchPdfNeighbors } from '../../hooks/usePdfDocument';
+import PdfPageLayer from '../../components/study/PdfPageLayer';
+import PageThumb from '../../components/common/PageThumb';
 
 const STUDENT_NOTE_PREFIX = '__sn_';
 
@@ -87,6 +92,7 @@ const StudentWorkViewer = () => {
   const teacherEls = useRef([]);
   const noteDebounceRef      = useRef(null);
   const lastStudentSyncRef   = useRef(null); // 마지막으로 반영한 학생 필기 — 동일하면 updateScene 생략(깜빡임 방지)
+  const loadRunRef           = useRef(0);    // 페이지 데이터 로드 실행 번호 — 늦게 끝난 이전 실행을 버린다
 
   useEffect(() => {
     mountedRef.current = true;
@@ -231,6 +237,18 @@ const StudentWorkViewer = () => {
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [STUDENT_NOTE_PREFIX] });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [STUDENT_NOTE_PREFIX] });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
+  /* PDF 페이지 배경: 학생 필기의 bgPosition 이 ref 에 들어간 뒤에 페이지를 넘긴다 — 교사 코멘트가 학생 화면과 같은 종이에 놓이도록 */
+  /* 지금 로드 실행이 학생 필기의 bgPosition 을 ref 에 넣은 뒤에만 페이지를 넘긴다(종이 = 학생 화면과 같은 위치).
+     페이지·학생이 바뀐 렌더에서 바로 문을 닫는다 — A→B→A 처럼 같은 키로 돌아와도 이전 완료가 남지 않게 */
+  const loadKey = currentPage ? `${currentPage.id}|${studentId}` : null;
+  const [loadedKey, setLoadedKey] = useState(null);
+  const [gateKey, setGateKey] = useState(loadKey);
+  if (gateKey !== loadKey) {
+    setGateKey(loadKey);
+    setLoadedKey(null);
+  }
+  const pdfBg = usePdfBackground({ page: loadedKey === loadKey ? currentPage : null, containerRef, bgPositionRef });
+  const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf } = pdfBg;
 
   /* ── 페이지 변경 시 scene 데이터 로드 ── */
   /* ── 페이지 이동 시 pending 저장 flush ── */
@@ -249,6 +267,8 @@ const StudentWorkViewer = () => {
 
   useEffect(() => {
     if (!currentPage) return;
+    const run = ++loadRunRef.current;
+    const key = `${currentPage.id}|${studentId}`;
 
     const loadPageData = async () => {
       bgPositionRef.current = null;
@@ -263,6 +283,7 @@ const StudentWorkViewer = () => {
           api.get(`/api/notes/student-notes-for/${studentId}?pageIds=${currentPage.id}`),
           api.get(`/api/comments/${currentPage.id}/${studentId}`),
         ]);
+        if (run !== loadRunRef.current) return;
 
         const snData = Array.isArray(snNotes) ? snNotes[0] : snNotes;
 
@@ -277,6 +298,8 @@ const StudentWorkViewer = () => {
         console.error('페이지 데이터 로드 실패:', err);
       }
 
+      if (run !== loadRunRef.current) return; // 늦게 끝난 이전 실행 — 현재 실행의 데이터를 덮지 않는다
+      setLoadedKey(key);
       rebuildScene();
     };
 
@@ -287,6 +310,15 @@ const StudentWorkViewer = () => {
   /* BG + student + teacher elements → scene */
   const rebuildScene = useCallback(async () => {
     const excApi = excalidrawAPIRef.current;
+    /* PDF 페이지: bg element 없이 학생 필기 + 교사 코멘트만 — 종이는 PdfPageLayer 가 그린다 */
+    if (excApi && isPdfPage(currentPageRef.current)) {
+      await applyPdfScene(
+        excApi,
+        [...Object.values(savedStudentFilesRef.current), ...Object.values(savedTeacherFilesRef.current)],
+        [...studentEls.current, ...teacherEls.current],
+      );
+      return;
+    }
     if (!excApi || !currentPageRef.current?.imageUrl || !containerRef.current) return;
 
     try {
@@ -318,6 +350,7 @@ const StudentWorkViewer = () => {
 
   /* ── 이미지 리로드 (원본 비율로 재배치) ── */
   const handleReloadImage = useCallback(async () => {
+    if (pdfBg.active) { rerenderPdf(); return; }
     const excApi = excalidrawAPIRef.current;
     if (!currentPageRef.current?.imageUrl || !excApi || !containerRef.current) return;
     bgPositionRef.current = null;
@@ -338,7 +371,7 @@ const StudentWorkViewer = () => {
     } catch (err) {
       console.error('이미지 리로드 실패:', err);
     }
-  }, []);
+  }, [pdfBg.active, rerenderPdf]);
 
   const handleToggleScreenLock = useCallback(() => {
     setScreenLocked(prev => {
@@ -399,6 +432,8 @@ const StudentWorkViewer = () => {
 
   /* ── onChange: 코멘트 모드 + 실제 변경 시에만 저장 ── */
   const handleExcalidrawChange = useCallback((elements, appState) => {
+    /* PDF 레이어는 제스처·복원 중에도 뷰포트를 따라가야 하므로 모든 조기 반환보다 먼저 */
+    onPdfViewport(appState);
     if (isRestoringRef.current || isAdjustingWidthRef.current) return;
 
     if (appState?.penMode) {
@@ -502,7 +537,7 @@ const StudentWorkViewer = () => {
       }
       if (mountedRef.current) setSaveStatus('saved');
     }, 1500);
-  }, [user, studentId]);
+  }, [user, studentId, onPdfViewport]);
 
   const goPage = (idx) => {
     if (idx < 0 || idx >= pages.length) return;
@@ -515,6 +550,7 @@ const StudentWorkViewer = () => {
     prefetchImages(
       [pages[currentPageIndex - 1]?.imageUrl, pages[currentPageIndex + 1]?.imageUrl].filter(Boolean)
     );
+    prefetchPdfNeighbors(pages[currentPageIndex], [pages[currentPageIndex - 1], pages[currentPageIndex + 1]]); // PDF 는 같은 문서의 이웃 쪽만
   }, [currentPageIndex, pages]);
 
   /* ── 사이드바: 현재 페이지가 세로 중앙에 오도록 자동 스크롤 ── */
@@ -585,7 +621,7 @@ const StudentWorkViewer = () => {
                 const title = `${studentProfile?.name || '학생'}_${chapter?.title || '챕터'}_${currentPage.position + 1}p`;
                 const elsToDownload = [...studentEls.current, ...teacherEls.current];
                 const filesToDownload = { ...savedStudentFilesRef.current, ...savedTeacherFilesRef.current };
-                downloadPage(title, elsToDownload, filesToDownload, currentPage.imageUrl, bgPositionRef.current);
+                downloadPage(title, elsToDownload, filesToDownload, currentPage, bgPositionRef.current);
               }}
               onDownloadAll={async () => {
                 const title = `${studentProfile?.name || '학생'}_${chapter?.title || '챕터'}_전체`;
@@ -610,7 +646,7 @@ const StudentWorkViewer = () => {
                   const tEls = (tNote.elements || []).map(el => ({ ...el, id: '__tc_' + el.id, locked: true, opacity: 60 }));
 
                   return {
-                    bgUrl: pg.imageUrl,
+                    bg: pg,
                     elements: [...sEls, ...tEls],
                     files: { ...(sNote.files || {}), ...(tNote.files || {}) },
                     bgPosition: sNote.bgPosition,
@@ -703,6 +739,7 @@ const StudentWorkViewer = () => {
             onReloadImage={handleReloadImage}
             onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw' || t === 'highlighter'; lassoActiveRef.current = t === 'lasso'; }}
             onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
+            pdfMode={pdfBg.active}
           />
         )
       )}
@@ -745,7 +782,7 @@ const StudentWorkViewer = () => {
                       </div>
                     </div>
                   ) : (
-                    <img src={pg.imageUrl} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                    <PageThumb page={pg} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" />
                   )}
                   <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
                     {idx + 1}
@@ -779,6 +816,7 @@ const StudentWorkViewer = () => {
           className="w-full h-full relative overflow-hidden"
         >
           <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{showExcalidrawPanel ? '' : PANEL_HIDE_CSS}</style>
+          {pdfBg.active && <PdfPageLayer ref={pdfLayerRef} {...pdfBg.layerProps} containerRef={containerRef} />}
 
           {currentPage ? (
             <ExcalidrawErrorBoundary key={currentPage.id}>

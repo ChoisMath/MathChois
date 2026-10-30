@@ -41,7 +41,7 @@ const btnCls = (active, activeCls = 'bg-blue-100 text-blue-600') =>
   `${BTN} ${active ? activeCls : 'text-gray-600 hover:bg-gray-100'}`;
 const Divider = () => <div className="w-px h-6 bg-gray-200 mx-1 flex-shrink-0" />;
 
-function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, onActiveToolChange }) {
+function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, pdfMode = false, onActiveToolChange }) {
   const [activeTool, setActiveTool]       = useState('freedraw');
   const [imageMoveMode, setImageMoveMode] = useState(false);
   const [inputMode, setInputModeState] = useState(() => getInputMode());
@@ -574,7 +574,8 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
       {/* ④ 지우개 · 이미지 */}
       {toolBtn('eraser', Eraser, '지우개 — 획 단위')}
 
-      {!htmlMode && (
+      {/* 이미지 이동 (배경 이미지 페이지 전용 — PDF 종이는 Excalidraw 요소가 아니라 끌 수 없음) */}
+      {!htmlMode && !pdfMode && (
       <button data-tb="image_move" onClick={handleToggleImageMove}
         aria-pressed={imageMoveMode}
         title={imageMoveMode ? '이미지 이동 완료 (잠금)' : '이미지 이동 — 배경 이미지를 드래그로 이동'}
