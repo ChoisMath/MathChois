@@ -9,6 +9,7 @@ import {
   loadSettings, saveSettings, stepRate, formatRate, formatTime, clamp,
   loadResumePosition, saveResumePosition, isTypingTarget,
   decideGestureAxis, verticalGestureKind, dragToLevel, SUBTITLE_SIZES, createScrubSeeker,
+  pickFullscreenMethod, isIphoneUserAgent, fullscreenElementOf, DRAG_START_PX,
 } from '../../lib/videoPlayer';
 import useVideoSubtitles from '../../hooks/useVideoSubtitles';
 import SubtitleOverlay from './SubtitleOverlay';
@@ -33,14 +34,18 @@ const PROGRESS_REPORT_INTERVAL_MS = 10000;
  * - fullscreenTargetRef: 전체화면으로 올릴 요소(기본은 플레이어 자신). 2분할 화면은 분할 루트를 넘겨
  *   "영상은 반쪽을 채우고 나머지 반쪽은 필기창" 전체화면을 만든다.
  * - onPseudoFullscreenChange(bool): 외부 대상인데 Fullscreen API 가 없는 환경(iPhone Safari)에서
- *   호출측이 CSS 로 전체화면을 흉내 내도록 알린다.
- * - ref: { getCurrentTime(), seekTo(sec), pause(), toggleFullscreen() }
+ *   호출측이 CSS 로 전체화면을 흉내 내도록 알린다. 외부 대상이 없으면 플레이어가 스스로 창을 채운다(fixed inset-0).
+ * - ref: { getCurrentTime(), seekTo(sec), pause(), toggleFullscreen(), exitPseudoFullscreen() }
+ *
+ * 전체화면 방식(lib/videoPlayer.js `pickFullscreenMethod`): 요소 전체화면 API(표준·webkit 접두사) → CSS 폴백 →
+ * iPhone 만 기본 플레이어(webkitEnterFullscreen). iPad 는 API 가 없어도 기본 플레이어로 넘기지 않는다 —
+ * 그러면 아래 제스처가 전부 사라지기 때문.
  *
  * 단축키: ←/→ 설정된 초만큼 이동, ↑/↓ 볼륨, Space/K 재생·정지, M 음소거, F 전체화면,
  *        , / . 배속 내림/올림, 0~9 해당 % 위치, C 자막. ⚙ 설정: 이동 시간(10/20/30/60초)·배속(0.7~2.5×)·자막.
  * 자막: 영상자료 라이브러리 src 면 등록된 자막을 직접 조회해 오버레이로 그린다(useVideoSubtitles).
- * 제스처: 탭 재생·정지, 더블탭 좌/우 절반 = 뒤로/앞으로, 길게 누른 뒤 드래그 —
- *        좌우 = 시간 이동(스크럽), 상하 = 화면 왼쪽 절반에서 밝기 / 오른쪽 절반에서 볼륨.
+ * 제스처(터치·펜): 탭 재생·정지, 더블탭 좌/우 절반 = 뒤로/앞으로, 바로 드래그 —
+ *        좌우 = 시간 이동(스크럽), 상하 = 화면 왼쪽 절반에서 밝기 / 오른쪽 절반에서 볼륨. 마우스는 클릭·더블클릭만.
  */
 export default function VideoPlayer({
   src, poster, title, storageKey, autoPlay = false, hotkeys = true, initialPosition = 0, onProgress,
@@ -183,39 +188,97 @@ export default function VideoPlayer({
     revealControls();
   }, [revealControls, showFlash, updateSettings]);
 
+  /* 전체화면 방식은 lib/videoPlayer.js `pickFullscreenMethod` 가 고른다.
+     · 요소 전체화면 API(표준 또는 webkit 접두사) — 우리 컨트롤·제스처가 그대로 전체화면에 올라간다.
+       (iPadOS 는 전체화면 중 시스템이 "아래로 쓸어 내리면 종료" 제스처를 함께 돌려, 빠른 아래 드래그는 터치가
+       취소(pointercancel)되고 전체화면이 닫힌다 — 페이지에서 막을 수 없다. 느린 드래그·좌우·위쪽은 그대로다.)
+     · CSS 폴백(pseudo) — API 가 없는 환경에서 플레이어(또는 외부 대상)를 fixed inset-0 로 창에 채운다.
+     · iPhone 기본 플레이어(webkitEnterFullscreen) — 요소 전체화면이 없는 iPhone 에서만. 웹 제스처가 전혀 없다. */
   const toggleFullscreen = useCallback(() => {
     const el = fullscreenTarget();
     const v = videoRef.current;
     if (!el) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => {});
-    } else if (el.requestFullscreen) {
+    const current = fullscreenElementOf(document);
+    if (current) {
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      else document.webkitExitFullscreen?.();
+      revealControls();
+      return;
+    }
+    const method = pickFullscreenMethod({
+      hasRequest: typeof el.requestFullscreen === 'function',
+      hasWebkitRequest: typeof el.webkitRequestFullscreen === 'function',
+      hasVideoNative: typeof v?.webkitEnterFullscreen === 'function',
+      hasExternalTarget: !!fullscreenTargetRef,
+      isIphone: isIphoneUserAgent(navigator.userAgent),
+    });
+    if (method === 'api') {
       el.requestFullscreen().catch(() => {});
-    } else if (fullscreenTargetRef) {
-      // 외부 대상(2분할 루트)인데 Fullscreen API 가 없음(iPhone Safari) → 호출측이 CSS 로 전체화면을 흉내 낸다.
-      // 영상만 전체가 되는 webkitEnterFullscreen 은 분할 의미가 없으므로 쓰지 않는다.
+    } else if (method === 'webkit') {
+      try { el.webkitRequestFullscreen(); } catch { /* ignore */ }
+    } else if (method === 'pseudo') {
+      // 외부 대상(2분할 루트)이면 호출측이 CSS 로 전체화면을 흉내 내고, 아니면 플레이어 컨테이너가 스스로 창을 채운다.
+      // 영상만 전체가 되는 webkitEnterFullscreen 은 분할·제스처 의미가 없으므로 쓰지 않는다.
       setPseudoFullscreen((p) => {
         const next = !p;
-        onPseudoFullscreenChangeRef.current?.(next);
+        if (fullscreenTargetRef) onPseudoFullscreenChangeRef.current?.(next);
         return next;
       });
-    } else if (v?.webkitEnterFullscreen) {
-      v.webkitEnterFullscreen(); // iOS Safari
+    } else if (method === 'native') {
+      v.webkitEnterFullscreen(); // iPhone Safari
     }
     revealControls();
   }, [revealControls, fullscreenTarget, fullscreenTargetRef]);
 
   useEffect(() => {
-    const onChange = () => setFullscreen(!!document.fullscreenElement && document.fullscreenElement === fullscreenTarget());
+    const onChange = () => {
+      const current = fullscreenElementOf(document);
+      setFullscreen(!!current && current === fullscreenTarget());
+    };
     document.addEventListener('fullscreenchange', onChange);
-    return () => document.removeEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
   }, [fullscreenTarget]);
+
+  /* 플레이어 자신의 CSS 폴백 전체화면: Esc 로 닫는다(외부 대상이면 호출측이 처리). */
+  const ownPseudoFullscreen = pseudoFullscreen && !fullscreenTargetRef;
+  useEffect(() => {
+    if (!ownPseudoFullscreen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setPseudoFullscreen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [ownPseudoFullscreen]);
+
+  /* 플레이어 자신이 전체화면(요소 API 또는 CSS 폴백)인 동안 문서 스크롤·바운스를 잠근다.
+     iPad(WebKit)는 요소 전체화면에서도 뒤의 문서가 길면 드래그로 웹뷰 전체를 옆·위로 끌어(rubber-band) 터치를 취소해
+     버려(pointercancel) 드래그 제스처가 끊긴다 — 학급 영상 시청 화면처럼 긴 페이지에서 그랬고, 100dvh 인 2분할
+     화면은 끌 거리가 없어 멀쩡했다. 루트에 touch-action:none + overscroll-behavior:none(<video> 는 항상 none).
+     2분할(외부 대상)은 필기창 목록 스크롤이 필요하므로 잠그지 않는다. */
+  const lockPage = !fullscreenTargetRef && (fullscreen || pseudoFullscreen);
+  const lockPageRef = useRef(false);
+  useEffect(() => {
+    lockPageRef.current = lockPage;
+    if (!lockPage) return undefined;
+    const root = document.documentElement;
+    const prev = { overflow: root.style.overflow, overscrollBehavior: root.style.overscrollBehavior, touchAction: root.style.touchAction };
+    root.style.overflow = 'hidden';
+    root.style.overscrollBehavior = 'none';
+    root.style.touchAction = 'none';
+    return () => {
+      root.style.overflow = prev.overflow;
+      root.style.overscrollBehavior = prev.overscrollBehavior;
+      root.style.touchAction = prev.touchAction;
+    };
+  }, [lockPage]);
 
   /* 외부에서 CSS 폴백 전체화면을 닫은 경우(Esc 등) 상태 동기화 */
   const exitPseudoFullscreen = useCallback(() => {
     setPseudoFullscreen(false);
-    onPseudoFullscreenChangeRef.current?.(false);
-  }, []);
+    if (fullscreenTargetRef) onPseudoFullscreenChangeRef.current?.(false);
+  }, [fullscreenTargetRef]);
 
   /* ── 외부 제어 (댓글 시각 첨부/이동) ── */
   useImperativeHandle(ref, () => ({
@@ -329,60 +392,41 @@ export default function VideoPlayer({
   const pausedByClickRef = useRef(false);
   useEffect(() => () => clearTimeout(tapTimerRef.current), []);
 
-  /* ── 길게 누른 뒤 드래그 제스처 ──
-     400ms 이상 누르면 제스처 모드로 들어가고, 그 뒤 첫 이동 방향으로 종류를 정한다(`decideGestureAxis`).
+  /* ── 드래그 제스처(바로 시작) ──
+     손가락·펜을 대고 DRAG_START_PX 이상 움직이면 그 자리에서 제스처가 시작되고, 첫 이동 방향으로 종류를 정한다
+     (`decideGestureAxis`). 그보다 작게 움직인 터치는 탭이다. 마우스는 클릭·더블클릭만 한다.
      · 좌우 = 스크럽(시간 이동): delta = sign · (|dx| / 폭)^1.6 · 영상 길이 → 짧은 드래그는 몇 초(미세),
        화면 끝까지 끌면 영상 끝까지(장거리). 스크럽 중에는 일시정지하고 목표 위치의 프레임을 보여 주며, 떼면 복귀한다.
        프레임 갱신은 `createScrubSeeker` 가 맡는다 — 탐색을 한 번에 하나만 보내고 seeked 뒤에 최신 목표로 다시
        보낸다(이전 탐색이 끝나기 전에 currentTime 을 다시 쓰면 취소되어 빨리 끌수록 화면이 멈추기 때문).
      · 상하 = 누른 위치가 화면 왼쪽 절반이면 밝기, 오른쪽 절반이면 볼륨(`verticalGestureKind`).
        위로 끌면 커지고 화면 높이만큼 끌면 전체 범위가 바뀐다(`dragToLevel`). 재생은 건드리지 않는다.
-     <video> 는 `touch-action: pan-y` 라 평소엔 세로 스크롤이 되므로, 제스처 모드에 들어간 뒤의 touchmove 만
-     non-passive 리스너에서 preventDefault 해 상하 드래그가 페이지 스크롤로 새지 않게 한다. */
-  const SCRUB_HOLD_MS = 400;
+     <video> 는 `touch-action: none` 이라 브라우저가 끌기를 먼저 가져가지 않는다(페이지 스크롤은 영상 밖에서).
+     non-passive touchmove 리스너의 preventDefault 는 그 보강이다. */
   const SCRUB_EXP = 1.6;
-  const pressRef = useRef(null);      // { id, x, y, timer, held }
+  const pressRef = useRef(null);      // { id, x, y, active }
   const scrubRef = useRef(null);      // { startTime, width, wasPlaying, seeker }
   const levelRef = useRef(null);      // { kind: 'volume'|'brightness', start, height, value }
-  // 오버레이용: { kind: 'pending' } | { kind: 'scrub', target, delta } | { kind: 'volume'|'brightness', value }
+  // 오버레이용: { kind: 'scrub', target, delta } | { kind: 'volume'|'brightness', value }
   const [gesture, setGesture] = useState(null);
 
-  useEffect(() => () => {
-    clearTimeout(pressRef.current?.timer);
-    scrubRef.current?.seeker.dispose();
-  }, []);
+  useEffect(() => () => { scrubRef.current?.seeker.dispose(); }, []); // 언마운트 시 진행 중 스크럽의 seeked 리스너 정리
 
-  // 제스처 모드 중에는 터치 스크롤을 막는다(React 의 onTouchMove 는 passive 라 preventDefault 가 안 먹음).
+  // 제스처 중(그리고 플레이어 전체화면 중)에는 터치 스크롤을 막는다(React 의 onTouchMove 는 passive 라 preventDefault 가 안 먹음).
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    const block = (e) => { if (pressRef.current?.held && e.cancelable) e.preventDefault(); };
+    const block = (e) => { if ((pressRef.current?.active || lockPageRef.current) && e.cancelable) e.preventDefault(); };
     v.addEventListener('touchmove', block, { passive: false });
     return () => v.removeEventListener('touchmove', block);
   }, []);
 
   const onVideoPointerDown = (e) => {
     if (e.button != null && e.button !== 0) return;
+    if (e.pointerType === 'mouse') return; // 마우스는 클릭·더블클릭만
     const v = videoRef.current;
     if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return;
-    clearTimeout(pressRef.current?.timer);
-    const target = e.currentTarget;
-    const id = e.pointerId;
-    const press = {
-      id, x: e.clientX, y: e.clientY, held: false,
-      timer: setTimeout(() => {
-        // 길게 누름 확정 → 제스처 모드(방향은 첫 이동으로 결정)
-        press.held = true;
-        clearTimeout(tapTimerRef.current);
-        tapTimerRef.current = null;
-        lastTapRef.current = 0;
-        try { target.setPointerCapture(id); } catch { /* ignore */ }
-        try { navigator.vibrate?.(15); } catch { /* ignore */ }
-        setGesture({ kind: 'pending' });
-        setControlsVisible(true);
-      }, SCRUB_HOLD_MS),
-    };
-    pressRef.current = press;
+    pressRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, active: false };
   };
 
   const startScrub = (v, target) => {
@@ -435,17 +479,16 @@ export default function VideoPlayer({
     if (!v || !press || press.id !== e.pointerId) return;
     const dx = e.clientX - press.x;
     const dy = e.clientY - press.y;
-    if (!press.held) {
-      // 아직 길게 누름 전: 손가락이 움직이면(스크롤 등) 길게 누름 취소
-      if (Math.hypot(dx, dy) > 10) {
-        clearTimeout(press.timer);
-        pressRef.current = null;
-      }
-      return;
-    }
-    if (!scrubRef.current && !levelRef.current) {
-      const axis = decideGestureAxis(dx, dy);
+    if (!press.active) {
+      // 아직 탭일 수 있음: 시작 거리를 넘는 첫 이동으로 제스처 종류를 정한다
+      const axis = decideGestureAxis(dx, dy, DRAG_START_PX);
       if (!axis) return;
+      press.active = true;
+      clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = null;
+      lastTapRef.current = 0;
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      setControlsVisible(true);
       if (axis === 'x') startScrub(v, e.currentTarget);
       else startLevel(press, e.currentTarget);
     }
@@ -460,23 +503,21 @@ export default function VideoPlayer({
     applyLevel(dy);
   };
 
-  /** 길게 누름 제스처 종료. 제스처 모드였으면 true(탭으로 처리하지 않는다). */
+  /** 드래그 제스처 종료. 제스처가 시작됐었으면 true(탭으로 처리하지 않는다). */
   const finishGesture = (e) => {
     const v = videoRef.current;
     const press = pressRef.current;
-    if (press && press.id === e.pointerId) {
-      clearTimeout(press.timer);
-      pressRef.current = null;
-    }
-    if (!press?.held || !v) return false;
+    if (press && press.id === e.pointerId) pressRef.current = null;
+    if (!press?.active || !v) return false;
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
     const sc = scrubRef.current;
     const lv = levelRef.current;
+    // pointercancel(브라우저가 제스처를 가져감)은 좌표가 비어 올 수 있어 마지막 적용값으로 마무리한다.
+    const cancelled = e.type === 'pointercancel';
+    if (lv && !cancelled) applyLevel(e.clientY - press.y); // levelRef 가 살아 있을 때 마지막 위치를 반영
     scrubRef.current = null;
     levelRef.current = null;
     setGesture(null);
-    // pointercancel(브라우저가 제스처를 가져감)은 좌표가 비어 올 수 있어 마지막 적용값으로 마무리한다.
-    const cancelled = e.type === 'pointercancel';
     if (sc) {
       const target = cancelled ? v.currentTime : scrubTarget(v, sc, e.clientX - press.x);
       sc.seeker.finish(target); // 대기 중 탐색을 버리고 정확한 위치로 마무리
@@ -485,8 +526,7 @@ export default function VideoPlayer({
       const d = target - sc.startTime;
       showFlash(`${formatTime(target)} (${d >= 0 ? '+' : '−'}${formatTime(Math.abs(d))})`);
     } else if (lv) {
-      const value = cancelled ? (lv.value ?? lv.start) : applyLevel(e.clientY - press.y).value;
-      setGesture(null);
+      const value = lv.value ?? lv.start;
       showFlash(`${lv.kind === 'volume' ? '볼륨' : '밝기'} ${Math.round(value * 100)}%`);
     }
     revealControls();
@@ -494,7 +534,7 @@ export default function VideoPlayer({
   };
 
   const onVideoPointerUp = (e) => {
-    if (finishGesture(e)) return; // 길게 누름 제스처로 끝났으면 탭으로 처리하지 않는다
+    if (finishGesture(e)) return; // 드래그 제스처로 끝났으면 탭으로 처리하지 않는다
     if (e.button != null && e.button !== 0) return;
     const v = videoRef.current;
     if (!v) return;
@@ -583,9 +623,17 @@ export default function VideoPlayer({
   return (
     <div
       ref={containerRef}
-      className={`relative w-full bg-black overflow-hidden select-none outline-none group touch-manipulation ${
-        fill ? 'h-full' : 'aspect-video rounded-lg'}`}
-      style={{ WebkitTouchCallout: 'none', containerType: 'inline-size' /* 자막 글자 크기(cqw) 기준 */ }}
+      className={`w-full bg-black overflow-hidden select-none outline-none group touch-manipulation ${
+        ownPseudoFullscreen ? 'fixed inset-0 z-[80] h-full' : `relative ${fill ? 'h-full' : 'aspect-video rounded-lg'}`}`}
+      style={{
+        WebkitTouchCallout: 'none',
+        containerType: 'inline-size', /* 자막 글자 크기(cqw) 기준 */
+        // 홈 화면 앱(standalone)처럼 viewport-fit=cover 인 화면에서 컨트롤이 홈 인디케이터·노치 밑에 깔리지 않게
+        ...(ownPseudoFullscreen ? {
+          paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)',
+        } : null),
+      }}
       tabIndex={0}
       onMouseMove={revealControls}
       onTouchStart={revealControls}
@@ -595,10 +643,11 @@ export default function VideoPlayer({
         ref={videoRef}
         src={src}
         poster={poster || undefined}
-        className={`w-full h-full ${fill ? 'object-contain' : ''}`}
+        className={`w-full h-full ${(fill || ownPseudoFullscreen) ? 'object-contain' : ''}`}
         style={{
           WebkitTouchCallout: 'none',
-          touchAction: 'pan-y pinch-zoom',
+          // 드래그 제스처가 바로 시작되도록 브라우저가 끌기를 가져가지 않게 한다(페이지 스크롤은 영상 밖에서)
+          touchAction: 'none',
           filter: brightness !== BRIGHTNESS_DEFAULT ? `brightness(${brightness})` : undefined,
         }}
         playsInline
@@ -630,14 +679,7 @@ export default function VideoPlayer({
         <SubtitleOverlay cues={subtitleCues} time={currentTime} size={settings.subtitleSize} raised={controlsVisible} />
       )}
 
-      {/* 길게 누른 뒤 드래그 제스처 오버레이 */}
-      {gesture?.kind === 'pending' && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="px-3 py-1.5 rounded-full bg-black/60 text-white/90 text-xs">
-            좌우: 시간 이동 · 상하: 왼쪽 밝기 / 오른쪽 볼륨
-          </span>
-        </div>
-      )}
+      {/* 드래그 제스처 오버레이 */}
       {gesture?.kind === 'scrub' && (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1">
           <span className="px-4 py-2 rounded-full bg-black/70 text-white text-xl font-semibold tabular-nums">

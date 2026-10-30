@@ -138,13 +138,15 @@ export function saveResumePosition(key, currentTime, duration) {
   } catch { /* 무시 */ }
 }
 
-// ─── 길게 누른 뒤 드래그 제스처 ──────────────────────
+// ─── 드래그 제스처 ──────────────────────
 
 /** 드래그 방향이 확정되기 전까지 무시할 이동 거리(px) */
 export const GESTURE_AXIS_THRESHOLD = 8;
+/** 터치·펜이 이만큼 움직이면 탭이 아니라 드래그 제스처가 바로 시작된다(px). 손떨림·탭은 그 아래. */
+export const DRAG_START_PX = 10;
 
 /**
- * 길게 누른 뒤의 첫 이동으로 제스처 축을 정한다.
+ * 드래그의 첫 이동으로 제스처 축을 정한다.
  * 임계값 미만이면 null(아직 미정), 가로가 세로 이상이면 'x'(시간 이동), 아니면 'y'(볼륨/밝기).
  */
 export function decideGestureAxis(dx, dy, threshold = GESTURE_AXIS_THRESHOLD) {
@@ -255,4 +257,39 @@ export function isTypingTarget(target) {
   const tag = (target.tagName || '').toUpperCase();
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
   return !!target.isContentEditable;
+}
+
+// ─── 전체화면 방식 ──────────────────────
+
+/**
+ * iPhone/iPod 사용자 에이전트인지. iPad 는 기본(데스크톱 모드) UA 가 "Macintosh" 라 여기서는 가려내지 않는다 —
+ * iPad 는 요소 전체화면 API 가 있으면 그것을 쓰고, 없으면(앱 내 브라우저 등) CSS 로 창을 채우는 쪽이 맞다.
+ */
+export function isIphoneUserAgent(ua) {
+  return /\b(iPhone|iPod)\b/.test(String(ua || ''));
+}
+
+/**
+ * 전체화면 단추가 실제로 할 일을 고른다(순수 함수 — VideoPlayer.toggleFullscreen 이 사용).
+ *   'api'    — element.requestFullscreen (Chrome/Android, iPadOS 16.4+ Safari·Chrome, 데스크톱)
+ *   'webkit' — element.webkitRequestFullscreen (iPadOS 12~16.3 처럼 접두사만 있는 WebKit)
+ *   'pseudo' — CSS 로 창을 채우는 폴백. 우리 컨트롤·드래그 제스처(좌우 시간 이동, 상하 밝기/볼륨)를 그대로 쓴다.
+ *   'native' — video.webkitEnterFullscreen: iPhone 기본 플레이어. 웹 오버레이·제스처가 전혀 없으므로
+ *              iPhone(요소 전체화면이 아예 없는 기기)에서만 쓴다.
+ *
+ * iPad 에서 요소 전체화면 API 가 없는 환경(앱 내 브라우저·WKWebView 등)에서 기본 플레이어로 넘기면 이 플레이어의
+ * 슬라이드 제스처가 전부 사라지므로, iPhone 이 아니면 'pseudo' 로 간다.
+ */
+export function pickFullscreenMethod({ hasRequest, hasWebkitRequest, hasVideoNative, hasExternalTarget, isIphone }) {
+  if (hasRequest) return 'api';
+  if (hasWebkitRequest) return 'webkit';
+  if (hasExternalTarget) return 'pseudo';
+  if (isIphone && hasVideoNative) return 'native';
+  return 'pseudo';
+}
+
+/** document.fullscreenElement 또는 webkit 접두사 버전(없으면 null) */
+export function fullscreenElementOf(doc) {
+  if (!doc || typeof doc !== 'object') return null;
+  return doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
 }
