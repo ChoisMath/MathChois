@@ -647,7 +647,15 @@ export default function VideoPlayer({
       ref={containerRef}
       className={`w-full bg-black overflow-hidden select-none outline-none group touch-manipulation ${
         ownPseudoFullscreen ? 'fixed inset-0 z-[80] h-full' : `relative ${fill ? 'h-full' : 'aspect-video rounded-lg'}`}`}
-      style={{ WebkitTouchCallout: 'none', containerType: 'inline-size' /* 자막 글자 크기(cqw) 기준 */ }}
+      style={{
+        WebkitTouchCallout: 'none',
+        containerType: 'inline-size', /* 자막 글자 크기(cqw) 기준 */
+        // 홈 화면 앱(standalone)처럼 viewport-fit=cover 인 화면에서 컨트롤이 홈 인디케이터·노치 밑에 깔리지 않게
+        ...(ownPseudoFullscreen ? {
+          paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)',
+        } : null),
+      }}
       tabIndex={0}
       onMouseMove={revealControls}
       onTouchStart={revealControls}
