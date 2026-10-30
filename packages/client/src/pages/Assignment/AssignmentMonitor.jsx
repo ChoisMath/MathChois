@@ -105,7 +105,8 @@ const AssignmentMonitor = () => {
       const pageDataList = pages.map((p) => ({
         elements: notesMap[p.id]?.elements || [],
         files: notesMap[p.id]?.files || {},
-        bg: p
+        bg: p,
+        bgPosition: notesMap[p.id]?.bgPosition,
       }));
 
       await downloadMultiplePages(`${member.student?.name || '학생'}_${assignment?.title || '과제'}_필기`, pageDataList);
