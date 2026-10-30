@@ -15,8 +15,8 @@ describe('classifyPdfInspection', () => {
 describe('inspectPdf', () => {
   const file = (size) => ({ size, arrayBuffer: async () => new ArrayBuffer(size) });
   it('reads numPages through the injected opener and destroys the doc', async () => {
-    const destroy = vi.fn();
-    const open = vi.fn(async () => ({ numPages: 3, destroy }));
+    const destroy = vi.fn(async () => {});
+    const open = vi.fn(async () => ({ numPages: 3, loadingTask: { destroy } }));
     await expect(inspectPdf(file(10), { open })).resolves.toEqual({ ok: true, numPages: 3 });
     expect(destroy).toHaveBeenCalled();
   });

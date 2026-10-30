@@ -45,7 +45,8 @@ export async function inspectPdf(file, { open = openPdf } = {}) {
   } catch (err) {
     return classifyPdfInspection({ size, errorName: err?.name ?? 'Error' })
   } finally {
-    try { await doc?.destroy() } catch { /* 검사 결과에는 영향 없음 */ }
+    /* pdf.js 6 의 PDFDocumentProxy 에는 destroy() 가 없다 — 로딩 태스크를 통해 닫는다 */
+    try { await doc?.loadingTask?.destroy?.() } catch { /* 검사 결과에는 영향 없음 */ }
   }
 }
 

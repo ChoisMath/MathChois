@@ -1,8 +1,13 @@
 import { openPdf } from './pdfjs';
 
+/* pdf.js 6 의 PDFDocumentProxy 에는 destroy() 가 없다 — 문서는 로딩 태스크를 통해 닫는다 */
+function closeDoc(doc) {
+  doc?.loadingTask?.destroy?.()?.catch?.(() => {});
+}
+
 /**
  * PDF 문서 LRU 캐시. 문서(PDFDocumentProxy)를 url 별로 한 번만 열고, 페이지 프록시도 문서별로 재사용한다.
- * `max` 개를 넘으면 가장 오래 쓰지 않은 문서를 destroy() 해 워커 쪽 메모리를 돌려준다.
+ * `max` 개를 넘으면 가장 오래 쓰지 않은 문서를 닫아(loadingTask.destroy()) 워커 쪽 메모리를 돌려준다.
  * 실패한 promise 는 캐시에서 빼서 다음 호출이 다시 시도하게 한다.
  * `pin(url)` 된 문서(화면에 그려진 배경 등)는 밀어내지 않는다 — 모두 고정이면 잠시 `max` 를 넘는다.
  * 이 모듈을 import 해도 pdf.js 는 로드되지 않는다(openPdf 가 처음 호출될 때 동적 import).
@@ -16,8 +21,8 @@ export function createDocCache({ open, max = 2 }) {
   const pins = new Map();
 
   function destroyEntry(entry) {
-    if (entry.resolved) entry.resolved.destroy();
-    else entry.doc.then((d) => d.destroy(), () => {});
+    if (entry.resolved) closeDoc(entry.resolved);
+    else entry.doc.then(closeDoc, () => {});
   }
 
   /** url 의 항목을 가장 최근으로 옮기거나 새로 연다. */
