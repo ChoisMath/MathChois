@@ -63,6 +63,8 @@ image.png
 
 # Reference docs kept locally (curriculum PDFs etc.)
 *.pdf
+# ...except committed E2E fixtures
+!packages/client/e2e/fixtures/*.pdf
 
 # Superpowers (brainstorm visual companion / local plan drafts / review scratch)
 .superpowers/

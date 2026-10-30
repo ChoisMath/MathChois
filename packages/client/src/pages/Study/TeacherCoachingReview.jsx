@@ -6,6 +6,7 @@ import ProblemView from '../../components/common/ProblemView';
 import AttemptStack from '../../components/coaching/AttemptStack';
 import { getProblemForCoaching } from '../../lib/problems';
 import { getPageStudents, getStudentPageAttempts, resetStudentQuota } from '../../lib/coaching';
+import PageThumb from '../../components/common/PageThumb';
 
 /**
  * 교사 챕터 필기 경로의 AI 코칭 문항 화면.
@@ -100,7 +101,7 @@ export default function TeacherCoachingReview({ classroomId, pages, currentPage,
             ) : pg.videoUrl ? (
               <PageVideoThumb videoUrl={pg.videoUrl} alt={`영상 ${i + 1}`} className="h-auto w-full bg-gray-900 object-cover" loading="lazy" />
             ) : (
-              <img src={pg.imageUrl} alt={`페이지 ${i + 1}`} className="h-auto w-full bg-white object-contain" loading="lazy" />
+              <PageThumb page={pg} alt={`페이지 ${i + 1}`} className="h-auto w-full bg-white object-contain" />
             )}
             <div className="absolute bottom-0 inset-x-0 bg-black/50 py-0.5 text-center text-xs text-white">{i + 1}</div>
           </button>

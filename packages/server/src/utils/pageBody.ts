@@ -1,0 +1,28 @@
+// 페이지 생성 body 의 PDF 필드 쌍(pdfUrl·pdfPage) 검증. null/undefined 는 "없음"으로 본다.
+
+const PDF_URL_PREFIX = '/api/files/chapter-pdfs/';
+
+/** 한 PDF 에서 등록할 수 있는 최대 쪽 수 — 클라이언트 lib/pdfImport.js 의 PDF_MAX_PAGES 와 같다 */
+export const PDF_MAX_PAGES = 500;
+
+/** 통과하면 null, 아니면 400 응답용 메시지 */
+export function pdfFieldsError(body: { pdfUrl?: unknown; pdfPage?: unknown }): string | null {
+  const hasUrl = body.pdfUrl != null;
+  const hasPage = body.pdfPage != null;
+  if (!hasUrl && !hasPage) return null;
+  if (!hasUrl || !hasPage) return 'pdfUrl과 pdfPage는 함께 보내야 합니다.';
+  if (typeof body.pdfUrl !== 'string' || !body.pdfUrl.startsWith(PDF_URL_PREFIX)) {
+    return `pdfUrl은 ${PDF_URL_PREFIX} 로 시작해야 합니다.`;
+  }
+  // 접두사 뒤에서 '..' 로 다른 버킷으로 빠져나가는 경로 차단
+  if (body.pdfUrl.split('/').includes('..')) {
+    return 'pdfUrl에 .. 경로를 쓸 수 없습니다.';
+  }
+  if (typeof body.pdfPage !== 'number' || !Number.isInteger(body.pdfPage) || body.pdfPage < 1) {
+    return 'pdfPage는 1 이상의 정수여야 합니다.';
+  }
+  if (body.pdfPage > PDF_MAX_PAGES) {
+    return `pdfPage는 ${PDF_MAX_PAGES} 이하여야 합니다.`;
+  }
+  return null;
+}

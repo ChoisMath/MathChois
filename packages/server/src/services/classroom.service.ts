@@ -1,6 +1,7 @@
-import { eq, and, count, desc, ne, inArray } from 'drizzle-orm';
+import { eq, and, or, count, desc, ne, inArray } from 'drizzle-orm';
 import type { ClassroomColor } from '@mathchois/shared';
 import { db } from '../config/database.js';
+import { collectFileUrls } from '../utils/fileUrls.js';
 import { classrooms, classroomMembers, profiles, chapters, pages, assignments, assignmentPages } from '../db/schema.js';
 
 /** 6자리 랜덤 클래스 코드 생성 */
@@ -210,30 +211,27 @@ export async function isClassroomOwner(classroomId: string, teacherId: string): 
   return rows.length > 0;
 }
 
-/** 교실의 모든 이미지 URL 수집 (챕터 페이지 + 과제 페이지) */
-export async function getClassroomImageUrls(classroomId: string): Promise<string[]> {
-  // 챕터 페이지 이미지
+/** 교실의 모든 페이지 파일 URL 수집 (챕터 페이지 + 과제 페이지의 imageUrl·pdfUrl, 중복 제거) */
+export async function getClassroomFileUrls(classroomId: string): Promise<string[]> {
+  // 챕터 페이지 파일
   const chapterRows = await db
-    .select({ imageUrl: pages.imageUrl })
+    .select({ imageUrl: pages.imageUrl, pdfUrl: pages.pdfUrl })
     .from(pages)
     .innerJoin(chapters, eq(pages.chapterId, chapters.id))
     .where(eq(chapters.classroomId, classroomId));
 
-  // 과제 페이지 이미지
+  // 과제 페이지 파일
   const assignmentRows = await db
-    .select({ imageUrl: assignmentPages.imageUrl })
+    .select({ imageUrl: assignmentPages.imageUrl, pdfUrl: assignmentPages.pdfUrl })
     .from(assignmentPages)
     .innerJoin(assignments, eq(assignmentPages.assignmentId, assignments.id))
     .where(eq(assignments.classroomId, classroomId));
 
-  return [
-    ...chapterRows.map((r) => r.imageUrl).filter((url): url is string => url !== null),
-    ...assignmentRows.map((r) => r.imageUrl).filter((url): url is string => url !== null),
-  ];
+  return collectFileUrls([...chapterRows, ...assignmentRows]);
 }
 
-/** 다른 교실에서도 사용 중인 이미지 URL 찾기 (orphan 체크) */
-export async function findSharedClassroomImageUrls(
+/** 주어진 URL 중 다른 교실의 페이지(imageUrl·pdfUrl)에서도 쓰이는 것 (orphan 체크) */
+export async function findSharedClassroomFileUrls(
   urls: string[],
   excludeClassroomId: string,
 ): Promise<string[]> {
@@ -241,28 +239,26 @@ export async function findSharedClassroomImageUrls(
 
   // 다른 교실의 챕터 페이지에서 사용 중인 URL
   const sharedChapterRows = await db
-    .select({ imageUrl: pages.imageUrl })
+    .select({ imageUrl: pages.imageUrl, pdfUrl: pages.pdfUrl })
     .from(pages)
     .innerJoin(chapters, eq(pages.chapterId, chapters.id))
     .where(and(
-      inArray(pages.imageUrl, urls),
+      or(inArray(pages.imageUrl, urls), inArray(pages.pdfUrl, urls)),
       ne(chapters.classroomId, excludeClassroomId),
     ));
 
   // 다른 교실의 과제 페이지에서 사용 중인 URL
   const sharedAssignmentRows = await db
-    .select({ imageUrl: assignmentPages.imageUrl })
+    .select({ imageUrl: assignmentPages.imageUrl, pdfUrl: assignmentPages.pdfUrl })
     .from(assignmentPages)
     .innerJoin(assignments, eq(assignmentPages.assignmentId, assignments.id))
     .where(and(
-      inArray(assignmentPages.imageUrl, urls),
+      or(inArray(assignmentPages.imageUrl, urls), inArray(assignmentPages.pdfUrl, urls)),
       ne(assignments.classroomId, excludeClassroomId),
     ));
 
-  return [
-    ...sharedChapterRows.map((r) => r.imageUrl).filter((url): url is string => url !== null),
-    ...sharedAssignmentRows.map((r) => r.imageUrl).filter((url): url is string => url !== null),
-  ];
+  const wanted = new Set(urls);
+  return collectFileUrls([...sharedChapterRows, ...sharedAssignmentRows]).filter((url) => wanted.has(url));
 }
 
 /** 교실 멤버 확인 */

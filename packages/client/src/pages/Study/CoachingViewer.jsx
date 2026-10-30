@@ -23,6 +23,7 @@ import { useIntervalRefresh } from '../../hooks/useIntervalRefresh';
 import { getProblemForCoaching } from '../../lib/problems';
 import { convertSolution, reviewSolution, listAttempts, getStudentPageAttempts, uploadWorkImage } from '../../lib/coaching';
 import { sceneStrokeWidth } from '../../lib/penWidth';
+import PageThumb from '../../components/common/PageThumb';
 
 const PANEL_KEY = 'coachingRightPanelWidth';
 const MIN_W = 300;
@@ -505,7 +506,7 @@ export default function CoachingViewer({
                 </div>
               </div>
             ) : (
-              <img src={pg.imageUrl} alt={`페이지 ${i + 1}`} className="h-auto w-full bg-white object-contain" loading="lazy" decoding="async" />
+              <PageThumb page={pg} alt={`페이지 ${i + 1}`} className="h-auto w-full bg-white object-contain" />
             )}
             <div className="absolute bottom-0 inset-x-0 bg-black/50 py-0.5 text-center text-xs text-white">{i + 1}</div>
           </button>

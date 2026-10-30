@@ -390,7 +390,7 @@ export default function ChapterTab({ classroomId, isTeacher, units, unitParam, o
       const pageDataList = pgs.map(pg => {
         const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
         return {
-          bgUrl: pg.imageUrl,
+          bg: pg,
           elements: note.elements || [],
           files: note.files || {},
           bgPosition: note.bgPosition,

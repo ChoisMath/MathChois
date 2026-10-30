@@ -92,6 +92,10 @@ export const pages = pgTable('pages', {
   pageType: text('page_type'),
   /** 화이트보드 기본 템플릿 key (null = 학생 선택) */
   whiteboardTemplate: text('whiteboard_template'),
+  /** PDF 교재 파일 URL (한 PDF 의 모든 페이지가 공유) — pdfPage 와 함께 쓴다 */
+  pdfUrl: text('pdf_url'),
+  /** PDF 안의 페이지 번호 (1부터) */
+  pdfPage: integer('pdf_page'),
 }, (t) => [
   index('idx_pages_chapter').on(t.chapterId),
 ]);
@@ -193,6 +197,10 @@ export const assignmentPages = pgTable('assignment_pages', {
   assignmentId: uuid('assignment_id').notNull().references(() => assignments.id, { onDelete: 'cascade' }),
   imageUrl: text('image_url'),
   videoUrl: text('video_url'),
+  /** PDF 교재 파일 URL (pages.pdf_url 과 같은 의미) */
+  pdfUrl: text('pdf_url'),
+  /** PDF 안의 페이지 번호 (1부터) */
+  pdfPage: integer('pdf_page'),
   position: integer('position').default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });

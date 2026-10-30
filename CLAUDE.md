@@ -177,10 +177,10 @@ YouTube playlists): `units` table, `chapters.unit_id`/`classroom_videos.unit_id`
 
 Tables: `profiles`, `allowed_teachers` (teacher allowlist), `classrooms`, `classroom_members`, `classroom_invites`
 (pre-registered student emails), `chapters`, `pages`
-(`imageUrl`/`videoUrl`/**`htmlUrl`**/`pageType`/`whiteboardTemplate`/position), the 5 annotation tables above,
+(`imageUrl`/`videoUrl`/**`htmlUrl`**/**`pdfUrl`**/`pdfPage`/`pageType`/`whiteboardTemplate`/position), the 5 annotation tables above,
 `classroom_groups`/`classroom_group_members` (default groups), `whiteboard_page_settings`/
 `whiteboard_groups`/`whiteboard_group_members` (shared boards),
-`posts`/`post_files`/`post_classrooms` (board), `assignments`/`assignment_pages`/
+`posts`/`post_files`/`post_classrooms` (board), `assignments`/`assignment_pages` (also `pdfUrl`/`pdfPage`)/
 `assignment_submissions`/`assignment_submission_files`, `videos`/`classroom_videos`/`video_comments`/
 `video_subtitles` (video library), `ai_motion_prompts`/`ai_slide_prompts` (AI활용 hub prompts; `classrooms.ai_hub_enabled`), `units` (classroom units; `chapters.unit_id`, `classroom_videos.unit_id`). Migrations via Drizzle Kit;
 additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures the
@@ -210,12 +210,19 @@ additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures th
   `lib/dashboardViews.js`. [학생] tab row-end [AI 풀이 초기화] calls
   `POST /api/coaching/classrooms/:cid/students/:sid/reset` (resets quota for every AI-coaching page of the classroom, keeps
   attempt records). Spec: `docs/superpowers/specs/2026-10-28-classroom-tabs-tables-groups-dashboard-design.md`.
+- **PDF pages have no background image element.** `PdfPageLayer` sits under Excalidraw, follows the viewport and
+  re-renders only the visible clip; the paper rect is `bgPosition`. pdf.js is loaded from its legacy build (the modern
+  build needs `Map.prototype.getOrInsertComputed`). With default options pdf.js streams the **whole** PDF on first
+  open (first page renders before the download ends; the file is then cached immutable) — HTTP Range only fills gaps
+  ahead of the stream, it is not range-only loading. `GET /api/files/*` is unauthenticated (all buckets), so the
+  viewer fetches the PDF by bare URL. Spec: `docs/superpowers/specs/2026-10-30-pdf-pages-design.md`.
 - **Icon-only buttons** use `components/common/IconButton.jsx` (`label` → `title` + `aria-label`, 44px hit area,
   variants ghost/primary/danger/danger-solid). Icon dictionary and keep-text rules:
   `docs/superpowers/specs/2026-10-20-icon-buttons-design.md`. `DrawingToolbar` keeps its own buttons.
 - **Pen/eraser input** is custom-handled: `hooks/useExcalidrawTouch.js`,
   `hooks/useScribbleErase.js` (S-Pen barrel button, scribble-to-erase, palm rejection).
-- File storage uses `VOLUME_PATH`; buckets: `chapter-pages`, `chapter-tools` (HTML only),
+- File storage uses `VOLUME_PATH`; buckets: `chapter-pages`, `chapter-pdfs` (PDF only, 100MB, teacher-only; one file shared by
+  all of its pages), `chapter-tools` (HTML only),
   `visualizations` (HTML only), `whiteboard-files` (raster images ≤ 2MB, students allowed), `ai-hub` (AI활용 hub material — written only through the `AI_MEDIA_UPLOAD_TOKEN` routes, never `/api/files/upload`; read via `/api/files/ai-hub/*` for motion/slide media + manifests only; brand files only via `/api/ai/brand/site/*`), `videos` (teacher-only, uploaded through the streaming route
   `POST /api/videos/upload`, not `/api/files/upload` which buffers whole files in memory),
   `submission-files`, post attachments. Served via `/api/files/*` as a stream with HTTP Range
