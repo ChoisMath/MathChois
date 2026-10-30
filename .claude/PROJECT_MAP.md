@@ -68,7 +68,7 @@ packages/
 │                               #   videos.js(라이브러리/학급배정/댓글/자막 API + 자막 캐시 + XHR 진행률 업로드 + 썸네일 캡처/길이 측정), subtitleFile.js(자막 업로드 전 검사),
 │                               #   units.js(단원 API 래퍼), unitBrowser.js(`resolveUnitView` — 단원 화면 판단: shared 규칙을 엮음),
 │                               #   aiHub/(guard.js 접근 리다이렉트 판단, editorStore.js 편집기 상태·`promptModel`, clipboard.js, motionNav.js 이전/다음, slideHash.js·slideOrder.js 슬라이드 주소·정렬),
-│                               #   videoPlayer.js(플레이어 설정 localStorage, SEEK_STEPS/PLAYBACK_RATES, formatTime, 이어보기 위치, 길게 누름 제스처 축/좌우/드래그→값 순수 함수),
+│                               #   videoPlayer.js(플레이어 설정 localStorage, SEEK_STEPS/PLAYBACK_RATES, formatTime, 이어보기 위치, 길게 누름 제스처 축/좌우/드래그→값 순수 함수, 전체화면 방식 선택 `pickFullscreenMethod` — 요소 API(표준·webkit 접두사) → CSS 폴백 → iPhone 만 기본 플레이어),
 │                               #   splitLayout.js(영상 2분할 — 비율/영상 위치 `mc_video_split`, 마지막 페이지 `mc_video_split_page:<cv>`, ratioFromPointer/stepRatio),
 │                               #   swUpdate.js(PWA SW 자동 업데이트 — setupSwAutoUpdate),
 │                               #   homeIntro.js(첫 화면 필기 장면 모션 — 브라우저당 첫 방문 1회, `mc_home_intro_played`, 동작 줄이기 시 생략),

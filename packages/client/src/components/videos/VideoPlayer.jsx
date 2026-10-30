@@ -9,6 +9,7 @@ import {
   loadSettings, saveSettings, stepRate, formatRate, formatTime, clamp,
   loadResumePosition, saveResumePosition, isTypingTarget,
   decideGestureAxis, verticalGestureKind, dragToLevel, SUBTITLE_SIZES,
+  pickFullscreenMethod, isIphoneUserAgent, fullscreenElementOf,
 } from '../../lib/videoPlayer';
 import useVideoSubtitles from '../../hooks/useVideoSubtitles';
 import SubtitleOverlay from './SubtitleOverlay';
@@ -33,8 +34,12 @@ const PROGRESS_REPORT_INTERVAL_MS = 10000;
  * - fullscreenTargetRef: 전체화면으로 올릴 요소(기본은 플레이어 자신). 2분할 화면은 분할 루트를 넘겨
  *   "영상은 반쪽을 채우고 나머지 반쪽은 필기창" 전체화면을 만든다.
  * - onPseudoFullscreenChange(bool): 외부 대상인데 Fullscreen API 가 없는 환경(iPhone Safari)에서
- *   호출측이 CSS 로 전체화면을 흉내 내도록 알린다.
- * - ref: { getCurrentTime(), seekTo(sec), pause(), toggleFullscreen() }
+ *   호출측이 CSS 로 전체화면을 흉내 내도록 알린다. 외부 대상이 없으면 플레이어가 스스로 창을 채운다(fixed inset-0).
+ * - ref: { getCurrentTime(), seekTo(sec), pause(), toggleFullscreen(), exitPseudoFullscreen() }
+ *
+ * 전체화면 방식(lib/videoPlayer.js `pickFullscreenMethod`): 요소 전체화면 API(표준·webkit 접두사) → CSS 폴백 →
+ * iPhone 만 기본 플레이어(webkitEnterFullscreen). iPad 는 API 가 없어도 기본 플레이어로 넘기지 않는다 —
+ * 그러면 아래 제스처가 전부 사라지기 때문.
  *
  * 단축키: ←/→ 설정된 초만큼 이동, ↑/↓ 볼륨, Space/K 재생·정지, M 음소거, F 전체화면,
  *        , / . 배속 내림/올림, 0~9 해당 % 위치, C 자막. ⚙ 설정: 이동 시간(10/20/30/60초)·배속(0.7~2.5×)·자막.
@@ -183,39 +188,75 @@ export default function VideoPlayer({
     revealControls();
   }, [revealControls, showFlash, updateSettings]);
 
+  /* 전체화면 방식은 lib/videoPlayer.js `pickFullscreenMethod` 가 고른다.
+     · 요소 전체화면 API(표준 또는 webkit 접두사) — 우리 컨트롤·제스처가 그대로 전체화면에 올라간다.
+       (iPadOS 는 전체화면 중 시스템이 "아래로 쓸어 내리면 종료" 제스처를 함께 돌려, 빠른 아래 드래그는 터치가
+       취소(pointercancel)되고 전체화면이 닫힌다 — 페이지에서 막을 수 없다. 느린 드래그·좌우·위쪽은 그대로다.)
+     · CSS 폴백(pseudo) — API 가 없는 환경에서 플레이어(또는 외부 대상)를 fixed inset-0 로 창에 채운다.
+     · iPhone 기본 플레이어(webkitEnterFullscreen) — 요소 전체화면이 없는 iPhone 에서만. 웹 제스처가 전혀 없다. */
   const toggleFullscreen = useCallback(() => {
     const el = fullscreenTarget();
     const v = videoRef.current;
     if (!el) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => {});
-    } else if (el.requestFullscreen) {
+    const current = fullscreenElementOf(document);
+    if (current) {
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      else document.webkitExitFullscreen?.();
+      revealControls();
+      return;
+    }
+    const method = pickFullscreenMethod({
+      hasRequest: typeof el.requestFullscreen === 'function',
+      hasWebkitRequest: typeof el.webkitRequestFullscreen === 'function',
+      hasVideoNative: typeof v?.webkitEnterFullscreen === 'function',
+      hasExternalTarget: !!fullscreenTargetRef,
+      isIphone: isIphoneUserAgent(navigator.userAgent),
+    });
+    if (method === 'api') {
       el.requestFullscreen().catch(() => {});
-    } else if (fullscreenTargetRef) {
-      // 외부 대상(2분할 루트)인데 Fullscreen API 가 없음(iPhone Safari) → 호출측이 CSS 로 전체화면을 흉내 낸다.
-      // 영상만 전체가 되는 webkitEnterFullscreen 은 분할 의미가 없으므로 쓰지 않는다.
+    } else if (method === 'webkit') {
+      try { el.webkitRequestFullscreen(); } catch { /* ignore */ }
+    } else if (method === 'pseudo') {
+      // 외부 대상(2분할 루트)이면 호출측이 CSS 로 전체화면을 흉내 내고, 아니면 플레이어 컨테이너가 스스로 창을 채운다.
+      // 영상만 전체가 되는 webkitEnterFullscreen 은 분할·제스처 의미가 없으므로 쓰지 않는다.
       setPseudoFullscreen((p) => {
         const next = !p;
-        onPseudoFullscreenChangeRef.current?.(next);
+        if (fullscreenTargetRef) onPseudoFullscreenChangeRef.current?.(next);
         return next;
       });
-    } else if (v?.webkitEnterFullscreen) {
-      v.webkitEnterFullscreen(); // iOS Safari
+    } else if (method === 'native') {
+      v.webkitEnterFullscreen(); // iPhone Safari
     }
     revealControls();
   }, [revealControls, fullscreenTarget, fullscreenTargetRef]);
 
   useEffect(() => {
-    const onChange = () => setFullscreen(!!document.fullscreenElement && document.fullscreenElement === fullscreenTarget());
+    const onChange = () => {
+      const current = fullscreenElementOf(document);
+      setFullscreen(!!current && current === fullscreenTarget());
+    };
     document.addEventListener('fullscreenchange', onChange);
-    return () => document.removeEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
   }, [fullscreenTarget]);
+
+  /* 플레이어 자신의 CSS 폴백 전체화면: Esc 로 닫는다(외부 대상이면 호출측이 처리). */
+  const ownPseudoFullscreen = pseudoFullscreen && !fullscreenTargetRef;
+  useEffect(() => {
+    if (!ownPseudoFullscreen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setPseudoFullscreen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [ownPseudoFullscreen]);
 
   /* 외부에서 CSS 폴백 전체화면을 닫은 경우(Esc 등) 상태 동기화 */
   const exitPseudoFullscreen = useCallback(() => {
     setPseudoFullscreen(false);
-    onPseudoFullscreenChangeRef.current?.(false);
-  }, []);
+    if (fullscreenTargetRef) onPseudoFullscreenChangeRef.current?.(false);
+  }, [fullscreenTargetRef]);
 
   /* ── 외부 제어 (댓글 시각 첨부/이동) ── */
   useImperativeHandle(ref, () => ({
@@ -582,8 +623,8 @@ export default function VideoPlayer({
   return (
     <div
       ref={containerRef}
-      className={`relative w-full bg-black overflow-hidden select-none outline-none group touch-manipulation ${
-        fill ? 'h-full' : 'aspect-video rounded-lg'}`}
+      className={`w-full bg-black overflow-hidden select-none outline-none group touch-manipulation ${
+        ownPseudoFullscreen ? 'fixed inset-0 z-[80] h-full' : `relative ${fill ? 'h-full' : 'aspect-video rounded-lg'}`}`}
       style={{ WebkitTouchCallout: 'none', containerType: 'inline-size' /* 자막 글자 크기(cqw) 기준 */ }}
       tabIndex={0}
       onMouseMove={revealControls}
@@ -594,7 +635,7 @@ export default function VideoPlayer({
         ref={videoRef}
         src={src}
         poster={poster || undefined}
-        className={`w-full h-full ${fill ? 'object-contain' : ''}`}
+        className={`w-full h-full ${(fill || ownPseudoFullscreen) ? 'object-contain' : ''}`}
         style={{
           WebkitTouchCallout: 'none',
           touchAction: 'pan-y pinch-zoom',

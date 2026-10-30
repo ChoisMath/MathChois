@@ -6,6 +6,7 @@ import {
   BRIGHTNESS_MIN, BRIGHTNESS_MAX, GESTURE_AXIS_THRESHOLD,
   decideGestureAxis, verticalGestureKind, dragToLevel,
   SUBTITLE_SIZES, pickSubtitleTrack,
+  pickFullscreenMethod, isIphoneUserAgent, fullscreenElementOf,
 } from './videoPlayer.js';
 
 function fakeStorage() {
@@ -134,5 +135,50 @@ describe('long-press drag gestures', () => {
     expect(dragToLevel(1, -65, 100, BRIGHTNESS_MIN, BRIGHTNESS_MAX)).toBeCloseTo(1.5 + 0, 2); // 1 + 0.65·1.3 → 1.845 → 1.5 로 고정
     expect(dragToLevel(1, 50, 100, BRIGHTNESS_MIN, BRIGHTNESS_MAX)).toBeCloseTo(0.35, 2);
     expect(dragToLevel(5, 0, 100, BRIGHTNESS_MIN, BRIGHTNESS_MAX)).toBe(BRIGHTNESS_MAX); // 시작값도 범위 안으로
+  });
+});
+
+describe('fullscreen method selection', () => {
+  const base = { hasRequest: false, hasWebkitRequest: false, hasVideoNative: true, hasExternalTarget: false, isIphone: false };
+
+  it('prefers the standard API, then the webkit-prefixed one (older iPadOS)', () => {
+    expect(pickFullscreenMethod({ ...base, hasRequest: true })).toBe('api');
+    expect(pickFullscreenMethod({ ...base, hasRequest: true, isIphone: true })).toBe('api');
+    expect(pickFullscreenMethod({ ...base, hasWebkitRequest: true })).toBe('webkit');
+  });
+
+  it('keeps the CSS fallback for an external target (2분할 루트) when there is no API', () => {
+    expect(pickFullscreenMethod({ ...base, hasExternalTarget: true })).toBe('pseudo');
+    expect(pickFullscreenMethod({ ...base, hasExternalTarget: true, isIphone: true })).toBe('pseudo');
+  });
+
+  it('hands the video to the native player only on iPhone', () => {
+    expect(pickFullscreenMethod({ ...base, isIphone: true })).toBe('native');
+    expect(pickFullscreenMethod({ ...base, isIphone: true, hasVideoNative: false })).toBe('pseudo');
+  });
+
+  it('fills the window with the custom player on iPad-class browsers without the element API', () => {
+    // iPad in-app browsers / WKWebView without element fullscreen: native player would drop every web gesture
+    expect(pickFullscreenMethod(base)).toBe('pseudo');
+    expect(pickFullscreenMethod({ ...base, hasVideoNative: false })).toBe('pseudo');
+  });
+
+  it('detects iPhone/iPod user agents but not iPad (desktop-mode UA says Macintosh)', () => {
+    expect(isIphoneUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15')).toBe(true);
+    expect(isIphoneUserAgent('Mozilla/5.0 (iPod touch; CPU iPhone OS 15_0 like Mac OS X)')).toBe(true);
+    expect(isIphoneUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.4 Safari/605.1.15')).toBe(false);
+    expect(isIphoneUserAgent('Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15 CriOS/124.0')).toBe(false);
+    expect(isIphoneUserAgent('Mozilla/5.0 (Linux; Android 14; SM-X916B) Chrome/124')).toBe(false);
+    expect(isIphoneUserAgent('')).toBe(false);
+    expect(isIphoneUserAgent(undefined)).toBe(false);
+  });
+
+  it('reads the fullscreen element with or without the webkit prefix', () => {
+    const el = {};
+    expect(fullscreenElementOf({ fullscreenElement: el })).toBe(el);
+    expect(fullscreenElementOf({ fullscreenElement: null, webkitFullscreenElement: el })).toBe(el);
+    expect(fullscreenElementOf({ fullscreenElement: null, webkitFullscreenElement: null })).toBeNull();
+    expect(fullscreenElementOf({})).toBeNull();
+    expect(fullscreenElementOf(null)).toBeNull();
   });
 });
