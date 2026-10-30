@@ -52,14 +52,23 @@ describe('VideoPlayer fullscreen button', () => {
     expect(m.container.className).toContain('inset-0');
     expect(m.container.className).not.toContain('aspect-video');
     expect(m.host.querySelector('video').className).toContain('object-contain');
+    // 전체화면 중에는 브라우저가 페이지를 끌지 못하게 잠근다(iPad rubber-band → pointercancel 방지)
+    expect(m.host.querySelector('video').style.touchAction).toBe('none');
+    expect(document.documentElement.style.touchAction).toBe('none');
+    expect(document.documentElement.style.overscrollBehavior).toBe('none');
+    expect(document.documentElement.style.overflow).toBe('hidden');
     // 제스처 핸들러가 붙은 <video> 는 그대로 — 길게 누름 제스처가 전체화면에서도 산다
     expect(m.host.querySelector('video')).toBeTruthy();
     // 같은 단추로 종료, Esc 로도 종료
     act(() => { m.fsButton.click(); });
     expect(m.container.className).toContain('relative');
+    expect(m.host.querySelector('video').style.touchAction).toBe('pan-y pinch-zoom');
+    expect(document.documentElement.style.touchAction).toBe('');
+    expect(document.documentElement.style.overflow).toBe('');
     act(() => { m.fsButton.click(); });
     act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
     expect(m.container.className).toContain('relative');
+    expect(document.documentElement.style.touchAction).toBe('');
     m.unmount();
   });
 
@@ -101,7 +110,13 @@ describe('VideoPlayer fullscreen button', () => {
     Object.defineProperty(document, 'webkitFullscreenElement', { configurable: true, get: () => m.container });
     act(() => { document.dispatchEvent(new Event('webkitfullscreenchange')); });
     expect(m.fsButton.querySelector('svg')?.getAttribute('class') || '').toContain('lucide-minimize');
+    // 요소 전체화면 중에도 같은 잠금
+    expect(m.host.querySelector('video').style.touchAction).toBe('none');
+    expect(document.documentElement.style.touchAction).toBe('none');
     delete document.webkitFullscreenElement;
+    act(() => { document.dispatchEvent(new Event('webkitfullscreenchange')); });
+    expect(document.documentElement.style.touchAction).toBe('');
+    expect(m.host.querySelector('video').style.touchAction).toBe('pan-y pinch-zoom');
     m.unmount();
   });
 
@@ -114,6 +129,9 @@ describe('VideoPlayer fullscreen button', () => {
     expect(onPseudo).toHaveBeenCalledWith(true);
     expect(m.container.className).toContain('relative');
     expect(m.container.className).not.toContain('fixed');
+    // 2분할은 필기창 목록을 스크롤해야 하므로 페이지를 잠그지 않는다
+    expect(document.documentElement.style.touchAction).toBe('');
+    expect(m.host.querySelector('video').style.touchAction).toBe('pan-y pinch-zoom');
     m.unmount();
   });
 });

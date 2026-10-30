@@ -252,6 +252,28 @@ export default function VideoPlayer({
     return () => window.removeEventListener('keydown', onKey);
   }, [ownPseudoFullscreen]);
 
+  /* 플레이어 자신이 전체화면(요소 API 또는 CSS 폴백)인 동안 문서 스크롤·바운스를 잠근다.
+     iPad(WebKit)는 요소 전체화면에서도 뒤의 문서가 길면 드래그로 웹뷰 전체를 옆·위로 끌어(rubber-band) 터치를 취소해
+     버려(pointercancel) 길게 누름 제스처가 끊긴다 — 학급 영상 시청 화면처럼 긴 페이지에서 그랬고, 100dvh 인 2분할
+     화면은 끌 거리가 없어 멀쩡했다. 루트에 touch-action:none + overscroll-behavior:none, <video> 에 touch-action:none.
+     2분할(외부 대상)은 필기창 목록 스크롤이 필요하므로 잠그지 않는다. */
+  const lockPage = !fullscreenTargetRef && (fullscreen || pseudoFullscreen);
+  const lockPageRef = useRef(false);
+  useEffect(() => {
+    lockPageRef.current = lockPage;
+    if (!lockPage) return undefined;
+    const root = document.documentElement;
+    const prev = { overflow: root.style.overflow, overscrollBehavior: root.style.overscrollBehavior, touchAction: root.style.touchAction };
+    root.style.overflow = 'hidden';
+    root.style.overscrollBehavior = 'none';
+    root.style.touchAction = 'none';
+    return () => {
+      root.style.overflow = prev.overflow;
+      root.style.overscrollBehavior = prev.overscrollBehavior;
+      root.style.touchAction = prev.touchAction;
+    };
+  }, [lockPage]);
+
   /* 외부에서 CSS 폴백 전체화면을 닫은 경우(Esc 등) 상태 동기화 */
   const exitPseudoFullscreen = useCallback(() => {
     setPseudoFullscreen(false);
@@ -388,11 +410,11 @@ export default function VideoPlayer({
 
   useEffect(() => () => clearTimeout(pressRef.current?.timer), []);
 
-  // 제스처 모드 중에는 터치 스크롤을 막는다(React 의 onTouchMove 는 passive 라 preventDefault 가 안 먹음).
+  // 제스처 모드 중(그리고 플레이어 전체화면 중)에는 터치 스크롤을 막는다(React 의 onTouchMove 는 passive 라 preventDefault 가 안 먹음).
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    const block = (e) => { if (pressRef.current?.held && e.cancelable) e.preventDefault(); };
+    const block = (e) => { if ((pressRef.current?.held || lockPageRef.current) && e.cancelable) e.preventDefault(); };
     v.addEventListener('touchmove', block, { passive: false });
     return () => v.removeEventListener('touchmove', block);
   }, []);
@@ -638,7 +660,8 @@ export default function VideoPlayer({
         className={`w-full h-full ${(fill || ownPseudoFullscreen) ? 'object-contain' : ''}`}
         style={{
           WebkitTouchCallout: 'none',
-          touchAction: 'pan-y pinch-zoom',
+          // 평소엔 세로 스크롤을 살리고(pan-y), 플레이어 전체화면에서는 브라우저가 끌지 못하게 한다
+          touchAction: lockPage ? 'none' : 'pan-y pinch-zoom',
           filter: brightness !== BRIGHTNESS_DEFAULT ? `brightness(${brightness})` : undefined,
         }}
         playsInline
