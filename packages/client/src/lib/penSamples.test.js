@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { orderCoalesced, isMicroReversal, dropMicroReversals, MICRO_REVERSAL_PX } from './penSamples';
+import { readFileSync } from 'node:fs';
+import { orderCoalesced, isMicroReversal, dropMicroReversals, isStaleSample, MICRO_REVERSAL_PX } from './penSamples';
 
 const ev = (x, y, t) => ({ clientX: x, clientY: y, timeStamp: t });
 
@@ -58,5 +59,50 @@ describe('isMicroReversal / dropMicroReversals — 미세 역행 점 제거', ()
   it('dropMicroReversals: 세 번째 요소(압력)를 보존한다', () => {
     expect(dropMicroReversals([[0, 0, .3], [10, 0, .4], [9.5, 0, .5], [20, 0, .6]], 2.5))
       .toEqual([[0, 0, .3], [10, 0, .4], [20, 0, .6]]);
+  });
+});
+
+describe('isStaleSample — 같은 pointermove 가 두 번 전달될 때 (iPad Chrome/WebKit 실측)', () => {
+  it('timeStamp 가 되돌아가거나, 같은 시각에 같은 좌표면 stale', () => {
+    const last = { t: 100, x: 10, y: 20 };
+    expect(isStaleSample(last, { timeStamp: 96, clientX: 8, clientY: 19 })).toBe(true);   // 과거 샘플 재전달
+    expect(isStaleSample(last, { timeStamp: 100, clientX: 10, clientY: 20 })).toBe(true); // 완전 중복
+    expect(isStaleSample(last, { timeStamp: 100, clientX: 11, clientY: 20 })).toBe(false); // 같은 ms 다른 점
+    expect(isStaleSample(last, { timeStamp: 104, clientX: 10, clientY: 20 })).toBe(false); // 멈춰 있음(정상)
+    expect(isStaleSample(null, { timeStamp: 1, clientX: 0, clientY: 0 })).toBe(false);
+  });
+
+  it('실측 픽스처: 중복 이벤트를 걸러내면 역행이 0이 되고, 걸러내지 않으면 획마다 수십 개', () => {
+    const strokes = JSON.parse(readFileSync(new URL('./__fixtures__/pen-samples-ipad-chrome.json', import.meta.url), 'utf8'));
+    const build = (s, dedupe) => {
+      const pts = [[s.down.x, s.down.y]];
+      let last = null;
+      for (const m of s.moves) {
+        const raw = m.c.map(([x, y, t]) => ({ clientX: x, clientY: y, timeStamp: t }));
+        for (const ev of orderCoalesced(raw, pts[pts.length - 1])) {
+          if (dedupe) { if (isStaleSample(last, ev)) continue; last = { t: ev.timeStamp, x: ev.clientX, y: ev.clientY }; }
+          const p = [ev.clientX, ev.clientY];
+          if (isMicroReversal(pts, p, MICRO_REVERSAL_PX)) continue;
+          pts.push(p);
+        }
+      }
+      return pts;
+    };
+    const backSteps = (pts) => {
+      let n = 0;
+      for (let i = 2; i < pts.length; i++) {
+        const [p, q, d] = [pts[i], pts[i - 1], pts[i - 2]];
+        if ((p[0] - q[0]) * (q[0] - d[0]) + (p[1] - q[1]) * (q[1] - d[1]) < 0) n += 1;
+      }
+      return n;
+    };
+    let dupMoves = 0;
+    for (const s of strokes) for (let i = 1; i < s.moves.length; i++) if (s.moves[i].t === s.moves[i - 1].t) dupMoves += 1;
+    expect(dupMoves).toBeGreaterThan(200);
+    for (const s of strokes) {
+      expect(backSteps(build(s, false))).toBeGreaterThan(50);
+      expect(backSteps(build(s, true))).toBe(0);
+      expect(build(s, true).length).toBeLessThan(build(s, false).length * 0.7);
+    }
   });
 });

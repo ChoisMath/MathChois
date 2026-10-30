@@ -4,7 +4,7 @@ import { buildStrokePath, makeFreedrawElement } from '../lib/wetInkStroke';
 import {
   recognizeShape, snapLineEnd, linePoints, HOLD_MS, HOLD_RADIUS_PX, CANCEL_MOVE_PX, MIN_LINE_PX,
 } from '../lib/shapeRecognizer';
-import { orderCoalesced, isMicroReversal, MICRO_REVERSAL_PX } from '../lib/penSamples';
+import { orderCoalesced, isMicroReversal, isStaleSample, MICRO_REVERSAL_PX } from '../lib/penSamples';
 import { beginPenStroke, recordPenMove, endPenStroke } from '../lib/penSampleLog';
 
 /**
@@ -50,6 +50,7 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
     let pts = [];          // [clientX, clientY]
     let pressures = [];
     let rect = null;       // 오버레이/컨테이너 bounding rect (down 시점)
+    let lastSample = null; // { t, x, y } 마지막으로 받아들인 샘플 — iPad 는 같은 pointermove 가 두 번 오므로 중복 차단
     let dpr = 1;
     let rafId = 0;
 
@@ -147,6 +148,7 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       }
       pts = [[e.clientX, e.clientY]];
       pressures = [e.pressure || 0.5];
+      lastSample = { t: e.timeStamp, x: e.clientX, y: e.clientY };
       snapped = null; snapAnchor = null; holdAnchor = null; travel = 0;
       armHold(pts[0]);
       scheduleRender();
@@ -156,11 +158,13 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
       if (!drawing || e.pointerId !== pointerId) return;
       e.stopPropagation();
       e.preventDefault();
-      // iPad Safari 는 coalesced 샘플 순서가 뒤섞여 올 수 있다 → 시간순 정렬 + 미세 역행 점 제거 (lib/penSamples.js)
+      // iPad(WebKit)는 같은 pointermove 를 두 번 전달한다 → timeStamp 단조 증가로 중복 차단, 묶음 정렬, 미세 역행 제거 (lib/penSamples.js)
       const raw = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
       const evs = orderCoalesced(raw.length ? raw : [e], pts[pts.length - 1]);
       let used = 0;
       for (const ev of evs) {
+        if (isStaleSample(lastSample, ev)) continue;
+        lastSample = { t: ev.timeStamp, x: ev.clientX, y: ev.clientY };
         const p = [ev.clientX, ev.clientY];
         if (isMicroReversal(pts, p, MICRO_REVERSAL_PX)) continue;
         trackPoint(p, pts[pts.length - 1]);
@@ -192,7 +196,7 @@ export function useWetInk({ excalidrawAPIRef, overlayRef, drawModeRef, penActive
         });
       }
       if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
-      drawing = false; pointerId = null; pts = []; pressures = [];
+      drawing = false; pointerId = null; pts = []; pressures = []; lastSample = null;
       snapped = null; snapAnchor = null; holdAnchor = null; travel = 0;
       // commit 직후 Excalidraw 가 같은 프레임에 요소를 그리므로 다음 프레임에 오버레이 클리어(겹침/깜빡임 방지)
       requestAnimationFrame(clear);

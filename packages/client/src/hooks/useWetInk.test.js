@@ -185,6 +185,29 @@ describe('useWetInk — 펜 멈춤 도형 보정', () => {
     expect(last().points.length).toBe(51);
   });
 
+  it('같은 pointermove 가 두 번 전달되어도(iPad) 점이 중복으로 들어가지 않는다', () => {
+    const down = pen('pointerdown', 100, 100);
+    Object.defineProperty(down, 'timeStamp', { value: 1000 });
+    canvas.dispatchEvent(down);
+    for (let x = 108; x <= 300; x += 8) {
+      const e = pen('pointermove', x, 100);
+      const batch = [ // 실기기처럼: 샘플마다 고유 timeStamp, 재전달 때도 같은 샘플
+        new PointerEvent('pointermove', { pointerType: 'pen', pointerId: 7, clientX: x - 4, clientY: 100 }),
+        new PointerEvent('pointermove', { pointerType: 'pen', pointerId: 7, clientX: x, clientY: 100 }),
+      ];
+      Object.defineProperty(batch[0], 'timeStamp', { value: 1000 + x - 4 });
+      Object.defineProperty(batch[1], 'timeStamp', { value: 1000 + x });
+      Object.defineProperty(e, 'timeStamp', { value: 1000 + x });
+      e.getCoalescedEvents = () => batch;
+      canvas.dispatchEvent(e);
+      canvas.dispatchEvent(e); // 같은 이벤트 객체 재전달 (timeStamp·좌표 동일)
+    }
+    canvas.dispatchEvent(pen('pointerup', 300, 100));
+    const pts = absPts(last());
+    expect(pts.length).toBe(1 + 25 * 2);
+    for (let i = 1; i < pts.length; i++) expect(pts[i][0]).toBeGreaterThan(pts[i - 1][0]); // 역행 없음
+  });
+
   it('언마운트 시 멈춤 타이머가 정리되어 commit 이 일어나지 않는다', () => {
     canvas.dispatchEvent(pen('pointerdown', 100, 100));
     moveAlong(canvas, [[100, 100], [300, 100]]);
