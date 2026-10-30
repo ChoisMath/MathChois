@@ -1,5 +1,6 @@
 import { eq, and, or, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '../config/database.js';
+import { collectFileUrls } from '../utils/fileUrls.js';
 import { pages } from '../db/schema.js';
 import { resolveSourceChapterId, isLinkedChapter } from './chapter.service.js';
 import { getVisualizationById } from './visualization.service.js';
@@ -146,16 +147,6 @@ export async function reorderPages(items: { id: string; position: number }[]) {
       db.update(pages).set({ position }).where(eq(pages.id, id)),
     ),
   );
-}
-
-/** 행들의 imageUrl·pdfUrl 값을 합쳐 null 제거·중복 제거 */
-function collectFileUrls(rows: { imageUrl: string | null; pdfUrl: string | null }[]): string[] {
-  const urls = new Set<string>();
-  for (const r of rows) {
-    if (r.imageUrl) urls.add(r.imageUrl);
-    if (r.pdfUrl) urls.add(r.pdfUrl);
-  }
-  return [...urls];
 }
 
 /** 챕터의 페이지 파일 URL 목록 (imageUrl + pdfUrl, 중복 제거, linked 챕터는 빈 배열) */

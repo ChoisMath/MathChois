@@ -217,14 +217,14 @@ export async function assignmentRoutes(app: FastifyInstance) {
 
     // 단일 삽입
     const { imageUrl, videoUrl, pdfUrl, pdfPage, position } = body as AssignmentPageBody;
+    const pdfError = pdfFieldsError({ pdfUrl, pdfPage });
+    if (pdfError) return reply.status(400).send({ error: pdfError });
     if (!imageUrl && !videoUrl && !pdfUrl) {
       return reply.status(400).send({ error: 'imageUrl, videoUrl, or pdfUrl is required' });
     }
     if (videoUrl != null && !isValidPageVideoUrl(videoUrl)) {
       return reply.status(400).send({ error: INVALID_VIDEO_URL_MESSAGE });
     }
-    const pdfError = pdfFieldsError({ pdfUrl, pdfPage });
-    if (pdfError) return reply.status(400).send({ error: pdfError });
 
     const page = await createAssignmentPage({
       assignmentId: request.params.id,

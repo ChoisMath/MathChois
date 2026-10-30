@@ -11,6 +11,10 @@ export function pdfFieldsError(body: { pdfUrl?: unknown; pdfPage?: unknown }): s
   if (typeof body.pdfUrl !== 'string' || !body.pdfUrl.startsWith(PDF_URL_PREFIX)) {
     return `pdfUrl은 ${PDF_URL_PREFIX} 로 시작해야 합니다.`;
   }
+  // 접두사 뒤에서 '..' 로 다른 버킷으로 빠져나가는 경로 차단
+  if (body.pdfUrl.split('/').includes('..')) {
+    return 'pdfUrl에 .. 경로를 쓸 수 없습니다.';
+  }
   if (typeof body.pdfPage !== 'number' || !Number.isInteger(body.pdfPage) || body.pdfPage < 1) {
     return 'pdfPage는 1 이상의 정수여야 합니다.';
   }

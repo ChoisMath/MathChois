@@ -75,11 +75,11 @@ export async function pageRoutes(app: FastifyInstance) {
       fromVisualizationId?: string; pageType?: string; whiteboardTemplate?: string | null; position?: number;
     };
     const isWhiteboard = pageType === 'whiteboard';
+    const pdfError = pdfFieldsError({ pdfUrl, pdfPage });
+    if (pdfError) return reply.status(400).send({ error: pdfError });
     if (!imageUrl && !videoUrl && !htmlUrl && !pdfUrl && !aiProblemId && !fromVisualizationId && !isWhiteboard) {
       return reply.status(400).send({ error: 'imageUrl, videoUrl, htmlUrl, pdfUrl, aiProblemId, fromVisualizationId, or pageType=whiteboard is required' });
     }
-    const pdfError = pdfFieldsError({ pdfUrl, pdfPage });
-    if (pdfError) return reply.status(400).send({ error: pdfError });
     if (pageType != null && !isWhiteboard) {
       return reply.status(400).send({ error: 'Unknown pageType' });
     }

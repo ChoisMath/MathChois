@@ -1,5 +1,6 @@
 import { eq, and, or, inArray, desc, sql, ne } from 'drizzle-orm';
 import { db } from '../config/database.js';
+import { collectFileUrls } from '../utils/fileUrls.js';
 import {
   assignments, assignmentPages, assignmentSubmissions,
   assignmentNotes, assignmentTeacherComments, assignmentSubmissionFiles,
@@ -79,16 +80,6 @@ export async function updateAssignment(id: string, data: {
 /** 과제 삭제 */
 export async function deleteAssignment(id: string) {
   await db.delete(assignments).where(eq(assignments.id, id));
-}
-
-/** 행들의 imageUrl·pdfUrl 값을 합쳐 null 제거·중복 제거 */
-function collectFileUrls(rows: { imageUrl: string | null; pdfUrl: string | null }[]): string[] {
-  const urls = new Set<string>();
-  for (const r of rows) {
-    if (r.imageUrl) urls.add(r.imageUrl);
-    if (r.pdfUrl) urls.add(r.pdfUrl);
-  }
-  return [...urls];
 }
 
 /** 과제 페이지의 파일 URL 목록 (imageUrl + pdfUrl, 중복 제거) */

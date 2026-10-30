@@ -1,6 +1,7 @@
 import { eq, and, or, count, desc, ne, inArray } from 'drizzle-orm';
 import type { ClassroomColor } from '@mathchois/shared';
 import { db } from '../config/database.js';
+import { collectFileUrls } from '../utils/fileUrls.js';
 import { classrooms, classroomMembers, profiles, chapters, pages, assignments, assignmentPages } from '../db/schema.js';
 
 /** 6자리 랜덤 클래스 코드 생성 */
@@ -206,16 +207,6 @@ export async function isClassroomOwner(classroomId: string, teacherId: string): 
     .where(and(eq(classrooms.id, classroomId), eq(classrooms.teacherId, teacherId)))
     .limit(1);
   return rows.length > 0;
-}
-
-/** 행들의 imageUrl·pdfUrl 값을 합쳐 null 제거·중복 제거 */
-function collectFileUrls(rows: { imageUrl: string | null; pdfUrl: string | null }[]): string[] {
-  const urls = new Set<string>();
-  for (const r of rows) {
-    if (r.imageUrl) urls.add(r.imageUrl);
-    if (r.pdfUrl) urls.add(r.pdfUrl);
-  }
-  return [...urls];
 }
 
 /** 교실의 모든 페이지 파일 URL 수집 (챕터 페이지 + 과제 페이지의 imageUrl·pdfUrl, 중복 제거) */

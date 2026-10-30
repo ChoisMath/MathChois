@@ -14,4 +14,7 @@ describe('pdfFieldsError', () => {
     expect(pdfFieldsError({ pdfUrl: url, pdfPage: 0 })).toBeTypeOf('string');
     expect(pdfFieldsError({ pdfUrl: '/api/files/chapter-pages/x.pdf', pdfPage: 1 })).toBeTypeOf('string');
   });
+  it('rejects a pdfUrl that escapes the bucket with a .. segment', () => {
+    expect(pdfFieldsError({ pdfUrl: '/api/files/chapter-pdfs/../videos/x.mp4', pdfPage: 1 })).toBeTypeOf('string');
+  });
 });
