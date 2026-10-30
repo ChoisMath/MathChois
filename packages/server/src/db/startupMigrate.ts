@@ -162,6 +162,13 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
   await pgClient`CREATE UNIQUE INDEX IF NOT EXISTS uq_video_comment_reads_cv_user ON video_comment_reads (classroom_video_id, user_id)`;
   log.info('startup migration: video_progress / video_comment_reads ensured');
 
+  // ─── PDF 교재 페이지 (한 PDF 를 페이지마다 pdf_url + pdf_page 로 참조) ───
+  await pgClient`ALTER TABLE pages ADD COLUMN IF NOT EXISTS pdf_url text`;
+  await pgClient`ALTER TABLE pages ADD COLUMN IF NOT EXISTS pdf_page integer`;
+  await pgClient`ALTER TABLE assignment_pages ADD COLUMN IF NOT EXISTS pdf_url text`;
+  await pgClient`ALTER TABLE assignment_pages ADD COLUMN IF NOT EXISTS pdf_page integer`;
+  log.info('startup migration: pdf_url/pdf_page ensured');
+
   // ─── 화이트보드 (모둠 공유 보드) ───
   await pgClient`ALTER TABLE pages ADD COLUMN IF NOT EXISTS page_type text`;
   await pgClient`ALTER TABLE pages ADD COLUMN IF NOT EXISTS whiteboard_template text`;

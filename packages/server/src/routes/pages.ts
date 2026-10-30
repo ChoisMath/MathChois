@@ -13,6 +13,9 @@ import {
 } from '../services/page.service.js';
 import { isLinkedChapter } from '../services/chapter.service.js';
 import { isValidPageVideoUrl, INVALID_VIDEO_URL_MESSAGE } from '../utils/videoUrl.js';
+import { pdfFieldsError } from '../utils/pageBody.js';
+
+type BulkPageItem = { imageUrl?: string; videoUrl?: string; htmlUrl?: string; pdfUrl?: string; pdfPage?: number; position: number };
 
 /** 화이트보드 템플릿 key (클라이언트 lib/whiteboardTemplates.js 의 key 형식) */
 const templateKeySchema = z.string().regex(/^[a-z0-9-]+$/).max(40).nullable();
@@ -31,7 +34,7 @@ export async function pageRoutes(app: FastifyInstance) {
 
   app.post<{
     Params: { chapterId: string };
-    Body: { imageUrl?: string; videoUrl?: string; htmlUrl?: string; position?: number } | { pages: { imageUrl?: string; videoUrl?: string; htmlUrl?: string; position: number }[] };
+    Body: { imageUrl?: string; videoUrl?: string; htmlUrl?: string; pdfUrl?: string; pdfPage?: number; position?: number } | { pages: BulkPageItem[] };
   }>('/api/chapters/:chapterId/pages', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
@@ -45,15 +48,21 @@ export async function pageRoutes(app: FastifyInstance) {
 
     // 배치 삽입
     if (Array.isArray(body.pages)) {
-      const bulk = body.pages as { imageUrl?: string; videoUrl?: string; htmlUrl?: string; position: number }[];
+      const bulk = body.pages as BulkPageItem[];
       if (bulk.some((pg) => pg.videoUrl != null && !isValidPageVideoUrl(pg.videoUrl))) {
         return reply.status(400).send({ error: INVALID_VIDEO_URL_MESSAGE });
+      }
+      for (const pg of bulk) {
+        const pdfError = pdfFieldsError(pg);
+        if (pdfError) return reply.status(400).send({ error: pdfError });
       }
       const items = bulk.map((pg) => ({
         chapterId,
         imageUrl: pg.imageUrl ?? null,
         videoUrl: pg.videoUrl ?? null,
         htmlUrl: pg.htmlUrl ?? null,
+        pdfUrl: pg.pdfUrl ?? null,
+        pdfPage: pg.pdfPage ?? null,
         position: pg.position,
       }));
       const created = await createPages(items);
@@ -61,14 +70,16 @@ export async function pageRoutes(app: FastifyInstance) {
     }
 
     // 단일 삽입
-    const { imageUrl, videoUrl, htmlUrl, aiProblemId, fromVisualizationId, pageType, whiteboardTemplate, position } = body as {
-      imageUrl?: string; videoUrl?: string; htmlUrl?: string; aiProblemId?: string;
+    const { imageUrl, videoUrl, htmlUrl, pdfUrl, pdfPage, aiProblemId, fromVisualizationId, pageType, whiteboardTemplate, position } = body as {
+      imageUrl?: string; videoUrl?: string; htmlUrl?: string; pdfUrl?: string; pdfPage?: number; aiProblemId?: string;
       fromVisualizationId?: string; pageType?: string; whiteboardTemplate?: string | null; position?: number;
     };
     const isWhiteboard = pageType === 'whiteboard';
-    if (!imageUrl && !videoUrl && !htmlUrl && !aiProblemId && !fromVisualizationId && !isWhiteboard) {
-      return reply.status(400).send({ error: 'imageUrl, videoUrl, htmlUrl, aiProblemId, fromVisualizationId, or pageType=whiteboard is required' });
+    if (!imageUrl && !videoUrl && !htmlUrl && !pdfUrl && !aiProblemId && !fromVisualizationId && !isWhiteboard) {
+      return reply.status(400).send({ error: 'imageUrl, videoUrl, htmlUrl, pdfUrl, aiProblemId, fromVisualizationId, or pageType=whiteboard is required' });
     }
+    const pdfError = pdfFieldsError({ pdfUrl, pdfPage });
+    if (pdfError) return reply.status(400).send({ error: pdfError });
     if (pageType != null && !isWhiteboard) {
       return reply.status(400).send({ error: 'Unknown pageType' });
     }
@@ -79,7 +90,7 @@ export async function pageRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: INVALID_VIDEO_URL_MESSAGE });
     }
     const page = await createPage({
-      chapterId, imageUrl, videoUrl, htmlUrl, aiProblemId, fromVisualizationId, position,
+      chapterId, imageUrl, videoUrl, htmlUrl, pdfUrl, pdfPage, aiProblemId, fromVisualizationId, position,
       pageType: isWhiteboard ? 'whiteboard' : null,
       whiteboardTemplate: isWhiteboard ? (whiteboardTemplate ?? null) : null,
     });

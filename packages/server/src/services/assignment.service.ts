@@ -1,4 +1,4 @@
-import { eq, and, inArray, desc, sql, ne } from 'drizzle-orm';
+import { eq, and, or, inArray, desc, sql, ne } from 'drizzle-orm';
 import { db } from '../config/database.js';
 import {
   assignments, assignmentPages, assignmentSubmissions,
@@ -81,13 +81,23 @@ export async function deleteAssignment(id: string) {
   await db.delete(assignments).where(eq(assignments.id, id));
 }
 
-/** 과제 페이지의 이미지 URL 목록 */
-export async function getAssignmentPageImageUrls(assignmentId: string): Promise<string[]> {
+/** 행들의 imageUrl·pdfUrl 값을 합쳐 null 제거·중복 제거 */
+function collectFileUrls(rows: { imageUrl: string | null; pdfUrl: string | null }[]): string[] {
+  const urls = new Set<string>();
+  for (const r of rows) {
+    if (r.imageUrl) urls.add(r.imageUrl);
+    if (r.pdfUrl) urls.add(r.pdfUrl);
+  }
+  return [...urls];
+}
+
+/** 과제 페이지의 파일 URL 목록 (imageUrl + pdfUrl, 중복 제거) */
+export async function getAssignmentPageFileUrls(assignmentId: string): Promise<string[]> {
   const rows = await db
-    .select({ imageUrl: assignmentPages.imageUrl })
+    .select({ imageUrl: assignmentPages.imageUrl, pdfUrl: assignmentPages.pdfUrl })
     .from(assignmentPages)
     .where(eq(assignmentPages.assignmentId, assignmentId));
-  return rows.map((r) => r.imageUrl).filter((url): url is string => url !== null);
+  return collectFileUrls(rows);
 }
 
 /** 과제 소유자 확인 */
@@ -126,6 +136,8 @@ export async function createAssignmentPage(data: {
   assignmentId: string;
   imageUrl?: string | null;
   videoUrl?: string | null;
+  pdfUrl?: string | null;
+  pdfPage?: number | null;
   position?: number;
 }) {
   let position = data.position;
@@ -143,6 +155,8 @@ export async function createAssignmentPage(data: {
       assignmentId: data.assignmentId,
       imageUrl: data.imageUrl ?? null,
       videoUrl: data.videoUrl ?? null,
+      pdfUrl: data.pdfUrl ?? null,
+      pdfPage: data.pdfPage ?? null,
       position: position ?? 0,
     })
     .returning();
@@ -179,31 +193,41 @@ export async function createAssignmentPages(items: {
   assignmentId: string;
   imageUrl?: string | null;
   videoUrl?: string | null;
+  pdfUrl?: string | null;
+  pdfPage?: number | null;
   position: number;
 }[]) {
   if (items.length === 0) return [];
   return db
     .insert(assignmentPages)
-    .values(items)
+    .values(items.map((it) => ({
+      assignmentId: it.assignmentId,
+      imageUrl: it.imageUrl ?? null,
+      videoUrl: it.videoUrl ?? null,
+      pdfUrl: it.pdfUrl ?? null,
+      pdfPage: it.pdfPage ?? null,
+      position: it.position,
+    })))
     .returning();
 }
 
-/** 특정 URL이 다른 과제에서도 사용되는지 확인 (orphan 체크) */
-export async function findSharedAssignmentImageUrls(
+/** 주어진 URL 중 다른 과제의 imageUrl·pdfUrl 에서도 쓰이는 것 (orphan 체크) */
+export async function findSharedAssignmentFileUrls(
   urls: string[],
   excludeAssignmentId: string,
 ): Promise<string[]> {
   if (urls.length === 0) return [];
   const rows = await db
-    .select({ imageUrl: assignmentPages.imageUrl })
+    .select({ imageUrl: assignmentPages.imageUrl, pdfUrl: assignmentPages.pdfUrl })
     .from(assignmentPages)
     .where(
       and(
-        inArray(assignmentPages.imageUrl, urls),
+        or(inArray(assignmentPages.imageUrl, urls), inArray(assignmentPages.pdfUrl, urls)),
         ne(assignmentPages.assignmentId, excludeAssignmentId),
       ),
     );
-  return rows.map((r) => r.imageUrl).filter((url): url is string => url !== null);
+  const wanted = new Set(urls);
+  return collectFileUrls(rows).filter((url) => wanted.has(url));
 }
 
 // ─── Submissions ────────────────────────────────
