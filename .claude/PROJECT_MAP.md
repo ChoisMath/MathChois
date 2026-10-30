@@ -73,7 +73,7 @@ packages/
 │                               #   groupAssign.js(모둠 자동 배분/이동), whiteboardTemplates.js(템플릿 34종 skeleton, 3200×1800), whiteboardTemplateBuild.js(convertToExcalidrawElements + groupId),
 │                               #   whiteboardExport.js(발표 영역 안내선·범위 계산, 순수), whiteboardExportBrowser.js(썸네일/PNG/PDF — Excalidraw import), whiteboardImage.js(축소 업로드·파일 ref↔dataURL·커서 색),
 │                               #   pdfjs.js(pdf.js 지연 로더 — legacy 빌드, 앱은 pdfjs-dist 를 직접 import 하지 않음), pdfLayerMath.js(레이어 좌표·렌더 계획 순수 함수),
-│                               #   pdfDocCache.js(문서 LRU 2개 + pin), pdfRaster.js(쪽 → JPEG dataURL), pdfThumbCache.js(썸네일 LRU),
+│                               #   pdfDocCache.js(문서 LRU 2개 + pin), pdfRaster.js(쪽 → JPEG dataURL), pdfThumbCache.js(썸네일 LRU — 개수·바이트 한도, bucketWidth),
 │                               #   pdfImport.js(PDF 검사 — 100MB·500쪽·암호·손상 메시지, 쪽 위치 배치), pageUpload.js(편집기 이미지·PDF 업로드 공용 흐름),
 │                               #   pageStorage.js(페이지 삭제 시 지울 파일 — 공유 PDF 는 마지막 쪽에서만), pdfBackground.js(내보내기 배경 서술자 — 이미지 / PDF 래스터) (*.test.js = Vitest)
 └── shared/src/
@@ -127,7 +127,8 @@ packages/
 - **등록**(`lib/pageUpload.js` + `lib/pdfImport.js`): 브라우저에서 pdf.js 로 검사(100MB·500쪽·암호·손상 → 안내 메시지) → `chapter-pdfs` 버킷에 1회 업로드 → `POST …/pages { pages }` 배치 생성(이미지와 섞여 파일명 순, 연속 position). 서버는 PDF 를 열지 않는다(`utils/uploadPolicy.ts` MIME·용량, `utils/pageBody.ts` 필드 쌍 검증). 페이지 삭제는 같은 `pdfUrl` 을 쓰는 다른 페이지가 남아 있으면 파일을 지우지 않는다(`lib/pageStorage.js`, 서버 챕터/과제/학급 정리는 `utils/fileUrls.ts`).
 - **뷰어**(`usePdfBackground` + `components/study/PdfPageLayer.jsx`): PDF 쪽에는 배경 image element 가 **없다**. 레이어가 Excalidraw 아래(z-0, `pointer-events:none`)에서 `onChange` 뷰포트를 따라가며 마지막 비트맵을 CSS transform 으로 옮기고, 뷰포트가 멈추면 **보이는 clip 만** zoom×DPR 로 다시 렌더한다. 종이 사각형 = 노트의 `bgPosition`(데이터 계약 그대로 — ③⑤는 학생의 `bgPosition`). 문서·쪽 로드 실패 시 Excalidraw 위(zIndex 4) 오류 카드 + "다시 시도".
 - **pdf.js**(`lib/pdfjs.js`): `pdfjs-dist` 6.4.299 를 **legacy 빌드**로 지연 로드(모던 빌드는 `Map.prototype.getOrInsertComputed` 를 요구해 Chromium 141·태블릿 브라우저에서 렌더 실패). cmaps/standard_fonts 는 `vite-plugin-pdfjs-assets.js` 가 `/pdfjs/` 로 제공. 문서는 `lib/pdfDocCache.js` **LRU 2개**로 공유하고 화면에 그린 문서는 **pin** 해 썸네일·이웃 프리패치가 밀어내지 못하게 한다.
-- **썸네일·내보내기**: 래스터 보관 없이 pdf.js 로 그린다 — `PageThumb`/`PdfPageThumb`(보일 때 JPEG dataURL, `pdfThumbCache`), PDF 내보내기 배경은 `lib/pdfBackground.js` → `pdfRaster.js`.
+- **PDF 받기**: pdf.js 기본값(스트리밍 `fetch` 지원 시) — 처음 열 때 **파일 전체를 한 요청으로 점진적으로** 받고(다 받기 전 첫 쪽 렌더), 이후는 `immutable` 캐시. Range 206 은 스트림보다 앞선 빈 구간 요청에만 쓰인다("필요한 범위만 받는다"가 아님). 지연 범위 모드(`disableStream`+`disableAutoFetch`)는 태블릿 미측정이라 미적용. `GET /api/files/*` 는 **인증 없음**(모든 버킷 공통, 기존) — 뷰어는 URL 만으로 받는다.
+- **썸네일·내보내기**: 래스터 보관 없이 pdf.js 로 그린다 — `PageThumb`/`PdfPageThumb`(보일 때 JPEG dataURL, 폭은 120px 단위로 올려(`bucketWidth`) 키·래스터, `pdfThumbCache` = 200개·24MB 이중 한도 LRU), PDF 내보내기 배경은 `lib/pdfBackground.js` → `pdfRaster.js`.
 - 테스트: `npm test -w @mathchois/client`(레이어 수학·문서 캐시·검사·업로드 흐름·삭제 판정·래스터·내보내기 배경), `npm test -w @mathchois/server`(uploadPolicy·pageBody), `packages/client/e2e/pdf-pages.smoke.mjs`(Chromium — 등록·썸네일·레이어 픽셀·줌 재렌더·필기 저장·가로 쪽·오류 카드 재시도·공유 파일 삭제 보호; 준비 `packages/server/scripts/pdf-e2e-setup.ts`, `LANG=C.UTF-8` 필요).
 
 ## AI 수학 코칭 페이지 (#3, `feat/ai-coaching-page`)
@@ -213,7 +214,7 @@ packages/
 | classrooms | routes/classrooms.ts | `GET/POST /classrooms`, `GET /classrooms/:id`, `/:id/members`, 클래스코드 가입. **색 계약**: `POST {name, color?}` — color 생략 시 교사의 가장 적게 쓴 색(`pickLeastUsedColor`), 여섯 색이 아니면 400 `{error:'Invalid color'}`. `PATCH /classrooms/:id {name?, color?}` — 소유 교사만, 본문에서 `name`/`color` 만 반영(`teacherId`·`classCode` 등은 무시), 잘못된 색 400 `Invalid color`, 바꿀 것이 없으면 400 `Nothing to update`. 목록·상세 응답에 `color` 포함 |
 | chapters | routes/chapters.ts | `GET /classrooms/:cid/chapters`, `GET/PATCH/DELETE /chapters/:id` |
 | pages | routes/pages.ts | `GET /chapters/:chapterId/pages`, `POST` 생성(배치 `{ pages }` 지원, **`pdfUrl`+`pdfPage`** 쌍 — `utils/pageBody.ts`; `htmlUrl`/`aiProblemId`/**`fromVisualizationId`**(시각화자료 복제 삽입) 허용; `videoUrl` 은 YouTube 또는 `/api/files/videos/library/…` 만 — `utils/videoUrl.ts`, 아니면 400), `PATCH /pages/:id`, `DELETE /pages/:id` |
-| storage | routes/storage.ts | `POST /files/upload`(+multiple; `whiteboard-files` 버킷은 학생 허용·래스터 이미지만·2MB, `chapter-pdfs` 는 교사 전용·PDF 만·100MB — `utils/uploadPolicy.ts`), `GET /files/*`(**스트리밍 + HTTP Range 206/416 + HEAD** — 영상 탐색/배속용, 전체 Buffer 읽기 없음), `DELETE /files/*` |
+| storage | routes/storage.ts | `POST /files/upload`(+multiple; `whiteboard-files` 버킷은 학생 허용·래스터 이미지만·2MB, `chapter-pdfs` 는 교사 전용·PDF 만·100MB — `utils/uploadPolicy.ts`), `GET /files/*`(**인증 없음**, **스트리밍 + HTTP Range 206/416 + HEAD** — 영상 탐색/배속용, 전체 Buffer 읽기 없음), `DELETE /files/*` |
 | posts | routes/posts.ts | `GET /posts`, `GET /classrooms/:cid/posts`, `GET/DELETE /posts/:id` (+파일) |
 | assignments | routes/assignments.ts | `GET /classrooms/:cid/assignments`, `GET/DELETE /assignments/:id`, `/:id/pages`, `/:id/submissions` |
 | notes | routes/notes.ts | ①② 및 ④ 필기 (위 표 참조) + `student-summary`, `student-notes-for/:studentId` |

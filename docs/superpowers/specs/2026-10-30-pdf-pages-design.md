@@ -66,8 +66,14 @@ assignment_pages
   정책 판정은 순수 함수 `utils/uploadPolicy.ts`의 `checkUploadPolicy(bucket, mimetype, size)`로 뽑아내
   테스트한다(기존 HTML 전용·화이트보드 규칙도 이 함수로 옮긴다).
 - 업로드는 기존 `POST /api/files/upload`(전체 버퍼링)를 그대로 쓴다. 100MB 상한 안에서는 허용 범위다.
-- 서빙은 기존 `GET/HEAD /api/files/*`를 그대로 쓴다. 이미 `Accept-Ranges: bytes`와 Range 206을
-  지원하므로 pdf.js가 **필요한 바이트 범위만** 요청한다. 같은 origin이라 쿠키 인증이 그대로 붙는다.
+- 서빙은 기존 `GET/HEAD /api/files/*`를 그대로 쓴다. pdf.js 6 은 브라우저가 스트리밍 `fetch`를 지원하면
+  처음 열 때 **PDF 전체를 한 요청으로 점진적으로 받는다**(다 받기 전에 첫 쪽이 그려진다 — `disableAutoFetch`는
+  스트리밍을 못 쓸 때만 강제로 켜진다). 받은 파일은 `Cache-Control: immutable`로 이후 다시 받지 않는다.
+  서버의 `Accept-Ranges: bytes`·Range 206은 스트림보다 앞선 쪽이 필요할 때 그 빈 구간을 채우는 요청에만 쓰인다.
+  필요한 범위만 받는 지연 모드(`disableStream: true, disableAutoFetch: true`)도 가능하지만 태블릿에서 측정하지
+  않았으므로 기본값을 유지한다.
+- `GET /api/files/*`에는 **인증이 없다**(모든 버킷 공통, 기존 동작). 뷰어는 PDF를 URL만으로 받는다
+  — 쿠키·토큰이 붙지 않으며, URL을 아는 사람은 누구나 받을 수 있다.
 - 삭제:
   - 페이지 삭제(편집기 `handleDeletePage`): 같은 `pdfUrl`을 참조하는 다른 페이지가 챕터(과제)에 남아
     있으면 PDF 파일은 지우지 않는다. 판정은 순수 함수 `lib/pageStorage.js`의

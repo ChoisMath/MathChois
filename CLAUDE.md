@@ -153,7 +153,10 @@ additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures th
   scenes in memory → single-instance deployment assumption.
 - **PDF pages have no background image element.** `PdfPageLayer` sits under Excalidraw, follows the viewport and
   re-renders only the visible clip; the paper rect is `bgPosition`. pdf.js is loaded from its legacy build (the modern
-  build needs `Map.prototype.getOrInsertComputed`). Spec: `docs/superpowers/specs/2026-10-30-pdf-pages-design.md`.
+  build needs `Map.prototype.getOrInsertComputed`). With default options pdf.js streams the **whole** PDF on first
+  open (first page renders before the download ends; the file is then cached immutable) — HTTP Range only fills gaps
+  ahead of the stream, it is not range-only loading. `GET /api/files/*` is unauthenticated (all buckets), so the
+  viewer fetches the PDF by bare URL. Spec: `docs/superpowers/specs/2026-10-30-pdf-pages-design.md`.
 - **Icon-only buttons** use `components/common/IconButton.jsx` (`label` → `title` + `aria-label`, 44px hit area,
   variants ghost/primary/danger/danger-solid). Icon dictionary and keep-text rules:
   `docs/superpowers/specs/2026-10-20-icon-buttons-design.md`. `DrawingToolbar` keeps its own buttons.
