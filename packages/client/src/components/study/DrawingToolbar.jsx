@@ -30,7 +30,7 @@ const SHAPE_TOOL_ICONS = {
 const SHAPE_TOOLS    = ['rectangle', 'ellipse', 'triangle'];
 const SAVEABLE_TOOLS = ['freedraw', 'selection', 'text', 'line', 'rectangle', 'ellipse', 'triangle'];
 
-function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked, onToggleScreenLock, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, onActiveToolChange }) {
+function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked, onToggleScreenLock, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, pdfMode = false, onActiveToolChange }) {
   const [activeTool, setActiveTool]       = useState('freedraw');
   const [color, setColor]                 = useState('#000000');
   const [strokeWidth, setStrokeWidth]     = useState(() =>
@@ -550,8 +550,8 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, screenLocked
         <Pointer className="h-4 w-4" />
       </button>
 
-      {/* 이미지 이동 (배경 이미지 페이지 전용) */}
-      {!htmlMode && (
+      {/* 이미지 이동 (배경 이미지 페이지 전용 — PDF 종이는 Excalidraw 요소가 아니라 끌 수 없음) */}
+      {!htmlMode && !pdfMode && (
       <button onClick={handleToggleImageMove}
         title={imageMoveMode ? '이미지 이동 완료 (잠금)' : '이미지 이동 — 배경 이미지를 드래그로 이동'}
         className={`p-1.5 rounded-md transition-colors cursor-pointer ${
