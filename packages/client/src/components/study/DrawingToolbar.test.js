@@ -50,7 +50,7 @@ describe('DrawingToolbar — 순서 · 형광펜 · 색상 슬롯 · 두께', ()
       'slot-0', 'slot-1', 'slot-2', 'slot-3', 'slot-4', 'palette',
       'width',
       'eraser', 'image_move', 'image_reload', 'image_add',
-      'line', 'text', 'shapes', 'selection',
+      'line', 'text', 'shapes', 'lasso',
       'clear', 'settings',
     ]);
     expect(mount.querySelector('[title^="스포이드"]')).toBeNull();      // 스포이드·화면고정은 바에서 빠짐
@@ -116,6 +116,13 @@ describe('DrawingToolbar — 순서 · 형광펜 · 색상 슬롯 · 두께', ()
     expect(props.onActiveToolChange).toHaveBeenLastCalledWith('highlighter'); // 형광펜 유지
     click(btn('freedraw'));
     expect(lastAppState().currentItemStrokeColor).toBe(DEFAULT_COLOR_SLOTS[1]); // 펜 색 복구
+  });
+
+  it('올가미: Excalidraw 는 selection 도구, 논리 도구는 lasso', () => {
+    render();
+    click(btn('lasso'));
+    expect(api.setActiveTool).toHaveBeenLastCalledWith({ type: 'selection' });
+    expect(props.onActiveToolChange).toHaveBeenLastCalledWith('lasso');
   });
 
   it('지우개 중 색 칸을 누르면 펜으로 돌아간다 (기존 동작)', () => {

@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  MousePointer, Pen, Highlighter, Type, Square, Circle, Triangle,
+  LassoSelect, Pen, Highlighter, Type, Square, Circle, Triangle,
   Eraser, Minus, Trash2, Plus, Palette,
   SlidersHorizontal, Hand, Shapes, ChevronDown, ImagePlus, Dot,
   RefreshCw, Undo2, Redo2, Pointer,
@@ -20,7 +20,7 @@ import ColorSlotsModal from './ColorSlotsModal';
  * 순서·형광펜·색상 슬롯·두께 규칙: docs/superpowers/specs/2026-10-30-drawing-toolbar-reorg-highlighter-design.md
  *
  * 논리 도구(activeTool)와 Excalidraw 도구는 다르다: 형광펜(highlighter)·삼각형(triangle)은 Excalidraw 쪽이 freedraw 이고,
- * 레이저포인터·이미지이동은 selection 이다. 형광펜은 currentItemOpacity 40 + 전용 색·두께, 펜으로 돌아오면 100 + 펜 색·두께.
+ * 올가미(lasso, hooks/useLasso.js)·레이저포인터·이미지이동은 selection 이다. 형광펜은 currentItemOpacity 40 + 전용 색·두께, 펜으로 돌아오면 100 + 펜 색·두께.
  * 화면 고정 버튼은 여기 없다 — components/study/ScreenLockFab.jsx (필기 영역 우측 상단 플로팅).
  */
 
@@ -31,7 +31,7 @@ const SHAPE_TOOL_ICONS = {
 };
 
 const SHAPE_TOOLS    = ['rectangle', 'ellipse', 'triangle'];
-const SAVEABLE_TOOLS = ['freedraw', 'highlighter', 'selection', 'text', 'line', 'rectangle', 'ellipse', 'triangle'];
+const SAVEABLE_TOOLS = ['freedraw', 'highlighter', 'lasso', 'text', 'line', 'rectangle', 'ellipse', 'triangle'];
 /** 색·두께를 공유하는 "잉크" 도구: 형광펜이면 형광펜 설정, 그 외는 펜 설정 */
 const inkToolOf = (tool) => (tool === 'highlighter' ? 'highlighter' : 'freedraw');
 
@@ -337,7 +337,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
       return;
     }
 
-    if (type === 'laser_pointer') {
+    if (type === 'laser_pointer' || type === 'lasso') {
       api?.setActiveTool({ type: 'selection' });
     } else {
       api?.setActiveTool({ type });
@@ -355,7 +355,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
     }
     setInk({ penColor: hex });
     saveToolColor('freedraw', hex);
-    if (['eraser', 'selection', 'image_move'].includes(tool)) {
+    if (['eraser', 'lasso', 'image_move'].includes(tool)) {
       applyTool('freedraw');
       return;
     }
@@ -660,7 +660,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
           ))}
         </>
       )}
-      {toolBtn('selection', MousePointer, '선택')}
+      {toolBtn('lasso', LassoSelect, '올가미 선택 — 둘러싼 필기·이미지 선택')}
       <Divider />
 
       {/* ⑥ 전체 지우기 */}

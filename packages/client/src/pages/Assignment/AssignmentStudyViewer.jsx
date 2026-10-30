@@ -19,11 +19,14 @@ import {
   BG_ELEMENT_ID, BG_FILE_ID,
   ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE,
   fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages,
-  calculateBgPosition, EXCALIDRAW_UI_OPTIONS, TOUCH_CSS, waitForLayout,
+  EXCALIDRAW_UI_OPTIONS, TOUCH_CSS, waitForLayout,
   clearImageCacheForUrl,
 } from '../../lib/excalidrawUtils';
+import { resolveBgLayout, bgViewportAppState } from '../../lib/bgFit';
+import { recordBgLoad } from '../../lib/bgLoadLog';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import { useWetInk } from '../../hooks/useWetInk';
+import { useLasso } from '../../hooks/useLasso';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
 import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
 import { useExcalidrawUndo } from '../../hooks/useExcalidrawUndo';
@@ -64,14 +67,11 @@ function TeacherNotesModal({ page, onClose }) {
       const { dataUrl, mimeType } = await fetchAsDataUrl(page.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
 
-      let bgW, bgH, bgX, bgY;
-      if (dbBgPosition && dbBgPosition.width > 10 && dbBgPosition.height > 10) {
-        ({ width: bgW, height: bgH, x: bgX, y: bgY } = dbBgPosition);
-      } else {
-        const { width: W, height: H } = await waitForLayout(containerRef.current);
-        const pos = calculateBgPosition(W, H, iW, iH);
-        bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
-      }
+      const { width: W, height: H } = await waitForLayout(containerRef.current);
+      /* 교사 저장값(비율 보정) 또는 계산값 + 화면 맞춤 뷰포트 (lib/bgFit.js) */
+      const bgLayout = resolveBgLayout({ saved: dbBgPosition, imageW: iW, imageH: iH, containerWidth: W, containerHeight: H });
+      const { x: bgX, y: bgY, width: bgW, height: bgH } = bgLayout.bg;
+      recordBgLoad(bgLayout.diag);
 
       bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
       apiRef.addFiles([{ id: '__bg_file__', dataURL: dataUrl, mimeType, created: Date.now() }]);
@@ -81,7 +81,7 @@ function TeacherNotesModal({ page, onClose }) {
       /* addFiles의 React 상태 커밋 후 updateScene — 별도 렌더 사이클에서 실행해야 이미지가 표시됨 */
       await new Promise((r) => requestAnimationFrame(r));
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
-      apiRef.updateScene({ elements: [bgEl, ...noteElements] });
+      apiRef.updateScene({ appState: bgViewportAppState(bgLayout.viewport), elements: [bgEl, ...noteElements] });
     } catch (err) {
       console.error('교사 필기 모달 bg 로드 실패:', err);
       apiRef.updateScene({ elements: noteElements });
@@ -204,6 +204,8 @@ const AssignmentStudyViewer = () => {
 
   const { triggerPalmRejectionWarmup, isGesturingRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef, onUserDrawStart: handleUserDrawStart });
   useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef });
+  const lassoActiveRef = useRef(false); // 논리 도구가 올가미인지 (useLasso 가로채기 게이트)
+  useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: drawModeRef, lassoActiveRef, excludePrefixes: [TEACHER_COMMENT_PREFIX] });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [TEACHER_COMMENT_PREFIX] });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [TEACHER_COMMENT_PREFIX] });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
@@ -539,16 +541,12 @@ const AssignmentStudyViewer = () => {
     try {
       const { dataUrl, mimeType } = await fetchAsDataUrl(page.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
-      let bgX, bgY, bgW, bgH;
-      const saved = bgPositionRef.current;
-      if (saved && saved.width > 10 && saved.height > 10) {
-        ({ x: bgX, y: bgY, width: bgW, height: bgH } = saved);
-      } else {
-        const { width: W, height: H } = await waitForLayout(containerRef.current);
-        const pos = calculateBgPosition(W, H, iW, iH);
-        bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
-        bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
-      }
+      const { width: W, height: H } = await waitForLayout(containerRef.current);
+      /* 저장값(비율 보정) 또는 계산값 + 화면 맞춤 뷰포트 (lib/bgFit.js) */
+      const bgLayout = resolveBgLayout({ saved: bgPositionRef.current, imageW: iW, imageH: iH, containerWidth: W, containerHeight: H });
+      const { x: bgX, y: bgY, width: bgW, height: bgH } = bgLayout.bg;
+      bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
+      recordBgLoad(bgLayout.diag);
       await new Promise((r) => setTimeout(r, 0));
       apiRef.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);
       const userFilesList = Object.values(savedFilesRef.current);
@@ -558,6 +556,7 @@ const AssignmentStudyViewer = () => {
       await new Promise((r) => requestAnimationFrame(r));
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
       apiRef.updateScene({
+        appState: bgViewportAppState(bgLayout.viewport),
         elements: [bgEl, ...noteElementsRef.current, ...teacherCommentsRef.current],
         commitToHistory: false,
       });
@@ -667,13 +666,15 @@ const AssignmentStudyViewer = () => {
       const { dataUrl, mimeType } = await fetchAsDataUrl(page.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
       const { width: W, height: H } = await waitForLayout(containerRef.current);
-      const pos = calculateBgPosition(W, H, iW, iH);
+      const bgLayout = resolveBgLayout({ saved: null, imageW: iW, imageH: iH, containerWidth: W, containerHeight: H });
+      const pos = bgLayout.bg;
+      recordBgLoad(bgLayout.diag);
       bgPositionRef.current = { x: pos.x, y: pos.y, width: pos.width, height: pos.height };
       excApi.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);
       await new Promise(r => requestAnimationFrame(r));
       const preserved = excApi.getSceneElements().filter(el => el.id !== BG_ELEMENT_ID);
       const bgEl = createBgElement(pos.x, pos.y, pos.width, pos.height);
-      excApi.updateScene({ elements: [bgEl, ...preserved], commitToHistory: false });
+      excApi.updateScene({ appState: bgViewportAppState(bgLayout.viewport), elements: [bgEl, ...preserved], commitToHistory: false });
     } catch (err) {
       console.error('이미지 리로드 실패:', err);
     }
@@ -900,7 +901,7 @@ const AssignmentStudyViewer = () => {
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
           onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
           onReloadImage={handleReloadImage}
-          onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw' || t === 'highlighter'; }}
+          onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw' || t === 'highlighter'; lassoActiveRef.current = t === 'lasso'; }}
           onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
         />
       )}

@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { getToggles, setToggle, subscribeToggles } from '../../lib/penToggles';
 import { usePenDiagnostics } from '../../hooks/usePenDiagnostics';
 import { getPenStrokeSamples } from '../../lib/penSampleLog';
+import { getBgLoad, subscribeBgLoad, formatBgLoad } from '../../lib/bgLoadLog';
 
 /** 최근 펜 획의 원시 샘플(메인/coalesced 좌표·timeStamp)을 JSON 파일로 내려받는다 (iPad: 파일 앱에 저장) */
 function downloadPenSamples() {
@@ -23,6 +24,8 @@ function downloadPenSamples() {
 export default function PenDiagnosticsOverlay({ containerRef }) {
   const [toggles, setToggles] = useState(getToggles());
   useEffect(() => subscribeToggles(setToggles), []);
+  const [bgLoad, setBgLoad] = useState(getBgLoad());
+  useEffect(() => subscribeBgLoad(setBgLoad), []);
   const { events } = usePenDiagnostics({ containerRef, enabled: toggles.diagnostics });
 
   if (!toggles.diagnostics) return null;
@@ -51,6 +54,7 @@ export default function PenDiagnosticsOverlay({ containerRef }) {
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
+      <div className="text-amber-200 mb-1">{formatBgLoad(bgLoad)}</div>
       <div onClick={(ev) => { try { navigator.clipboard?.writeText(dump); } catch { /* clipboard 불가 무시 */ } ev.stopPropagation(); }}>
         {dump || '(이벤트 대기...)'}
       </div>

@@ -58,6 +58,7 @@ packages/
 │       │                       #   useAiHubData(AI활용 허브 데이터 컨텍스트 — access/motion/slide/status/reload/from), useCopyFeedback(복사 단추 상태)
 │       └── lib/                # api.ts, socket.ts, toolUrl.js, excalidrawUtils, pdfDownloader,
 │                               #   inputMode.js, penToggles.js, excalidrawHistory.js, toolPrefs.js(색 슬롯·펜/형광펜 기억·도구바 순서),
+│                               #   lasso.js(올가미 기하), bgFit.js(배경 화면 맞춤·비율 보정), bgLoadLog.js(배경 로드 진단),
 │                               #   wetInkStroke.js(인라인 perfect-freehand + freedraw element 생성),
 │                               #   freedrawResample.js, scribbleDetect.js,
 │                               #   problemContent.js([FIGURE:n] 파서), problems.js(API),
@@ -104,6 +105,8 @@ packages/
 - **도구바 구성(2026-10-30, `docs/superpowers/specs/2026-10-30-drawing-toolbar-reorg-highlighter-design.md`)**: 순서는 `lib/toolPrefs.js` `TOOLBAR_ORDER`(되돌리기 → 펜·형광펜·손가락·레이저 → 색 5칸·🎨 → 두께 → 지우개·이미지이동/새로고침/추가 → 직선·텍스트·도형·선택 → 전체지움 → 설정)가 기준이고 `DrawingToolbar.test.js`가 `data-tb` 순서를 검증한다.
   - **형광펜**(논리 도구 `highlighter`): Excalidraw 는 `freedraw` + `currentItemOpacity: 40`(`HL_OPACITY`) + 전용 색(`mc_hl_color`, 기본 노랑)·두께(`mc_hl_width`, 0.4~3 기본 1.2). 펜으로 돌아오거나 다른 도구로 가면 투명도 100·펜 색 복구. 웻잉크는 `currentItemOpacity` 를 미리보기·commit(`makeFreedrawElement` `opacity`)에 쓰고 반투명 획은 멈춤 도형 보정을 하지 않는다. 뷰어의 `onActiveToolChange` 는 `freedraw`/`highlighter` 둘 다 펜 활성으로 넘긴다. 두께 슬라이더 하나가 켜진 도구의 두께를 보여주고 `onBaseWidthChange` 로 넘긴다(줌 보정은 뷰어 공통).
   - **색상 바로가기 5칸**(`mc_color_slots`, 기본 검정·빨강·파랑·초록·주황, 모두 편집 가능): 칸을 누르면 켜진 도구(펜/형광펜)의 색이 바뀐다. 편집은 🎨 → `ColorSlotsModal`(자주 쓰는 색 격자 `PRESET_COLORS`·네이티브 색상 선택기·HEX·스포이드(`EyeDropper` 없으면 비활성)·기본값 복원). 예전 `mc_custom_colors`(추가 6색)와 `excalidrawUtils` 의 `DEFAULT_COLORS/MAX_CUSTOM_COLORS/TOOLS` 는 제거.
+  - **올가미 선택**(`hooks/useLasso.js` + `lib/lasso.js`, 2026-10-30, `docs/superpowers/specs/2026-10-30-lasso-and-bg-fit-design.md`): Excalidraw 0.18.1 에는 올가미가 없어 도구바의 「선택」을 올가미(`lasso`, lucide `LassoSelect`)로 바꿨다. 웻잉크처럼 window-capture 로 가로채 공유 오버레이 캔버스에 점선을 그리고, 떼면 `lassoSelection`(freedraw/line/arrow 는 점의 50% 이상, 그 외는 bbox 중심; 잠김·배경·제외 접두사 제외; 그룹은 통째로)으로 `selectedElementIds/selectedGroupIds` 를 넣는다. 선택 묶음 화면 bbox(+8px) 안을 누르면 가로채지 않아 Excalidraw 가 이동·크기 조절, 밖은 새 올가미, 탭은 해제. 손가락은 finger 모드에서만, 두 번째 손가락은 취소. 6개 뷰어가 `lassoActiveRef` 로 켠다.
+  - **배경 이미지 화면 맞춤**(`lib/bgFit.js`, 같은 스펙): 노트의 `bgPosition` 은 처음 연 기기 화면 크기의 scene 절대 px 라 다른 기기에서 작게 보였다(열기만 해도 저장됨). 저장값은 유지하고(필기 정렬) 열 때 `resolveBgLayout` → `fitViewportToBg` 로 줌·스크롤을 맞춘다(가로 중앙·위 여백 20). 저장 비율이 이미지 비율과 2% 넘게 다르면 높이만 보정(`fixBgAspect`). 5개 뷰어의 마운트·새로고침·교사필기 모달이 `updateScene({ appState: bgViewportAppState(...), elements })` 로 적용. 진단: `?penlog=1` 오버레이 「배경 이미지」 줄(`lib/bgLoadLog.js`).
   - **화면 고정 버튼은 도구바 밖** `components/study/ScreenLockFab.jsx` — 이미지 페이지 Excalidraw 컨테이너 우측 상단 플로팅(보기 모드·도구바 접힘에도 보임). 영상·HTML 페이지(항상 고정)에는 없음. 6개 뷰어(5 필기 + CoachingViewer) 적용.
 - 입력 모드 게이트(`hooks/useExcalidrawTouch.js` + `lib/inputMode.js`)로 손바닥 연결선(phantom line) 차단. 자체 undo/redo(`hooks/useExcalidrawUndo.js` + `lib/excalidrawHistory.js`). 5개 뷰어 모두 사용.
 - **웻잉크(wet-ink) 펜 렌더링**(`hooks/useWetInk.js` + `lib/wetInkStroke.js`): 진행 중인 펜 획을 가벼운 `<canvas>`에 펜 전속도로 렌더하고 pointerup에서 Excalidraw freedraw element로 commit(→ 기존 저장/동기화/undo). 기본 ON, `?wetink=0`이 기기별 비상 kill switch. 5개 뷰어 + CoachingViewer(`!readOnly`) + HtmlToolOverlay에 통합. 아래 "주의사항"의 웻잉크 항목 참조.

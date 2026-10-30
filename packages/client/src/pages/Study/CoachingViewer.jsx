@@ -15,6 +15,7 @@ import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, TOUCH_CSS, GRID_STYLE, EXCALIDRAW_UI_OPTIONS } from '../../lib/excalidrawUtils';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import { useWetInk } from '../../hooks/useWetInk';
+import { useLasso } from '../../hooks/useLasso';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
 import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
 import { useExcalidrawUndo } from '../../hooks/useExcalidrawUndo';
@@ -75,6 +76,8 @@ export default function CoachingViewer({
   const drawModeRef      = useRef(!readOnly);
   useEffect(() => { drawModeRef.current = !readOnly; }, [readOnly]);
   useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef });
+  const lassoActiveRef = useRef(false); // 논리 도구가 올가미인지 (useLasso 가로채기 게이트)
+  useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: drawModeRef, lassoActiveRef, excludePrefixes: [] });
 
   const [problem, setProblem] = useState(null);
   const [solutionLatex, setSolutionLatex] = useState('');
@@ -519,7 +522,7 @@ export default function CoachingViewer({
       showPanel={showExcalidrawPanel}
       onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
       onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
-      onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw' || t === 'highlighter'; }}
+      onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw' || t === 'highlighter'; lassoActiveRef.current = t === 'lasso'; }}
       onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
     />
   );

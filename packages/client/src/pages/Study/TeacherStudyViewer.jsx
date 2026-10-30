@@ -22,14 +22,17 @@ import {
   getImageNaturalSize,
   createBgElement,
   prefetchImages,
-  calculateBgPosition,
+ 
   EXCALIDRAW_UI_OPTIONS,
   TOUCH_CSS,
   waitForLayout,
   clearImageCacheForUrl,
 } from '../../lib/excalidrawUtils';
+import { resolveBgLayout, bgViewportAppState } from '../../lib/bgFit';
+import { recordBgLoad } from '../../lib/bgLoadLog';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import { useWetInk } from '../../hooks/useWetInk';
+import { useLasso } from '../../hooks/useLasso';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
 import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
 import { useExcalidrawUndo } from '../../hooks/useExcalidrawUndo';
@@ -100,6 +103,8 @@ const TeacherStudyViewer = () => {
     if (new URLSearchParams(window.location.search).get('penlog') === '1') setToggle('diagnostics', true);
   }, []);
   useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef });
+  const lassoActiveRef = useRef(false); // 논리 도구가 올가미인지 (useLasso 가로채기 게이트)
+  useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: drawModeRef, lassoActiveRef, excludePrefixes: [] });
   const { checkForScribble } = useScribbleErase({ excalidrawAPIRef });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
@@ -334,16 +339,12 @@ const TeacherStudyViewer = () => {
       const { dataUrl, mimeType } = await fetchAsDataUrl(page.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
 
-      let bgX, bgY, bgW, bgH;
-      const saved = bgPositionRef.current;
-      if (saved && saved.width > 10 && saved.height > 10) {
-        ({ x: bgX, y: bgY, width: bgW, height: bgH } = saved);
-      } else {
-        const { width: W, height: H } = await waitForLayout(containerRef.current);
-        const pos = calculateBgPosition(W, H, iW, iH);
-        bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
-        bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
-      }
+      const { width: W, height: H } = await waitForLayout(containerRef.current);
+      /* 저장값(비율 보정) 또는 계산값 + 화면 맞춤 뷰포트 (lib/bgFit.js) */
+      const bgLayout = resolveBgLayout({ saved: bgPositionRef.current, imageW: iW, imageH: iH, containerWidth: W, containerHeight: H });
+      const { x: bgX, y: bgY, width: bgW, height: bgH } = bgLayout.bg;
+      bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
+      recordBgLoad(bgLayout.diag);
 
       /* 캐시된 DataURL은 즉시 반환되어 Excalidraw 초기 렌더 전에 addFiles가 호출될 수 있음.
          한 이벤트 루프 후에 실행하여 Excalidraw가 렌더링 준비를 완료하도록 보장 */
@@ -354,7 +355,7 @@ const TeacherStudyViewer = () => {
       /* addFiles의 React 상태 커밋 후 updateScene — 별도 렌더 사이클에서 실행해야 이미지가 표시됨 */
       await new Promise((r) => requestAnimationFrame(r));
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
-      api.updateScene({ elements: [bgEl, ...noteElementsRef.current], commitToHistory: false });
+      api.updateScene({ appState: bgViewportAppState(bgLayout.viewport), elements: [bgEl, ...noteElementsRef.current], commitToHistory: false });
 
     } catch (err) {
       console.error('배경 이미지 로드 실패:', err);
@@ -392,13 +393,15 @@ const TeacherStudyViewer = () => {
       const { dataUrl, mimeType } = await fetchAsDataUrl(page.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
       const { width: W, height: H } = await waitForLayout(containerRef.current);
-      const pos = calculateBgPosition(W, H, iW, iH);
+      const bgLayout = resolveBgLayout({ saved: null, imageW: iW, imageH: iH, containerWidth: W, containerHeight: H });
+      const pos = bgLayout.bg;
+      recordBgLoad(bgLayout.diag);
       bgPositionRef.current = { x: pos.x, y: pos.y, width: pos.width, height: pos.height };
       excApi.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);
       await new Promise(r => requestAnimationFrame(r));
       const preserved = excApi.getSceneElements().filter(el => el.id !== BG_ELEMENT_ID);
       const bgEl = createBgElement(pos.x, pos.y, pos.width, pos.height);
-      excApi.updateScene({ elements: [bgEl, ...preserved], commitToHistory: false });
+      excApi.updateScene({ appState: bgViewportAppState(bgLayout.viewport), elements: [bgEl, ...preserved], commitToHistory: false });
     } catch (err) {
       console.error('이미지 리로드 실패:', err);
     }
@@ -555,7 +558,7 @@ const TeacherStudyViewer = () => {
               showPanel={showExcalidrawPanel}
               onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
               onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
-              onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw' || t === 'highlighter'; }}
+              onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw' || t === 'highlighter'; lassoActiveRef.current = t === 'lasso'; }}
               onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
               htmlMode
             />
@@ -568,7 +571,7 @@ const TeacherStudyViewer = () => {
             onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
             onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
             onReloadImage={handleReloadImage}
-            onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw' || t === 'highlighter'; }}
+            onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw' || t === 'highlighter'; lassoActiveRef.current = t === 'lasso'; }}
             onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
           />
         ))

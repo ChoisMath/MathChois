@@ -30,7 +30,7 @@ export const TOOLBAR_ORDER = Object.freeze([
   'slot-0', 'slot-1', 'slot-2', 'slot-3', 'slot-4', 'palette',
   'width',
   'eraser', 'image_move', 'image_reload', 'image_add',
-  'line', 'text', 'shapes', 'selection',
+  'line', 'text', 'shapes', 'lasso',
   'clear', 'settings',
 ]);
 
