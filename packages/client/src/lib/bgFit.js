@@ -75,6 +75,45 @@ export function resolveBgLayout({ saved, imageW, imageH, containerWidth, contain
   };
 }
 
+/** 종이 밖 요소 둘레 여백(scene px) — 필기 끝이 화면 가장자리에 붙지 않게 */
+export const CONTENT_PAD = 16;
+
+/** 회전(angle, 라디안)까지 반영한 요소의 경계 상자. 쓸 수 없는 요소면 null */
+function elementBox(el) {
+  if (!el || el.isDeleted) return null;
+  const { x, y, width, height } = el;
+  if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null;
+  const a = Number.isFinite(el.angle) ? el.angle : 0;
+  if (a === 0) return { left: x, top: y, right: x + width, bottom: y + height };
+  const cx = x + width / 2, cy = y + height / 2;
+  const hw = (Math.abs(Math.cos(a)) * width + Math.abs(Math.sin(a)) * height) / 2;
+  const hh = (Math.abs(Math.sin(a)) * width + Math.abs(Math.cos(a)) * height) / 2;
+  return { left: cx - hw, top: cy - hh, right: cx + hw, bottom: cy + hh };
+}
+
+/**
+ * 종이(bgPosition)와 종이 밖으로 나간 요소들의 합집합 사각형 — PDF 페이지를 열 때 뷰포트를 맞출 범위.
+ * 요소가 종이 안에만 있으면 종이를 그대로(같은 객체) 돌려준다. 종이 밖 요소에는 사방 `pad` 를 더한다.
+ * 스펙: docs/superpowers/specs/2026-10-30-pdf-pages-design.md (첫 화면 맞춤 추가분)
+ * @param {{x:number,y:number,width:number,height:number}} paper
+ * @param {Array<{x:number,y:number,width:number,height:number,angle?:number,isDeleted?:boolean}>|null|undefined} elements
+ */
+export function contentExtent(paper, elements, pad = CONTENT_PAD) {
+  if (!paper || !Array.isArray(elements) || elements.length === 0) return paper;
+  let left = paper.x, top = paper.y, right = paper.x + paper.width, bottom = paper.y + paper.height;
+  let grown = false;
+  for (const el of elements) {
+    const b = elementBox(el);
+    if (!b) continue;
+    if (b.left - pad < left) { left = b.left - pad; grown = true; }
+    if (b.top - pad < top) { top = b.top - pad; grown = true; }
+    if (b.right + pad > right) { right = b.right + pad; grown = true; }
+    if (b.bottom + pad > bottom) { bottom = b.bottom + pad; grown = true; }
+  }
+  if (!grown) return paper;
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
 /** updateScene 에 넣을 appState 조각 (viewport 가 없으면 빈 객체) */
 export function bgViewportAppState(viewport) {
   if (!viewport) return {};

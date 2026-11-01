@@ -107,4 +107,16 @@ describe('relockOwnStickies — 저장 전 내 메모지는 항상 잠긴 채로
     const arr = [own, { id: 'fd', type: 'freedraw' }];
     expect(relockOwnStickies(arr)).toBe(arr);
   });
+
+  it('별 다이컷(물결 도장)은 틀 안에 들어온다 — 꼭짓점이 네 변에서 11px 이상 떨어져 물결 돌출분까지 잘리지 않음', () => {
+    const svg = stickySvg({ type: 'cut', friend: 'star', pattern: 'plain' });
+    const d = svg.match(/<clipPath[^>]*><path d="([^"]+)"/)[1];
+    const nums = [...d.matchAll(/(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)(?=[A-Z]|$)/g)].map((m) => [parseFloat(m[1]), parseFloat(m[2])]);
+    expect(nums.length).toBeGreaterThan(10);
+    const xs = nums.map((p) => p[0]), ys = nums.map((p) => p[1]);
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(11);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(169);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(11);
+    expect(Math.max(...ys)).toBeLessThanOrEqual(159);
+  });
 });

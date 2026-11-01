@@ -14,6 +14,11 @@ SVG 는 `width/height` 를 viewBox 와 같게 넣는다(없으면 브라우저 i
   캔버스를 덮는 투명 덮개라 따라다니는 동안 펜이 획을 긋지 않음). 마우스·손가락은 누르는 순간, 펜은 한 자리에서 400ms 꾹 눌러야 확정(8px 넘는 이동·짧은 탭은 무시하고 계속 따라다님).
   Escape·다른 도구 선택·메모지 단추 재누름·페이지 이동은 취소. 확정 지점은 그림자 중심(= 포인터), 좌표 변환은 `scene = (client − offset) / zoom − scroll`.
   "같은 자리면 24씩 비키기" 규칙은 사용자가 자리를 정하므로 뺐다. 길게 누르기·더블탭은 마지막 메모지로 바로 따라다니기를 시작한다.
+- (후속 수정) **패드에서 취소**: 덮개가 도구바까지 덮어 패드(키보드 없음)에서는 취소할 길이 없었다. 덮개는 도구바 아래(`topInset`)부터만 덮어 도구바·상단 바가 그대로 눌리고,
+  안내 띠에 **[취소]** 단추를 넣었다. 따라다니는 동안 메모지 단추는 켜진 상태로 보인다.
+- (후속 수정) **꾹 누르면 페이지 전체가 선택되던 문제**: 브라우저의 길게 누르기 제스처(텍스트 선택·이미지 콜아웃, 약 500ms)가 그대로 살아 있었고, 펜 확정(400ms) 직후
+  덮개가 사라지면 남은 누름이 아래 레이어(PDF 층)에서 그 제스처를 일으켰다. 덮개와 자식에 `user-select: none`·`-webkit-touch-callout: none`, `contextmenu`·`selectstart` 차단,
+  펜 확정 뒤에는 펜을 뗄 때까지 덮개를 투명하게 남겨 둔다(`onDone` 은 pointerup 에). `PdfPageLayer` 루트에도 `select-none`·touch-callout 차단을 넣었다.
 
 ## 배경 / 문제
 
@@ -169,9 +174,11 @@ export const FRIEND_LABEL = { circle: '동글', square: '네모', triangle: '세
   옮기고 크기 조절", 끝낼 때 "이동 완료 (잠금)"). 아이콘은 그대로.
 - 켜면 `handleToggleImageMove` 가 배경 이미지와 함께 **`isStickyElement` 인 요소도 `locked: false`** 로 바꾸고, 끄면 다시
   `locked: true` 로 돌린다(배경과 같은 `updateScene`). 모드 안에서는 선택 도구이므로 드래그 이동·모서리 크기 조절(비율 유지)이 된다.
-- 모드 안에서 **선택된 요소에 메모지가 하나라도 있으면** 도구바의 W/H 미니 단추 옆에 **[메모지 삭제]** 단추(`data-tb="sticky_delete"`,
-  `vw-tb-btn vw-tb-btn--danger`, lucide `Trash2`)가 나타난다. 누르면 선택된 메모지를 `isDeleted: true` 로 바꾼다(undo 한 단계).
-  키보드 Delete/Backspace 는 Excalidraw 기본 동작으로 이미 지워진다.
+- ~~모드 안에서 **선택된 요소에 메모지가 하나라도 있으면** 도구바의 W/H 미니 단추 옆에 **[메모지 삭제]** 단추(`data-tb="sticky_delete"`)가 나타난다.~~
+  (2026-11-01 변경) 모드 안에서 **배경 이미지 말고 무엇이든 선택돼 있으면**(메모지·도형·필기·삽입 이미지…) 손바닥 단추 **바로 옆**에
+  **[선택한 개체 삭제]** 단추(`data-tb="delete_selected"`, `vw-tb-btn vw-tb-btn--danger`, lucide `Trash2`)가 나타난다. 누르면 선택된
+  개체를 `isDeleted: true` 로 바꾼다(배경 이미지는 선택돼 있어도 남김; 도형에 묶인 글 `containerId` 은 도형과 함께; undo 한 단계).
+  패드에는 Delete 키가 없어 선택 뒤 지울 길이 이것뿐이다. 키보드 Delete/Backspace 는 Excalidraw 기본 동작으로 이미 지워진다.
 - 선택 변화는 도구바가 **직접** `apiRef.current.onChange((elements, appState) => …)` 를 구독해(0.18 API, 해제 함수 반환)
   `appState.selectedElementIds` 에 메모지가 있는지 계산한다. 뷰어에 새 콜백 prop 을 더하지 않는다. 이동 모드가 켜져 있을 때만 구독한다.
 
@@ -198,7 +205,7 @@ export const FRIEND_LABEL = { circle: '동글', square: '네모', triangle: '세
 … 'eraser', 'image_move', 'image_reload', 'sticky', 'image_add', 'line', 'text', 'shapes', 'lasso', 'clear', 'settings'
 ```
 
-`sticky_delete` 는 이동 모드에서만 나타나는 조건부 단추라 순서 배열에는 넣지 않는다(W/H 미니 단추와 같은 취급).
+`delete_selected`(옛 이름 `sticky_delete`) 는 이동 모드에서만 나타나는 조건부 단추라 순서 배열에는 넣지 않는다(W/H 미니 단추와 같은 취급).
 새 props: `stickyOpacity` (number, 기본 100). 메모지 삽입에 필요한 종이 너비는 도구바가 이미 받는 `apiRef` 로
 `getSceneElements()` 의 `__bg_image__` 요소 너비, PDF 쪽은 뷰어가 넘기는 `paperWidth` prop(없으면 260)로 얻는다.
 
@@ -235,7 +242,7 @@ export const FRIEND_LABEL = { circle: '동글', square: '네모', triangle: '세
 - `components/study/DrawingToolbar.test.js` — `TOOLBAR_ORDER` 에 `sticky` 위치, 단추가 팝오버를 열고 4줄 × 6칸 + 무늬 3칸,
   미리보기 클릭이 `addFiles` 와 `updateScene`(요소 하나 추가, 배경 뒤 위치, `captureUpdate: 'IMMEDIATELY'`)을 호출하고 팝오버를 닫음,
   `stickyOpacity={70}` 이 요소 `opacity` 에 반영, 마지막 선택 기억(`mc_sticky_last`), 이동 모드 켜기/끄기가 메모지 `locked` 를 토글,
-  이동 모드에서 메모지를 선택하면 [메모지 삭제] 가 나타나고 누르면 `isDeleted`.
+  이동 모드에서 배경 말고 무엇이든 선택하면 [선택한 개체 삭제] 가 손바닥 옆에 나타나고 누르면 선택된 것만 `isDeleted`(묶인 글 포함, 배경 제외).
 - `hooks/useScribbleErase.test.js` / `lib/lasso.test.js` — `sticky_` 접두사가 제외됨(기존 접두사 테스트에 한 줄).
 - 브라우저 확인(Playwright, 기존 `viewer-shots` 픽스처): 학생 창에서 메모지 붙이기 → 그 위에 쓰기 → 지우개로 글만 지워짐 →
   이동 모드에서 옮기고 삭제 → 저장 후 새로고침 유지 → 교사 창에서 보임 + 교사 메모지 70% → PDF 내보내기에 포함.

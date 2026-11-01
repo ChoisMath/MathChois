@@ -219,7 +219,7 @@ export default function PdfPageLayer({ page, paperRect, containerRef, error, onR
 
   return (
     <>
-      <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 0, background: '#e5e7eb' }}>
+      <div className="absolute inset-0 pointer-events-none overflow-hidden select-none" style={{ zIndex: 0, background: '#e5e7eb', WebkitTouchCallout: 'none' }}>
         <div ref={paperRef} className="absolute bg-white" style={{ display: 'none' }} />
         <canvas
           ref={canvasRef}

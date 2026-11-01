@@ -67,13 +67,13 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
   const stickyBtnRef    = useRef(null);
   const longPressRef    = useRef({ timer: null, fired: false });
   /* 이동 모드: 선택된 요소 중 내 메모지가 있는지 (onChange 구독, 모드가 켜진 동안만) */
-  const [stickySelected, setStickySelected] = useState(false);
+  const [selectionDeletable, setSelectionDeletable] = useState(false); // 이동 모드에서 배경 말고 무엇이든 선택돼 있음
   const [bgPresent, setBgPresent] = useState(false); // 이동 모드에서 W/H 미니 단추는 배경 이미지가 있을 때만
   const moveUnsubRef = useRef(null);
   const stopMoveWatch = useCallback(() => {
     moveUnsubRef.current?.();
     moveUnsubRef.current = null;
-    setStickySelected(false);
+    setSelectionDeletable(false);
   }, []);
   useEffect(() => () => { moveUnsubRef.current?.(); }, []);
   useEffect(() => { setPickerOpen(false); setPlacing(null); }, [pageId]);
@@ -299,6 +299,8 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
 
   /* 이동 모드에서 잠금이 풀리는 요소: 배경 이미지 + 내 메모지 (교사 창에 내려온 학생 메모지 `__sn_sticky_…` 는 그대로) */
   const movable = (el) => el.id === BG_ELEMENT_ID || isOwnSticky(el);
+  /* 이동 모드의 [선택 삭제] 대상: 배경 이미지만 빼고 선택된 모든 개체 */
+  const deletable = (el) => el.id !== BG_ELEMENT_ID;
 
   const disableImageMove = useCallback((api) => {
     const els = api.getSceneElements().map((el) =>
@@ -439,7 +441,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
       stopMoveWatch();
       moveUnsubRef.current = api.onChange?.((sceneEls, st) => {
         const sel = st?.selectedElementIds || {};
-        setStickySelected(sceneEls.some((e) => sel[e.id] && !e.isDeleted && isOwnSticky(e)));
+        setSelectionDeletable(sceneEls.some((e) => sel[e.id] && !e.isDeleted && deletable(e)));
       }) ?? null;
       setActiveTool('image_move');
       api.setActiveTool({ type: 'selection' });
@@ -450,16 +452,18 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
     }
   };
 
-  /* 이동 모드에서 선택된 내 메모지 지우기 */
-  const handleDeleteSticky = () => {
+  /* 이동 모드에서 선택된 개체(메모지·도형·필기·삽입 이미지…) 지우기. 배경 이미지는 선택돼도 지우지 않는다.
+     도형에 묶인 글(containerId)은 도형과 함께 지운다. */
+  const handleDeleteSelected = () => {
     const api = apiRef.current;
     if (!api) return;
     const sel = api.getAppState().selectedElementIds || {};
+    const gone = (e) => (sel[e.id] && deletable(e)) || (e.containerId && sel[e.containerId]);
     api.updateScene({
-      elements: api.getSceneElements().map((e) => (sel[e.id] && isOwnSticky(e) ? { ...e, isDeleted: true } : e)),
+      elements: api.getSceneElements().map((e) => (gone(e) ? { ...e, isDeleted: true } : e)),
       appState: { selectedElementIds: {} },
     });
-    setStickySelected(false);
+    setSelectionDeletable(false);
   };
 
   /* ── 배경 이미지 가로/세로 독립 리사이즈 ── */
@@ -560,12 +564,12 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
     setPlacing(spec);
   };
   const cancelPlacing = useCallback(() => setPlacing(null), []);
+  const finishPlacing = cancelPlacing; // 확정 뒤 덮개를 내릴 때 (펜은 뗄 때까지 StickyPlacer 가 들고 있다)
   /** 화면 좌표(그림자 중심)에 확정 — scene = (client − offset) / zoom − scroll (Excalidraw 0.18 viewportCoordsToSceneCoords) */
   const commitSticky = useCallback(({ clientX, clientY }) => {
     const api = apiRef.current;
     const spec = placing;
-    setPlacing(null);
-    if (!api || !spec) return;
+    if (!api || !spec) { setPlacing(null); return; }
     const width = stickyWidth();
     const height = width * stickyAspect(spec.type);
     const appState = api.getAppState();
@@ -588,6 +592,8 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placing, stickyOpacity]);
   /** 그림자 크기(화면 px) = 실제 메모지 크기 × 줌 */
+  /** 덮개는 도구바 아래부터 — 도구바·상단 바는 그대로 눌린다 */
+  const placerTopInset = () => stickyBtnRef.current?.closest('.vw-tb')?.getBoundingClientRect().bottom ?? 0;
   const ghostSize = () => {
     const zoom = apiRef.current?.getAppState()?.zoom?.value || 1;
     const w = stickyWidth() * zoom;
@@ -684,7 +690,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
         onClick={onStickyClick} onDoubleClick={onStickyDoubleClick}
         aria-haspopup="dialog" aria-expanded={pickerOpen} aria-label="메모지"
         title="메모지 — 누르면 고르기, 길게 누르면 마지막 메모지 바로 붙이기"
-        className={btnCls(pickerOpen)}>
+        className={btnCls(pickerOpen || !!placing)}>
         <StickyNote />
       </button>
       {pickerOpen && (
@@ -698,7 +704,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
         />
       )}
       {placing && (
-        <StickyPlacer spec={placing} ghostSize={ghostSize()} onCommit={commitSticky} onCancel={cancelPlacing} />
+        <StickyPlacer spec={placing} ghostSize={ghostSize()} topInset={placerTopInset()} onCommit={commitSticky} onDone={finishPlacing} onCancel={cancelPlacing} />
       )}
       </>)}
       {/* 이미지·메모지 이동 — HTML 도구 쪽만 제외(메모지도 없음). PDF 쪽은 종이는 못 끌지만 메모지를 옮기고 지우려면 필요하다 */}
@@ -711,9 +717,15 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
         <Hand />
       </button>
       )}
-      {/* 이동 모드: 배경 가로/세로 비율 조정(배경 이미지가 있을 때만) + 선택된 메모지 삭제 */}
+      {/* 이동 모드: 선택된 개체 삭제(손바닥 바로 옆) + 배경 가로/세로 비율 조정(배경 이미지가 있을 때만) */}
       {imageMoveMode && (
         <>
+          {selectionDeletable && (
+            <button data-tb="delete_selected" onClick={handleDeleteSelected} title="선택한 개체 삭제" aria-label="선택한 개체 삭제"
+              className="vw-tb-btn vw-tb-btn--danger">
+              <Trash2 />
+            </button>
+          )}
           {bgPresent && (<>
           <div className="vw-tb-mini" role="group" aria-label="배경 너비">
             <span className="vw-tb-mini-label" aria-hidden="true">W</span>
@@ -734,12 +746,6 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
             </button>
           </div>
           </>)}
-          {stickySelected && (
-            <button data-tb="sticky_delete" onClick={handleDeleteSticky} title="메모지 삭제" aria-label="메모지 삭제"
-              className="vw-tb-btn vw-tb-btn--danger">
-              <Trash2 />
-            </button>
-          )}
         </>
       )}
       <Divider />

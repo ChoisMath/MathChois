@@ -36,7 +36,7 @@ import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import FileAttachmentPanel from './components/FileAttachmentPanel';
 import { PageVideoEmbed, PageVideoThumb } from '../../components/videos/PageVideo';
 import { isPdfPage } from '@mathchois/shared';
-import { usePdfBackground, applyPdfScene } from '../../hooks/usePdfBackground';
+import { usePdfBackground } from '../../hooks/usePdfBackground';
 import { prefetchPdfNeighbors } from '../../hooks/usePdfDocument';
 import PdfPageLayer from '../../components/study/PdfPageLayer';
 import PageThumb from '../../components/common/PageThumb';
@@ -62,7 +62,7 @@ function TeacherNotesModal({ page, onClose }) {
   const [dbBgPosition] = useState(null);
   /* PDF 페이지: 저장된 교사 필기 위치(dbBgPosition)로 종이를 놓는다 */
   const pdfBg = usePdfBackground({ page, containerRef, bgPositionRef, savedBgPosition: dbBgPosition });
-  const { layerRef: pdfLayerRef } = pdfBg;
+  const { layerRef: pdfLayerRef, applyScene: applyPdfSceneFit } = pdfBg;
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -76,7 +76,7 @@ function TeacherNotesModal({ page, onClose }) {
   const handleMount = useCallback(async (apiRef) => {
     /* PDF 페이지: bg element 없이 필기만 — 종이는 PdfPageLayer 가 캔버스 아래에 그린다 */
     if (isPdfPage(page)) {
-      await applyPdfScene(apiRef, Object.values(noteFiles), noteElements);
+      await applyPdfSceneFit(apiRef, Object.values(noteFiles), noteElements, page.id);
       return;
     }
     if (!page.imageUrl || !containerRef.current) return;
@@ -103,7 +103,7 @@ function TeacherNotesModal({ page, onClose }) {
       console.error('교사 필기 모달 bg 로드 실패:', err);
       apiRef.updateScene({ elements: noteElements });
     }
-  }, [page, noteElements, noteFiles, dbBgPosition]);
+  }, [page, noteElements, noteFiles, dbBgPosition, applyPdfSceneFit]);
 
   return (
     <div
@@ -230,7 +230,7 @@ const AssignmentStudyViewer = () => {
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
   /* PDF 페이지 배경: 로딩이 끝나 저장된 bgPosition 이 ref 에 있고 컨테이너가 마운트된 뒤에 페이지를 넘긴다 */
   const pdfBg = usePdfBackground({ page: loading ? null : currentPage, containerRef, bgPositionRef });
-  const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf } = pdfBg;
+  const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf, applyScene: applyPdfSceneFit } = pdfBg;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -563,10 +563,11 @@ const AssignmentStudyViewer = () => {
 
     /* PDF 페이지: bg element 없이 필기·코멘트만 — 종이는 PdfPageLayer 가 그린다 */
     if (isPdfPage(page)) {
-      await applyPdfScene(
+      await applyPdfSceneFit(
         apiRef,
         [...Object.values(savedFilesRef.current), ...Object.values(teacherCommentFilesRef.current)],
         [...noteElementsRef.current, ...teacherCommentsRef.current],
+        page.id,
       );
       return;
     }
@@ -599,7 +600,7 @@ const AssignmentStudyViewer = () => {
       console.error('배경 이미지 로드 실패:', err);
       apiRef.updateScene({ elements: noteElementsRef.current, commitToHistory: false });
     }
-  }, []);
+  }, [applyPdfSceneFit]);
 
   /* 파일 첨부 핸들러 */
   const MAX_SUBMISSION_FILES = 5;

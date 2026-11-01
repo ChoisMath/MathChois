@@ -45,7 +45,7 @@ import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import { PageVideoEmbed, PageVideoThumb } from '../../components/videos/PageVideo';
 import CoachingViewer from '../Study/CoachingViewer';
 import { isPdfPage } from '@mathchois/shared';
-import { usePdfBackground, applyPdfScene } from '../../hooks/usePdfBackground';
+import { usePdfBackground } from '../../hooks/usePdfBackground';
 import { prefetchPdfNeighbors } from '../../hooks/usePdfDocument';
 import PdfPageLayer from '../../components/study/PdfPageLayer';
 import PageThumb from '../../components/common/PageThumb';
@@ -252,7 +252,7 @@ const StudentWorkViewer = () => {
     setLoadedKey(null);
   }
   const pdfBg = usePdfBackground({ page: loadedKey === loadKey ? currentPage : null, containerRef, bgPositionRef });
-  const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf } = pdfBg;
+  const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf, applyScene: applyPdfSceneFit } = pdfBg;
 
   /* ── 페이지 변경 시 scene 데이터 로드 ── */
   /* ── 페이지 이동 시 pending 저장 flush ── */
@@ -316,10 +316,11 @@ const StudentWorkViewer = () => {
     const excApi = excalidrawAPIRef.current;
     /* PDF 페이지: bg element 없이 학생 필기 + 교사 코멘트만 — 종이는 PdfPageLayer 가 그린다 */
     if (excApi && isPdfPage(currentPageRef.current)) {
-      await applyPdfScene(
+      await applyPdfSceneFit(
         excApi,
         [...Object.values(savedStudentFilesRef.current), ...Object.values(savedTeacherFilesRef.current)],
         [...studentEls.current, ...teacherEls.current],
+        currentPageRef.current.id,
       );
       return;
     }
@@ -350,7 +351,7 @@ const StudentWorkViewer = () => {
       console.error('scene 재구성 실패:', err);
       excApi.updateScene({ elements: [...studentEls.current, ...teacherEls.current], commitToHistory: false });
     }
-  }, []);
+  }, [applyPdfSceneFit]);
 
   /* ── 이미지 리로드 (원본 비율로 재배치) ── */
   const handleReloadImage = useCallback(async () => {

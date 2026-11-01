@@ -341,6 +341,31 @@ describe('DrawingToolbar — 메모지', () => {
     const el = lastElements().at(-1);
     expect(el.x + el.width / 2).toBeCloseTo(240);
     expect(el.y + el.height / 2).toBeCloseTo(260);
+    act(() => { placer().dispatchEvent(ptr('pointerup', 240, 260, { pointerType: 'pen' })); });
+    expect(placer()).toBeNull();
+  });
+
+  it('따라다니는 동안 메모지 단추는 켜진 상태로 보이고, 덮개는 도구바 아래부터 덮으며, 띠의 [취소]로 끝낼 수 있다', () => {
+    render();
+    const ov = pick('[data-sticky="tab:circle"]');
+    expect(btn('sticky').classList.contains('is-on')).toBe(true);
+    expect(ov.style.top).toBe(`${Math.round(mount.querySelector('.vw-tb').getBoundingClientRect().bottom)}px`);
+    act(() => { ov.querySelector('button').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(placer()).toBeNull();
+    expect(btn('sticky').classList.contains('is-on')).toBe(false);
+    flush();
+    expect(api.addFiles).not.toHaveBeenCalled();
+  });
+
+  it('펜으로 확정한 뒤 펜을 떼기 전까지 덮개가 남고, 떼면 사라진다 (남은 누름이 PDF 층에 닿지 않게)', () => {
+    render();
+    const ov = pick('[data-sticky="tab:circle"]');
+    act(() => { ov.dispatchEvent(ptr('pointerdown', 240, 260, { pointerType: 'pen' })); });
+    act(() => { vi.advanceTimersByTime(400); });
+    flush();
+    expect(lastElements().filter((e) => e.id.startsWith('sticky_'))).toHaveLength(1);
+    expect(placer()).not.toBeNull();
+    act(() => { placer().dispatchEvent(ptr('pointerup', 240, 260, { pointerType: 'pen' })); });
     expect(placer()).toBeNull();
   });
 
@@ -522,23 +547,42 @@ describe('DrawingToolbar — 이미지·메모지 이동', () => {
     expect(elements.find((e) => e.id === 'sticky_1').locked).toBe(true);   // 장면 상태(모의가 누적) 기준
   });
 
-  it('이동 모드에서 메모지를 선택하면 [메모지 삭제] 가 나타나고 누르면 isDeleted, 선택이 없으면 사라진다', () => {
-    elements = [bg, own, { id: 'img_1', type: 'image', locked: false }];
+  it('이동 모드에서 무엇이든(배경 제외) 선택되면 [선택한 개체 삭제] 가 손바닥 옆에 나타나고, 누르면 선택된 것만 isDeleted', () => {
+    elements = [bg, own, { id: 'img_1', type: 'image', locked: false }, { id: 'fd1', type: 'freedraw', locked: false }];
     render();
     click(btn('image_move'));
     expect(api.onChange).toHaveBeenCalledTimes(1);
     const cb = api.onChange.mock.calls[0][0];
-    expect(btn('sticky_delete')).toBeNull();
-    act(() => { cb(elements, { ...appState, selectedElementIds: { img_1: true } }); });
-    expect(btn('sticky_delete')).toBeNull();
-    act(() => { cb(elements, { ...appState, selectedElementIds: { sticky_1: true, img_1: true } }); });
-    expect(btn('sticky_delete')).not.toBeNull();
-    appState = { ...appState, selectedElementIds: { sticky_1: true, img_1: true } };
-    click(btn('sticky_delete'));
+    expect(btn('delete_selected')).toBeNull();
+    act(() => { cb(elements, { ...appState, selectedElementIds: { __bg_image__: true } }); });
+    expect(btn('delete_selected')).toBeNull(); // 배경만 선택 → 없음
+    act(() => { cb(elements, { ...appState, selectedElementIds: { fd1: true } }); });
+    expect(btn('delete_selected')).not.toBeNull(); // 필기만 선택돼도 나타난다
+    expect(btn('image_move').nextElementSibling).toBe(btn('delete_selected')); // 손바닥 바로 옆
+    act(() => { cb(elements, { ...appState, selectedElementIds: { sticky_1: true, img_1: true, __bg_image__: true } }); });
+    appState = { ...appState, selectedElementIds: { sticky_1: true, img_1: true, __bg_image__: true } };
+    click(btn('delete_selected'));
     const next = lastElements();
     expect(next.find((e) => e.id === 'sticky_1').isDeleted).toBe(true);
-    expect(next.find((e) => e.id === 'img_1').isDeleted).toBeFalsy();
-    expect(btn('sticky_delete')).toBeNull();
+    expect(next.find((e) => e.id === 'img_1').isDeleted).toBe(true);
+    expect(next.find((e) => e.id === '__bg_image__').isDeleted).toBeFalsy(); // 배경은 남는다
+    expect(next.find((e) => e.id === 'fd1').isDeleted).toBeFalsy();
+    expect(appState.selectedElementIds).toEqual({});
+    expect(btn('delete_selected')).toBeNull();
+  });
+
+  it('도형을 지우면 그 도형에 묶인 글도 함께 지워진다', () => {
+    const rect = { id: 'rect1', type: 'rectangle', locked: false, boundElements: [{ id: 'txt1', type: 'text' }] };
+    const text = { id: 'txt1', type: 'text', locked: false, containerId: 'rect1' };
+    elements = [bg, rect, text, { id: 'fd1', type: 'freedraw', locked: false }];
+    render();
+    click(btn('image_move'));
+    const cb = api.onChange.mock.calls[0][0];
+    act(() => { cb(elements, { ...appState, selectedElementIds: { rect1: true } }); });
+    appState = { ...appState, selectedElementIds: { rect1: true } };
+    click(btn('delete_selected'));
+    const next = lastElements();
+    expect(next.filter((e) => e.isDeleted).map((e) => e.id)).toEqual(['rect1', 'txt1']);
   });
 
   it('메모지가 선택된 채로 이동 모드를 꺼도 내 메모지는 전부 다시 잠긴다', () => {
@@ -548,10 +592,10 @@ describe('DrawingToolbar — 이미지·메모지 이동', () => {
     const cb = api.onChange.mock.calls[0][0];
     act(() => { cb(elements, { ...appState, selectedElementIds: { sticky_1: true } }); });
     appState = { ...appState, selectedElementIds: { sticky_1: true } };
-    expect(btn('sticky_delete')).not.toBeNull();
+    expect(btn('delete_selected')).not.toBeNull();
     click(btn('image_move'));
     expect(elements.filter((e) => e.customData?.sticky).map((e) => e.locked)).toEqual([true, true]);
-    expect(btn('sticky_delete')).toBeNull();
+    expect(btn('delete_selected')).toBeNull();
   });
 
   it('이동 모드를 끄면 onChange 구독이 해제되고 팝오버도 닫혀 있다', () => {
