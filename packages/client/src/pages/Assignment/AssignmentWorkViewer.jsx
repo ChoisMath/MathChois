@@ -5,6 +5,7 @@ import {
   CheckCircle, XCircle, Trophy, Loader, X, Paperclip
 } from 'lucide-react';
 import PageListIcon from '../../components/study/PageListIcon';
+import { STICKY_ID_PREFIX } from '../../lib/stickyPads';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
@@ -43,6 +44,8 @@ import PageThumb from '../../components/common/PageThumb';
 const TEACHER_COMMENT_PREFIX = '__atc_';
 
 const STUDENT_NOTE_PREFIX = '__asn_sn_';
+/** 올가미·문지르기 지우개가 건드리지 않는 id 접두사: 학생 필기 + 메모지 */
+const EXCLUDE_PREFIXES = [STUDENT_NOTE_PREFIX, STICKY_ID_PREFIX];
 
 const AssignmentWorkViewer = () => {
   const { classroomId, assignmentId, studentId } = useParams();
@@ -110,8 +113,8 @@ const AssignmentWorkViewer = () => {
   const { triggerPalmRejectionWarmup, isGesturingRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef, onUserDrawStart: handleUserDrawStart });
   useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: commentModeRef, penActiveRef });
   const lassoActiveRef = useRef(false); // 논리 도구가 올가미인지 (useLasso 가로채기 게이트)
-  useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: commentModeRef, lassoActiveRef, excludePrefixes: [STUDENT_NOTE_PREFIX] });
-  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [STUDENT_NOTE_PREFIX] });
+  useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: commentModeRef, lassoActiveRef, excludePrefixes: EXCLUDE_PREFIXES });
+  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: EXCLUDE_PREFIXES });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [STUDENT_NOTE_PREFIX] });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
 
@@ -719,6 +722,8 @@ const AssignmentWorkViewer = () => {
           apiRef={excalidrawAPIRef}
           sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)}
           pageId={currentPage?.id}
+          bgPositionRef={bgPositionRef}
+          stickyOpacity={70}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
           onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}

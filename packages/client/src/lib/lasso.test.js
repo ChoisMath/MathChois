@@ -42,10 +42,11 @@ describe('lassoSelection', () => {
       fd('del', 10, 10, [[0, 0], [5, 5]], { isDeleted: true }),
       fd('lock', 10, 10, [[0, 0], [5, 5]], { locked: true }),
       fd('__tn_x', 10, 10, [[0, 0], [5, 5]]),
+      fd('sticky_p', 10, 10, [[0, 0], [5, 5]]),
       fd('skip', 10, 10, [[0, 0], [5, 5]]),
       fd('ok', 10, 10, [[0, 0], [5, 5]]),
     ];
-    const r = lassoSelection(els, square, { excludePrefixes: ['__tn_'], excludeIds: ['skip'] });
+    const r = lassoSelection(els, square, { excludePrefixes: ['__tn_', 'sticky_'], excludeIds: ['skip'] });
     expect(r.selectedElementIds).toEqual({ ok: true });
   });
 

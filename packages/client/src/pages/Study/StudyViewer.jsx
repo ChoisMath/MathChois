@@ -5,6 +5,7 @@ import {
   ChevronUp, ChevronDown,
 } from 'lucide-react';
 import PageListIcon from '../../components/study/PageListIcon';
+import { STICKY_ID_PREFIX } from '../../lib/stickyPads';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
@@ -45,6 +46,8 @@ const _notesCache    = new Map(); // `${userId}_${pageId}` → { elements, bgPos
 const _commentsCache = new Map(); // `${userId}_${pageId}` → commentEls[]
 
 const TEACHER_NOTE_PREFIX = '__tn_';
+/** 올가미·문지르기 지우개가 건드리지 않는 id 접두사: 교사 코멘트 + 메모지 */
+const EXCLUDE_PREFIXES = [TEACHER_NOTE_PREFIX, STICKY_ID_PREFIX];
 
 /* ── 교사 필기 모달 세션 캐시 (모달 닫아도 유지) ── */
 const _teacherNotesModalCache = new Map(); // pageId → { elements, files, bgPosition }
@@ -468,8 +471,8 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
   /* wet-ink PoC: HTML 오버레이가 아닌 이미지 페이지에서만 동작(오버레이 캔버스가 그 분기에만 존재) */
   useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef });
   const lassoActiveRef = useRef(false); // 논리 도구가 올가미인지 (useLasso 가로채기 게이트)
-  useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: drawModeRef, lassoActiveRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
-  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
+  useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: drawModeRef, lassoActiveRef, excludePrefixes: EXCLUDE_PREFIXES });
+  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: EXCLUDE_PREFIXES });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [TEACHER_NOTE_PREFIX] });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
   /* PDF 페이지 배경: 로딩이 끝나 저장된 bgPosition 이 ref 에 있고 컨테이너가 마운트된 뒤에 페이지를 넘긴다 */
@@ -1122,6 +1125,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
             apiRef={excalidrawAPIRef}
             sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)}
             pageId={currentPage?.id}
+            bgPositionRef={bgPositionRef}
             showPanel={showExcalidrawPanel}
             onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
             onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
@@ -1133,6 +1137,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
             apiRef={excalidrawAPIRef}
             sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)}
             pageId={currentPage?.id}
+            bgPositionRef={bgPositionRef}
             showPanel={showExcalidrawPanel}
             onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
             onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}

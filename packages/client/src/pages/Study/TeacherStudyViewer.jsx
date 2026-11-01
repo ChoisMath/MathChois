@@ -4,6 +4,10 @@ import {
   ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil,
 } from 'lucide-react';
 import PageListIcon from '../../components/study/PageListIcon';
+import { STICKY_ID_PREFIX } from '../../lib/stickyPads';
+
+/** 올가미·문지르기 지우개가 건드리지 않는 id 접두사: 메모지 */
+const EXCLUDE_PREFIXES = [STICKY_ID_PREFIX];
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
@@ -113,8 +117,8 @@ const TeacherStudyViewer = () => {
   const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf } = pdfBg;
   useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef });
   const lassoActiveRef = useRef(false); // 논리 도구가 올가미인지 (useLasso 가로채기 게이트)
-  useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: drawModeRef, lassoActiveRef, excludePrefixes: [] });
-  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef });
+  useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: drawModeRef, lassoActiveRef, excludePrefixes: EXCLUDE_PREFIXES });
+  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: EXCLUDE_PREFIXES });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
 
@@ -581,6 +585,7 @@ const TeacherStudyViewer = () => {
               apiRef={excalidrawAPIRef}
               sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)}
               pageId={currentPage?.id}
+              bgPositionRef={bgPositionRef}
               showPanel={showExcalidrawPanel}
               onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
               onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
@@ -594,6 +599,7 @@ const TeacherStudyViewer = () => {
             apiRef={excalidrawAPIRef}
             sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)}
             pageId={currentPage?.id}
+            bgPositionRef={bgPositionRef}
             showPanel={showExcalidrawPanel}
             onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
             onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}

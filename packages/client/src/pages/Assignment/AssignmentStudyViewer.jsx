@@ -5,6 +5,7 @@ import {
   ChevronUp, ChevronDown, GraduationCap, X, Download, Loader, Paperclip
 } from 'lucide-react';
 import PageListIcon from '../../components/study/PageListIcon';
+import { STICKY_ID_PREFIX } from '../../lib/stickyPads';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
@@ -45,6 +46,8 @@ const _notesCache    = new Map(); // `${userId}_${pageId}` → { elements, bgPos
 const _commentsCache = new Map(); // `${userId}_${pageId}` → { elements, files }
 
 const TEACHER_COMMENT_PREFIX = '__atc_';
+/** 올가미·문지르기 지우개가 건드리지 않는 id 접두사: 교사 코멘트 + 메모지 */
+const EXCLUDE_PREFIXES = [TEACHER_COMMENT_PREFIX, STICKY_ID_PREFIX];
 
 /* ─────────── 교사 필기 모달 ─────────── */
 /* TODO: assignment_teacher_notes 테이블/API가 서버에 아직 없음.
@@ -221,8 +224,8 @@ const AssignmentStudyViewer = () => {
   const { triggerPalmRejectionWarmup, isGesturingRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef, onUserDrawStart: handleUserDrawStart });
   useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef });
   const lassoActiveRef = useRef(false); // 논리 도구가 올가미인지 (useLasso 가로채기 게이트)
-  useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: drawModeRef, lassoActiveRef, excludePrefixes: [TEACHER_COMMENT_PREFIX] });
-  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [TEACHER_COMMENT_PREFIX] });
+  useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: drawModeRef, lassoActiveRef, excludePrefixes: EXCLUDE_PREFIXES });
+  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: EXCLUDE_PREFIXES });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [TEACHER_COMMENT_PREFIX] });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
   /* PDF 페이지 배경: 로딩이 끝나 저장된 bgPosition 이 ref 에 있고 컨테이너가 마운트된 뒤에 페이지를 넘긴다 */
@@ -933,6 +936,7 @@ const AssignmentStudyViewer = () => {
           apiRef={excalidrawAPIRef}
           sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)}
           pageId={currentPage?.id}
+          bgPositionRef={bgPositionRef}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
           onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
