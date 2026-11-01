@@ -36,7 +36,7 @@ import HtmlToolOverlay from '../../components/study/HtmlToolOverlay';
 import { HTML_OVERLAY_LOCK_BASE } from '../../lib/htmlOverlay';
 import { sceneStrokeWidth } from '../../lib/penWidth';
 import { UNASSIGNED, isPdfPage } from '@mathchois/shared';
-import { usePdfBackground, applyPdfScene } from '../../hooks/usePdfBackground';
+import { usePdfBackground } from '../../hooks/usePdfBackground';
 import { prefetchPdfNeighbors } from '../../hooks/usePdfDocument';
 import PdfPageLayer from '../../components/study/PdfPageLayer';
 import PageThumb from '../../components/common/PageThumb';
@@ -79,7 +79,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
     bgPositionRef,
     savedBgPosition: dbBgPosition,
   });
-  const { layerRef: pdfLayerRef } = pdfBg;
+  const { layerRef: pdfLayerRef, applyScene: applyPdfSceneFit } = pdfBg;
 
   /* refs 동기화 */
   useEffect(() => { noteElementsRef.current = noteElements; }, [noteElements]);
@@ -175,7 +175,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
     excApiRef.current = excApi;
     /* PDF 페이지: bg element 없이 필기만 — 종이는 PdfPageLayer 가 캔버스 아래에 그린다 */
     if (isPdfPage(currentPage)) {
-      await applyPdfScene(excApi, Object.values(noteFilesRef.current), noteElementsRef.current);
+      await applyPdfSceneFit(excApi, Object.values(noteFilesRef.current), noteElementsRef.current, currentPage.id);
       return;
     }
     if (!currentPage?.imageUrl || !containerRef.current) return;
@@ -200,7 +200,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
       console.error('교사 필기 모달 bg 로드 실패:', err);
       excApi.updateScene({ elements: noteElementsRef.current });
     }
-  }, [currentPage, dbBgPosition]);
+  }, [currentPage, dbBgPosition, applyPdfSceneFit]);
 
   return (
     <div
@@ -477,7 +477,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
   /* PDF 페이지 배경: 로딩이 끝나 저장된 bgPosition 이 ref 에 있고 컨테이너가 마운트된 뒤에 페이지를 넘긴다 */
   const pdfBg = usePdfBackground({ page: loading ? null : currentPage, containerRef, bgPositionRef });
-  const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf } = pdfBg;
+  const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf, applyScene: applyPdfSceneFit } = pdfBg;
 
 
   useEffect(() => () => { mountedRef.current = false; }, []);
@@ -861,10 +861,11 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
 
     /* PDF 페이지: bg element 없이 필기·코멘트만 (handleHtmlOverlayMount 와 같은 순서) — 종이는 PdfPageLayer 가 그린다 */
     if (isPdfPage(page)) {
-      await applyPdfScene(
+      await applyPdfSceneFit(
         excApi,
         [...Object.values(savedFilesRef.current), ...Object.values(teacherCommentFilesRef.current)],
         [...noteElementsRef.current, ...teacherCommentsRef.current],
+        page.id,
       );
       return;
     }
@@ -907,7 +908,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
       console.error('배경 이미지 로드 실패:', err);
       excApi.updateScene({ elements: noteElementsRef.current, commitToHistory: false });
     }
-  }, []);
+  }, [applyPdfSceneFit]);
 
   /* ── HTML 오버레이 마운트: 배경 없이 학생 필기 + 교사 코멘트만 ── */
   const handleHtmlOverlayMount = useCallback(async (excApi) => {

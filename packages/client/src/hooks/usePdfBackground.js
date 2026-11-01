@@ -3,6 +3,7 @@ import { isPdfPage } from '@mathchois/shared';
 import { usePdfPage } from './usePdfDocument';
 import { paperRectForPage, viewFromAppState } from '../lib/pdfLayerMath';
 import { waitForLayout } from '../lib/excalidrawUtils';
+import { contentExtent, fitViewportToBg, bgViewportAppState } from '../lib/bgFit';
 
 const NO_PAPER = { pageId: null, rect: null };
 
@@ -33,6 +34,12 @@ export async function applyPdfScene(excApi, files, elements) {
  * 유효하면 그대로, 아니면 컨테이너에 맞춰 배치. 뷰어는 저장된 위치를 ref 에 채우고 컨테이너를 마운트한 뒤에
  * `page` 를 넘겨야 한다(로딩 중에는 null).
  *
+ * 첫 화면 맞춤: 저장된 종이 위치는 처음 연 기기 화면 크기의 scene px 라 다른 기기에서 줌 1 로 보면 작거나 넘친다
+ * (이미지 페이지의 `resolveBgLayout` 과 같은 문제). 뷰어가 `applyScene(api, files, elements, pageId)` 로 장면을 올리면
+ * 종이와 장면이 **둘 다** 준비된 시점에 한 번, 종이(+종이 밖 필기·메모지, `contentExtent`)가 컨테이너에 꽉 차도록
+ * 줌·스크롤을 맞춘다(`fitViewportToBg`). 같은 마운트에서 장면을 다시 올려도(실시간 갱신) 다시 맞추지 않고,
+ * "이미지 위치 초기화"(`rerender`)는 종이만 기준으로 다시 맞춘다.
+ *
  * @param {object} args
  * @param {any} args.page 현재 페이지(pdfUrl·pdfPage) | null
  * @param {import('react').RefObject<HTMLElement>} args.containerRef Excalidraw 컨테이너
@@ -51,6 +58,7 @@ export function usePdfBackground({ page, containerRef, bgPositionRef, savedBgPos
   const [paper, setPaper] = useState(NO_PAPER);
   const paperStateRef = useRef(NO_PAPER);
   const pageIdRef = useRef(pageId);
+  const sceneRef = useRef(null); // { pageId, api, elements, fitted } — 마지막으로 올린 장면
 
   const commitPaper = useCallback((next) => {
     paperStateRef.current = next;
@@ -60,6 +68,38 @@ export function usePdfBackground({ page, containerRef, bgPositionRef, savedBgPos
   useEffect(() => {
     pageIdRef.current = pageId;
   }, [pageId]);
+
+  /* 종이(+종이 밖 요소)가 컨테이너에 꽉 차게 줌·스크롤을 맞춘다. 기다리는 사이 페이지가 바뀌면 그만둔다 */
+  const fitViewport = useCallback(async (targetPageId, rect, elements, api) => {
+    const container = containerRef.current;
+    if (!container) return;
+    const size = await waitForLayout(container);
+    if (paperStateRef.current.pageId !== targetPageId) return;
+    const viewport = fitViewportToBg({ containerWidth: size.width, containerHeight: size.height, bg: contentExtent(rect, elements) });
+    if (viewport) api.updateScene({ appState: bgViewportAppState(viewport), commitToHistory: false });
+  }, [containerRef]);
+
+  /* 종이와 장면이 같은 페이지로 둘 다 준비됐고 아직 안 맞췄으면 한 번 맞춘다 (종이 쪽·장면 쪽 어느 쪽이 늦어도 됨) */
+  const tryFit = useCallback(() => {
+    const scene = sceneRef.current;
+    const paper = paperStateRef.current;
+    if (!scene || scene.fitted || !paper.rect || scene.pageId !== paper.pageId) return;
+    scene.fitted = true;
+    fitViewport(paper.pageId, paper.rect, scene.elements, scene.api);
+  }, [fitViewport]);
+
+  /**
+   * 필기·코멘트를 scene 에 올리고(applyPdfScene) 첫 화면 맞춤을 건다. 뷰어의 Excalidraw 마운트에서 부른다.
+   * 같은 Excalidraw(api)에 같은 페이지를 다시 올리면(실시간 갱신) 이미 맞춘 뷰포트를 건드리지 않는다.
+   * @param {any} api @param {any[]} files @param {any[]} elements @param {string} targetPageId 올리는 페이지 id
+   */
+  const applyScene = useCallback(async (api, files, elements, targetPageId) => {
+    await applyPdfScene(api, files, elements);
+    const prev = sceneRef.current;
+    const fitted = !!prev && prev.api === api && prev.pageId === targetPageId && prev.fitted;
+    sceneRef.current = { pageId: targetPageId, api, elements, fitted };
+    tryFit();
+  }, [tryFit]);
 
   /* 쪽 크기가 오면(페이지가 바뀌면) 종이 위치를 정한다 */
   useEffect(() => {
@@ -72,11 +112,12 @@ export function usePdfBackground({ page, containerRef, bgPositionRef, savedBgPos
       const rect = paperRectForPage(pageSize, size, saved);
       bgPositionRef.current = rect;
       commitPaper({ pageId, rect });
+      tryFit();
     });
     return () => { cancelled = true; };
-  }, [pageId, pageSize, savedBgPosition, containerRef, bgPositionRef, commitPaper]);
+  }, [pageId, pageSize, savedBgPosition, containerRef, bgPositionRef, commitPaper, tryFit]);
 
-  /* "이미지 위치 초기화" — 저장 위치를 버리고 컨테이너에 다시 맞춘 뒤 레이어를 다시 그린다 */
+  /* "이미지 위치 초기화" — 저장 위치를 버리고 컨테이너에 다시 맞춘 뒤 레이어를 다시 그리고, 뷰포트도 종이만 기준으로 다시 맞춘다 */
   const rerender = useCallback(async () => {
     const container = containerRef.current;
     if (!pageId || !pageSize || !container) return;
@@ -88,7 +129,9 @@ export function usePdfBackground({ page, containerRef, bgPositionRef, savedBgPos
     const current = paperStateRef.current;
     if (current.pageId === pageId && sameRect(current.rect, rect)) layerRef.current?.rerender();
     else commitPaper({ pageId, rect }); // 종이가 바뀌면 레이어가 스스로 다시 렌더
-  }, [pageId, pageSize, containerRef, bgPositionRef, commitPaper]);
+    const scene = sceneRef.current;
+    if (scene && scene.pageId === pageId) { scene.fitted = true; fitViewport(pageId, rect, [], scene.api); }
+  }, [pageId, pageSize, containerRef, bgPositionRef, commitPaper, fitViewport]);
 
   /* Excalidraw onChange 마다 호출(제스처 중 포함). 레이어가 없으면(비활성) layerRef 가 비어 no-op.
      의존성이 없어 항상 같은 함수 — 뷰어의 useCallback 의존성에 넣어도 재생성되지 않는다. */
@@ -104,6 +147,7 @@ export function usePdfBackground({ page, containerRef, bgPositionRef, savedBgPos
     layerProps: { page: pdfPage, paperRect, error, onRetry: retry }, // 비활성이면 usePdfPage 가 빈 값
     onViewport,
     rerender,
+    applyScene,
     paperRect,
   };
 }

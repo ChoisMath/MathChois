@@ -36,7 +36,7 @@ import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import FileAttachmentPanel from './components/FileAttachmentPanel';
 import { PageVideoEmbed, PageVideoThumb } from '../../components/videos/PageVideo';
 import { isPdfPage } from '@mathchois/shared';
-import { usePdfBackground, applyPdfScene } from '../../hooks/usePdfBackground';
+import { usePdfBackground } from '../../hooks/usePdfBackground';
 import { prefetchPdfNeighbors } from '../../hooks/usePdfDocument';
 import PdfPageLayer from '../../components/study/PdfPageLayer';
 import PageThumb from '../../components/common/PageThumb';
@@ -139,7 +139,7 @@ const AssignmentWorkViewer = () => {
     setLoadedKey(null);
   }
   const pdfBg = usePdfBackground({ page: loadedKey === loadKey ? currentPage : null, containerRef, bgPositionRef });
-  const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf } = pdfBg;
+  const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf, applyScene: applyPdfSceneFit } = pdfBg;
 
   /* 코멘트 모드 전환 시 펜+검정으로 초기화 (자동 ON은 그리는 도중이라 도구 리셋 생략) */
   useEffect(() => {
@@ -281,10 +281,11 @@ const AssignmentWorkViewer = () => {
     const apiRef = excalidrawAPIRef.current;
     /* PDF 페이지: bg element 없이 학생 필기 + 교사 코멘트만 — 종이는 PdfPageLayer 가 그린다 */
     if (apiRef && isPdfPage(currentPageRef.current)) {
-      await applyPdfScene(
+      await applyPdfSceneFit(
         apiRef,
         [...Object.values(savedStudentFilesRef.current), ...Object.values(savedTeacherFilesRef.current)],
         [...studentEls.current, ...teacherEls.current],
+        currentPageRef.current.id,
       );
       return;
     }
@@ -309,7 +310,7 @@ const AssignmentWorkViewer = () => {
       console.error('scene 재구성 실패:', err);
       apiRef.updateScene({ elements: [...studentEls.current, ...teacherEls.current], commitToHistory: false });
     }
-  }, []);
+  }, [applyPdfSceneFit]);
 
   /* ── 이미지 리로드 (원본 비율로 재배치) ── */
   const handleReloadImage = useCallback(async () => {

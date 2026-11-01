@@ -146,6 +146,24 @@ assignment_pages
 - 학생 필기 위 교사 코멘트(③⑤), 실시간 동기화, PDF 내보내기가 모두 `bgPosition`을 쓰므로 데이터
   계약이 바뀌지 않는다.
 
+### 첫 화면 맞춤 (2026-11-01 추가)
+
+- **문제**: 저장된 `bgPosition` 은 처음 연 기기 화면 크기로 계산된 scene 절대 px 인데, PDF 경로는 종이 위치만 정하고
+  뷰포트는 Excalidraw 기본값(줌 1, 스크롤 0)으로 두었다. 그래서 다른 기기(예: 폰에서 먼저 연 뒤 태블릿)에서 열면 종이가
+  좌상단에 작게 보이고 나머지는 회색이었다(큰 화면에서 먼저 열었으면 넘쳐 잘림). 이미지 페이지는 같은 문제를
+  `2026-10-30-lasso-and-bg-fit-design.md` 의 `fitViewportToBg` 로 이미 풀었으나 PDF 쪽에는 적용되지 않았다.
+- **규칙**: 페이지를 열면 **종이가 컨테이너에 꽉 차도록**(가로 중앙, 위 여백 20, `fitViewportToBg`) 줌·스크롤을 한 번 맞춘다.
+  종이 **밖**에 필기·메모지가 있으면 그것까지 보이도록 범위를 넓힌다(`lib/bgFit.js` `contentExtent(paper, elements)`:
+  삭제되지 않은 요소의 회전 반영 경계 상자 + 사방 `CONTENT_PAD` 16px 과 종이의 합집합; 요소가 모두 종이 안이면 종이 그대로).
+  저장된 `bgPosition` 은 건드리지 않는다(필기 좌표 정렬).
+- **시점**: 종이(pdf.js 쪽 크기)와 장면(마운트 뒤 `addFiles`/`updateScene`)은 어느 쪽이 늦어도 된다. 뷰어는 `applyPdfScene`
+  대신 훅의 `pdfBg.applyScene(api, files, elements, pageId)` 를 부르고, 훅은 마지막 장면(`{ pageId, api, elements, fitted }`)과
+  종이가 같은 페이지로 둘 다 준비된 순간 한 번 맞춘다. 같은 Excalidraw(api)에 같은 페이지를 다시 올려도(③⑤ 실시간 갱신
+  `rebuildScene`) 다시 맞추지 않고, 페이지가 바뀌어 종이가 먼저 와도 이전 페이지의 api 는 건드리지 않는다.
+  "이미지 위치 초기화"(`rerender`)는 종이만 기준으로 다시 맞춘다(줌≈1). 적용 범위: ①②③④⑤ + StudyViewer·AssignmentStudyViewer
+  의 교사 필기 모달. 이미지 페이지는 종전대로 배경만 기준(`resolveBgLayout`).
+- 테스트: `lib/bgFit.test.js`(contentExtent), `hooks/usePdfBackground.test.js`(두 순서·한 번만·페이지 전환·rerender).
+
 ### 5개 뷰어 통합
 
 각 뷰어(`StudyViewer`, `TeacherStudyViewer`, `StudentWorkViewer`, `AssignmentStudyViewer`,

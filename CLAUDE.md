@@ -211,7 +211,8 @@ additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures th
   `POST /api/coaching/classrooms/:cid/students/:sid/reset` (resets quota for every AI-coaching page of the classroom, keeps
   attempt records). Spec: `docs/superpowers/specs/2026-10-28-classroom-tabs-tables-groups-dashboard-design.md`.
 - **PDF pages have no background image element.** `PdfPageLayer` sits under Excalidraw, follows the viewport and
-  re-renders only the visible clip; the paper rect is `bgPosition`. pdf.js is loaded from its legacy build (the modern
+  re-renders only the visible clip; the paper rect is `bgPosition`. On open, `usePdfBackground.applyScene` fits the viewport
+  to the paper plus any ink outside it (`bgFit.contentExtent`), once per mount, like `resolveBgLayout` does for image pages. pdf.js is loaded from its legacy build (the modern
   build needs `Map.prototype.getOrInsertComputed`). With default options pdf.js streams the **whole** PDF on first
   open (first page renders before the download ends; the file is then cached immutable) — HTTP Range only fills gaps
   ahead of the stream, it is not range-only loading. `GET /api/files/*` is unauthenticated (all buckets), so the
