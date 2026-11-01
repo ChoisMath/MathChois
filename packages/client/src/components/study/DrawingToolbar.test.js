@@ -350,3 +350,93 @@ describe('DrawingToolbar — 메모지', () => {
     expect(lastElements().map((e) => e.id)).toEqual(['__bg_image__']);
   });
 });
+
+describe('DrawingToolbar — 이미지·메모지 이동', () => {
+  let root, mount, api, appState, elements;
+  const own = { id: 'sticky_1', type: 'image', locked: true, customData: { sticky: { v: 1 } } };
+  const student = { id: '__sn_sticky_2', type: 'image', locked: true, customData: { sticky: { v: 1 } } };
+  const bg = { id: '__bg_image__', type: 'image', locked: true };
+
+  const render = (over = {}) => {
+    const props = {
+      apiRef: { current: api }, pageId: 'p1', showPanel: false, onTogglePanel: vi.fn(),
+      onBaseWidthChange: vi.fn(), onReloadImage: vi.fn(), onUndo: vi.fn(), onRedo: vi.fn(),
+      onActiveToolChange: vi.fn(), sidebarOpen: false, onToggleSidebar: vi.fn(), ...over,
+    };
+    act(() => { root.render(createElement(DrawingToolbar, props)); });
+  };
+  const btn = (name) => mount.querySelector(`[data-tb="${name}"]`);
+  const click = (el) => act(() => { el.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  const lastElements = () => api.updateScene.mock.calls.at(-1)[0].elements;
+
+  beforeEach(() => {
+    localStorage.clear();
+    appState = { zoom: { value: 1 }, scrollX: 0, scrollY: 0, currentItemStrokeColor: '#000000', currentItemStrokeWidth: 0.2, currentItemOpacity: 100, selectedElementIds: {} };
+    elements = [];
+    api = {
+      getAppState: () => appState,
+      getSceneElements: () => elements,
+      updateScene: vi.fn(({ appState: next, elements: els }) => {
+        if (next) appState = { ...appState, ...next };
+        if (els) elements = els;
+      }),
+      setActiveTool: vi.fn(),
+      addFiles: vi.fn(),
+      onChange: vi.fn(() => () => {}),
+    };
+    mount = document.createElement('div');
+    document.body.appendChild(mount);
+    root = createRoot(mount);
+  });
+  afterEach(() => { act(() => { root.unmount(); }); mount.remove(); });
+
+  it('이름이 이미지·메모지 이동이고, 켜면 배경과 내 메모지만 잠금이 풀리고 끄면 다시 잠긴다', () => {
+    elements = [bg, own, student, { id: 'fd1', locked: false }];
+    render();
+    expect(btn('image_move').title).toMatch(/^이미지·메모지 이동/);
+    click(btn('image_move'));
+    expect(lastElements().map((e) => [e.id, e.locked])).toEqual([['__bg_image__', false], ['sticky_1', false], ['__sn_sticky_2', true], ['fd1', false]]);
+    click(btn('image_move'));
+    expect(lastElements().map((e) => [e.id, e.locked])).toEqual([['__bg_image__', true], ['sticky_1', true], ['__sn_sticky_2', true], ['fd1', false]]);
+  });
+
+  it('다른 도구로 나가도 메모지가 다시 잠긴다', () => {
+    elements = [bg, own];
+    render();
+    click(btn('image_move'));
+    expect(elements.find((e) => e.id === 'sticky_1').locked).toBe(false);
+    click(btn('eraser'));
+    expect(elements.find((e) => e.id === 'sticky_1').locked).toBe(true);   // 장면 상태(모의가 누적) 기준
+  });
+
+  it('이동 모드에서 메모지를 선택하면 [메모지 삭제] 가 나타나고 누르면 isDeleted, 선택이 없으면 사라진다', () => {
+    elements = [bg, own, { id: 'img_1', type: 'image', locked: false }];
+    render();
+    click(btn('image_move'));
+    expect(api.onChange).toHaveBeenCalledTimes(1);
+    const cb = api.onChange.mock.calls[0][0];
+    expect(btn('sticky_delete')).toBeNull();
+    act(() => { cb(elements, { ...appState, selectedElementIds: { img_1: true } }); });
+    expect(btn('sticky_delete')).toBeNull();
+    act(() => { cb(elements, { ...appState, selectedElementIds: { sticky_1: true, img_1: true } }); });
+    expect(btn('sticky_delete')).not.toBeNull();
+    appState = { ...appState, selectedElementIds: { sticky_1: true, img_1: true } };
+    click(btn('sticky_delete'));
+    const next = lastElements();
+    expect(next.find((e) => e.id === 'sticky_1').isDeleted).toBe(true);
+    expect(next.find((e) => e.id === 'img_1').isDeleted).toBeFalsy();
+    expect(btn('sticky_delete')).toBeNull();
+  });
+
+  it('이동 모드를 끄면 onChange 구독이 해제되고 팝오버도 닫혀 있다', () => {
+    const unsub = vi.fn();
+    api.onChange = vi.fn(() => unsub);
+    render();
+    click(btn('sticky'));                       // 팝오버 열림
+    expect(document.querySelector('.vw-tb-pop')).not.toBeNull();
+    click(btn('image_move'));
+    expect(document.querySelector('.vw-tb-pop')).toBeNull();
+    click(btn('image_move'));
+    expect(unsub).toHaveBeenCalledTimes(1);
+  });
+});

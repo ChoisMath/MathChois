@@ -18,7 +18,7 @@ import {
 } from '../../lib/toolPrefs';
 import ColorSlotsModal from './ColorSlotsModal';
 import StickyPicker from './StickyPicker';
-import { buildStickyElement, stickyFile } from '../../lib/stickyPads';
+import { buildStickyElement, stickyFile, isOwnSticky } from '../../lib/stickyPads';
 
 /**
  * 필기 도구바 (5개 필기 뷰어 + AI 코칭 공용).
@@ -63,6 +63,15 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
   const stickyBtnRef    = useRef(null);
   const longPressRef    = useRef({ timer: null, fired: false });
   const lastStickyPosRef = useRef(null);
+  /* 이동 모드: 선택된 요소 중 내 메모지가 있는지 (onChange 구독, 모드가 켜진 동안만) */
+  const [stickySelected, setStickySelected] = useState(false);
+  const moveUnsubRef = useRef(null);
+  const stopMoveWatch = useCallback(() => {
+    moveUnsubRef.current?.();
+    moveUnsubRef.current = null;
+    setStickySelected(false);
+  }, []);
+  useEffect(() => () => { moveUnsubRef.current?.(); }, []);
   useEffect(() => { setPickerOpen(false); }, [pageId]);
   const [slots, setSlots]                 = useState(() => loadColorSlots());
 
@@ -284,13 +293,17 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
     };
   }, [activeTool]);
 
+  /* 이동 모드에서 잠금이 풀리는 요소: 배경 이미지 + 내 메모지 (교사 창에 내려온 학생 메모지 `__sn_sticky_…` 는 그대로) */
+  const movable = (el) => el.id === BG_ELEMENT_ID || isOwnSticky(el);
+
   const disableImageMove = useCallback((api) => {
     const els = api.getSceneElements().map((el) =>
-      el.id === BG_ELEMENT_ID ? { ...el, locked: true } : el
+      movable(el) ? { ...el, locked: true } : el
     );
     api.updateScene({ elements: els });
     setImageMoveMode(false);
-  }, []);
+    stopMoveWatch();
+  }, [stopMoveWatch]);
 
   const SHAPE_TYPES = ['rectangle', 'ellipse', 'triangle', 'line'];
 
@@ -410,16 +423,35 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
     const next = !imageMoveMode;
     setImageMoveMode(next);
     const els = api.getSceneElements().map((el) =>
-      el.id === BG_ELEMENT_ID ? { ...el, locked: !next } : el
+      movable(el) ? { ...el, locked: !next } : el
     );
     api.updateScene({ elements: els });
     if (next) {
+      setPickerOpen(false);
+      stopMoveWatch();
+      moveUnsubRef.current = api.onChange?.((sceneEls, st) => {
+        const sel = st?.selectedElementIds || {};
+        setStickySelected(sceneEls.some((e) => sel[e.id] && !e.isDeleted && isOwnSticky(e)));
+      }) ?? null;
       setActiveTool('image_move');
       api.setActiveTool({ type: 'selection' });
     } else {
+      stopMoveWatch();
       setActiveTool('freedraw');
       api.setActiveTool({ type: 'freedraw' });
     }
+  };
+
+  /* 이동 모드에서 선택된 내 메모지 지우기 */
+  const handleDeleteSticky = () => {
+    const api = apiRef.current;
+    if (!api) return;
+    const sel = api.getAppState().selectedElementIds || {};
+    api.updateScene({
+      elements: api.getSceneElements().map((e) => (sel[e.id] && isOwnSticky(e) ? { ...e, isDeleted: true } : e)),
+      appState: { selectedElementIds: {} },
+    });
+    setStickySelected(false);
   };
 
   /* ── 배경 이미지 가로/세로 독립 리사이즈 ── */
@@ -660,7 +692,8 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
       {!htmlMode && !pdfMode && (
       <button data-tb="image_move" onClick={handleToggleImageMove}
         aria-pressed={imageMoveMode}
-        title={imageMoveMode ? '이미지 이동 완료 (잠금)' : '이미지 이동 — 배경 이미지를 드래그로 이동'}
+        aria-label="이미지·메모지 이동"
+        title={imageMoveMode ? '이동 완료 (잠금)' : '이미지·메모지 이동 — 배경 이미지와 메모지를 드래그로 옮기고 크기 조절'}
         className={btnCls(imageMoveMode, 'vw-tb-btn--image')}>
         <Hand />
       </button>
@@ -687,6 +720,12 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
               <Plus />
             </button>
           </div>
+          {stickySelected && (
+            <button data-tb="sticky_delete" onClick={handleDeleteSticky} title="메모지 삭제" aria-label="메모지 삭제"
+              className="vw-tb-btn vw-tb-btn--danger">
+              <Trash2 />
+            </button>
+          )}
         </>
       )}
 
