@@ -5,9 +5,6 @@ import {
 } from 'lucide-react';
 import PageListIcon from '../../components/study/PageListIcon';
 import { STICKY_ID_PREFIX, relockOwnStickies } from '../../lib/stickyPads';
-
-/** 올가미·문지르기 지우개가 건드리지 않는 id 접두사: 메모지 */
-const EXCLUDE_PREFIXES = [STICKY_ID_PREFIX];
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
@@ -54,6 +51,9 @@ import { usePdfBackground, applyPdfScene } from '../../hooks/usePdfBackground';
 import { prefetchPdfNeighbors } from '../../hooks/usePdfDocument';
 import PdfPageLayer from '../../components/study/PdfPageLayer';
 import PageThumb from '../../components/common/PageThumb';
+
+/** 올가미·문지르기 지우개가 건드리지 않는 id 접두사: 메모지 */
+const EXCLUDE_PREFIXES = [STICKY_ID_PREFIX];
 
 /* ── 세션 내 캐시 ── */
 const _notesCache = new Map(); // `${teacherId}_${pageId}` → { elements, bgPosition, files }

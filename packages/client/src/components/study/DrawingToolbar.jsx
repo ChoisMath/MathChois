@@ -574,11 +574,13 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
     });
   };
   const openSticky = () => {
+    if (!apiRef.current) return;           // Excalidraw 준비 전에는 열지 않는다 (disabled 로 ref 를 렌더 중 읽지 않음)
     setShapeMenuOpen(false);
     setPaletteOpen(false);
     setPickerOpen((v) => !v);
   };
-  const onStickyPointerDown = () => {
+  const onStickyPointerDown = (e) => {
+    if (e.button > 0 || !apiRef.current) return; // 첫째 버튼(펜·손가락·왼쪽 클릭)만 길게 누르기
     clearTimeout(longPressRef.current.timer);
     longPressRef.current.fired = false;
     longPressRef.current.timer = setTimeout(() => {
@@ -592,6 +594,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
     openSticky();
   };
   const onStickyDoubleClick = () => { setPickerOpen(false); insertSticky(stickySpec); };
+  const closePicker = useCallback(() => setPickerOpen(false), []);
 
   const handleClear = () => {
     if (!window.confirm('필기 내용을 모두 지우시겠습니까?')) return;
@@ -746,9 +749,8 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
 
       {!htmlMode && (<>
       <button ref={stickyBtnRef} data-tb="sticky" type="button"
-        onPointerDown={onStickyPointerDown} onPointerUp={onStickyPointerUp} onPointerLeave={onStickyPointerUp}
+        onPointerDown={onStickyPointerDown} onPointerUp={onStickyPointerUp} onPointerLeave={onStickyPointerUp} onPointerCancel={onStickyPointerUp}
         onClick={onStickyClick} onDoubleClick={onStickyDoubleClick}
-        disabled={!apiRef.current}
         aria-haspopup="dialog" aria-expanded={pickerOpen} aria-label="메모지"
         title="메모지 — 누르면 고르기, 길게 누르면 마지막 메모지 바로 붙이기"
         className={btnCls(pickerOpen)}>
@@ -761,7 +763,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
           anchorRect={stickyBtnRef.current?.getBoundingClientRect() ?? { bottom: 0 }}
           onPick={insertSticky}
           onPatternChange={(pattern) => setStickySpec((sp) => ({ ...sp, pattern }))}
-          onClose={() => setPickerOpen(false)}
+          onClose={closePicker}
         />
       )}
       </>)}

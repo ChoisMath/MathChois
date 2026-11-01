@@ -361,9 +361,38 @@ describe('DrawingToolbar — 메모지', () => {
     expect(document.querySelector('.vw-tb-pop')).toBeNull();
   });
 
-  it('api 가 없으면 버튼이 비활성', () => {
+  it('api 가 아직 없으면 눌러도 팝오버가 열리지 않고 아무 일도 없다 (렌더 중 ref 를 읽어 disabled 를 정하지 않는다)', () => {
     render({ apiRef: { current: null } });
-    expect(btn('sticky').disabled).toBe(true);
+    expect(btn('sticky').disabled).toBe(false);
+    click(btn('sticky'));
+    expect(document.querySelector('.vw-tb-pop')).toBeNull();
+    act(() => { btn('sticky').dispatchEvent(new Event('pointerdown', { bubbles: true })); });
+    act(() => { vi.advanceTimersByTime(600); });
+    flush();
+    expect(api.addFiles).not.toHaveBeenCalled();
+  });
+
+  it('길게 누르기는 첫째 버튼(펜·손가락·왼쪽 클릭)만 — 오른쪽 버튼은 무시하고, pointercancel 이면 타이머를 끈다', () => {
+    render();
+    act(() => { btn('sticky').dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 2 })); });
+    act(() => { vi.advanceTimersByTime(600); });
+    flush();
+    expect(api.addFiles).not.toHaveBeenCalled();
+    act(() => { btn('sticky').dispatchEvent(new Event('pointerdown', { bubbles: true })); });
+    act(() => { vi.advanceTimersByTime(200); });
+    act(() => { btn('sticky').dispatchEvent(new Event('pointercancel', { bubbles: true })); });
+    act(() => { vi.advanceTimersByTime(600); });
+    flush();
+    expect(api.addFiles).not.toHaveBeenCalled();
+  });
+
+  it('장면에 파일이 빠진 옛 메모지가 있어도 새 메모지 붙이기는 파일을 다시 넣고 정상 동작한다', () => {
+    elements = [{ id: 'sticky_old', type: 'image', fileId: 'stickyf_v1_tab_circle_plain', locked: true, customData: { sticky: { v: 1, type: 'tab', friend: 'circle', pattern: 'plain' } }, x: 0, y: 0, width: 100, height: 100 }];
+    api.getFiles = () => ({});
+    render();
+    click(openPicker().querySelector('[data-sticky="tab:circle"]')); flush();
+    expect(api.addFiles).toHaveBeenCalledWith([expect.objectContaining({ id: 'stickyf_v1_tab_circle_plain' })]);
+    expect(lastElements().filter((e) => e.customData?.sticky)).toHaveLength(2);
   });
 
   it('전체 지우기는 메모지도 지운다 (배경만 남김)', () => {
@@ -449,6 +478,19 @@ describe('DrawingToolbar — 이미지·메모지 이동', () => {
     const next = lastElements();
     expect(next.find((e) => e.id === 'sticky_1').isDeleted).toBe(true);
     expect(next.find((e) => e.id === 'img_1').isDeleted).toBeFalsy();
+    expect(btn('sticky_delete')).toBeNull();
+  });
+
+  it('메모지가 선택된 채로 이동 모드를 꺼도 내 메모지는 전부 다시 잠긴다', () => {
+    elements = [bg, own, { ...own, id: 'sticky_9' }];
+    render();
+    click(btn('image_move'));
+    const cb = api.onChange.mock.calls[0][0];
+    act(() => { cb(elements, { ...appState, selectedElementIds: { sticky_1: true } }); });
+    appState = { ...appState, selectedElementIds: { sticky_1: true } };
+    expect(btn('sticky_delete')).not.toBeNull();
+    click(btn('image_move'));
+    expect(elements.filter((e) => e.customData?.sticky).map((e) => e.locked)).toEqual([true, true]);
     expect(btn('sticky_delete')).toBeNull();
   });
 

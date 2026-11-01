@@ -5,9 +5,6 @@ import '@excalidraw/excalidraw/index.css';
 import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Loader, Wand2, Sparkles } from 'lucide-react';
 import PageListIcon from '../../components/study/PageListIcon';
 import { STICKY_ID_PREFIX, relockOwnStickies } from '../../lib/stickyPads';
-
-/** 올가미·문지르기 지우개가 건드리지 않는 id 접두사: 메모지 */
-const EXCLUDE_PREFIXES = [STICKY_ID_PREFIX];
 import { PageVideoThumb } from '../../components/videos/PageVideo';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
@@ -29,6 +26,9 @@ import { getProblemForCoaching } from '../../lib/problems';
 import { convertSolution, reviewSolution, listAttempts, getStudentPageAttempts, uploadWorkImage } from '../../lib/coaching';
 import { sceneStrokeWidth } from '../../lib/penWidth';
 import PageThumb from '../../components/common/PageThumb';
+
+/** 올가미·문지르기 지우개가 건드리지 않는 id 접두사: 메모지 */
+const EXCLUDE_PREFIXES = [STICKY_ID_PREFIX];
 
 const PANEL_KEY = 'coachingRightPanelWidth';
 const MIN_W = 300;

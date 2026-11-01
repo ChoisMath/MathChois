@@ -12,6 +12,7 @@ const PATTERN_ICON = { plain: Square, ruled: AlignJustify, grid: Grid3x3 };
  * 메모지 고르기 팝오버 — 도구바 아래에 붙는다 (document.body 포털, position: fixed).
  * 유형 4줄 × 친구 6칸(현재 무늬로 만든 실제 메모지 미리보기) + 무늬 3칸.
  * 칸을 누르면 `onPick(spec)`, 무늬를 누르면 `onPatternChange(pattern)`(닫지 않음). Escape·바깥 pointerdown 은 `onClose`.
+ * 포커스: 열리면 현재 칸, Tab 은 대화상자 안에서 돌고, 닫히면 `anchorEl`(메모지 단추)로 돌아간다.
  * 설계: docs/superpowers/specs/2026-11-01-sticky-pads-design.md
  *
  * @param {{ current: { type, friend, pattern }, anchorRect: { bottom: number }, anchorEl?: Element|null,
@@ -39,10 +40,28 @@ export default function StickyPicker({ current, anchorRect, anchorEl, onPick, on
     };
   }, [anchorEl, onClose]);
 
+  /* 포커스: 열릴 때 현재 칸(없으면 첫 단추), 닫힐 때 단추로 복귀 */
+  useEffect(() => {
+    const pop = popRef.current;
+    const first = pop?.querySelector('[aria-current="true"]') || pop?.querySelector('button');
+    first?.focus();
+    return () => { anchorEl?.focus?.(); };
+  }, [anchorEl]);
+
+  /* Tab 은 대화상자 안에서 돈다 */
+  const onKeyDown = (e) => {
+    if (e.key !== 'Tab') return;
+    const items = [...popRef.current.querySelectorAll('button')];
+    if (!items.length) return;
+    const i = items.indexOf(document.activeElement);
+    if (!e.shiftKey && (i === items.length - 1 || i === -1)) { e.preventDefault(); items[0].focus(); }
+    else if (e.shiftKey && (i === 0 || i === -1)) { e.preventDefault(); items[items.length - 1].focus(); }
+  };
+
   const top = Math.round((anchorRect?.bottom ?? 0) + 6);
 
   return createPortal(
-    <div ref={popRef} className="vw-tb-pop" role="dialog" aria-label="메모지 고르기" style={{ top: `${top}px` }}>
+    <div ref={popRef} className="vw-tb-pop" role="dialog" aria-modal="true" aria-label="메모지 고르기" style={{ top: `${top}px` }} onKeyDown={onKeyDown}>
       {STICKY_TYPES.map((type) => (
         <div key={type} className="vw-tb-pop-row">
           <span className="vw-tb-pop-head">{TYPE_LABEL[type]}</span>
