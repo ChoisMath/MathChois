@@ -4,9 +4,10 @@ import {
   LassoSelect, Pen, Highlighter, Type, Square, Circle, Triangle,
   Eraser, Minus, Trash2, Plus, Palette,
   SlidersHorizontal, Hand, Shapes, ChevronDown, ImagePlus, Dot,
-  RefreshCw, Undo2, Redo2, Pointer, PanelLeftOpen, PanelLeftClose,
+  RefreshCw, Undo2, Redo2, Pointer,
 } from 'lucide-react';
 import './viewer.css';
+import PageListIcon from './PageListIcon';
 import { BG_ELEMENT_ID } from '../../lib/excalidrawUtils';
 import { getInputMode, setInputMode, subscribeInputMode } from '../../lib/inputMode';
 import { sceneStrokeWidth } from '../../lib/penWidth';
@@ -519,7 +520,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
             title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
             aria-label={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
             className={btnCls(!!sidebarOpen)}>
-            {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+            <PageListIcon />
           </button>
           <Divider />
         </>

@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ChevronLeft, ChevronRight, Pencil, ChevronUp, ChevronDown, PanelLeftOpen, PanelLeftClose,
+  ChevronLeft, ChevronRight, Pencil, ChevronUp, ChevronDown,
   CheckCircle, XCircle, Trophy, Loader, X, Paperclip
 } from 'lucide-react';
+import PageListIcon from '../../components/study/PageListIcon';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
@@ -706,7 +707,7 @@ const AssignmentWorkViewer = () => {
               aria-label={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
               title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
               className="vw-ibtn">
-              {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+              <PageListIcon />
             </button>
           )}
         </div>

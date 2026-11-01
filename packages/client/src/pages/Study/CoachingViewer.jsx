@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Excalidraw, exportToBlob } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
-import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Loader, Wand2, Sparkles, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Loader, Wand2, Sparkles } from 'lucide-react';
+import PageListIcon from '../../components/study/PageListIcon';
 import { PageVideoThumb } from '../../components/videos/PageVideo';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
@@ -479,7 +480,7 @@ export default function CoachingViewer({
           <button onClick={() => setSidebarOpen((v) => !v)} aria-pressed={sidebarOpen}
             aria-label={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'} title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
             className="min-h-11 min-w-11 flex items-center justify-center border rounded-md">
-            {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+            <PageListIcon size={18} />
           </button>
         )}
       </div>

@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
-  ChevronLeft, ChevronRight, PanelLeftOpen, PanelLeftClose, Pencil, X, GraduationCap,
+  ChevronLeft, ChevronRight, Pencil, X, GraduationCap,
   ChevronUp, ChevronDown,
 } from 'lucide-react';
+import PageListIcon from '../../components/study/PageListIcon';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
@@ -278,7 +279,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
               title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
               className="vw-ibtn"
             >
-              {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+              <PageListIcon />
             </button>
             <button onClick={onClose} aria-label="교사 필기 닫기" title="교사 필기 닫기" className="vw-ibtn">
               <X className="h-5 w-5" />
@@ -1108,7 +1109,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
               aria-label={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
               title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
               className="vw-ibtn">
-              {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+              <PageListIcon />
             </button>
           )}
         </div>

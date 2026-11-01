@@ -33,7 +33,7 @@
 ```
 
 - **(2026-11-01 추가) 맨 앞 [▤ 페이지 목록]**: 상단 바 오른쪽 끝에 있던 햄버거(썸네일 목록 토글)를 도구바 맨 앞으로 옮겼다
-  (`data-tb="pages"`, `PanelLeftOpen`/`PanelLeftClose`, `aria-pressed`). 뷰어가 `sidebarOpen`/`onToggleSidebar` 를 넘길 때만 나오고,
+  (`data-tb="pages"`, 아이콘 `components/study/PageListIcon.jsx` — 왼쪽 칸에 줄이 있는 두 칸 공책, `aria-pressed`). 뷰어가 `sidebarOpen`/`onToggleSidebar` 를 넘길 때만 나오고,
   도구바가 없는 상태(보기 모드·접힘·영상 페이지)에서는 뷰어 상단 바에 같은 버튼이 대신 나온다. 겉모양은 `components/study/viewer.css`
   (`.vw-tb*`)로 옮겨 상단 바·페이지 목록과 토큰을 공유한다(아래 "겉모양" 절은 그 전 상태).
 
