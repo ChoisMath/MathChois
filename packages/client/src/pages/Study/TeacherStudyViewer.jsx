@@ -47,7 +47,7 @@ import { setToggle } from '../../lib/penToggles';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 import { PageVideoEmbed, PageVideoThumb } from '../../components/videos/PageVideo';
 import { isPdfPage } from '@mathchois/shared';
-import { usePdfBackground, applyPdfScene } from '../../hooks/usePdfBackground';
+import { usePdfBackground } from '../../hooks/usePdfBackground';
 import { prefetchPdfNeighbors } from '../../hooks/usePdfDocument';
 import PdfPageLayer from '../../components/study/PdfPageLayer';
 import PageThumb from '../../components/common/PageThumb';
@@ -114,7 +114,7 @@ const TeacherStudyViewer = () => {
   }, []);
   /* PDF 페이지 배경: 로딩이 끝나 저장된 bgPosition 이 ref 에 있고 컨테이너가 마운트된 뒤에 페이지를 넘긴다 */
   const pdfBg = usePdfBackground({ page: loading ? null : currentPage, containerRef, bgPositionRef });
-  const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf } = pdfBg;
+  const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf, applyScene: applyPdfSceneFit } = pdfBg;
   useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef });
   const lassoActiveRef = useRef(false); // 논리 도구가 올가미인지 (useLasso 가로채기 게이트)
   useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: drawModeRef, lassoActiveRef, excludePrefixes: EXCLUDE_PREFIXES });
@@ -351,7 +351,7 @@ const TeacherStudyViewer = () => {
 
     /* PDF 페이지: bg element 없이 필기만 (handleHtmlOverlayMount 와 같은 순서) — 종이는 PdfPageLayer 가 그린다 */
     if (isPdfPage(page)) {
-      await applyPdfScene(api, Object.values(savedFilesRef.current), [...noteElementsRef.current]);
+      await applyPdfSceneFit(api, Object.values(savedFilesRef.current), [...noteElementsRef.current], page.id);
       return;
     }
 
@@ -383,7 +383,7 @@ const TeacherStudyViewer = () => {
       console.error('배경 이미지 로드 실패:', err);
       api.updateScene({ elements: noteElementsRef.current, commitToHistory: false });
     }
-  }, []);
+  }, [applyPdfSceneFit]);
 
   /* ── HTML 오버레이 마운트: 배경 없이 교사 필기만 ── */
   const handleHtmlOverlayMount = useCallback(async (api) => {

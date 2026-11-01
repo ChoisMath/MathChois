@@ -61,11 +61,11 @@ packages/
 │       │                       #   useWetInk(웻잉크 오버레이 — 펜 라이브 렌더), useOrientation(세로 화면 → 위/아래 분할),
 │       │                       #   useWhiteboardCollab(보드 1개 소켓 협업 — 변경 요소 100ms 스로틀 전송/포인터/파일), useWhiteboardGrid(교사 격자 — 소켓 하나로 N 보드 장면 유지),
 │       │                       #   useAiHubData(AI활용 허브 데이터 컨텍스트 — access/motion/slide/status/reload/from), useCopyFeedback(복사 단추 상태)
-│       │                       #   usePdfDocument(usePdfPage — 문서 캐시에서 쪽 열기·고정·재시도, prefetchPdfNeighbors), usePdfBackground(뷰어용 PDF 배경 — 종이 사각형=bgPosition·레이어 props·applyPdfScene),
+│       │                       #   usePdfDocument(usePdfPage — 문서 캐시에서 쪽 열기·고정·재시도, prefetchPdfNeighbors), usePdfBackground(뷰어용 PDF 배경 — 종이 사각형=bgPosition·레이어 props·applyScene=장면 올리기+첫 화면 맞춤),
 │       │                       #   useElementWidth(콜백 ref + ResizeObserver 폭 — 편집기 미리보기 썸네일 폭)
 │       └── lib/                # api.ts, socket.ts, toolUrl.js, excalidrawUtils, pdfDownloader,
 │                               #   inputMode.js, penToggles.js, excalidrawHistory.js, toolPrefs.js(색 슬롯·펜/형광펜 기억·도구바 순서·마지막 메모지 `mc_sticky_last`), stickyPads.js(메모지 모델 + 결정적 SVG 생성기 — 유형 4종×도형 친구 6종×무늬 3종, `buildStickyElement`·`isOwnSticky`·`STICKY_ID_PREFIX`),
-│                               #   lasso.js(올가미 기하), bgFit.js(배경 화면 맞춤·비율 보정), bgLoadLog.js(배경 로드 진단),
+│                               #   lasso.js(올가미 기하), bgFit.js(배경 화면 맞춤·비율 보정·contentExtent=종이+종이 밖 요소 범위), bgLoadLog.js(배경 로드 진단),
 │                               #   wetInkStroke.js(인라인 perfect-freehand + freedraw element 생성),
 │                               #   freedrawResample.js, scribbleDetect.js,
 │                               #   problemContent.js([FIGURE:n] 파서), problems.js(API),
@@ -165,7 +165,7 @@ me.chois.pro 의 AI활용 세 갤러리를 옮겼다(오빠두엑셀 출처 표�
 
 챕터·과제 편집기에서 PDF 를 등록하면 쪽수만큼 페이지 행이 생긴다(`pages`/`assignment_pages` 의 `pdfUrl` + `pdfPage`, 같은 PDF 의 쪽들은 `pdfUrl` 하나를 공유, `imageUrl` 은 null). 5개 필기 뷰어 모두 쪽을 **벡터로** 그려 어느 배율에서도 선명하다.
 - **등록**(`lib/pageUpload.js` + `lib/pdfImport.js`): 브라우저에서 pdf.js 로 검사(100MB·500쪽·암호·손상 → 안내 메시지) → `chapter-pdfs` 버킷에 1회 업로드 → `POST …/pages { pages }` 배치 생성(이미지와 섞여 파일명 순, 연속 position). 서버는 PDF 를 열지 않는다(`utils/uploadPolicy.ts` MIME·용량, `utils/pageBody.ts` 필드 쌍 검증). 페이지 삭제는 같은 `pdfUrl` 을 쓰는 다른 페이지가 남아 있으면 파일을 지우지 않는다(`lib/pageStorage.js`, 서버 챕터/과제/학급 정리는 `utils/fileUrls.ts`).
-- **뷰어**(`usePdfBackground` + `components/study/PdfPageLayer.jsx`): PDF 쪽에는 배경 image element 가 **없다**. 레이어가 Excalidraw 아래(z-0, `pointer-events:none`)에서 `onChange` 뷰포트를 따라가며 마지막 비트맵을 CSS transform 으로 옮기고, 뷰포트가 멈추면 **보이는 clip 만** zoom×DPR 로 다시 렌더한다. 종이 사각형 = 노트의 `bgPosition`(데이터 계약 그대로 — ③⑤는 학생의 `bgPosition`). 문서·쪽 로드 실패 시 Excalidraw 위(zIndex 4) 오류 카드 + "다시 시도".
+- **뷰어**(`usePdfBackground` + `components/study/PdfPageLayer.jsx`): PDF 쪽에는 배경 image element 가 **없다**. 레이어가 Excalidraw 아래(z-0, `pointer-events:none`)에서 `onChange` 뷰포트를 따라가며 마지막 비트맵을 CSS transform 으로 옮기고, 뷰포트가 멈추면 **보이는 clip 만** zoom×DPR 로 다시 렌더한다. 종이 사각형 = 노트의 `bgPosition`(데이터 계약 그대로 — ③⑤는 학생의 `bgPosition`). 문서·쪽 로드 실패 시 Excalidraw 위(zIndex 4) 오류 카드 + "다시 시도". **첫 화면 맞춤**(2026-11-01): 뷰어가 `pdfBg.applyScene(api, files, elements, pageId)` 로 장면을 올리면 종이와 장면이 둘 다 준비된 시점에 한 번, 종이(+종이 밖 필기·메모지, `bgFit.contentExtent`)가 컨테이너에 꽉 차게 `fitViewportToBg` 로 줌·스크롤을 맞춘다(저장 `bgPosition` 은 유지; 같은 마운트 재적용·다른 페이지 api 는 건드리지 않음; `rerender` 는 종이만 기준).
 - **pdf.js**(`lib/pdfjs.js`): `pdfjs-dist` 6.4.299 를 **legacy 빌드**로 지연 로드(모던 빌드는 `Map.prototype.getOrInsertComputed` 를 요구해 Chromium 141·태블릿 브라우저에서 렌더 실패). cmaps/standard_fonts 는 `vite-plugin-pdfjs-assets.js` 가 `/pdfjs/` 로 제공. 문서는 `lib/pdfDocCache.js` **LRU 2개**로 공유하고 화면에 그린 문서는 **pin** 해 썸네일·이웃 프리패치가 밀어내지 못하게 한다.
 - **PDF 받기**: pdf.js 기본값(스트리밍 `fetch` 지원 시) — 처음 열 때 **파일 전체를 한 요청으로 점진적으로** 받고(다 받기 전 첫 쪽 렌더), 이후는 `immutable` 캐시. Range 206 은 스트림보다 앞선 빈 구간 요청에만 쓰인다("필요한 범위만 받는다"가 아님). 지연 범위 모드(`disableStream`+`disableAutoFetch`)는 태블릿 미측정이라 미적용. `GET /api/files/*` 는 **인증 없음**(모든 버킷 공통, 기존) — 뷰어는 URL 만으로 받는다.
 - **썸네일·내보내기**: 래스터 보관 없이 pdf.js 로 그린다 — `PageThumb`/`PdfPageThumb`(보일 때 JPEG dataURL, 폭은 120px 단위로 올려(`bucketWidth`) 키·래스터, `pdfThumbCache` = 200개·24MB 이중 한도 LRU), PDF 내보내기 배경은 `lib/pdfBackground.js` → `pdfRaster.js`.

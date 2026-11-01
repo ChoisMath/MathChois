@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fixBgAspect, fitViewportToBg, resolveBgLayout, bgViewportAppState, BG_FIT_MARGIN, BG_ASPECT_TOL } from './bgFit';
+import { fixBgAspect, fitViewportToBg, resolveBgLayout, bgViewportAppState, BG_FIT_MARGIN, BG_ASPECT_TOL, contentExtent, CONTENT_PAD } from './bgFit';
 
 describe('fixBgAspect — 저장된 배경 크기의 비율 보정', () => {
   it('비율 차가 허용 안이면 그대로(같은 객체 값)', () => {
@@ -85,5 +85,37 @@ describe('resolveBgLayout — 저장값/계산값 선택 + 진단', () => {
     expect(r.viewport.zoom).toBeCloseTo(1, 6);
     expect(r.diag.saved).toBeNull();
     expect(bgViewportAppState(null)).toEqual({});
+  });
+});
+
+describe('contentExtent — 종이 + 종이 밖 요소의 합집합 (PDF 첫 화면 맞춤)', () => {
+  const paper = { x: 20, y: 20, width: 350, height: 495 };
+  const el = (x, y, width, height, extra = {}) => ({ x, y, width, height, angle: 0, isDeleted: false, ...extra });
+
+  it('요소가 없거나 모두 종이 안이면 종이 그대로(같은 객체)', () => {
+    expect(contentExtent(paper, [])).toBe(paper);
+    expect(contentExtent(paper, [el(100, 100, 50, 50)])).toBe(paper);
+    expect(contentExtent(paper, null)).toBe(paper);
+  });
+
+  it('종이 밖 요소가 있으면 그 요소(여백 CONTENT_PAD 포함)까지 넓힌다', () => {
+    const out = contentExtent(paper, [el(420, 300, 120, 60)]);
+    expect(out).toEqual({ x: 20, y: 20, width: 420 + 120 + CONTENT_PAD - 20, height: 495 });
+  });
+
+  it('왼쪽·위로 벗어난 요소는 x·y 를 앞당기고 폭·높이를 늘린다', () => {
+    const out = contentExtent(paper, [el(-100, -50, 40, 40)]);
+    expect(out).toEqual({ x: -100 - CONTENT_PAD, y: -50 - CONTENT_PAD, width: 370 - (-100 - CONTENT_PAD), height: 515 - (-50 - CONTENT_PAD) });
+  });
+
+  it('삭제된 요소·크기가 없는 요소·좌표가 숫자가 아닌 요소는 무시', () => {
+    expect(contentExtent(paper, [el(900, 900, 10, 10, { isDeleted: true }), el(900, 900, 0, 0), { x: 'a', y: 1, width: 10, height: 10 }])).toBe(paper);
+  });
+
+  it('회전한 요소는 회전 뒤 경계 상자로 본다', () => {
+    /* 100×20 막대(x 280~380)를 90° 돌리면 중심(330,110) 기준 20×100 → x 320~340: 여백을 더해도 종이 안 */
+    expect(contentExtent(paper, [el(280, 100, 100, 20, { angle: Math.PI / 2 })])).toBe(paper);
+    /* 안 돌리면 x 가 380 까지 → 종이 밖 */
+    expect(contentExtent(paper, [el(280, 100, 100, 20)]).width).toBeCloseTo(380 + CONTENT_PAD - 20);
   });
 });
