@@ -4,7 +4,7 @@ import {
   LassoSelect, Pen, Highlighter, Type, Square, Circle, Triangle,
   Eraser, Minus, Trash2, Plus, Palette,
   SlidersHorizontal, Hand, Shapes, ChevronDown, ImagePlus, Dot,
-  RefreshCw, Undo2, Redo2, Pointer,
+  RefreshCw, Undo2, Redo2, Pointer, StickyNote,
 } from 'lucide-react';
 import './viewer.css';
 import PageListIcon from './PageListIcon';
@@ -14,8 +14,11 @@ import { sceneStrokeWidth } from '../../lib/penWidth';
 import {
   HL_OPACITY, PEN_COLOR_DEFAULT,
   loadColorSlots, saveColorSlots, loadToolColor, saveToolColor, loadToolWidth, saveToolWidth, widthRange,
+  loadStickyLast, saveStickyLast,
 } from '../../lib/toolPrefs';
 import ColorSlotsModal from './ColorSlotsModal';
+import StickyPicker from './StickyPicker';
+import { buildStickyElement, stickyFile } from '../../lib/stickyPads';
 
 /**
  * 필기 도구바 (5개 필기 뷰어 + AI 코칭 공용).
@@ -27,6 +30,8 @@ import ColorSlotsModal from './ColorSlotsModal';
  * 맨 앞의 페이지 목록(썸네일) 버튼은 뷰어가 `sidebarOpen`/`onToggleSidebar` 를 넘길 때만 나온다 — 도구바가 보일 때는 여기,
  * 보기 모드·도구바 접힘처럼 도구바가 없을 때는 뷰어 상단 바에 같은 버튼이 대신 나온다.
  * 겉모양은 components/study/viewer.css (`.vw-tb*`) — 뷰어 상단 바·페이지 목록과 같은 토큰을 쓴다.
+ * 메모지(포스트잇 배경 도형, lib/stickyPads.js): `sticky` 버튼 → StickyPicker 팝오버 → 잠긴 image 요소 하나를 배경 바로 뒤에 넣는다.
+ *   길게 누르기(500ms)·더블탭은 마지막 메모지를 바로 붙인다. 코멘트 창은 `stickyOpacity={70}`. 설계 docs/superpowers/specs/2026-11-01-sticky-pads-design.md
  */
 
 const SHAPE_TOOL_ICONS = {
@@ -45,13 +50,20 @@ const inkToolOf = (tool) => (tool === 'highlighter' ? 'highlighter' : 'freedraw'
 const btnCls = (active, mod = '') => ['vw-tb-btn', mod, active ? 'is-on' : ''].filter(Boolean).join(' ');
 const Divider = () => <div className="vw-tb-sep" aria-hidden="true" />;
 
-function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, pdfMode = false, onActiveToolChange, sidebarOpen, onToggleSidebar }) {
+function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, pdfMode = false, onActiveToolChange, sidebarOpen, onToggleSidebar, stickyOpacity = 100, bgPositionRef }) {
   const [activeTool, setActiveTool]       = useState('freedraw');
   const [imageMoveMode, setImageMoveMode] = useState(false);
   const [inputMode, setInputModeState] = useState(() => getInputMode());
   useEffect(() => subscribeInputMode(setInputModeState), []);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
   const [paletteOpen, setPaletteOpen]     = useState(false);
+  /* 메모지: 팝오버 열림, 마지막 선택(유형·친구·무늬), 길게 누르기 타이머, 직전 삽입 위치 */
+  const [pickerOpen, setPickerOpen]       = useState(false);
+  const [stickySpec, setStickySpec]       = useState(() => loadStickyLast());
+  const stickyBtnRef    = useRef(null);
+  const longPressRef    = useRef({ timer: null, fired: false });
+  const lastStickyPosRef = useRef(null);
+  useEffect(() => { setPickerOpen(false); }, [pageId]);
   const [slots, setSlots]                 = useState(() => loadColorSlots());
 
   /* 펜·형광펜 색/두께 — 콜백에서 최신값을 쓰도록 ref 와 state 를 함께 갱신 */
@@ -490,6 +502,60 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
     reader.readAsDataURL(file);
   };
 
+  /* ── 메모지 붙이기 ── */
+  const STICKY_PAPER_RATIO = 0.36;
+  const STICKY_FALLBACK_WIDTH = 260;
+  const STICKY_NUDGE = 24;
+  const insertSticky = (spec) => {
+    const api = apiRef.current;
+    if (!api) return;
+    const paperW = bgPositionRef?.current?.width;
+    const width = paperW ? paperW * STICKY_PAPER_RATIO : STICKY_FALLBACK_WIDTH;
+    const height = width; // 자리 계산용 근사 — 실제 높이는 buildStickyElement 가 유형 비율로 정한다
+    const appState = api.getAppState();
+    const zoom = appState.zoom?.value || 1;
+    const canvasEl = document.querySelector('.excalidraw canvas');
+    const vpW = canvasEl?.clientWidth || 800;
+    const vpH = canvasEl?.clientHeight || 600;
+    let x = (vpW / 2 - (appState.scrollX || 0)) / zoom - width / 2;
+    let y = (vpH / 2 - (appState.scrollY || 0)) / zoom - height / 2;
+    const last = lastStickyPosRef.current;
+    if (last && last.x === x && last.y === y) { x += STICKY_NUDGE; y += STICKY_NUDGE; }
+    lastStickyPosRef.current = { x, y };
+    saveStickyLast(spec);
+    setStickySpec(spec);
+    setPickerOpen(false);
+    const el = buildStickyElement(spec, { x, y, width, opacity: stickyOpacity });
+    /* addFiles 의 상태 커밋 뒤 다음 프레임에 updateScene — 같은 틱이면 이미지가 안 보일 수 있다 */
+    requestAnimationFrame(() => {
+      const a = apiRef.current;
+      if (!a) return;
+      a.addFiles([stickyFile(spec)]);
+      const els = a.getSceneElements();
+      const i = els.findIndex((e) => e.id === BG_ELEMENT_ID) + 1; // 배경 바로 뒤(없으면 맨 앞) = 기존 필기 아래
+      a.updateScene({ elements: [...els.slice(0, i), el, ...els.slice(i)] });
+    });
+  };
+  const openSticky = () => {
+    setShapeMenuOpen(false);
+    setPaletteOpen(false);
+    setPickerOpen((v) => !v);
+  };
+  const onStickyPointerDown = () => {
+    clearTimeout(longPressRef.current.timer);
+    longPressRef.current.fired = false;
+    longPressRef.current.timer = setTimeout(() => {
+      longPressRef.current.fired = true;
+      insertSticky(stickySpec);
+    }, 500);
+  };
+  const onStickyPointerUp = () => { clearTimeout(longPressRef.current.timer); };
+  const onStickyClick = () => {
+    if (longPressRef.current.fired) { longPressRef.current.fired = false; return; }
+    openSticky();
+  };
+  const onStickyDoubleClick = () => { setPickerOpen(false); insertSticky(stickySpec); };
+
   const handleClear = () => {
     if (!window.confirm('필기 내용을 모두 지우시겠습니까?')) return;
     const api = apiRef.current;
@@ -630,6 +696,26 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
           className="vw-tb-btn">
           <RefreshCw />
         </button>
+      )}
+
+      <button ref={stickyBtnRef} data-tb="sticky" type="button"
+        onPointerDown={onStickyPointerDown} onPointerUp={onStickyPointerUp} onPointerLeave={onStickyPointerUp}
+        onClick={onStickyClick} onDoubleClick={onStickyDoubleClick}
+        disabled={!apiRef.current}
+        aria-haspopup="dialog" aria-expanded={pickerOpen} aria-label="메모지"
+        title="메모지 — 누르면 고르기, 길게 누르면 마지막 메모지 바로 붙이기"
+        className={btnCls(pickerOpen)}>
+        <StickyNote />
+      </button>
+      {pickerOpen && (
+        <StickyPicker
+          current={stickySpec}
+          anchorEl={stickyBtnRef.current}
+          anchorRect={stickyBtnRef.current?.getBoundingClientRect() ?? { bottom: 0 }}
+          onPick={insertSticky}
+          onPatternChange={(pattern) => setStickySpec((sp) => ({ ...sp, pattern }))}
+          onClose={() => setPickerOpen(false)}
+        />
       )}
 
       <button data-tb="image_add" onClick={() => imageInputRef.current?.click()} title="이미지 삽입"

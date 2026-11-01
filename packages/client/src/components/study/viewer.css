@@ -148,6 +148,22 @@
 .vw-tb-mini button svg { width: 14px; height: 14px; }
 @media (hover: hover) { .vw-tb-mini button:hover { background: rgba(28, 43, 74, .07); color: var(--vw-ink); } }
 
+/* 메모지 고르기 팝오버 (StickyPicker) — 도구바 아래 흰 판, 유형 4줄 × 친구 6칸 + 무늬 */
+.vw-tb-pop { position: fixed; left: 50%; transform: translateX(-50%); z-index: 60; background: #fff; border: 1px solid var(--vw-line); border-radius: 8px; box-shadow: 0 6px 18px rgba(28, 43, 74, .14); padding: 8px 10px; max-height: calc(100vh - 120px); overflow-y: auto; }
+.vw-tb-pop-row { display: flex; align-items: center; gap: 4px; }
+.vw-tb-pop-head { width: 64px; font-size: 12px; color: var(--vw-soft); flex-shrink: 0; }
+.vw-tb-pop-cell { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 2px solid transparent; cursor: pointer; background: none; padding: 0; }
+.vw-tb-pop-cell img { width: 40px; height: 40px; object-fit: contain; display: block; }
+.vw-tb-pop-cell[aria-current="true"] { border-color: var(--vw-ink); }
+.vw-tb-pop-pattern { border-top: 1px solid var(--vw-line); margin-top: 6px; padding-top: 6px; }
+.vw-tb-pop-pattern button { height: 36px; padding: 0 10px; border-radius: 8px; font-size: 12px; display: inline-flex; gap: 6px; align-items: center; color: var(--vw-soft); cursor: pointer; background: none; border: 0; }
+.vw-tb-pop-pattern button svg { width: 16px; height: 16px; }
+.vw-tb-pop-pattern button[aria-pressed="true"] { background: var(--vw-ink); color: #fff; }
+@media (hover: hover) {
+  .vw-tb-pop-cell:not([aria-current="true"]):hover { background: rgba(28, 43, 74, .07); }
+  .vw-tb-pop-pattern button:not([aria-pressed="true"]):hover { background: rgba(28, 43, 74, .07); color: var(--vw-ink); }
+}
+
 /* ── 페이지 목록 ── 쪽 번호는 왼쪽 위 인덱스 탭(앱 사이드바의 색 인덱스 탭과 같은 어법) */
 .vw-side {
   width: 160px; flex-shrink: 0; overflow-y: auto;
@@ -226,6 +242,7 @@
 .vw-top-r { min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .vw-top-r::-webkit-scrollbar { display: none; }
 @media (max-width: 640px) {
+  .vw-tb-pop { left: 8px; right: 8px; transform: none; }
   .vw-top { padding-right: 4px; }
   .vw-top-title { font-size: 15px; }
   .vw-top .vw-ibtn--nav { display: none; }
