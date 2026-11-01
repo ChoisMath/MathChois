@@ -99,11 +99,11 @@ describe('toolPrefs — 펜/형광펜 기억', () => {
 describe('toolPrefs — 메모지', () => {
   beforeEach(() => localStorage.clear());
 
-  it('TOOLBAR_ORDER: sticky 는 image_add 바로 앞', () => {
+  it('TOOLBAR_ORDER: 메모지는 레이저 포인터 바로 뒤, 이미지·메모지 이동이 그 뒤', () => {
     const i = TOOLBAR_ORDER.indexOf('sticky');
     expect(i).toBeGreaterThan(0);
-    expect(TOOLBAR_ORDER[i + 1]).toBe('image_add');
-    expect(TOOLBAR_ORDER[i - 1]).toBe('image_reload');
+    expect(TOOLBAR_ORDER[i - 1]).toBe('laser_pointer');
+    expect(TOOLBAR_ORDER[i + 1]).toBe('image_move');
   });
 
   it('마지막 메모지 선택: 기본값 → 저장 → 잘못된 값이면 기본값', () => {

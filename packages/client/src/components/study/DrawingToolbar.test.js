@@ -47,10 +47,10 @@ describe('DrawingToolbar — 순서 · 형광펜 · 색상 슬롯 · 두께', ()
     expect(TOOLBAR_ORDER).toEqual([
       'pages',
       'undo', 'redo',
-      'freedraw', 'highlighter', 'finger', 'laser_pointer',
+      'freedraw', 'highlighter', 'finger', 'laser_pointer', 'sticky', 'image_move',
       'slot-0', 'slot-1', 'slot-2', 'slot-3', 'slot-4', 'palette',
       'width',
-      'eraser', 'image_move', 'image_reload', 'sticky', 'image_add',
+      'eraser', 'image_reload', 'image_add',
       'line', 'text', 'shapes', 'lasso',
       'clear', 'settings',
     ]);
@@ -206,14 +206,23 @@ describe('DrawingToolbar — 메모지', () => {
   const btn = (name) => mount.querySelector(`[data-tb="${name}"]`);
   const click = (el) => act(() => { el.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   const openPicker = () => { click(btn('sticky')); return document.querySelector('.vw-tb-pop'); };
+  const placer = () => document.querySelector('[data-sticky-placer]');
+  const pick = (sel) => { click(openPicker().querySelector(sel)); return placer(); };
+  const ptr = (type, x, y, extra = {}) => {
+    const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, ...extra });
+    Object.defineProperty(e, 'pointerType', { value: extra.pointerType ?? 'mouse' });
+    return e;
+  };
   const flush = () => act(() => { vi.runOnlyPendingTimers(); });
+  /** 마우스·손가락: 누르는 자리에 확정 */
+  const place = (x, y, pointerType = 'mouse') => { act(() => { placer().dispatchEvent(ptr('pointerdown', x, y, { pointerType })); }); flush(); };
   const lastElements = () => api.updateScene.mock.calls.at(-1)[0].elements;
 
   beforeEach(() => {
     localStorage.clear();
     vi.useFakeTimers();
     vi.stubGlobal('requestAnimationFrame', (cb) => setTimeout(cb, 0));
-    appState = { zoom: { value: 1 }, scrollX: 0, scrollY: 0, currentItemStrokeColor: '#000000', currentItemStrokeWidth: 0.2, currentItemOpacity: 100, selectedElementIds: {} };
+    appState = { zoom: { value: 1 }, scrollX: 0, scrollY: 0, offsetLeft: 0, offsetTop: 0, currentItemStrokeColor: '#000000', currentItemStrokeWidth: 0.2, currentItemOpacity: 100, selectedElementIds: {} };
     elements = [];
     api = {
       getAppState: () => appState,
@@ -237,7 +246,7 @@ describe('DrawingToolbar — 메모지', () => {
     vi.useRealTimers();
   });
 
-  it('버튼은 image_reload 뒤·image_add 앞, 팝오버는 4줄×6칸 + 무늬 3칸, 기본 선택은 모서리 탭·동글·민무늬', () => {
+  it('버튼은 레이저 포인터 뒤·이미지 이동 앞, 팝오버는 4줄×6칸 + 무늬 3칸, 기본 선택은 모서리 탭·동글·민무늬', () => {
     render();
     const names = [...mount.querySelectorAll('[data-tb]')].map((el) => el.dataset.tb);
     expect(names).toEqual([...TOOLBAR_ORDER]);
@@ -251,51 +260,187 @@ describe('DrawingToolbar — 메모지', () => {
     expect(pop.textContent).not.toMatch(/[A-Z]{3,}/);
   });
 
-  it('칸을 누르면 다음 프레임에 addFiles + 잠긴 image 요소가 배경 바로 뒤에 들어가고 팝오버가 닫히며 도구는 그대로', () => {
+  it('칸을 누르면 팝오버가 닫히고 반투명 그림자가 포인터를 따라다니며, 누르는 자리에 확정되면 배경 바로 뒤에 잠긴 요소가 들어가고 도구는 그대로', () => {
     elements = [{ id: '__bg_image__', type: 'image' }, { id: 'fd1', type: 'freedraw' }];
     render();
     click(btn('freedraw'));
-    const pop = openPicker();
+    const ov = pick('[data-sticky="face:star"]');
+    expect(document.querySelector('.vw-tb-pop')).toBeNull();
+    expect(ov).not.toBeNull();
+    expect(ov.querySelector('img').src).toContain('data:image/svg+xml');
+    expect(api.addFiles).not.toHaveBeenCalled();
+    expect(api.updateScene.mock.calls.some((c) => c[0].elements)).toBe(false);
+    act(() => { ov.dispatchEvent(ptr('pointermove', 300, 200)); });
+    const img = ov.querySelector('img');
+    expect(parseFloat(img.style.left) + parseFloat(img.style.width) / 2).toBeCloseTo(300);
+    expect(parseFloat(img.style.top) + parseFloat(img.style.height) / 2).toBeCloseTo(200);
     const callsBefore = api.updateScene.mock.calls.length;
-    click(pop.querySelector('[data-sticky="face:star"]'));
+    act(() => { ov.dispatchEvent(ptr('pointerdown', 300, 200)); });
     expect(api.addFiles).toHaveBeenCalledWith([expect.objectContaining({ id: 'stickyf_v1_face_star_plain', mimeType: 'image/svg+xml' })]);
     expect(api.updateScene.mock.calls.length).toBe(callsBefore);   // 요소는 다음 프레임에
     flush();
     const next = lastElements();
     expect(next.map((e) => e.id.replace(/^sticky_.*/, 'sticky'))).toEqual(['__bg_image__', 'sticky', 'fd1']);
     expect(next[1]).toMatchObject({ locked: true, opacity: 100, customData: { sticky: { v: 1, type: 'face', friend: 'star', pattern: 'plain' } } });
-    expect(document.querySelector('.vw-tb-pop')).toBeNull();
-    expect(btn('freedraw').classList.contains('is-on')).toBe(true);   // 도구는 그대로 펜
+    expect(next[1].x + next[1].width / 2).toBeCloseTo(300);      // 확정 지점 = 그림자 중심 = 포인터
+    expect(next[1].y + next[1].height / 2).toBeCloseTo(200);
+    expect(placer()).toBeNull();
+    expect(btn('freedraw').classList.contains('is-on')).toBe(true);
     expect(api.setActiveTool).not.toHaveBeenCalled();
     expect(JSON.parse(localStorage.getItem('mc_sticky_last'))).toEqual({ type: 'face', friend: 'star', pattern: 'plain' });
   });
 
-  it('배경이 없으면 맨 앞에 들어가고, 종이 너비의 36% (없으면 260) 로 놓인다', () => {
-    elements = [{ id: 'fd1', type: 'freedraw' }];
+  it('확정 좌표는 줌·스크롤·캔버스 오프셋을 반영한다 (scene = (client − offset) / zoom − scroll)', () => {
+    appState = { ...appState, zoom: { value: 2 }, scrollX: 50, scrollY: -20, offsetLeft: 10, offsetTop: 100 };
     render({ bgPositionRef: { current: { x: 0, y: 0, width: 1000, height: 1400 } } });
-    click(openPicker().querySelector('[data-sticky="tab:circle"]'));
-    flush();
-    let next = lastElements();
-    expect(next[0].id.startsWith('sticky_')).toBe(true);
-    expect(next[0].width).toBeCloseTo(360);
+    const ov = pick('[data-sticky="tab:circle"]');
+    const img = ov.querySelector('img');
+    expect(parseFloat(img.style.width)).toBeCloseTo(360 * 2);     // 종이 36% × 줌
+    place(410, 300);
+    const el = lastElements()[0];
+    expect(el.width).toBeCloseTo(360);
+    expect(el.x + el.width / 2).toBeCloseTo((410 - 10) / 2 - 50);
+    expect(el.y + el.height / 2).toBeCloseTo((300 - 100) / 2 + 20);
+  });
+
+  it('배경이 없으면 맨 앞에 들어가고, 종이가 없으면 너비 260', () => {
+    elements = [{ id: 'fd1', type: 'freedraw' }];
     render({ bgPositionRef: { current: null } });
-    click(openPicker().querySelector('[data-sticky="tab:circle"]'));
-    flush();
-    next = lastElements();
+    pick('[data-sticky="tab:circle"]');
+    place(100, 100);
+    const next = lastElements();
+    expect(next[0].id.startsWith('sticky_')).toBe(true);
     expect(next[0].width).toBe(260);
   });
 
-  it('같은 자리에 연달아 붙이면 장면에 있는 메모지를 피해 24 씩 계단으로 비켜 놓는다 (세 번째도 첫 번째 위에 겹치지 않음)', () => {
+  it('stickyOpacity=70 이면 요소 opacity 70', () => {
+    render({ stickyOpacity: 70 });
+    pick('[data-sticky="mark:cloud"]');
+    place(120, 120);
+    expect(lastElements().at(-1).opacity).toBe(70);
+  });
+
+  it('스타일러스는 한 자리에서 400ms 꾹 눌러야 확정 — 짧은 탭과 8px 넘는 움직임은 무시하고 계속 따라다닌다', () => {
     render();
-    click(openPicker().querySelector('[data-sticky="tab:circle"]')); flush();
-    const a = lastElements()[0];                       // 배경이 없으면 맨 앞에 들어간다
-    click(openPicker().querySelector('[data-sticky="tab:circle"]')); flush();
-    const b = lastElements()[0];
-    click(openPicker().querySelector('[data-sticky="tab:circle"]')); flush();
-    const c = lastElements()[0];
-    expect(new Set([a.id, b.id, c.id]).size).toBe(3);
-    expect([b.x - a.x, b.y - a.y]).toEqual([24, 24]);
-    expect([c.x - a.x, c.y - a.y]).toEqual([48, 48]);
+    const ov = pick('[data-sticky="tab:circle"]');
+    act(() => { ov.dispatchEvent(ptr('pointerdown', 200, 200, { pointerType: 'pen' })); });
+    act(() => { vi.advanceTimersByTime(200); });
+    act(() => { ov.dispatchEvent(ptr('pointerup', 200, 200, { pointerType: 'pen' })); });
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(api.addFiles).not.toHaveBeenCalled();
+    expect(placer()).not.toBeNull();
+    act(() => { ov.dispatchEvent(ptr('pointerdown', 200, 200, { pointerType: 'pen' })); });
+    act(() => { ov.dispatchEvent(ptr('pointermove', 220, 200, { pointerType: 'pen' })); });
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(api.addFiles).not.toHaveBeenCalled();
+    act(() => { ov.dispatchEvent(ptr('pointerup', 220, 200, { pointerType: 'pen' })); });
+    act(() => { ov.dispatchEvent(ptr('pointerdown', 240, 260, { pointerType: 'pen' })); });
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(api.addFiles).toHaveBeenCalledTimes(1);
+    flush();
+    const el = lastElements().at(-1);
+    expect(el.x + el.width / 2).toBeCloseTo(240);
+    expect(el.y + el.height / 2).toBeCloseTo(260);
+    expect(placer()).toBeNull();
+  });
+
+  it('Escape · 다른 도구 · 메모지 단추 다시 누름은 따라다니기를 취소하고 아무것도 붙이지 않는다', () => {
+    render();
+    pick('[data-sticky="tab:circle"]');
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    expect(placer()).toBeNull();
+    pick('[data-sticky="tab:circle"]');
+    click(btn('eraser'));
+    expect(placer()).toBeNull();
+    pick('[data-sticky="tab:circle"]');
+    click(btn('sticky'));
+    expect(placer()).toBeNull();
+    expect(document.querySelector('.vw-tb-pop')).toBeNull();
+    flush();
+    expect(api.addFiles).not.toHaveBeenCalled();
+  });
+
+  it('무늬 칸은 선택을 바꾸되 팝오버를 닫지 않고, 미리보기 그림이 그 무늬로 바뀐다', () => {
+    render();
+    const pop = openPicker();
+    click(pop.querySelector('[data-sticky-pattern="grid"]'));
+    expect(document.querySelector('.vw-tb-pop')).not.toBeNull();
+    expect(pop.querySelector('[data-sticky-pattern="grid"]').getAttribute('aria-pressed')).toBe('true');
+    expect(pop.querySelector('[data-sticky="tab:circle"] img').src).toContain(encodeURIComponent('data-pattern="grid"'));
+  });
+
+  it('길게 누르면(500ms) 팝오버 없이 마지막 메모지의 그림자가 바로 따라다닌다; 더블탭도 같다', () => {
+    localStorage.setItem('mc_sticky_last', JSON.stringify({ type: 'cut', friend: 'heart', pattern: 'ruled' }));
+    render();
+    act(() => { btn('sticky').dispatchEvent(new Event('pointerdown', { bubbles: true })); });
+    act(() => { vi.advanceTimersByTime(500); });
+    act(() => { btn('sticky').dispatchEvent(new Event('pointerup', { bubbles: true })); });
+    expect(document.querySelector('.vw-tb-pop')).toBeNull();
+    expect(placer()).not.toBeNull();
+    place(150, 150);
+    expect(lastElements().at(-1).customData.sticky).toEqual({ v: 1, type: 'cut', friend: 'heart', pattern: 'ruled' });
+    act(() => { btn('sticky').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+    expect(placer()).not.toBeNull();
+    place(200, 200);
+    expect(lastElements().filter((e) => e.id.startsWith('sticky_'))).toHaveLength(2);
+  });
+
+  it('페이지가 바뀌거나 Escape·바깥 pointerdown 이면 팝오버가 닫힌다; 페이지가 바뀌면 따라다니기도 끝난다', () => {
+    render();
+    openPicker();
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    expect(document.querySelector('.vw-tb-pop')).toBeNull();
+    openPicker();
+    render({ pageId: 'p2' });
+    expect(document.querySelector('.vw-tb-pop')).toBeNull();
+    openPicker();
+    act(() => { document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })); });
+    expect(document.querySelector('.vw-tb-pop')).toBeNull();
+    pick('[data-sticky="tab:circle"]');
+    render({ pageId: 'p3' });
+    expect(placer()).toBeNull();
+  });
+
+  it('api 가 아직 없으면 눌러도 팝오버가 열리지 않고 아무 일도 없다 (렌더 중 ref 를 읽어 disabled 를 정하지 않는다)', () => {
+    render({ apiRef: { current: null } });
+    expect(btn('sticky').disabled).toBe(false);
+    click(btn('sticky'));
+    expect(document.querySelector('.vw-tb-pop')).toBeNull();
+    act(() => { btn('sticky').dispatchEvent(new Event('pointerdown', { bubbles: true })); });
+    act(() => { vi.advanceTimersByTime(600); });
+    flush();
+    expect(placer()).toBeNull();
+    expect(api.addFiles).not.toHaveBeenCalled();
+  });
+
+  it('길게 누르기는 첫째 버튼(펜·손가락·왼쪽 클릭)만 — 오른쪽 버튼은 무시하고, pointercancel 이면 타이머를 끈다', () => {
+    render();
+    act(() => { btn('sticky').dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 2 })); });
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(placer()).toBeNull();
+    act(() => { btn('sticky').dispatchEvent(new Event('pointerdown', { bubbles: true })); });
+    act(() => { vi.advanceTimersByTime(200); });
+    act(() => { btn('sticky').dispatchEvent(new Event('pointercancel', { bubbles: true })); });
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(placer()).toBeNull();
+  });
+
+  it('장면에 파일이 빠진 옛 메모지가 있어도 새 메모지 붙이기는 파일을 다시 넣고 정상 동작한다', () => {
+    elements = [{ id: 'sticky_old', type: 'image', fileId: 'stickyf_v1_tab_circle_plain', locked: true, customData: { sticky: { v: 1, type: 'tab', friend: 'circle', pattern: 'plain' } }, x: 0, y: 0, width: 100, height: 100 }];
+    api.getFiles = () => ({});
+    render();
+    pick('[data-sticky="tab:circle"]');
+    place(80, 80);
+    expect(api.addFiles).toHaveBeenCalledWith([expect.objectContaining({ id: 'stickyf_v1_tab_circle_plain' })]);
+    expect(lastElements().filter((e) => e.customData?.sticky)).toHaveLength(2);
+  });
+
+  it('전체 지우기는 메모지도 지운다 (배경만 남김)', () => {
+    elements = [{ id: '__bg_image__', type: 'image' }, { id: 'sticky_a', type: 'image', customData: { sticky: {} } }, { id: 'fd1' }];
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render();
+    click(btn('clear'));
+    expect(lastElements().map((e) => e.id)).toEqual(['__bg_image__']);
   });
 
   it('PDF 쪽에서도 메모지와 이미지·메모지 이동이 있고, 배경 이미지가 없으면 W/H 미니 단추는 나오지 않는다', () => {
@@ -316,91 +461,6 @@ describe('DrawingToolbar — 메모지', () => {
     render({ htmlMode: true });
     expect(btn('sticky')).toBeNull();
     expect(btn('image_move')).toBeNull();
-  });
-
-  it('stickyOpacity=70 이면 요소 opacity 70', () => {
-    render({ stickyOpacity: 70 });
-    click(openPicker().querySelector('[data-sticky="mark:cloud"]')); flush();
-    expect(lastElements().at(-1).opacity).toBe(70);
-  });
-
-  it('무늬 칸은 선택을 바꾸되 팝오버를 닫지 않고, 미리보기 그림이 그 무늬로 바뀐다', () => {
-    render();
-    const pop = openPicker();
-    click(pop.querySelector('[data-sticky-pattern="grid"]'));
-    expect(document.querySelector('.vw-tb-pop')).not.toBeNull();
-    expect(pop.querySelector('[data-sticky-pattern="grid"]').getAttribute('aria-pressed')).toBe('true');
-    expect(pop.querySelector('[data-sticky="tab:circle"] img').src).toContain(encodeURIComponent('data-pattern="grid"'));
-  });
-
-  it('길게 누르면(500ms) 팝오버 없이 마지막 메모지를 바로 붙인다; 더블탭도 같다', () => {
-    localStorage.setItem('mc_sticky_last', JSON.stringify({ type: 'cut', friend: 'heart', pattern: 'ruled' }));
-    render();
-    act(() => { btn('sticky').dispatchEvent(new Event('pointerdown', { bubbles: true })); });
-    act(() => { vi.advanceTimersByTime(500); });
-    act(() => { btn('sticky').dispatchEvent(new Event('pointerup', { bubbles: true })); });
-    flush();
-    expect(document.querySelector('.vw-tb-pop')).toBeNull();
-    expect(lastElements().at(-1).customData.sticky).toEqual({ v: 1, type: 'cut', friend: 'heart', pattern: 'ruled' });
-    act(() => { btn('sticky').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
-    flush();
-    expect(document.querySelector('.vw-tb-pop')).toBeNull();
-    expect(lastElements().filter((e) => e.id.startsWith('sticky_'))).toHaveLength(2);
-  });
-
-  it('페이지가 바뀌거나 Escape·바깥 pointerdown 이면 팝오버가 닫힌다', () => {
-    render();
-    openPicker();
-    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
-    expect(document.querySelector('.vw-tb-pop')).toBeNull();
-    openPicker();
-    render({ pageId: 'p2' });
-    expect(document.querySelector('.vw-tb-pop')).toBeNull();
-    openPicker();
-    act(() => { document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })); });
-    expect(document.querySelector('.vw-tb-pop')).toBeNull();
-  });
-
-  it('api 가 아직 없으면 눌러도 팝오버가 열리지 않고 아무 일도 없다 (렌더 중 ref 를 읽어 disabled 를 정하지 않는다)', () => {
-    render({ apiRef: { current: null } });
-    expect(btn('sticky').disabled).toBe(false);
-    click(btn('sticky'));
-    expect(document.querySelector('.vw-tb-pop')).toBeNull();
-    act(() => { btn('sticky').dispatchEvent(new Event('pointerdown', { bubbles: true })); });
-    act(() => { vi.advanceTimersByTime(600); });
-    flush();
-    expect(api.addFiles).not.toHaveBeenCalled();
-  });
-
-  it('길게 누르기는 첫째 버튼(펜·손가락·왼쪽 클릭)만 — 오른쪽 버튼은 무시하고, pointercancel 이면 타이머를 끈다', () => {
-    render();
-    act(() => { btn('sticky').dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 2 })); });
-    act(() => { vi.advanceTimersByTime(600); });
-    flush();
-    expect(api.addFiles).not.toHaveBeenCalled();
-    act(() => { btn('sticky').dispatchEvent(new Event('pointerdown', { bubbles: true })); });
-    act(() => { vi.advanceTimersByTime(200); });
-    act(() => { btn('sticky').dispatchEvent(new Event('pointercancel', { bubbles: true })); });
-    act(() => { vi.advanceTimersByTime(600); });
-    flush();
-    expect(api.addFiles).not.toHaveBeenCalled();
-  });
-
-  it('장면에 파일이 빠진 옛 메모지가 있어도 새 메모지 붙이기는 파일을 다시 넣고 정상 동작한다', () => {
-    elements = [{ id: 'sticky_old', type: 'image', fileId: 'stickyf_v1_tab_circle_plain', locked: true, customData: { sticky: { v: 1, type: 'tab', friend: 'circle', pattern: 'plain' } }, x: 0, y: 0, width: 100, height: 100 }];
-    api.getFiles = () => ({});
-    render();
-    click(openPicker().querySelector('[data-sticky="tab:circle"]')); flush();
-    expect(api.addFiles).toHaveBeenCalledWith([expect.objectContaining({ id: 'stickyf_v1_tab_circle_plain' })]);
-    expect(lastElements().filter((e) => e.customData?.sticky)).toHaveLength(2);
-  });
-
-  it('전체 지우기는 메모지도 지운다 (배경만 남김)', () => {
-    elements = [{ id: '__bg_image__', type: 'image' }, { id: 'sticky_a', type: 'image', customData: { sticky: {} } }, { id: 'fd1' }];
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    render();
-    click(btn('clear'));
-    expect(lastElements().map((e) => e.id)).toEqual(['__bg_image__']);
   });
 });
 

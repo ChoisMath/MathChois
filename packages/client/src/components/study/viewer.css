@@ -8,7 +8,8 @@
  * 옅은 칠/짙은 글씨 짝(lib/classroomColor.js COLOR_STYLES 와 같은 값, 글씨 대비 4.5:1 이상)에서 가져온다.
  * 크기는 px 로만 쓴다 — html 루트 글자 크기가 화면 폭마다 바뀐다(shell.css 와 같은 이유). 누르는 영역은 40px 이상.
  */
-.vw-root {
+/* 토큰은 뷰어 루트와, body 로 포털되는 메모지 팝오버·자리 정하기 덮개에도 건다 (포털은 .vw-root 바깥) */
+.vw-root, .vw-tb-pop, .vw-sticky-placer {
   --vw-ink: #1c2b4a;        /* 잉크 — 글씨, 켜진 도구 */
   --vw-soft: #56627c;       /* 보조 글씨·아이콘 */
   --vw-mute: #8a94ab;       /* 흐린 글씨(저장 중…) */
@@ -22,11 +23,9 @@
   --vw-lavender-t: #ece4fa; --vw-lavender-d: #563a99; /* Excalidraw 세부설정 · 첨부 · AI */
   --vw-sky-t: #dcebfa;     --vw-sky-d: #1d5893;       /* 손가락 필기 */
   --vw-sans: 'IBM Plex Sans KR', 'Noto Sans KR', system-ui, sans-serif;
-
-  background: var(--vw-desk);
-  color: var(--vw-ink);
-  font-family: var(--vw-sans);
 }
+.vw-root { background: var(--vw-desk); color: var(--vw-ink); font-family: var(--vw-sans); }
+.vw-tb-pop, .vw-sticky-placer { color: var(--vw-ink); font-family: var(--vw-sans); }   /* 포털: 배경은 각자 (덮개는 투명) */
 .vw-top :focus-visible, .vw-tb :focus-visible, .vw-side :focus-visible, .vw-fab:focus-visible {
   outline: 3px solid var(--vw-pen); outline-offset: 2px;
 }
@@ -159,6 +158,12 @@
 .vw-tb-pop-pattern button { height: 36px; padding: 0 10px; border-radius: 8px; font-size: 12px; display: inline-flex; gap: 6px; align-items: center; color: var(--vw-soft); cursor: pointer; background: none; border: 0; }
 .vw-tb-pop-pattern button svg { width: 16px; height: 16px; }
 .vw-tb-pop-pattern button[aria-pressed="true"] { background: var(--vw-ink); color: #fff; }
+/* 메모지 자리 정하기 (StickyPlacer) — 캔버스를 덮는 투명 덮개 + 포인터를 따라다니는 50% 그림자 */
+.vw-sticky-placer { position: fixed; inset: 0; z-index: 55; cursor: copy; touch-action: none; }
+.vw-sticky-ghost { position: fixed; pointer-events: none; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(28, 43, 74, .25)); }
+.vw-sticky-hint { position: fixed; left: 50%; top: 116px; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; background: var(--vw-ink); color: #fff; font-size: 12px; white-space: nowrap; pointer-events: none; opacity: .92; }
+@media (max-width: 640px) { .vw-sticky-hint { top: 110px; font-size: 11px; } }
+
 @media (hover: hover) {
   .vw-tb-pop-cell:not([aria-current="true"]):hover { background: rgba(28, 43, 74, .07); }
   .vw-tb-pop-pattern button:not([aria-pressed="true"]):hover { background: rgba(28, 43, 74, .07); color: var(--vw-ink); }

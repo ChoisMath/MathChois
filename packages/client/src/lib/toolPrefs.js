@@ -31,10 +31,10 @@ export const PEN_COLOR_DEFAULT = '#000000';
 export const TOOLBAR_ORDER = Object.freeze([
   'pages',
   'undo', 'redo',
-  'freedraw', 'highlighter', 'finger', 'laser_pointer',
+  'freedraw', 'highlighter', 'finger', 'laser_pointer', 'sticky', 'image_move',
   'slot-0', 'slot-1', 'slot-2', 'slot-3', 'slot-4', 'palette',
   'width',
-  'eraser', 'image_move', 'image_reload', 'sticky', 'image_add',
+  'eraser', 'image_reload', 'image_add',
   'line', 'text', 'shapes', 'lasso',
   'clear', 'settings',
 ]);
