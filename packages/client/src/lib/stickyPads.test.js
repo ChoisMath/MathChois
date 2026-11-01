@@ -20,12 +20,13 @@ describe('stickyPads — 모델', () => {
     expect(stickyAspect('cut')).toBeCloseTo(170 / 180);
   });
 
-  it('72 조합 모두 viewBox 가 있고 width/height 속성은 없는 SVG 를 만든다', () => {
+  it('72 조합 모두 viewBox 와 같은 width/height 를 가진 SVG 를 만든다 (없으면 브라우저 기본 300×150 으로 샘플링돼 잘린다)', () => {
     for (const type of STICKY_TYPES) for (const friend of STICKY_FRIENDS) for (const pattern of STICKY_PATTERNS) {
       const svg = stickySvg({ type, friend, pattern });
       expect(svg.startsWith('<svg')).toBe(true);
-      expect(svg).toMatch(/viewBox="0 0 \d+ \d+"/);
-      expect(svg).not.toMatch(/<svg[^>]*\swidth=/);
+      const m = svg.match(/^<svg[^>]*\swidth="(\d+)" height="(\d+)" viewBox="0 0 (\d+) (\d+)"/);
+      expect(m).not.toBeNull();
+      expect([m[1], m[2]]).toEqual([m[3], m[4]]);
       expect(svg.length).toBeLessThan(8000);
     }
   });

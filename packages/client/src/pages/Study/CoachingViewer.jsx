@@ -194,7 +194,7 @@ export default function CoachingViewer({
     if (!noteLoadedRef.current) return;
 
     const userEls = elements.filter((el) => !el.isDeleted);
-    const serialized = JSON.stringify(userEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points })));
+    const serialized = JSON.stringify(userEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points, locked: el.locked })));  // locked: 메모지 잠금 토글도 저장되게
     if (serialized === lastSavedRef.current) {
       pendingSaveRef.current = null;
       clearTimeout(saveTimerRef.current);

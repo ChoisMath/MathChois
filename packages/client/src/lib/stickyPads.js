@@ -183,12 +183,13 @@ function drawCut(friend, pattern, c, id) {
 
 const DRAW = { tab: drawTab, face: drawFace, mark: drawMark, cut: drawCut };
 
-/** 결정적 SVG 문자열 (viewBox 만, width/height 없음) */
+/** 결정적 SVG 문자열 (width/height = viewBox) */
 export function stickySvg({ type, friend, pattern }) {
   const [w, h] = VIEWBOX[type];
   const c = friendColor(friend);
   const id = ids(type, friend, pattern);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}">`
+  /* width/height 는 viewBox 와 같게 — 없으면 브라우저가 300×150 으로 보고 Excalidraw 가 그 크기로 샘플링해 그림이 커지고 잘린다 */
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`
        + `<defs>${patternDefs(pattern, id)}</defs>`
        + DRAW[type](friend, pattern, c, id)
        + '</svg>';

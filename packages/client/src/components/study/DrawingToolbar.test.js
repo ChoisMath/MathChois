@@ -256,10 +256,11 @@ describe('DrawingToolbar — 메모지', () => {
     render();
     click(btn('freedraw'));
     const pop = openPicker();
+    const callsBefore = api.updateScene.mock.calls.length;
     click(pop.querySelector('[data-sticky="face:star"]'));
-    expect(api.addFiles).not.toHaveBeenCalled();          // 같은 틱에는 아무것도 안 함
-    flush();
     expect(api.addFiles).toHaveBeenCalledWith([expect.objectContaining({ id: 'stickyf_v1_face_star_plain', mimeType: 'image/svg+xml' })]);
+    expect(api.updateScene.mock.calls.length).toBe(callsBefore);   // 요소는 다음 프레임에
+    flush();
     const next = lastElements();
     expect(next.map((e) => e.id.replace(/^sticky_.*/, 'sticky'))).toEqual(['__bg_image__', 'sticky', 'fd1']);
     expect(next[1]).toMatchObject({ locked: true, opacity: 100, customData: { sticky: { v: 1, type: 'face', friend: 'star', pattern: 'plain' } } });

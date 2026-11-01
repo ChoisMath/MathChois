@@ -558,11 +558,11 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
     setStickySpec(spec);
     setPickerOpen(false);
     const el = buildStickyElement(spec, { x, y, width, opacity: stickyOpacity });
-    /* addFiles 의 상태 커밋 뒤 다음 프레임에 updateScene — 같은 틱이면 이미지가 안 보일 수 있다 */
+    /* 파일을 먼저 넣고, 그 상태가 커밋된 다음 프레임에 updateScene — 같은 틱이면 이미지 자리에 빈 상자가 보일 수 있다 */
+    api.addFiles([stickyFile(spec)]);
     requestAnimationFrame(() => {
       const a = apiRef.current;
       if (!a) return;
-      a.addFiles([stickyFile(spec)]);
       const els = a.getSceneElements();
       const i = els.findIndex((e) => e.id === BG_ELEMENT_ID) + 1; // 배경 바로 뒤(없으면 맨 앞) = 기존 필기 아래
       a.updateScene({ elements: [...els.slice(0, i), el, ...els.slice(i)] });
