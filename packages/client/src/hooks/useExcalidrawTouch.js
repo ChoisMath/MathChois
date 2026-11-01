@@ -39,7 +39,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
   const onUserDrawStartRef = useRef(onUserDrawStart);
   useEffect(() => { onUserDrawStartRef.current = onUserDrawStart; }, [onUserDrawStart]);
   const isTouchingRef        = useRef(false);
-  const pinchStateRef        = useRef(null); // { startDist, startZoom, lastCenterX, lastCenterY }
+  const pinchStateRef        = useRef(null); // { startDist, startZoom, lastCenterX, lastCenterY, offsetLeft, offsetTop }
   const panStateRef          = useRef(null); // { lastX, lastY } — 1손가락 팬
   const viewportRef          = useRef({ zoom: 1, scrollX: 0, scrollY: 0 }); // 제스처 누적 뷰포트(단일 출처)
   const isGesturingRef       = useRef(false); // 1손가락 팬 또는 2손가락 핀치 진행 중
@@ -287,7 +287,10 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         const cy = (t0.clientY + t1.clientY) / 2;
         const appState = excalidrawAPIRef.current?.getAppState();
         const z = appState?.zoom?.value || 1;
-        pinchStateRef.current = { startDist: dist, startZoom: z, lastCenterX: cx, lastCenterY: cy };
+        pinchStateRef.current = {
+          startDist: dist, startZoom: z, lastCenterX: cx, lastCenterY: cy,
+          offsetLeft: appState?.offsetLeft || 0, offsetTop: appState?.offsetTop || 0,
+        };
         viewportRef.current = { zoom: z, scrollX: appState?.scrollX || 0, scrollY: appState?.scrollY || 0 };
         panStateRef.current = null;
         isGesturingRef.current = true;
@@ -338,8 +341,12 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         const ps = pinchStateRef.current;
         const newZoom = Math.min(Math.max(ps.startZoom * (dist / ps.startDist), 0.1), 10);
         const vp = viewportRef.current;
-        vp.scrollX += (cx - ps.lastCenterX) / newZoom;
-        vp.scrollY += (cy - ps.lastCenterY) / newZoom;
+        // 핀치 중심을 기준으로 줌한다: 직전 중심 아래 있던 장면 좌표가 새 중심 아래에 오도록 scroll 을 맞춘다.
+        // (Excalidraw: scene = (client - offset) / zoom - scroll) 이 보정 없이 zoom 만 바꾸면 캔버스 왼쪽 위를
+        // 축으로 확대되어 손가락 아래 내용이 손가락보다 몇 배 빠르게 달아난다 → "조금만 움직여도 확 확대".
+        const prevZoom = vp.zoom;
+        vp.scrollX += (cx - ps.offsetLeft) / newZoom - (ps.lastCenterX - ps.offsetLeft) / prevZoom;
+        vp.scrollY += (cy - ps.offsetTop) / newZoom - (ps.lastCenterY - ps.offsetTop) / prevZoom;
         vp.zoom = newZoom;
         ps.lastCenterX = cx;
         ps.lastCenterY = cy;
