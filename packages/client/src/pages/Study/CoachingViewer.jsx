@@ -4,7 +4,7 @@ import { Excalidraw, exportToBlob } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Loader, Wand2, Sparkles } from 'lucide-react';
 import PageListIcon from '../../components/study/PageListIcon';
-import { STICKY_ID_PREFIX } from '../../lib/stickyPads';
+import { STICKY_ID_PREFIX, relockOwnStickies } from '../../lib/stickyPads';
 
 /** 올가미·문지르기 지우개가 건드리지 않는 id 접두사: 메모지 */
 const EXCLUDE_PREFIXES = [STICKY_ID_PREFIX];
@@ -193,7 +193,7 @@ export default function CoachingViewer({
     /* 필기 로드 완료 전에는 저장 금지 (마운트 직후 빈 캔버스 onChange로 인한 덮어쓰기 방지) */
     if (!noteLoadedRef.current) return;
 
-    const userEls = elements.filter((el) => !el.isDeleted);
+    const userEls = relockOwnStickies(elements.filter((el) => !el.isDeleted));
     const serialized = JSON.stringify(userEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points, locked: el.locked })));  // locked: 메모지 잠금 토글도 저장되게
     if (serialized === lastSavedRef.current) {
       pendingSaveRef.current = null;

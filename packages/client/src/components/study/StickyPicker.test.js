@@ -36,4 +36,18 @@ describe('StickyPicker', () => {
     expect(onPatternChange).toHaveBeenCalledWith('ruled');
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it('바깥을 누르면 닫히고 그 pointerdown 은 캔버스까지 가지 않는다 (점이 찍히지 않게); 안쪽 누름은 통과한다', () => {
+    const outside = vi.fn();
+    document.body.addEventListener('pointerdown', outside);
+    act(() => { document.body.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true })); });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(outside).not.toHaveBeenCalled();
+    document.body.removeEventListener('pointerdown', outside);
+    const inside = vi.fn();
+    pop().addEventListener('pointerdown', inside);
+    act(() => { pop().querySelector('[data-sticky="tab:circle"]').dispatchEvent(new Event('pointerdown', { bubbles: true })); });
+    expect(inside).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

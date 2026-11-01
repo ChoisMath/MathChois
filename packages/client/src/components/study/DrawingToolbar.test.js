@@ -285,14 +285,37 @@ describe('DrawingToolbar — 메모지', () => {
     expect(next[0].width).toBe(260);
   });
 
-  it('같은 자리에 연달아 붙이면 24 씩 비켜 놓는다', () => {
+  it('같은 자리에 연달아 붙이면 장면에 있는 메모지를 피해 24 씩 계단으로 비켜 놓는다 (세 번째도 첫 번째 위에 겹치지 않음)', () => {
     render();
     click(openPicker().querySelector('[data-sticky="tab:circle"]')); flush();
     const a = lastElements()[0];                       // 배경이 없으면 맨 앞에 들어간다
     click(openPicker().querySelector('[data-sticky="tab:circle"]')); flush();
     const b = lastElements()[0];
-    expect(b.id).not.toBe(a.id);
+    click(openPicker().querySelector('[data-sticky="tab:circle"]')); flush();
+    const c = lastElements()[0];
+    expect(new Set([a.id, b.id, c.id]).size).toBe(3);
     expect([b.x - a.x, b.y - a.y]).toEqual([24, 24]);
+    expect([c.x - a.x, c.y - a.y]).toEqual([48, 48]);
+  });
+
+  it('PDF 쪽에서도 메모지와 이미지·메모지 이동이 있고, 배경 이미지가 없으면 W/H 미니 단추는 나오지 않는다', () => {
+    elements = [{ id: 'fd1', type: 'freedraw' }];
+    render({ pdfMode: true });
+    expect(btn('sticky')).not.toBeNull();
+    expect(btn('image_move')).not.toBeNull();
+    click(btn('image_move'));
+    expect(mount.querySelectorAll('.vw-tb-mini')).toHaveLength(0);
+    click(btn('image_move'));
+    elements = [{ id: '__bg_image__', type: 'image', locked: true }];
+    render({ pdfMode: false });
+    click(btn('image_move'));
+    expect(mount.querySelectorAll('.vw-tb-mini')).toHaveLength(2);
+  });
+
+  it('HTML 도구 쪽에는 메모지 단추가 없다 (이동 도구도 없어 다룰 수 없으므로)', () => {
+    render({ htmlMode: true });
+    expect(btn('sticky')).toBeNull();
+    expect(btn('image_move')).toBeNull();
   });
 
   it('stickyOpacity=70 이면 요소 opacity 70', () => {

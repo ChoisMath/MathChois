@@ -5,7 +5,7 @@ import {
   ChevronUp, ChevronDown,
 } from 'lucide-react';
 import PageListIcon from '../../components/study/PageListIcon';
-import { STICKY_ID_PREFIX } from '../../lib/stickyPads';
+import { STICKY_ID_PREFIX, relockOwnStickies } from '../../lib/stickyPads';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
@@ -771,11 +771,11 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
     const cu   = userRef.current;
     if (!cu || !page) return;
 
-    const userEls = elements.filter((el) =>
+    const userEls = relockOwnStickies(elements.filter((el) =>
       el.id !== BG_ELEMENT_ID &&
       !el.id.startsWith(TEACHER_NOTE_PREFIX) &&
       !el.isDeleted
-    );
+    ));
 
     /* 직전 저장 내용과 동일하면 저장 스킵 */
     const serialized = JSON.stringify(userEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points, text: el.text, width: el.width, height: el.height, strokeColor: el.strokeColor, strokeWidth: el.strokeWidth, locked: el.locked })));  // locked: 메모지 잠금 토글도 저장되게

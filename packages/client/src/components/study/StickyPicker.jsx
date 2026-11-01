@@ -22,17 +22,20 @@ export default function StickyPicker({ current, anchorRect, anchorEl, onPick, on
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    /* 바깥 누름은 닫기만 한다: 캡처 단계에서 삼켜 캔버스에 점이 찍히지 않게 (단추 자체는 토글이 처리) */
     const onDown = (e) => {
       const t = e.target;
       if (popRef.current?.contains(t)) return;
       if (anchorEl && anchorEl.contains(t)) return;
+      e.stopPropagation();
+      e.preventDefault();
       onClose();
     };
     document.addEventListener('keydown', onKey);
-    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('pointerdown', onDown, true);
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('pointerdown', onDown, true);
     };
   }, [anchorEl, onClose]);
 

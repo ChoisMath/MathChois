@@ -30,6 +30,7 @@ import { buildStickyElement, stickyFile, isOwnSticky } from '../../lib/stickyPad
  * 맨 앞의 페이지 목록(썸네일) 버튼은 뷰어가 `sidebarOpen`/`onToggleSidebar` 를 넘길 때만 나온다 — 도구바가 보일 때는 여기,
  * 보기 모드·도구바 접힘처럼 도구바가 없을 때는 뷰어 상단 바에 같은 버튼이 대신 나온다.
  * 겉모양은 components/study/viewer.css (`.vw-tb*`) — 뷰어 상단 바·페이지 목록과 같은 토큰을 쓴다.
+ * `pdfMode` prop 은 더 이상 쓰지 않는다(PDF 쪽에서도 메모지 때문에 이동 도구가 필요) — 뷰어가 넘겨도 무시된다.
  * 메모지(포스트잇 배경 도형, lib/stickyPads.js): `sticky` 버튼 → StickyPicker 팝오버 → 잠긴 image 요소 하나를 배경 바로 뒤에 넣는다.
  *   길게 누르기(500ms)·더블탭은 마지막 메모지를 바로 붙인다. 코멘트 창은 `stickyOpacity={70}`. 설계 docs/superpowers/specs/2026-11-01-sticky-pads-design.md
  */
@@ -50,7 +51,7 @@ const inkToolOf = (tool) => (tool === 'highlighter' ? 'highlighter' : 'freedraw'
 const btnCls = (active, mod = '') => ['vw-tb-btn', mod, active ? 'is-on' : ''].filter(Boolean).join(' ');
 const Divider = () => <div className="vw-tb-sep" aria-hidden="true" />;
 
-function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, pdfMode = false, onActiveToolChange, sidebarOpen, onToggleSidebar, stickyOpacity = 100, bgPositionRef }) {
+function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, onActiveToolChange, sidebarOpen, onToggleSidebar, stickyOpacity = 100, bgPositionRef }) {
   const [activeTool, setActiveTool]       = useState('freedraw');
   const [imageMoveMode, setImageMoveMode] = useState(false);
   const [inputMode, setInputModeState] = useState(() => getInputMode());
@@ -62,9 +63,9 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
   const [stickySpec, setStickySpec]       = useState(() => loadStickyLast());
   const stickyBtnRef    = useRef(null);
   const longPressRef    = useRef({ timer: null, fired: false });
-  const lastStickyPosRef = useRef(null);
   /* 이동 모드: 선택된 요소 중 내 메모지가 있는지 (onChange 구독, 모드가 켜진 동안만) */
   const [stickySelected, setStickySelected] = useState(false);
+  const [bgPresent, setBgPresent] = useState(false); // 이동 모드에서 W/H 미니 단추는 배경 이미지가 있을 때만
   const moveUnsubRef = useRef(null);
   const stopMoveWatch = useCallback(() => {
     moveUnsubRef.current?.();
@@ -422,10 +423,12 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
     if (!api) return;
     const next = !imageMoveMode;
     setImageMoveMode(next);
-    const els = api.getSceneElements().map((el) =>
+    const scene = api.getSceneElements();
+    const els = scene.map((el) =>
       movable(el) ? { ...el, locked: !next } : el
     );
     api.updateScene({ elements: els });
+    setBgPresent(scene.some((el) => el.id === BG_ELEMENT_ID));
     if (next) {
       setPickerOpen(false);
       stopMoveWatch();
@@ -551,9 +554,11 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
     const vpH = canvasEl?.clientHeight || 600;
     let x = (vpW / 2 - (appState.scrollX || 0)) / zoom - width / 2;
     let y = (vpH / 2 - (appState.scrollY || 0)) / zoom - height / 2;
-    const last = lastStickyPosRef.current;
-    if (last && last.x === x && last.y === y) { x += STICKY_NUDGE; y += STICKY_NUDGE; }
-    lastStickyPosRef.current = { x, y };
+    /* 같은 자리에 이미 내 메모지가 있으면 오른쪽 아래로 24 씩 계단으로 비킨다 (연달아 붙여도 겹치지 않게) */
+    const taken = api.getSceneElements().filter((e) => isOwnSticky(e) && !e.isDeleted);
+    for (let i = 0; i < 20 && taken.some((e) => Math.abs(e.x - x) < 0.5 && Math.abs(e.y - y) < 0.5); i++) {
+      x += STICKY_NUDGE; y += STICKY_NUDGE;
+    }
     saveStickyLast(spec);
     setStickySpec(spec);
     setPickerOpen(false);
@@ -688,8 +693,8 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
       {/* ④ 지우개 · 이미지 */}
       {toolBtn('eraser', Eraser, '지우개 — 획 단위')}
 
-      {/* 이미지 이동 (배경 이미지 페이지 전용 — PDF 종이는 Excalidraw 요소가 아니라 끌 수 없음) */}
-      {!htmlMode && !pdfMode && (
+      {/* 이미지·메모지 이동 — HTML 도구 쪽만 제외(메모지도 없음). PDF 쪽은 종이는 못 끌지만 메모지를 옮기고 지우려면 필요하다 */}
+      {!htmlMode && (
       <button data-tb="image_move" onClick={handleToggleImageMove}
         aria-pressed={imageMoveMode}
         aria-label="이미지·메모지 이동"
@@ -699,9 +704,10 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
       </button>
       )}
 
-      {/* 이미지 가로/세로 비율 조정 (이동 모드일 때만) */}
+      {/* 이동 모드: 배경 가로/세로 비율 조정(배경 이미지가 있을 때만) + 선택된 메모지 삭제 */}
       {imageMoveMode && (
         <>
+          {bgPresent && (<>
           <div className="vw-tb-mini" role="group" aria-label="배경 너비">
             <span className="vw-tb-mini-label" aria-hidden="true">W</span>
             <button onClick={() => handleResizeBg('width', -0.05)} title="너비 축소 (-5%)" aria-label="너비 축소 (-5%)">
@@ -720,6 +726,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
               <Plus />
             </button>
           </div>
+          </>)}
           {stickySelected && (
             <button data-tb="sticky_delete" onClick={handleDeleteSticky} title="메모지 삭제" aria-label="메모지 삭제"
               className="vw-tb-btn vw-tb-btn--danger">
@@ -737,6 +744,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
         </button>
       )}
 
+      {!htmlMode && (<>
       <button ref={stickyBtnRef} data-tb="sticky" type="button"
         onPointerDown={onStickyPointerDown} onPointerUp={onStickyPointerUp} onPointerLeave={onStickyPointerUp}
         onClick={onStickyClick} onDoubleClick={onStickyDoubleClick}
@@ -756,6 +764,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
           onClose={() => setPickerOpen(false)}
         />
       )}
+      </>)}
 
       <button data-tb="image_add" onClick={() => imageInputRef.current?.click()} title="이미지 삽입"
         className="vw-tb-btn">

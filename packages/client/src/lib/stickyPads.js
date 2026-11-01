@@ -213,6 +213,20 @@ export function isOwnSticky(el) {
   return isStickyElement(el) && typeof el.id === 'string' && el.id.startsWith(STICKY_ID_PREFIX);
 }
 
+/**
+ * 저장 직전 정규화: 내 메모지는 항상 `locked: true` 로 저장한다.
+ * 이동 모드 중(잠금 해제 상태)에 페이지를 떠나거나 앱이 닫히면 풀린 채 저장돼 다음에 지우개에 지워지는 것을 막는다.
+ * 바꿀 것이 없으면 같은 배열을 그대로 돌려준다.
+ */
+export function relockOwnStickies(elements) {
+  let changed = false;
+  const out = elements.map((el) => {
+    if (isOwnSticky(el) && el.locked !== true) { changed = true; return { ...el, locked: true }; }
+    return el;
+  });
+  return changed ? out : elements;
+}
+
 /** 잠긴 image 요소 하나 — 삽입 이미지와 같은 필드 + locked·customData */
 export function buildStickyElement(spec, { x, y, width, opacity = 100, id, now = Date.now(), rand = Math.random } = {}) {
   const { type, friend, pattern } = spec;

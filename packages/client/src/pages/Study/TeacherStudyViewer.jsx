@@ -4,7 +4,7 @@ import {
   ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil,
 } from 'lucide-react';
 import PageListIcon from '../../components/study/PageListIcon';
-import { STICKY_ID_PREFIX } from '../../lib/stickyPads';
+import { STICKY_ID_PREFIX, relockOwnStickies } from '../../lib/stickyPads';
 
 /** 올가미·문지르기 지우개가 건드리지 않는 id 접두사: 메모지 */
 const EXCLUDE_PREFIXES = [STICKY_ID_PREFIX];
@@ -272,7 +272,7 @@ const TeacherStudyViewer = () => {
     const page = currentPageRef.current;
     if (!user || !page) return;
 
-    const teacherEls = elements.filter((el) => el.id !== BG_ELEMENT_ID && !el.isDeleted);
+    const teacherEls = relockOwnStickies(elements.filter((el) => el.id !== BG_ELEMENT_ID && !el.isDeleted));
 
     /* 직전 저장 내용과 동일하면 저장 스킵 */
     const serialized = JSON.stringify(teacherEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points, text: el.text, width: el.width, height: el.height, strokeColor: el.strokeColor, strokeWidth: el.strokeWidth, locked: el.locked })));  // locked: 메모지 잠금 토글도 저장되게

@@ -5,7 +5,7 @@ import {
   CheckCircle, XCircle, Trophy, Loader, X, Paperclip
 } from 'lucide-react';
 import PageListIcon from '../../components/study/PageListIcon';
-import { STICKY_ID_PREFIX } from '../../lib/stickyPads';
+import { STICKY_ID_PREFIX, relockOwnStickies } from '../../lib/stickyPads';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
@@ -415,9 +415,9 @@ const AssignmentWorkViewer = () => {
 
     const page = currentPageRef.current;
     if (!user || !page) return;
-    const filtered = elements.filter(
+    const filtered = relockOwnStickies(elements.filter(
       (el) => el.id !== BG_ELEMENT_ID && !el.id.startsWith(STUDENT_NOTE_PREFIX) && !el.isDeleted
-    );
+    ));
     const serialized = JSON.stringify(filtered.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points, text: el.text, width: el.width, height: el.height, strokeColor: el.strokeColor, strokeWidth: el.strokeWidth, locked: el.locked })));  // locked: 메모지 잠금 토글도 저장되게
     if (serialized === lastSavedRef.current) return;
 

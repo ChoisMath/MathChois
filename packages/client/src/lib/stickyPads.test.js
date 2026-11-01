@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   STICKY_TYPES, STICKY_FRIENDS, STICKY_PATTERNS, STICKY_ID_PREFIX,
   stickyFileId, stickySvg, stickyDataUrl, stickyAspect, stickyFile,
-  buildStickyElement, isStickyElement, isOwnSticky, isStickySpec, friendColor,
+  buildStickyElement, isStickyElement, isOwnSticky, isStickySpec, friendColor, relockOwnStickies,
 } from './stickyPads';
 import { COLOR_STYLES } from './classroomColor';
 
@@ -90,5 +90,21 @@ describe('stickyPads — 요소', () => {
     expect(isOwnSticky(own)).toBe(true);
     expect(isOwnSticky({ ...own, id: '__sn_' + own.id })).toBe(false); // 교사 창에 내려온 학생 메모지
     expect(isStickyElement({ type: 'image', id: 'img_1' })).toBe(false);
+  });
+});
+
+describe('relockOwnStickies — 저장 전 내 메모지는 항상 잠긴 채로', () => {
+  const own = buildStickyElement({ type: 'tab', friend: 'circle', pattern: 'plain' }, { x: 0, y: 0, width: 100, id: 'sticky_a' });
+  it('풀린 내 메모지는 잠그고, 학생 층 메모지와 다른 요소는 그대로 둔다', () => {
+    const student = { ...own, id: '__sn_sticky_b', locked: false };
+    const ink = { id: 'fd', type: 'freedraw', locked: false };
+    const out = relockOwnStickies([{ ...own, locked: false }, student, ink]);
+    expect(out.map((e) => [e.id, e.locked])).toEqual([['sticky_a', true], ['__sn_sticky_b', false], ['fd', false]]);
+    expect(out[1]).toBe(student);
+    expect(out[2]).toBe(ink);
+  });
+  it('바꿀 것이 없으면 같은 배열을 돌려준다', () => {
+    const arr = [own, { id: 'fd', type: 'freedraw' }];
+    expect(relockOwnStickies(arr)).toBe(arr);
   });
 });

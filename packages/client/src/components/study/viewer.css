@@ -242,7 +242,9 @@
 .vw-top-r { min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .vw-top-r::-webkit-scrollbar { display: none; }
 @media (max-width: 640px) {
-  .vw-tb-pop { left: 8px; right: 8px; transform: none; }
+  .vw-tb-pop { left: 8px; right: 8px; transform: none; padding: 8px; }
+  .vw-tb-pop-row { flex-wrap: wrap; }                 /* 360px 폰: 유형 이름을 칸 위에 두어 여섯 칸이 다 보이게 */
+  .vw-tb-pop-head { width: 100%; padding: 4px 2px 0; }
   .vw-top { padding-right: 4px; }
   .vw-top-title { font-size: 15px; }
   .vw-top .vw-ibtn--nav { display: none; }
