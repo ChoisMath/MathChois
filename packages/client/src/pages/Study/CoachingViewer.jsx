@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Excalidraw, exportToBlob } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
-import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Loader, Wand2, Sparkles, Menu } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Loader, Wand2, Sparkles } from 'lucide-react';
+import PageListIcon from '../../components/study/PageListIcon';
+import { STICKY_ID_PREFIX, relockOwnStickies } from '../../lib/stickyPads';
 import { PageVideoThumb } from '../../components/videos/PageVideo';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
@@ -24,6 +26,9 @@ import { getProblemForCoaching } from '../../lib/problems';
 import { convertSolution, reviewSolution, listAttempts, getStudentPageAttempts, uploadWorkImage } from '../../lib/coaching';
 import { sceneStrokeWidth } from '../../lib/penWidth';
 import PageThumb from '../../components/common/PageThumb';
+
+/** 올가미·문지르기 지우개가 건드리지 않는 id 접두사: 메모지 */
+const EXCLUDE_PREFIXES = [STICKY_ID_PREFIX];
 
 const PANEL_KEY = 'coachingRightPanelWidth';
 const MIN_W = 300;
@@ -67,7 +72,7 @@ export default function CoachingViewer({
   useEffect(() => { screenLockedRef.current = screenLocked; }, [screenLocked]);
 
   const { triggerPalmRejectionWarmup, isGesturingRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef });
-  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef });
+  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: EXCLUDE_PREFIXES });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
 
@@ -78,7 +83,7 @@ export default function CoachingViewer({
   useEffect(() => { drawModeRef.current = !readOnly; }, [readOnly]);
   useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef });
   const lassoActiveRef = useRef(false); // 논리 도구가 올가미인지 (useLasso 가로채기 게이트)
-  useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: drawModeRef, lassoActiveRef, excludePrefixes: [] });
+  useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: drawModeRef, lassoActiveRef, excludePrefixes: EXCLUDE_PREFIXES });
 
   const [problem, setProblem] = useState(null);
   const [solutionLatex, setSolutionLatex] = useState('');
@@ -188,8 +193,8 @@ export default function CoachingViewer({
     /* 필기 로드 완료 전에는 저장 금지 (마운트 직후 빈 캔버스 onChange로 인한 덮어쓰기 방지) */
     if (!noteLoadedRef.current) return;
 
-    const userEls = elements.filter((el) => !el.isDeleted);
-    const serialized = JSON.stringify(userEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points })));
+    const userEls = relockOwnStickies(elements.filter((el) => !el.isDeleted));
+    const serialized = JSON.stringify(userEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points, locked: el.locked })));  // locked: 메모지 잠금 토글도 저장되게
     if (serialized === lastSavedRef.current) {
       pendingSaveRef.current = null;
       clearTimeout(saveTimerRef.current);
@@ -474,9 +479,14 @@ export default function CoachingViewer({
         )}
         <button onClick={() => go(nextPage)} disabled={!nextPage} aria-label="다음 페이지"
           className="min-h-11 min-w-11 flex items-center justify-center border rounded-md disabled:opacity-40"><ChevronRight size={18} /></button>
-        {/* 페이지 목록 토글 */}
-        <button onClick={() => setSidebarOpen((v) => !v)} title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
-          className="min-h-11 min-w-11 flex items-center justify-center border rounded-md"><Menu size={18} /></button>
+        {/* 페이지 목록 토글 — 도구바가 있으면(필기 가능) 도구바 맨 앞 버튼이 대신한다 */}
+        {readOnly && (
+          <button onClick={() => setSidebarOpen((v) => !v)} aria-pressed={sidebarOpen}
+            aria-label={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'} title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+            className="min-h-11 min-w-11 flex items-center justify-center border rounded-md">
+            <PageListIcon size={18} />
+          </button>
+        )}
       </div>
     </header>
   );
@@ -519,6 +529,7 @@ export default function CoachingViewer({
   const toolbar = !readOnly && (
     <DrawingToolbar
       apiRef={excalidrawAPIRef}
+      sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)}
       pageId={pageId}
       showPanel={showExcalidrawPanel}
       onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}

@@ -157,7 +157,7 @@ assignment_pages
 3. 렌더 트리에서 `<PdfPageLayer …/>`를 Excalidraw 컨테이너 아래(형제, z-index 낮음)에 배치.
 
 부수 변경:
-- `DrawingToolbar`의 "이미지 이동" 버튼은 PDF 페이지에서 숨긴다(`htmlMode`처럼 `pdfMode` prop).
+- ~~`DrawingToolbar`의 "이미지 이동" 버튼은 PDF 페이지에서 숨긴다(`htmlMode`처럼 `pdfMode` prop).~~ (2026-11-01 변경) 메모지(`2026-11-01-sticky-pads-design.md`)를 PDF 쪽에서도 옮기고 지워야 해서 "이미지·메모지 이동" 버튼은 PDF 쪽에도 나온다. 배경 가로/세로 W/H 미니 단추만 배경 이미지가 있을 때 나온다. `pdfMode` prop 은 도구바가 더 이상 읽지 않는다.
   "이미지 다시 불러오기"는 `layer.rerender()`로 연결.
 - `prefetchImages([prev.imageUrl, next.imageUrl])` 자리에서 PDF 페이지는 `prefetchPages`로 예열.
 - 화면 잠금, 줌 독립 펜 두께, 문지르기 지우개, 웻잉크, 영상 2분할은 그대로.

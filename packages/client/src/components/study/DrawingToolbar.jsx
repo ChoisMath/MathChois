@@ -4,16 +4,22 @@ import {
   LassoSelect, Pen, Highlighter, Type, Square, Circle, Triangle,
   Eraser, Minus, Trash2, Plus, Palette,
   SlidersHorizontal, Hand, Shapes, ChevronDown, ImagePlus, Dot,
-  RefreshCw, Undo2, Redo2, Pointer,
+  RefreshCw, Undo2, Redo2, Pointer, StickyNote,
 } from 'lucide-react';
+import './viewer.css';
+import PageListIcon from './PageListIcon';
 import { BG_ELEMENT_ID } from '../../lib/excalidrawUtils';
 import { getInputMode, setInputMode, subscribeInputMode } from '../../lib/inputMode';
 import { sceneStrokeWidth } from '../../lib/penWidth';
 import {
   HL_OPACITY, PEN_COLOR_DEFAULT,
   loadColorSlots, saveColorSlots, loadToolColor, saveToolColor, loadToolWidth, saveToolWidth, widthRange,
+  loadStickyLast, saveStickyLast,
 } from '../../lib/toolPrefs';
 import ColorSlotsModal from './ColorSlotsModal';
+import StickyPicker from './StickyPicker';
+import StickyPlacer from './StickyPlacer';
+import { buildStickyElement, stickyFile, isOwnSticky, stickyAspect } from '../../lib/stickyPads';
 
 /**
  * 필기 도구바 (5개 필기 뷰어 + AI 코칭 공용).
@@ -22,6 +28,13 @@ import ColorSlotsModal from './ColorSlotsModal';
  * 논리 도구(activeTool)와 Excalidraw 도구는 다르다: 형광펜(highlighter)·삼각형(triangle)은 Excalidraw 쪽이 freedraw 이고,
  * 올가미(lasso, hooks/useLasso.js)·레이저포인터·이미지이동은 selection 이다. 형광펜은 currentItemOpacity 40 + 전용 색·두께, 펜으로 돌아오면 100 + 펜 색·두께.
  * 화면 고정 버튼은 여기 없다 — components/study/ScreenLockFab.jsx (필기 영역 우측 상단 플로팅).
+ * 맨 앞의 페이지 목록(썸네일) 버튼은 뷰어가 `sidebarOpen`/`onToggleSidebar` 를 넘길 때만 나온다 — 도구바가 보일 때는 여기,
+ * 보기 모드·도구바 접힘처럼 도구바가 없을 때는 뷰어 상단 바에 같은 버튼이 대신 나온다.
+ * 겉모양은 components/study/viewer.css (`.vw-tb*`) — 뷰어 상단 바·페이지 목록과 같은 토큰을 쓴다.
+ * `pdfMode` prop 은 더 이상 쓰지 않는다(PDF 쪽에서도 메모지 때문에 이동 도구가 필요) — 뷰어가 넘겨도 무시된다.
+ * 메모지(포스트잇 배경 도형, lib/stickyPads.js): `sticky` 버튼 → StickyPicker 팝오버 → StickyPlacer(50% 그림자가 포인터를 따라다님,
+ *   마우스·손가락은 누르는 자리, 펜은 400ms 꾹 누른 자리) → 잠긴 image 요소 하나를 배경 바로 뒤에 넣는다.
+ *   길게 누르기(500ms)·더블탭은 마지막 메모지를 바로 붙인다. 코멘트 창은 `stickyOpacity={70}`. 설계 docs/superpowers/specs/2026-11-01-sticky-pads-design.md
  */
 
 const SHAPE_TOOL_ICONS = {
@@ -36,18 +49,34 @@ const SAVEABLE_TOOLS = ['freedraw', 'highlighter', 'lasso', 'text', 'line', 'rec
 const inkToolOf = (tool) => (tool === 'highlighter' ? 'highlighter' : 'freedraw');
 
 /* 요소 순서는 lib/toolPrefs.js TOOLBAR_ORDER 가 기준 — 아래 JSX 의 data-tb 순서와 일치해야 한다(테스트가 검증) */
-const BTN = 'p-1.5 rounded-md transition-colors cursor-pointer flex-shrink-0 flex items-center justify-center';
-const btnCls = (active, activeCls = 'bg-blue-100 text-blue-600') =>
-  `${BTN} ${active ? activeCls : 'text-gray-600 hover:bg-gray-100'}`;
-const Divider = () => <div className="w-px h-6 bg-gray-200 mx-1 flex-shrink-0" />;
+/** 도구 버튼 클래스 — `mod` 는 켜졌을 때의 상태 색(viewer.css `.vw-tb-btn--hl` 등), 없으면 잉크 남색 */
+const btnCls = (active, mod = '') => ['vw-tb-btn', mod, active ? 'is-on' : ''].filter(Boolean).join(' ');
+const Divider = () => <div className="vw-tb-sep" aria-hidden="true" />;
 
-function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, pdfMode = false, onActiveToolChange }) {
+function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, onActiveToolChange, sidebarOpen, onToggleSidebar, stickyOpacity = 100, bgPositionRef }) {
   const [activeTool, setActiveTool]       = useState('freedraw');
   const [imageMoveMode, setImageMoveMode] = useState(false);
   const [inputMode, setInputModeState] = useState(() => getInputMode());
   useEffect(() => subscribeInputMode(setInputModeState), []);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
   const [paletteOpen, setPaletteOpen]     = useState(false);
+  /* 메모지: 팝오버 열림, 마지막 선택(유형·친구·무늬), 길게 누르기 타이머, 직전 삽입 위치 */
+  const [pickerOpen, setPickerOpen]       = useState(false);
+  const [placing, setPlacing]             = useState(null);   // 자리 정하는 중인 메모지 spec (StickyPlacer 표시)
+  const [stickySpec, setStickySpec]       = useState(() => loadStickyLast());
+  const stickyBtnRef    = useRef(null);
+  const longPressRef    = useRef({ timer: null, fired: false });
+  /* 이동 모드: 선택된 요소 중 내 메모지가 있는지 (onChange 구독, 모드가 켜진 동안만) */
+  const [stickySelected, setStickySelected] = useState(false);
+  const [bgPresent, setBgPresent] = useState(false); // 이동 모드에서 W/H 미니 단추는 배경 이미지가 있을 때만
+  const moveUnsubRef = useRef(null);
+  const stopMoveWatch = useCallback(() => {
+    moveUnsubRef.current?.();
+    moveUnsubRef.current = null;
+    setStickySelected(false);
+  }, []);
+  useEffect(() => () => { moveUnsubRef.current?.(); }, []);
+  useEffect(() => { setPickerOpen(false); setPlacing(null); }, [pageId]);
   const [slots, setSlots]                 = useState(() => loadColorSlots());
 
   /* 펜·형광펜 색/두께 — 콜백에서 최신값을 쓰도록 ref 와 state 를 함께 갱신 */
@@ -268,19 +297,24 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
     };
   }, [activeTool]);
 
+  /* 이동 모드에서 잠금이 풀리는 요소: 배경 이미지 + 내 메모지 (교사 창에 내려온 학생 메모지 `__sn_sticky_…` 는 그대로) */
+  const movable = (el) => el.id === BG_ELEMENT_ID || isOwnSticky(el);
+
   const disableImageMove = useCallback((api) => {
     const els = api.getSceneElements().map((el) =>
-      el.id === BG_ELEMENT_ID ? { ...el, locked: true } : el
+      movable(el) ? { ...el, locked: true } : el
     );
     api.updateScene({ elements: els });
     setImageMoveMode(false);
-  }, []);
+    stopMoveWatch();
+  }, [stopMoveWatch]);
 
   const SHAPE_TYPES = ['rectangle', 'ellipse', 'triangle', 'line'];
 
   const applyTool = (type) => {
     const api = apiRef.current;
     if (imageMoveMode && api) disableImageMove(api);
+    setPlacing(null);
     setActiveTool(type);
     activeToolRef.current = type;
     if (SAVEABLE_TOOLS.includes(type)) localStorage.setItem('mc_active_tool', type);
@@ -393,17 +427,39 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
     if (!api) return;
     const next = !imageMoveMode;
     setImageMoveMode(next);
-    const els = api.getSceneElements().map((el) =>
-      el.id === BG_ELEMENT_ID ? { ...el, locked: !next } : el
+    setPlacing(null);
+    const scene = api.getSceneElements();
+    const els = scene.map((el) =>
+      movable(el) ? { ...el, locked: !next } : el
     );
     api.updateScene({ elements: els });
+    setBgPresent(scene.some((el) => el.id === BG_ELEMENT_ID));
     if (next) {
+      setPickerOpen(false);
+      stopMoveWatch();
+      moveUnsubRef.current = api.onChange?.((sceneEls, st) => {
+        const sel = st?.selectedElementIds || {};
+        setStickySelected(sceneEls.some((e) => sel[e.id] && !e.isDeleted && isOwnSticky(e)));
+      }) ?? null;
       setActiveTool('image_move');
       api.setActiveTool({ type: 'selection' });
     } else {
+      stopMoveWatch();
       setActiveTool('freedraw');
       api.setActiveTool({ type: 'freedraw' });
     }
+  };
+
+  /* 이동 모드에서 선택된 내 메모지 지우기 */
+  const handleDeleteSticky = () => {
+    const api = apiRef.current;
+    if (!api) return;
+    const sel = api.getAppState().selectedElementIds || {};
+    api.updateScene({
+      elements: api.getSceneElements().map((e) => (sel[e.id] && isOwnSticky(e) ? { ...e, isDeleted: true } : e)),
+      appState: { selectedElementIds: {} },
+    });
+    setStickySelected(false);
   };
 
   /* ── 배경 이미지 가로/세로 독립 리사이즈 ── */
@@ -486,6 +542,81 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
     reader.readAsDataURL(file);
   };
 
+  /* ── 메모지 붙이기: 고르면 그림자가 따라다니고, 누르는 자리에 확정 ── */
+  const STICKY_PAPER_RATIO = 0.36;
+  const STICKY_FALLBACK_WIDTH = 260;
+  const stickyWidth = () => {
+    const paperW = bgPositionRef?.current?.width;
+    return paperW ? paperW * STICKY_PAPER_RATIO : STICKY_FALLBACK_WIDTH;
+  };
+  const startPlacing = (spec) => {
+    const api = apiRef.current;
+    if (!api) return;
+    saveStickyLast(spec);
+    setStickySpec(spec);
+    setPickerOpen(false);
+    setShapeMenuOpen(false);
+    setPaletteOpen(false);
+    setPlacing(spec);
+  };
+  const cancelPlacing = useCallback(() => setPlacing(null), []);
+  /** 화면 좌표(그림자 중심)에 확정 — scene = (client − offset) / zoom − scroll (Excalidraw 0.18 viewportCoordsToSceneCoords) */
+  const commitSticky = useCallback(({ clientX, clientY }) => {
+    const api = apiRef.current;
+    const spec = placing;
+    setPlacing(null);
+    if (!api || !spec) return;
+    const width = stickyWidth();
+    const height = width * stickyAspect(spec.type);
+    const appState = api.getAppState();
+    const zoom = appState.zoom?.value || 1;
+    const canvasRect = document.querySelector('.excalidraw canvas')?.getBoundingClientRect();
+    const offsetLeft = appState.offsetLeft ?? canvasRect?.left ?? 0;
+    const offsetTop  = appState.offsetTop  ?? canvasRect?.top  ?? 0;
+    const x = (clientX - offsetLeft) / zoom - (appState.scrollX || 0) - width / 2;
+    const y = (clientY - offsetTop)  / zoom - (appState.scrollY || 0) - height / 2;
+    const el = buildStickyElement(spec, { x, y, width, opacity: stickyOpacity });
+    /* 파일을 먼저 넣고, 그 상태가 커밋된 다음 프레임에 updateScene — 같은 틱이면 이미지 자리에 빈 상자가 보일 수 있다 */
+    api.addFiles([stickyFile(spec)]);
+    requestAnimationFrame(() => {
+      const a = apiRef.current;
+      if (!a) return;
+      const els = a.getSceneElements();
+      const i = els.findIndex((e) => e.id === BG_ELEMENT_ID) + 1; // 배경 바로 뒤(없으면 맨 앞) = 기존 필기 아래
+      a.updateScene({ elements: [...els.slice(0, i), el, ...els.slice(i)] });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placing, stickyOpacity]);
+  /** 그림자 크기(화면 px) = 실제 메모지 크기 × 줌 */
+  const ghostSize = () => {
+    const zoom = apiRef.current?.getAppState()?.zoom?.value || 1;
+    const w = stickyWidth() * zoom;
+    return { w, h: w * stickyAspect(placing?.type || 'tab') };
+  };
+  const openSticky = () => {
+    if (!apiRef.current) return;           // Excalidraw 준비 전에는 열지 않는다 (disabled 로 ref 를 렌더 중 읽지 않음)
+    if (placing) { setPlacing(null); return; } // 따라다니는 중에 다시 누르면 취소
+    setShapeMenuOpen(false);
+    setPaletteOpen(false);
+    setPickerOpen((v) => !v);
+  };
+  const onStickyPointerDown = (e) => {
+    if (e.button > 0 || !apiRef.current) return; // 첫째 버튼(펜·손가락·왼쪽 클릭)만 길게 누르기
+    clearTimeout(longPressRef.current.timer);
+    longPressRef.current.fired = false;
+    longPressRef.current.timer = setTimeout(() => {
+      longPressRef.current.fired = true;
+      startPlacing(stickySpec);
+    }, 500);
+  };
+  const onStickyPointerUp = () => { clearTimeout(longPressRef.current.timer); };
+  const onStickyClick = () => {
+    if (longPressRef.current.fired) { longPressRef.current.fired = false; return; }
+    openSticky();
+  };
+  const onStickyDoubleClick = () => { setPickerOpen(false); startPlacing(stickySpec); };
+  const closePicker = useCallback(() => setPickerOpen(false), []);
+
   const handleClear = () => {
     if (!window.confirm('필기 내용을 모두 지우시겠습니까?')) return;
     const api = apiRef.current;
@@ -497,70 +628,148 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
   const isShapeActive   = SHAPE_TOOLS.includes(activeTool);
   const ShapeActiveIcon = isShapeActive ? SHAPE_TOOL_ICONS[activeTool] : Shapes;
 
-  const toolBtn = (type, Icon, label, activeCls) => (
+  const toolBtn = (type, Icon, label, mod) => (
     <button key={type} data-tb={type} onClick={() => applyTool(type)} title={label}
       aria-pressed={activeTool === type}
-      className={btnCls(activeTool === type, activeCls)}>
-      <Icon className="h-4 w-4" />
+      className={btnCls(activeTool === type, mod)}>
+      <Icon />
     </button>
   );
 
   return (
-    <div className="flex items-center gap-1 px-3 h-11 bg-white border-b shadow-sm flex-shrink-0 overflow-x-auto sticky top-14 z-50">
+    <div className="vw-tb" role="toolbar" aria-label="필기 도구">
+
+      {/* ⓪ 페이지 목록(썸네일) 열기/닫기 — 뷰어가 핸들러를 줄 때만 */}
+      {onToggleSidebar && (
+        <>
+          <button data-tb="pages" onClick={onToggleSidebar}
+            aria-pressed={!!sidebarOpen}
+            title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+            aria-label={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+            className={btnCls(!!sidebarOpen)}>
+            <PageListIcon />
+          </button>
+          <Divider />
+        </>
+      )}
 
       {/* ⓪ 실행 취소 / 다시 실행 */}
-      <button data-tb="undo" onClick={onUndo} disabled={!canUndo} title="실행 취소 (Ctrl+Z)"
-        className={`${BTN} ${canUndo ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-300 cursor-not-allowed'}`}>
-        <Undo2 className="h-4 w-4" />
+      <button data-tb="undo" onClick={onUndo} disabled={!canUndo} title="실행 취소 (Ctrl+Z)" aria-label="실행 취소"
+        className="vw-tb-btn">
+        <Undo2 />
       </button>
-      <button data-tb="redo" onClick={onRedo} disabled={!canRedo} title="다시 실행 (Ctrl+Shift+Z)"
-        className={`${BTN} ${canRedo ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-300 cursor-not-allowed'}`}>
-        <Redo2 className="h-4 w-4" />
+      <button data-tb="redo" onClick={onRedo} disabled={!canRedo} title="다시 실행 (Ctrl+Shift+Z)" aria-label="다시 실행"
+        className="vw-tb-btn">
+        <Redo2 />
       </button>
       <Divider />
 
       {/* ① 펜 · 형광펜 · 손가락 필기 · 레이저 포인터 */}
       {toolBtn('freedraw', Pen, '펜')}
-      {toolBtn('highlighter', Highlighter, '형광펜 (반투명)', 'bg-yellow-100 text-yellow-700')}
+      {toolBtn('highlighter', Highlighter, '형광펜 (반투명)', 'vw-tb-btn--hl')}
       <button data-tb="finger" onClick={handleToggleInputMode}
         aria-pressed={inputMode === 'finger'}
         title={inputMode === 'finger'
           ? '손가락 필기 끄기 (현재: 손가락 허용)'
           : '손가락 필기 켜기 (현재: 스타일러스 전용)'}
-        className={btnCls(inputMode === 'finger')}>
-        <Pointer className="h-4 w-4" />
+        className={btnCls(inputMode === 'finger', 'vw-tb-btn--finger')}>
+        <Pointer />
       </button>
-      {toolBtn('laser_pointer', Dot, '레이저 포인터', 'bg-red-100 text-red-500')}
+      {toolBtn('laser_pointer', Dot, '레이저 포인터', 'vw-tb-btn--laser')}
+
+      {/* 메모지 · 이미지·메모지 이동 — 펜 묶음 옆 (HTML 도구 쪽은 둘 다 없음) */}
+      {!htmlMode && (<>
+      <button ref={stickyBtnRef} data-tb="sticky" type="button"
+        onPointerDown={onStickyPointerDown} onPointerUp={onStickyPointerUp} onPointerLeave={onStickyPointerUp} onPointerCancel={onStickyPointerUp}
+        onClick={onStickyClick} onDoubleClick={onStickyDoubleClick}
+        aria-haspopup="dialog" aria-expanded={pickerOpen} aria-label="메모지"
+        title="메모지 — 누르면 고르기, 길게 누르면 마지막 메모지 바로 붙이기"
+        className={btnCls(pickerOpen)}>
+        <StickyNote />
+      </button>
+      {pickerOpen && (
+        <StickyPicker
+          current={stickySpec}
+          anchorEl={stickyBtnRef.current}
+          anchorRect={stickyBtnRef.current?.getBoundingClientRect() ?? { bottom: 0 }}
+          onPick={startPlacing}
+          onPatternChange={(pattern) => setStickySpec((sp) => ({ ...sp, pattern }))}
+          onClose={closePicker}
+        />
+      )}
+      {placing && (
+        <StickyPlacer spec={placing} ghostSize={ghostSize()} onCommit={commitSticky} onCancel={cancelPlacing} />
+      )}
+      </>)}
+      {/* 이미지·메모지 이동 — HTML 도구 쪽만 제외(메모지도 없음). PDF 쪽은 종이는 못 끌지만 메모지를 옮기고 지우려면 필요하다 */}
+      {!htmlMode && (
+      <button data-tb="image_move" onClick={handleToggleImageMove}
+        aria-pressed={imageMoveMode}
+        aria-label="이미지·메모지 이동"
+        title={imageMoveMode ? '이동 완료 (잠금)' : '이미지·메모지 이동 — 배경 이미지와 메모지를 드래그로 옮기고 크기 조절'}
+        className={btnCls(imageMoveMode, 'vw-tb-btn--image')}>
+        <Hand />
+      </button>
+      )}
+      {/* 이동 모드: 배경 가로/세로 비율 조정(배경 이미지가 있을 때만) + 선택된 메모지 삭제 */}
+      {imageMoveMode && (
+        <>
+          {bgPresent && (<>
+          <div className="vw-tb-mini" role="group" aria-label="배경 너비">
+            <span className="vw-tb-mini-label" aria-hidden="true">W</span>
+            <button onClick={() => handleResizeBg('width', -0.05)} title="너비 축소 (-5%)" aria-label="너비 축소 (-5%)">
+              <Minus />
+            </button>
+            <button onClick={() => handleResizeBg('width', 0.05)} title="너비 확대 (+5%)" aria-label="너비 확대 (+5%)">
+              <Plus />
+            </button>
+          </div>
+          <div className="vw-tb-mini" role="group" aria-label="배경 높이">
+            <span className="vw-tb-mini-label" aria-hidden="true">H</span>
+            <button onClick={() => handleResizeBg('height', -0.05)} title="높이 축소 (-5%)" aria-label="높이 축소 (-5%)">
+              <Minus />
+            </button>
+            <button onClick={() => handleResizeBg('height', 0.05)} title="높이 확대 (+5%)" aria-label="높이 확대 (+5%)">
+              <Plus />
+            </button>
+          </div>
+          </>)}
+          {stickySelected && (
+            <button data-tb="sticky_delete" onClick={handleDeleteSticky} title="메모지 삭제" aria-label="메모지 삭제"
+              className="vw-tb-btn vw-tb-btn--danger">
+              <Trash2 />
+            </button>
+          )}
+        </>
+      )}
       <Divider />
 
       {/* ② 색상 바로가기 5칸 + 색상 설정 */}
       {slots.map((hex, i) => (
         <button key={i} data-tb={`slot-${i}`} onClick={() => applyColor(hex)} title={hex}
           aria-label={`색 ${i + 1}: ${hex}`}
-          className={`w-5 h-5 rounded-full cursor-pointer flex-shrink-0 transition-transform border border-white ${
-            curColor === hex ? 'ring-2 ring-offset-1 ring-gray-500 scale-110' : 'hover:scale-110'
-          }`}
+          aria-pressed={curColor === hex}
+          className={`vw-swatch${curColor === hex ? ' is-current' : ''}`}
           style={{ backgroundColor: hex }}
         />
       ))}
       <button data-tb="palette" onClick={() => setPaletteOpen(true)} title="색상 설정 — 바로가기 색 바꾸기 · 스포이드 · 직접 입력"
         aria-haspopup="dialog" aria-expanded={paletteOpen}
         className={btnCls(paletteOpen)}>
-        <Palette className="h-4 w-4" style={{ color: curColor }} />
+        <Palette style={{ color: paletteOpen ? undefined : curColor }} />
       </button>
       <Divider />
 
       {/* ③ 두께 슬라이더 (펜/형광펜 — 켜진 도구의 두께) */}
-      <div data-tb="width" className="flex items-center gap-1.5 flex-shrink-0">
+      <div data-tb="width" className={`vw-tb-width${inkTool === 'highlighter' ? ' is-hl' : ''}`}>
         <input
           type="range" min={range.min} max={range.max} step={range.step}
           value={curWidth}
           title={`${inkTool === 'highlighter' ? '형광펜' : '펜'} 굵기: ${curWidth}`}
           aria-label={`${inkTool === 'highlighter' ? '형광펜' : '펜'} 굵기`}
           onChange={(e) => applyWidth(parseFloat(e.target.value))}
-          className={`w-32 cursor-pointer ${inkTool === 'highlighter' ? 'accent-yellow-500' : 'accent-blue-500'}`}
         />
-        <svg width="22" height="16" className="flex-shrink-0" style={{ overflow: 'visible' }}>
+        <svg width="22" height="16" className="flex-shrink-0" style={{ overflow: 'visible' }} aria-hidden="true">
           <line x1="1" y1="8" x2="21" y2="8"
             stroke={curColor}
             strokeOpacity={inkTool === 'highlighter' ? HL_OPACITY / 100 : 1}
@@ -574,59 +783,19 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
       {/* ④ 지우개 · 이미지 */}
       {toolBtn('eraser', Eraser, '지우개 — 획 단위')}
 
-      {/* 이미지 이동 (배경 이미지 페이지 전용 — PDF 종이는 Excalidraw 요소가 아니라 끌 수 없음) */}
-      {!htmlMode && !pdfMode && (
-      <button data-tb="image_move" onClick={handleToggleImageMove}
-        aria-pressed={imageMoveMode}
-        title={imageMoveMode ? '이미지 이동 완료 (잠금)' : '이미지 이동 — 배경 이미지를 드래그로 이동'}
-        className={btnCls(imageMoveMode, 'bg-green-100 text-green-600')}>
-        <Hand className="h-4 w-4" />
-      </button>
-      )}
-
-      {/* 이미지 가로/세로 비율 조정 (이동 모드일 때만) */}
-      {imageMoveMode && (
-        <>
-          <div className="flex items-center gap-0.5 flex-shrink-0">
-            <span className="text-[10px] text-gray-400 w-3">W</span>
-            <button onClick={() => handleResizeBg('width', -0.05)}
-              title="너비 축소 (-5%)"
-              className="p-1 rounded text-gray-600 hover:bg-gray-100 cursor-pointer">
-              <Minus className="h-3 w-3" />
-            </button>
-            <button onClick={() => handleResizeBg('width', 0.05)}
-              title="너비 확대 (+5%)"
-              className="p-1 rounded text-gray-600 hover:bg-gray-100 cursor-pointer">
-              <Plus className="h-3 w-3" />
-            </button>
-          </div>
-          <div className="flex items-center gap-0.5 flex-shrink-0">
-            <span className="text-[10px] text-gray-400 w-3">H</span>
-            <button onClick={() => handleResizeBg('height', -0.05)}
-              title="높이 축소 (-5%)"
-              className="p-1 rounded text-gray-600 hover:bg-gray-100 cursor-pointer">
-              <Minus className="h-3 w-3" />
-            </button>
-            <button onClick={() => handleResizeBg('height', 0.05)}
-              title="높이 확대 (+5%)"
-              className="p-1 rounded text-gray-600 hover:bg-gray-100 cursor-pointer">
-              <Plus className="h-3 w-3" />
-            </button>
-          </div>
-        </>
-      )}
 
       {onReloadImage && (
         <button data-tb="image_reload" onClick={onReloadImage}
           title="이미지 위치 초기화 — 원본 비율로 재배치"
-          className={btnCls(false)}>
-          <RefreshCw className="h-4 w-4" />
+          className="vw-tb-btn">
+          <RefreshCw />
         </button>
       )}
 
+
       <button data-tb="image_add" onClick={() => imageInputRef.current?.click()} title="이미지 삽입"
-        className={btnCls(false)}>
-        <ImagePlus className="h-4 w-4" />
+        className="vw-tb-btn">
+        <ImagePlus />
       </button>
       <input ref={imageInputRef} type="file" accept="image/*" className="sr-only"
         onChange={handleImageFileChange} />
@@ -639,10 +808,10 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
         onClick={() => setShapeMenuOpen((v) => !v)}
         title="도형 (사각형 / 원 / 삼각형)"
         aria-expanded={shapeMenuOpen}
-        className={`${btnCls(isShapeActive || shapeMenuOpen)} gap-0.5`}
+        className={`${btnCls(isShapeActive || shapeMenuOpen)} vw-tb-btn--wide`}
       >
-        <ShapeActiveIcon className="h-4 w-4" />
-        <ChevronDown className="h-3 w-3 opacity-60" />
+        <ShapeActiveIcon />
+        <ChevronDown className="vw-tb-caret" />
       </button>
 
       {shapeMenuOpen && (
@@ -656,7 +825,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
               onClick={() => { applyTool(type); setShapeMenuOpen(false); }}
               title={label}
               className={btnCls(activeTool === type)}>
-              <ShapeIcon className="h-4 w-4" />
+              <ShapeIcon />
             </button>
           ))}
         </>
@@ -666,8 +835,8 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
 
       {/* ⑥ 전체 지우기 */}
       <button data-tb="clear" onClick={handleClear} title="전체 지우기"
-        className={`${BTN} text-red-500 hover:bg-red-50`}>
-        <Trash2 className="h-4 w-4" />
+        className="vw-tb-btn vw-tb-btn--danger">
+        <Trash2 />
       </button>
       <Divider />
 
@@ -675,8 +844,8 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
       <button data-tb="settings" onClick={onTogglePanel}
         title={showPanel ? 'Excalidraw 세부설정 숨기기' : 'Excalidraw 세부설정 열기'}
         aria-pressed={!!showPanel}
-        className={btnCls(showPanel, 'bg-violet-100 text-violet-600').replace('text-gray-600', 'text-gray-400')}>
-        <SlidersHorizontal className="h-4 w-4" />
+        className={btnCls(showPanel, 'vw-tb-btn--settings')}>
+        <SlidersHorizontal />
       </button>
 
       {paletteOpen && (
