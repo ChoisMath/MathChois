@@ -27,7 +27,7 @@ export const PEN_COLOR_DEFAULT = '#000000';
 
 /** 상단 도구바 요소 순서 (components/study/DrawingToolbar.jsx 의 data-tb). 테스트가 이 순서를 검증한다.
  *  'pages'(페이지 목록 썸네일 열기/닫기)는 뷰어가 onToggleSidebar 를 넘길 때만 나온다(6개 뷰어 모두 넘긴다).
- *  이동 모드에서만 나오는 W/H 미니 단추와 'sticky_delete'(선택된 메모지 삭제)는 조건부라 이 배열에 없다. */
+ *  이동 모드에서만 나오는 W/H 미니 단추와 'delete_selected'(선택한 개체 삭제)는 조건부라 이 배열에 없다. */
 export const TOOLBAR_ORDER = Object.freeze([
   'pages',
   'undo', 'redo',
