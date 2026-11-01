@@ -50,7 +50,7 @@ describe('DrawingToolbar — 순서 · 형광펜 · 색상 슬롯 · 두께', ()
       'freedraw', 'highlighter', 'finger', 'laser_pointer',
       'slot-0', 'slot-1', 'slot-2', 'slot-3', 'slot-4', 'palette',
       'width',
-      'eraser', 'image_move', 'image_reload', 'image_add',
+      'eraser', 'image_move', 'image_reload', 'sticky', 'image_add',
       'line', 'text', 'shapes', 'lasso',
       'clear', 'settings',
     ]);

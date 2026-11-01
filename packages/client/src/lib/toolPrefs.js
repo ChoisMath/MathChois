@@ -4,10 +4,12 @@
  * - 색상 바로가기 5칸: `mc_color_slots` (HEX 배열). 기본값 검정·빨강·파랑·초록·주황. 모달에서만 편집.
  * - 펜:    색 `mc_tool_color`(기본 검정),  두께 `mc_stroke_width`(lib/penWidth.js 범위).
  * - 형광펜: 색 `mc_hl_color`(기본 노랑),    두께 `mc_hl_width`(0.4~3, 기본 1.2 = 화면 12px). 획은 투명도 40% 의 freedraw.
+ * - 메모지: 마지막 선택 `mc_sticky_last` (`{ type, friend, pattern }` JSON, lib/stickyPads.js 의 spec). 잘못된 값이면 기본값.
  *
  * 두께 값은 "화면에서 보이는 두께"(펜 두께 규칙과 같음, 화면 px = 값×10). 저장값이 깨졋거나 범위 밖이면 기본값.
  * 스펙: docs/superpowers/specs/2026-10-30-drawing-toolbar-reorg-highlighter-design.md
  */
+import { STICKY_DEFAULT, isStickySpec } from './stickyPads';
 import { PEN_WIDTH_MIN, PEN_WIDTH_MAX, PEN_WIDTH_STEP, PEN_WIDTH_DEFAULT } from './penWidth';
 
 export const COLOR_SLOT_COUNT = 5;
@@ -31,7 +33,7 @@ export const TOOLBAR_ORDER = Object.freeze([
   'freedraw', 'highlighter', 'finger', 'laser_pointer',
   'slot-0', 'slot-1', 'slot-2', 'slot-3', 'slot-4', 'palette',
   'width',
-  'eraser', 'image_move', 'image_reload', 'image_add',
+  'eraser', 'image_move', 'image_reload', 'sticky', 'image_add',
   'line', 'text', 'shapes', 'lasso',
   'clear', 'settings',
 ]);
@@ -121,4 +123,18 @@ export function loadToolWidth(tool) {
 export function saveToolWidth(tool, w) {
   const key = KEYS[tool]?.width;
   if (key && Number.isFinite(w)) write(key, String(w));
+}
+
+const STICKY_KEY = 'mc_sticky_last';
+
+/** 마지막으로 고른 메모지 (유형·친구·무늬). 없거나 깨졌으면 기본값. */
+export function loadStickyLast() {
+  try {
+    const parsed = JSON.parse(read(STICKY_KEY) ?? 'null');
+    if (isStickySpec(parsed)) return { type: parsed.type, friend: parsed.friend, pattern: parsed.pattern };
+  } catch { /* 깨진 값은 기본값으로 */ }
+  return { ...STICKY_DEFAULT };
+}
+export function saveStickyLast(spec) {
+  if (isStickySpec(spec)) write(STICKY_KEY, JSON.stringify({ type: spec.type, friend: spec.friend, pattern: spec.pattern }));
 }

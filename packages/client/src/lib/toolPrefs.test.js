@@ -4,6 +4,7 @@ import {
   COLOR_SLOT_COUNT, DEFAULT_COLOR_SLOTS, loadColorSlots, saveColorSlots, isHexColor, normalizeHex,
   HL_OPACITY, HL_COLOR_DEFAULT, HL_WIDTH_MIN, HL_WIDTH_MAX, HL_WIDTH_STEP, HL_WIDTH_DEFAULT,
   loadToolColor, saveToolColor, loadToolWidth, saveToolWidth, widthRange,
+  loadStickyLast, saveStickyLast, TOOLBAR_ORDER,
 } from './toolPrefs';
 import { PEN_WIDTH_MIN, PEN_WIDTH_MAX, PEN_WIDTH_DEFAULT } from './penWidth';
 
@@ -92,5 +93,26 @@ describe('toolPrefs — 펜/형광펜 기억', () => {
   it('widthRange 는 도구별 슬라이더 범위', () => {
     expect(widthRange('freedraw')).toEqual({ min: PEN_WIDTH_MIN, max: PEN_WIDTH_MAX, step: 0.05 });
     expect(widthRange('highlighter')).toEqual({ min: HL_WIDTH_MIN, max: HL_WIDTH_MAX, step: HL_WIDTH_STEP });
+  });
+});
+
+describe('toolPrefs — 메모지', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('TOOLBAR_ORDER: sticky 는 image_add 바로 앞', () => {
+    const i = TOOLBAR_ORDER.indexOf('sticky');
+    expect(i).toBeGreaterThan(0);
+    expect(TOOLBAR_ORDER[i + 1]).toBe('image_add');
+    expect(TOOLBAR_ORDER[i - 1]).toBe('image_reload');
+  });
+
+  it('마지막 메모지 선택: 기본값 → 저장 → 잘못된 값이면 기본값', () => {
+    expect(loadStickyLast()).toEqual({ type: 'tab', friend: 'circle', pattern: 'plain' });
+    saveStickyLast({ type: 'cut', friend: 'heart', pattern: 'grid' });
+    expect(loadStickyLast()).toEqual({ type: 'cut', friend: 'heart', pattern: 'grid' });
+    localStorage.setItem('mc_sticky_last', JSON.stringify({ type: 'nope', friend: 'heart', pattern: 'grid' }));
+    expect(loadStickyLast()).toEqual({ type: 'tab', friend: 'circle', pattern: 'plain' });
+    localStorage.setItem('mc_sticky_last', '{not json');
+    expect(loadStickyLast()).toEqual({ type: 'tab', friend: 'circle', pattern: 'plain' });
   });
 });
