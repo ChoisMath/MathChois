@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import IconButton from '../../components/common/IconButton';
 import { ArrowLeft, Plus, Trash2, Loader, Upload, Save, X, Video, Play, FileCode2, Sparkles, Presentation, LayoutTemplate, ExternalLink, Link, Clapperboard, Replace } from 'lucide-react';
@@ -35,6 +35,7 @@ import { useElementWidth } from '../../hooks/useElementWidth';
 import { extractYouTubeId } from '../../lib/youtubeUtils';
 import { uploadPagesWithPdf } from '../../lib/pageUpload';
 import { fileUrlsToDeleteFor, storagePathOf } from '../../lib/pageStorage';
+import { useInlineEdit } from '../../hooks/useInlineEdit';
 
 
 const ChapterEditor = () => {
@@ -55,9 +56,14 @@ const ChapterEditor = () => {
   const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0, label: null });
   const [deleting, setDeleting] = useState(false);
 
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleInput, setTitleInput]     = useState('');
-  const [savingTitle, setSavingTitle]   = useState(false);
+  /* 제목·설명 인라인 편집 — 클릭 → 입력 → Enter/포커스 이탈 저장, Esc 취소 (hooks/useInlineEdit) */
+  const saveChapterField = useCallback(async (patch) => {
+    await api.patch(`/api/chapters/${id}`, patch);
+    setChapter((prev) => ({ ...prev, ...patch }));
+    invalidatePagesCache(id); // 목록·뷰어의 챕터 캐시에도 반영
+  }, [id]);
+  const titleEdit = useInlineEdit({ value: chapter?.title, save: (title) => saveChapterField({ title }) });
+  const descEdit = useInlineEdit({ value: chapter?.description, allowEmpty: true, save: (description) => saveChapterField({ description }) });
 
   /* YouTube URL 입력 */
   const [showVideoChoice, setShowVideoChoice]   = useState(false); // YouTube 링크 / 영상자료 선택
@@ -245,25 +251,6 @@ const ChapterEditor = () => {
     setExportResult(result);
   };
 
-  const handleTitleSave = async () => {
-    const trimmed = titleInput.trim();
-    if (!trimmed || trimmed === chapter.title) { setEditingTitle(false); return; }
-    setSavingTitle(true);
-    try {
-      await api.patch(`/api/chapters/${id}`, { title: trimmed });
-      setChapter((prev) => ({ ...prev, title: trimmed }));
-      invalidatePagesCache(id);
-    } catch (err) {
-      console.error('제목 저장 실패:', err.message);
-    }
-    setSavingTitle(false);
-    setEditingTitle(false);
-  };
-
-  const handleTitleKeyDown = (e) => {
-    if (e.key === 'Enter')  { e.preventDefault(); handleTitleSave(); }
-    if (e.key === 'Escape') { setEditingTitle(false); }
-  };
 
   const handleAddYouTube = async () => {
     setYoutubeError('');
@@ -402,33 +389,62 @@ const ChapterEditor = () => {
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3 min-w-0">
           <IconButton icon={ArrowLeft} label="뒤로" onClick={() => navigate(-1)} />
-          {editingTitle ? (
-            <input
-              autoFocus
-              type="text"
-              value={titleInput}
-              onChange={(e) => setTitleInput(e.target.value)}
-              onBlur={handleTitleSave}
-              onKeyDown={handleTitleKeyDown}
-              disabled={savingTitle}
-              className="text-xl font-bold text-gray-900 border-b-2 border-blue-500 outline-none bg-transparent w-72"
-            />
-          ) : (
-            <h1
-              onClick={() => { setTitleInput(chapter?.title || ''); setEditingTitle(true); }}
-              title="클릭하여 제목 수정"
-              className="text-xl font-bold text-gray-900 cursor-text hover:text-blue-600 transition-colors"
-            >
-              {chapter?.title}
-            </h1>
-          )}
-          {isLinked && (
-            <span className="ml-2 px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
-              공유 챕터
-            </span>
-          )}
+          <div className="min-w-0">
+            <div className="flex items-center">
+              {titleEdit.editing ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={titleEdit.draft}
+                  onChange={(e) => titleEdit.setDraft(e.target.value)}
+                  onBlur={titleEdit.commit}
+                  onKeyDown={titleEdit.onKeyDown}
+                  disabled={titleEdit.saving}
+                  aria-label="챕터 제목"
+                  className="text-xl font-bold text-gray-900 border-b-2 border-blue-500 outline-none bg-transparent w-72"
+                />
+              ) : (
+                <h1
+                  onClick={titleEdit.start}
+                  title="클릭하여 제목 수정"
+                  className="text-xl font-bold text-gray-900 cursor-text hover:text-blue-600 transition-colors"
+                >
+                  {chapter?.title}
+                </h1>
+              )}
+              {isLinked && (
+                <span className="ml-2 px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
+                  공유 챕터
+                </span>
+              )}
+            </div>
+            {/* 설명 — 비어 있으면 "설명 추가" 자리만, 클릭하면 여러 줄 입력(Enter 저장 · Shift+Enter 줄바꿈 · Esc 취소) */}
+            {descEdit.editing ? (
+              <textarea
+                autoFocus
+                value={descEdit.draft}
+                onChange={(e) => descEdit.setDraft(e.target.value)}
+                onBlur={descEdit.commit}
+                onKeyDown={descEdit.onKeyDown}
+                disabled={descEdit.saving}
+                rows={Math.min(6, Math.max(1, descEdit.draft.split('\n').length))}
+                placeholder="설명 (Enter 저장 · Shift+Enter 줄바꿈 · Esc 취소)"
+                aria-label="챕터 설명"
+                className="mt-1 block w-full max-w-xl text-sm text-gray-700 border-b-2 border-blue-500 outline-none bg-transparent resize-none leading-snug"
+              />
+            ) : (
+              <p
+                onClick={descEdit.start}
+                title={chapter?.description ? '클릭하여 설명 수정' : '클릭하여 설명 추가'}
+                className={`mt-1 text-sm whitespace-pre-line cursor-text transition-colors max-w-xl ${
+                  chapter?.description ? 'text-gray-500 hover:text-blue-600' : 'text-gray-400 italic hover:text-blue-600'}`}
+              >
+                {chapter?.description || '설명 추가'}
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2 overflow-x-auto shrink-0">
           {!isLinked && (
