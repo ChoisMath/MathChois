@@ -341,6 +341,31 @@ describe('DrawingToolbar — 메모지', () => {
     const el = lastElements().at(-1);
     expect(el.x + el.width / 2).toBeCloseTo(240);
     expect(el.y + el.height / 2).toBeCloseTo(260);
+    act(() => { placer().dispatchEvent(ptr('pointerup', 240, 260, { pointerType: 'pen' })); });
+    expect(placer()).toBeNull();
+  });
+
+  it('따라다니는 동안 메모지 단추는 켜진 상태로 보이고, 덮개는 도구바 아래부터 덮으며, 띠의 [취소]로 끝낼 수 있다', () => {
+    render();
+    const ov = pick('[data-sticky="tab:circle"]');
+    expect(btn('sticky').classList.contains('is-on')).toBe(true);
+    expect(ov.style.top).toBe(`${Math.round(mount.querySelector('.vw-tb').getBoundingClientRect().bottom)}px`);
+    act(() => { ov.querySelector('button').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(placer()).toBeNull();
+    expect(btn('sticky').classList.contains('is-on')).toBe(false);
+    flush();
+    expect(api.addFiles).not.toHaveBeenCalled();
+  });
+
+  it('펜으로 확정한 뒤 펜을 떼기 전까지 덮개가 남고, 떼면 사라진다 (남은 누름이 PDF 층에 닿지 않게)', () => {
+    render();
+    const ov = pick('[data-sticky="tab:circle"]');
+    act(() => { ov.dispatchEvent(ptr('pointerdown', 240, 260, { pointerType: 'pen' })); });
+    act(() => { vi.advanceTimersByTime(400); });
+    flush();
+    expect(lastElements().filter((e) => e.id.startsWith('sticky_'))).toHaveLength(1);
+    expect(placer()).not.toBeNull();
+    act(() => { placer().dispatchEvent(ptr('pointerup', 240, 260, { pointerType: 'pen' })); });
     expect(placer()).toBeNull();
   });
 
