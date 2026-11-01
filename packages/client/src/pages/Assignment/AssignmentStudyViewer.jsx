@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ChevronLeft, ChevronRight, Menu, Pencil, Send,
+  ChevronLeft, ChevronRight, PanelLeftOpen, PanelLeftClose, Pencil, Send,
   ChevronUp, ChevronDown, GraduationCap, X, Download, Loader, Paperclip
 } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
@@ -771,24 +771,26 @@ const AssignmentStudyViewer = () => {
   const canSubmit = !isLocked && submission?.status !== 'submitted';
   const fileCount = (submissionFiles.length - deletedFileIds.size) + newFiles.length;
 
+  // 도구바가 보이면 페이지 목록 버튼은 도구바 맨 앞에, 아니면 상단 바에 둔다
+  const toolbarShown = drawMode && !toolbarCollapsed && !isLocked && !currentPage?.videoUrl;
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
+    <div className="vw-root flex flex-col" style={{ height: '100vh' }}>
 
       {/* 내비게이션 바 */}
-      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="vw-top">
+        <div className="vw-top-l">
           <button
             onClick={() => navigate(assignment?.classroomId ? `/student/classrooms/${assignment.classroomId}?tab=assignments` : '/student/classrooms')}
             aria-label="과제 목록으로 돌아가기" title="과제 목록으로 돌아가기"
-            className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer">
+            className="vw-ibtn">
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <span className="font-semibold text-gray-900 truncate">{assignment?.title}</span>
+          <span className="vw-top-title">{assignment?.title}</span>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="vw-top-r">
           {drawMode && !isLocked && !currentPage?.videoUrl && (
-            <span className={`text-xs whitespace-nowrap ${saveStatus === 'saved' ? 'text-green-600' : 'text-gray-400'}`}>
+            <span className={`vw-status${saveStatus === 'saved' ? ' is-saved' : ''}`}>
               {saveStatus === 'saved' ? '저장됨' : '저장 중...'}
             </span>
           )}
@@ -824,7 +826,7 @@ const AssignmentStudyViewer = () => {
                 }
               }}
               isDownloading={isDownloading}
-              className="mt-0 ml-1 py-1 px-2 text-[10px]"
+              className="vw-pdf"
             />
           )}
 
@@ -832,13 +834,11 @@ const AssignmentStudyViewer = () => {
           <button
             onClick={() => setShowFilesPanel(v => !v)}
             title="파일 첨부"
-            className={`relative p-1.5 rounded-md transition-colors cursor-pointer ${
-              showFilesPanel ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:text-gray-700'
-            }`}
+            className={`vw-ibtn${showFilesPanel ? ' is-tint-lavender' : ''}`}
           >
             <Paperclip className="h-5 w-5" />
             {fileCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-purple-600 text-white text-[10px] rounded-full flex items-center justify-center">
+              <span className="vw-ibtn-badge">
                 {fileCount}
               </span>
             )}
@@ -846,7 +846,7 @@ const AssignmentStudyViewer = () => {
 
           {/* 업로드 진행률 */}
           {uploadProgress && (
-            <span className="text-xs text-purple-600">{uploadProgress}</span>
+            <span className="vw-status">{uploadProgress}</span>
           )}
 
           {/* 제출 버튼 */}
@@ -855,7 +855,7 @@ const AssignmentStudyViewer = () => {
               onClick={handleSubmit}
               disabled={submitting}
               title={submitting ? '제출 중...' : '제출하기'}
-              className="flex items-center justify-center p-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 cursor-pointer"
+              className="vw-ibtn vw-ibtn--sage"
             >
               {submitting ? <Loader className="animate-spin h-5 w-5" /> : <Send className="h-5 w-5" />}
             </button>
@@ -865,11 +865,7 @@ const AssignmentStudyViewer = () => {
           <button
             onClick={() => setShowTeacherNotesModal((v) => !v)}
             title="교사 필기"
-            className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-              showTeacherNotesModal
-                ? 'bg-amber-100 text-amber-700'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
+            className={`vw-ibtn${showTeacherNotesModal ? ' is-tint-mustard' : ''}`}
           >
             <GraduationCap className="h-5 w-5" />
           </button>
@@ -879,7 +875,7 @@ const AssignmentStudyViewer = () => {
             <button
               onClick={() => setDrawMode((v) => !v)}
               title={drawMode ? '뷰 모드로 전환' : '필기 모드로 전환'}
-              className={`p-1.5 rounded-md transition-colors cursor-pointer ${drawMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`vw-ibtn${drawMode ? ' is-on' : ''}`}
             >
               <Pencil className="h-4 w-4" />
             </button>
@@ -889,7 +885,7 @@ const AssignmentStudyViewer = () => {
             <button onClick={() => setToolbarCollapsed((v) => !v)}
               aria-label={toolbarCollapsed ? '필기 도구 펼치기' : '필기 도구 접기'}
               title={toolbarCollapsed ? '필기 도구 펼치기' : '필기 도구 접기'}
-              className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 cursor-pointer">
+              className="vw-ibtn">
               {toolbarCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
             </button>
           )}
@@ -898,11 +894,11 @@ const AssignmentStudyViewer = () => {
             onClick={() => prevPage && navigate(`/student/assignments/${assignmentId}/page/${prevPage.id}`)}
             disabled={!prevPage}
             aria-label="이전 페이지" title="이전 페이지"
-            className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer">
+            className="vw-ibtn vw-ibtn--nav">
             <ChevronLeft className="h-4 w-4" />
           </button>
           {pages.length > 0 && (
-            <span className="text-sm text-gray-400 min-w-[3rem] text-center">
+            <span className="vw-counter">
               {currentIndex + 1} / {pages.length}
             </span>
           )}
@@ -910,15 +906,20 @@ const AssignmentStudyViewer = () => {
             onClick={() => nextPage && navigate(`/student/assignments/${assignmentId}/page/${nextPage.id}`)}
             disabled={!nextPage}
             aria-label="다음 페이지" title="다음 페이지"
-            className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer">
+            className="vw-ibtn vw-ibtn--nav">
             <ChevronRight className="h-4 w-4" />
           </button>
 
-          <button onClick={() => setSidebarOpen((v) => !v)}
-            aria-label="페이지 목록" title="페이지 목록"
-            className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer">
-            <Menu className="h-5 w-5" />
-          </button>
+          {/* 페이지 목록 — 도구바가 없을 때만 여기(있을 때는 도구바 맨 앞) */}
+          {!toolbarShown && (
+            <button onClick={() => setSidebarOpen((v) => !v)}
+              aria-pressed={sidebarOpen}
+              aria-label={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+              title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+              className="vw-ibtn">
+              {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+            </button>
+          )}
         </div>
       </div>
 
@@ -929,6 +930,7 @@ const AssignmentStudyViewer = () => {
       {drawMode && !toolbarCollapsed && !isLocked && !currentPage?.videoUrl && (
         <DrawingToolbar
           apiRef={excalidrawAPIRef}
+          sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)}
           pageId={currentPage?.id}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
@@ -959,31 +961,31 @@ const AssignmentStudyViewer = () => {
       {/* 본문 */}
       <div className="flex flex-1 overflow-hidden">
         {sidebarOpen && (
-          <div ref={sidebarScrollRef} className="w-44 bg-white border-r overflow-y-auto flex-shrink-0">
-            <div className="px-3 py-2 border-b flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">페이지</span>
-              <button onClick={() => setSidebarOpen(false)} aria-label="페이지 목록 닫기" title="페이지 목록 닫기" className="text-gray-400 hover:text-gray-600 cursor-pointer">
+          <div ref={sidebarScrollRef} className="vw-side">
+            <div className="vw-side-head">
+              <span>페이지 {pages.length}</span>
+              <button onClick={() => setSidebarOpen(false)} aria-label="페이지 목록 닫기" title="페이지 목록 닫기" className="vw-ibtn">
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-            <div className="space-y-2 p-2">
+            <div className="vw-side-list">
               {pages.map((pg, idx) => (
                 <button key={pg.id}
                   ref={pg.id === currentPage?.id ? activeSidebarItemRef : null}
                   onClick={() => navigate(`/student/assignments/${assignmentId}/page/${pg.id}`)}
-                  className={`relative block w-full rounded-md overflow-hidden transition-colors text-left ${pg.id === currentPage?.id ? 'border-4 border-blue-500' : 'border-4 border-transparent hover:border-gray-300'}`}
+                  className={`vw-thumb${pg.id === currentPage?.id ? ' is-current' : ''}`}
                 >
                   {pg.videoUrl ? (
-                    <div className="relative">
-                      <PageVideoThumb videoUrl={pg.videoUrl} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover bg-gray-900" loading="lazy" decoding="async" />
+                    <div className="vw-thumb-video">
+                      <PageVideoThumb videoUrl={pg.videoUrl} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover" loading="lazy" decoding="async" />
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="bg-red-600 rounded-full p-1"><svg className="h-3 w-3 text-white fill-white" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div>
+                        <div className="vw-thumb-play"><svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg></div>
                       </div>
                     </div>
                   ) : (
                     <PageThumb page={pg} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" />
                   )}
-                  <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
+                  <div className="vw-thumb-tab" aria-hidden="true">
                     {idx + 1}
                   </div>
                 </button>

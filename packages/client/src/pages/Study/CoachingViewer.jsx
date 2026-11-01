@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Excalidraw, exportToBlob } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
-import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Loader, Wand2, Sparkles, Menu } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Loader, Wand2, Sparkles, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 import { PageVideoThumb } from '../../components/videos/PageVideo';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
@@ -474,9 +474,14 @@ export default function CoachingViewer({
         )}
         <button onClick={() => go(nextPage)} disabled={!nextPage} aria-label="다음 페이지"
           className="min-h-11 min-w-11 flex items-center justify-center border rounded-md disabled:opacity-40"><ChevronRight size={18} /></button>
-        {/* 페이지 목록 토글 */}
-        <button onClick={() => setSidebarOpen((v) => !v)} title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
-          className="min-h-11 min-w-11 flex items-center justify-center border rounded-md"><Menu size={18} /></button>
+        {/* 페이지 목록 토글 — 도구바가 있으면(필기 가능) 도구바 맨 앞 버튼이 대신한다 */}
+        {readOnly && (
+          <button onClick={() => setSidebarOpen((v) => !v)} aria-pressed={sidebarOpen}
+            aria-label={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'} title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+            className="min-h-11 min-w-11 flex items-center justify-center border rounded-md">
+            {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+          </button>
+        )}
       </div>
     </header>
   );
@@ -519,6 +524,7 @@ export default function CoachingViewer({
   const toolbar = !readOnly && (
     <DrawingToolbar
       apiRef={excalidrawAPIRef}
+      sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)}
       pageId={pageId}
       showPanel={showExcalidrawPanel}
       onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}

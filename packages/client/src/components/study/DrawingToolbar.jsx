@@ -4,8 +4,9 @@ import {
   LassoSelect, Pen, Highlighter, Type, Square, Circle, Triangle,
   Eraser, Minus, Trash2, Plus, Palette,
   SlidersHorizontal, Hand, Shapes, ChevronDown, ImagePlus, Dot,
-  RefreshCw, Undo2, Redo2, Pointer,
+  RefreshCw, Undo2, Redo2, Pointer, PanelLeftOpen, PanelLeftClose,
 } from 'lucide-react';
+import './viewer.css';
 import { BG_ELEMENT_ID } from '../../lib/excalidrawUtils';
 import { getInputMode, setInputMode, subscribeInputMode } from '../../lib/inputMode';
 import { sceneStrokeWidth } from '../../lib/penWidth';
@@ -22,6 +23,9 @@ import ColorSlotsModal from './ColorSlotsModal';
  * 논리 도구(activeTool)와 Excalidraw 도구는 다르다: 형광펜(highlighter)·삼각형(triangle)은 Excalidraw 쪽이 freedraw 이고,
  * 올가미(lasso, hooks/useLasso.js)·레이저포인터·이미지이동은 selection 이다. 형광펜은 currentItemOpacity 40 + 전용 색·두께, 펜으로 돌아오면 100 + 펜 색·두께.
  * 화면 고정 버튼은 여기 없다 — components/study/ScreenLockFab.jsx (필기 영역 우측 상단 플로팅).
+ * 맨 앞의 페이지 목록(썸네일) 버튼은 뷰어가 `sidebarOpen`/`onToggleSidebar` 를 넘길 때만 나온다 — 도구바가 보일 때는 여기,
+ * 보기 모드·도구바 접힘처럼 도구바가 없을 때는 뷰어 상단 바에 같은 버튼이 대신 나온다.
+ * 겉모양은 components/study/viewer.css (`.vw-tb*`) — 뷰어 상단 바·페이지 목록과 같은 토큰을 쓴다.
  */
 
 const SHAPE_TOOL_ICONS = {
@@ -36,12 +40,11 @@ const SAVEABLE_TOOLS = ['freedraw', 'highlighter', 'lasso', 'text', 'line', 'rec
 const inkToolOf = (tool) => (tool === 'highlighter' ? 'highlighter' : 'freedraw');
 
 /* 요소 순서는 lib/toolPrefs.js TOOLBAR_ORDER 가 기준 — 아래 JSX 의 data-tb 순서와 일치해야 한다(테스트가 검증) */
-const BTN = 'p-1.5 rounded-md transition-colors cursor-pointer flex-shrink-0 flex items-center justify-center';
-const btnCls = (active, activeCls = 'bg-blue-100 text-blue-600') =>
-  `${BTN} ${active ? activeCls : 'text-gray-600 hover:bg-gray-100'}`;
-const Divider = () => <div className="w-px h-6 bg-gray-200 mx-1 flex-shrink-0" />;
+/** 도구 버튼 클래스 — `mod` 는 켜졌을 때의 상태 색(viewer.css `.vw-tb-btn--hl` 등), 없으면 잉크 남색 */
+const btnCls = (active, mod = '') => ['vw-tb-btn', mod, active ? 'is-on' : ''].filter(Boolean).join(' ');
+const Divider = () => <div className="vw-tb-sep" aria-hidden="true" />;
 
-function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, pdfMode = false, onActiveToolChange }) {
+function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthChange, onReloadImage, onUndo, onRedo, canUndo = true, canRedo = true, htmlMode = false, pdfMode = false, onActiveToolChange, sidebarOpen, onToggleSidebar }) {
   const [activeTool, setActiveTool]       = useState('freedraw');
   const [imageMoveMode, setImageMoveMode] = useState(false);
   const [inputMode, setInputModeState] = useState(() => getInputMode());
@@ -497,70 +500,82 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
   const isShapeActive   = SHAPE_TOOLS.includes(activeTool);
   const ShapeActiveIcon = isShapeActive ? SHAPE_TOOL_ICONS[activeTool] : Shapes;
 
-  const toolBtn = (type, Icon, label, activeCls) => (
+  const toolBtn = (type, Icon, label, mod) => (
     <button key={type} data-tb={type} onClick={() => applyTool(type)} title={label}
       aria-pressed={activeTool === type}
-      className={btnCls(activeTool === type, activeCls)}>
-      <Icon className="h-4 w-4" />
+      className={btnCls(activeTool === type, mod)}>
+      <Icon />
     </button>
   );
 
   return (
-    <div className="flex items-center gap-1 px-3 h-11 bg-white border-b shadow-sm flex-shrink-0 overflow-x-auto sticky top-14 z-50">
+    <div className="vw-tb" role="toolbar" aria-label="필기 도구">
+
+      {/* ⓪ 페이지 목록(썸네일) 열기/닫기 — 뷰어가 핸들러를 줄 때만 */}
+      {onToggleSidebar && (
+        <>
+          <button data-tb="pages" onClick={onToggleSidebar}
+            aria-pressed={!!sidebarOpen}
+            title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+            aria-label={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+            className={btnCls(!!sidebarOpen)}>
+            {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+          </button>
+          <Divider />
+        </>
+      )}
 
       {/* ⓪ 실행 취소 / 다시 실행 */}
-      <button data-tb="undo" onClick={onUndo} disabled={!canUndo} title="실행 취소 (Ctrl+Z)"
-        className={`${BTN} ${canUndo ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-300 cursor-not-allowed'}`}>
-        <Undo2 className="h-4 w-4" />
+      <button data-tb="undo" onClick={onUndo} disabled={!canUndo} title="실행 취소 (Ctrl+Z)" aria-label="실행 취소"
+        className="vw-tb-btn">
+        <Undo2 />
       </button>
-      <button data-tb="redo" onClick={onRedo} disabled={!canRedo} title="다시 실행 (Ctrl+Shift+Z)"
-        className={`${BTN} ${canRedo ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-300 cursor-not-allowed'}`}>
-        <Redo2 className="h-4 w-4" />
+      <button data-tb="redo" onClick={onRedo} disabled={!canRedo} title="다시 실행 (Ctrl+Shift+Z)" aria-label="다시 실행"
+        className="vw-tb-btn">
+        <Redo2 />
       </button>
       <Divider />
 
       {/* ① 펜 · 형광펜 · 손가락 필기 · 레이저 포인터 */}
       {toolBtn('freedraw', Pen, '펜')}
-      {toolBtn('highlighter', Highlighter, '형광펜 (반투명)', 'bg-yellow-100 text-yellow-700')}
+      {toolBtn('highlighter', Highlighter, '형광펜 (반투명)', 'vw-tb-btn--hl')}
       <button data-tb="finger" onClick={handleToggleInputMode}
         aria-pressed={inputMode === 'finger'}
         title={inputMode === 'finger'
           ? '손가락 필기 끄기 (현재: 손가락 허용)'
           : '손가락 필기 켜기 (현재: 스타일러스 전용)'}
-        className={btnCls(inputMode === 'finger')}>
-        <Pointer className="h-4 w-4" />
+        className={btnCls(inputMode === 'finger', 'vw-tb-btn--finger')}>
+        <Pointer />
       </button>
-      {toolBtn('laser_pointer', Dot, '레이저 포인터', 'bg-red-100 text-red-500')}
+      {toolBtn('laser_pointer', Dot, '레이저 포인터', 'vw-tb-btn--laser')}
       <Divider />
 
       {/* ② 색상 바로가기 5칸 + 색상 설정 */}
       {slots.map((hex, i) => (
         <button key={i} data-tb={`slot-${i}`} onClick={() => applyColor(hex)} title={hex}
           aria-label={`색 ${i + 1}: ${hex}`}
-          className={`w-5 h-5 rounded-full cursor-pointer flex-shrink-0 transition-transform border border-white ${
-            curColor === hex ? 'ring-2 ring-offset-1 ring-gray-500 scale-110' : 'hover:scale-110'
-          }`}
+          aria-pressed={curColor === hex}
+          className={`vw-swatch${curColor === hex ? ' is-current' : ''}`}
           style={{ backgroundColor: hex }}
         />
       ))}
       <button data-tb="palette" onClick={() => setPaletteOpen(true)} title="색상 설정 — 바로가기 색 바꾸기 · 스포이드 · 직접 입력"
         aria-haspopup="dialog" aria-expanded={paletteOpen}
         className={btnCls(paletteOpen)}>
-        <Palette className="h-4 w-4" style={{ color: curColor }} />
+        <Palette style={{ color: paletteOpen ? undefined : curColor }} />
       </button>
       <Divider />
 
       {/* ③ 두께 슬라이더 (펜/형광펜 — 켜진 도구의 두께) */}
-      <div data-tb="width" className="flex items-center gap-1.5 flex-shrink-0">
+      <div data-tb="width" className={`vw-tb-width${inkTool === 'highlighter' ? ' is-hl' : ''}`}>
         <input
           type="range" min={range.min} max={range.max} step={range.step}
           value={curWidth}
           title={`${inkTool === 'highlighter' ? '형광펜' : '펜'} 굵기: ${curWidth}`}
           aria-label={`${inkTool === 'highlighter' ? '형광펜' : '펜'} 굵기`}
           onChange={(e) => applyWidth(parseFloat(e.target.value))}
-          className={`w-32 cursor-pointer ${inkTool === 'highlighter' ? 'accent-yellow-500' : 'accent-blue-500'}`}
         />
-        <svg width="22" height="16" className="flex-shrink-0" style={{ overflow: 'visible' }}>
+        <svg width="22" height="16" className="flex-shrink-0" style={{ overflow: 'visible' }} aria-hidden="true">
           <line x1="1" y1="8" x2="21" y2="8"
             stroke={curColor}
             strokeOpacity={inkTool === 'highlighter' ? HL_OPACITY / 100 : 1}
@@ -579,38 +594,30 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
       <button data-tb="image_move" onClick={handleToggleImageMove}
         aria-pressed={imageMoveMode}
         title={imageMoveMode ? '이미지 이동 완료 (잠금)' : '이미지 이동 — 배경 이미지를 드래그로 이동'}
-        className={btnCls(imageMoveMode, 'bg-green-100 text-green-600')}>
-        <Hand className="h-4 w-4" />
+        className={btnCls(imageMoveMode, 'vw-tb-btn--image')}>
+        <Hand />
       </button>
       )}
 
       {/* 이미지 가로/세로 비율 조정 (이동 모드일 때만) */}
       {imageMoveMode && (
         <>
-          <div className="flex items-center gap-0.5 flex-shrink-0">
-            <span className="text-[10px] text-gray-400 w-3">W</span>
-            <button onClick={() => handleResizeBg('width', -0.05)}
-              title="너비 축소 (-5%)"
-              className="p-1 rounded text-gray-600 hover:bg-gray-100 cursor-pointer">
-              <Minus className="h-3 w-3" />
+          <div className="vw-tb-mini" role="group" aria-label="배경 너비">
+            <span className="vw-tb-mini-label" aria-hidden="true">W</span>
+            <button onClick={() => handleResizeBg('width', -0.05)} title="너비 축소 (-5%)" aria-label="너비 축소 (-5%)">
+              <Minus />
             </button>
-            <button onClick={() => handleResizeBg('width', 0.05)}
-              title="너비 확대 (+5%)"
-              className="p-1 rounded text-gray-600 hover:bg-gray-100 cursor-pointer">
-              <Plus className="h-3 w-3" />
+            <button onClick={() => handleResizeBg('width', 0.05)} title="너비 확대 (+5%)" aria-label="너비 확대 (+5%)">
+              <Plus />
             </button>
           </div>
-          <div className="flex items-center gap-0.5 flex-shrink-0">
-            <span className="text-[10px] text-gray-400 w-3">H</span>
-            <button onClick={() => handleResizeBg('height', -0.05)}
-              title="높이 축소 (-5%)"
-              className="p-1 rounded text-gray-600 hover:bg-gray-100 cursor-pointer">
-              <Minus className="h-3 w-3" />
+          <div className="vw-tb-mini" role="group" aria-label="배경 높이">
+            <span className="vw-tb-mini-label" aria-hidden="true">H</span>
+            <button onClick={() => handleResizeBg('height', -0.05)} title="높이 축소 (-5%)" aria-label="높이 축소 (-5%)">
+              <Minus />
             </button>
-            <button onClick={() => handleResizeBg('height', 0.05)}
-              title="높이 확대 (+5%)"
-              className="p-1 rounded text-gray-600 hover:bg-gray-100 cursor-pointer">
-              <Plus className="h-3 w-3" />
+            <button onClick={() => handleResizeBg('height', 0.05)} title="높이 확대 (+5%)" aria-label="높이 확대 (+5%)">
+              <Plus />
             </button>
           </div>
         </>
@@ -619,14 +626,14 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
       {onReloadImage && (
         <button data-tb="image_reload" onClick={onReloadImage}
           title="이미지 위치 초기화 — 원본 비율로 재배치"
-          className={btnCls(false)}>
-          <RefreshCw className="h-4 w-4" />
+          className="vw-tb-btn">
+          <RefreshCw />
         </button>
       )}
 
       <button data-tb="image_add" onClick={() => imageInputRef.current?.click()} title="이미지 삽입"
-        className={btnCls(false)}>
-        <ImagePlus className="h-4 w-4" />
+        className="vw-tb-btn">
+        <ImagePlus />
       </button>
       <input ref={imageInputRef} type="file" accept="image/*" className="sr-only"
         onChange={handleImageFileChange} />
@@ -639,10 +646,10 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
         onClick={() => setShapeMenuOpen((v) => !v)}
         title="도형 (사각형 / 원 / 삼각형)"
         aria-expanded={shapeMenuOpen}
-        className={`${btnCls(isShapeActive || shapeMenuOpen)} gap-0.5`}
+        className={`${btnCls(isShapeActive || shapeMenuOpen)} vw-tb-btn--wide`}
       >
-        <ShapeActiveIcon className="h-4 w-4" />
-        <ChevronDown className="h-3 w-3 opacity-60" />
+        <ShapeActiveIcon />
+        <ChevronDown className="vw-tb-caret" />
       </button>
 
       {shapeMenuOpen && (
@@ -656,7 +663,7 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
               onClick={() => { applyTool(type); setShapeMenuOpen(false); }}
               title={label}
               className={btnCls(activeTool === type)}>
-              <ShapeIcon className="h-4 w-4" />
+              <ShapeIcon />
             </button>
           ))}
         </>
@@ -666,8 +673,8 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
 
       {/* ⑥ 전체 지우기 */}
       <button data-tb="clear" onClick={handleClear} title="전체 지우기"
-        className={`${BTN} text-red-500 hover:bg-red-50`}>
-        <Trash2 className="h-4 w-4" />
+        className="vw-tb-btn vw-tb-btn--danger">
+        <Trash2 />
       </button>
       <Divider />
 
@@ -675,8 +682,8 @@ function DrawingToolbar({ apiRef, pageId, showPanel, onTogglePanel, onBaseWidthC
       <button data-tb="settings" onClick={onTogglePanel}
         title={showPanel ? 'Excalidraw 세부설정 숨기기' : 'Excalidraw 세부설정 열기'}
         aria-pressed={!!showPanel}
-        className={btnCls(showPanel, 'bg-violet-100 text-violet-600').replace('text-gray-600', 'text-gray-400')}>
-        <SlidersHorizontal className="h-4 w-4" />
+        className={btnCls(showPanel, 'vw-tb-btn--settings')}>
+        <SlidersHorizontal />
       </button>
 
       {paletteOpen && (

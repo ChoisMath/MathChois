@@ -15,7 +15,7 @@ describe('DrawingToolbar — 순서 · 형광펜 · 색상 슬롯 · 두께', ()
     props = {
       apiRef: { current: api }, pageId: 'p1', showPanel: false, onTogglePanel: vi.fn(),
       onBaseWidthChange: vi.fn(), onReloadImage: vi.fn(), onUndo: vi.fn(), onRedo: vi.fn(),
-      onActiveToolChange: vi.fn(), ...over,
+      onActiveToolChange: vi.fn(), sidebarOpen: false, onToggleSidebar: vi.fn(), ...over,
     };
     act(() => { root.render(createElement(DrawingToolbar, props)); });
   };
@@ -40,11 +40,12 @@ describe('DrawingToolbar — 순서 · 형광펜 · 색상 슬롯 · 두께', ()
   });
   afterEach(() => { act(() => { root.unmount(); }); mount.remove(); });
 
-  it('버튼 순서: 되돌리기 → 펜·형광펜·손가락·포인터 → 색 5칸·팔레트 → (두께) → 지우개·이미지 → 직선·텍스트·도형·선택 → 전체지움 → 설정', () => {
+  it('버튼 순서: 페이지 목록 → 되돌리기 → 펜·형광펜·손가락·포인터 → 색 5칸·팔레트 → (두께) → 지우개·이미지 → 직선·텍스트·도형·선택 → 전체지움 → 설정', () => {
     render();
     const names = [...mount.querySelectorAll('[data-tb]')].map((el) => el.dataset.tb);
     expect(names).toEqual([...TOOLBAR_ORDER]);
     expect(TOOLBAR_ORDER).toEqual([
+      'pages',
       'undo', 'redo',
       'freedraw', 'highlighter', 'finger', 'laser_pointer',
       'slot-0', 'slot-1', 'slot-2', 'slot-3', 'slot-4', 'palette',
@@ -55,6 +56,24 @@ describe('DrawingToolbar — 순서 · 형광펜 · 색상 슬롯 · 두께', ()
     ]);
     expect(mount.querySelector('[title^="스포이드"]')).toBeNull();      // 스포이드·화면고정은 바에서 빠짐
     expect(mount.querySelector('[title^="화면 고정"]')).toBeNull();
+  });
+
+  it('페이지 목록 버튼: 열림 상태를 aria-pressed 로 보이고 누르면 onToggleSidebar, 핸들러가 없으면 버튼도 없다', () => {
+    render({ sidebarOpen: true });
+    const pages = btn('pages');
+    expect(pages.getAttribute('aria-pressed')).toBe('true');
+    expect(pages.title).toBe('페이지 목록 숨기기');
+    expect(pages.classList.contains('is-on')).toBe(true);
+    click(pages);
+    expect(props.onToggleSidebar).toHaveBeenCalledTimes(1);
+
+    render({ sidebarOpen: false });
+    expect(btn('pages').getAttribute('aria-pressed')).toBe('false');
+    expect(btn('pages').title).toBe('페이지 목록 펼치기');
+
+    render({ onToggleSidebar: undefined });
+    expect(btn('pages')).toBeNull();
+    expect([...mount.querySelectorAll('[data-tb]')].map((el) => el.dataset.tb)).toEqual(TOOLBAR_ORDER.filter((n) => n !== 'pages'));
   });
 
   it('HTML 모드에서는 이미지이동·이미지새로고침이 숨겨진다', () => {

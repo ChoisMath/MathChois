@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
-  ChevronLeft, ChevronRight, Menu, Pencil, X, GraduationCap,
+  ChevronLeft, ChevronRight, PanelLeftOpen, PanelLeftClose, Pencil, X, GraduationCap,
   ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { Excalidraw } from '@excalidraw/excalidraw';
@@ -208,9 +208,9 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── 헤더 ── */}
-        <div className="h-12 flex items-center justify-between px-4 border-b flex-shrink-0">
-          <span className="font-semibold text-gray-800">교사 필기</span>
-          <div className="flex items-center gap-2">
+        <div className="vw-top vw-top--modal">
+          <span className="vw-top-title">교사 필기</span>
+          <div className="vw-top-r">
             {status === 'ok' && (
               <PdfDownloadButton
                 onClick={() => downloadPage('교사_필기', noteElements, noteFiles, currentPage, bgPositionRef.current)}
@@ -245,7 +245,7 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
                    downloadMultiplePages(title, pageDataList);
                 }}
                 isDownloading={isDownloading}
-                className="py-1 px-2 text-xs"
+                className="vw-pdf"
               />
             )}
             {/* 이전/다음 페이지 */}
@@ -254,11 +254,11 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
               disabled={!hasPrev}
               aria-label="이전 페이지"
               title="이전 페이지"
-              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer"
+              className="vw-ibtn vw-ibtn--nav"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="text-sm text-gray-500 min-w-[3rem] text-center">
+            <span className="vw-counter">
               {currentPageIndex + 1} / {pages.length}
             </span>
             <button
@@ -266,19 +266,21 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
               disabled={!hasNext}
               aria-label="다음 페이지"
               title="다음 페이지"
-              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer"
+              className="vw-ibtn vw-ibtn--nav"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
             {/* 사이드바 토글 */}
             <button
               onClick={() => setSidebarOpen((v) => !v)}
-              title="페이지 목록"
-              className="p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer"
+              aria-pressed={sidebarOpen}
+              aria-label={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+              title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+              className="vw-ibtn"
             >
-              <Menu className="h-4 w-4" />
+              {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
             </button>
-            <button onClick={onClose} aria-label="교사 필기 닫기" title="교사 필기 닫기" className="p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer">
+            <button onClick={onClose} aria-label="교사 필기 닫기" title="교사 필기 닫기" className="vw-ibtn">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -288,33 +290,29 @@ function TeacherNotesModal({ initialPageId, pages, onClose }) {
         <div className="flex flex-1 overflow-hidden">
           {/* 페이지 썸네일 사이드바 */}
           {sidebarOpen && (
-            <div className="w-28 bg-gray-50 border-r overflow-y-auto flex-shrink-0">
-              <div className="space-y-1.5 p-1.5">
+            <div className="vw-side vw-side--narrow">
+              <div className="vw-side-list">
                 {pages.map((pg, idx) => (
                   <button
                     key={pg.id}
                     onClick={() => setCurrentPageIndex(idx)}
-                    className={`relative block w-full rounded overflow-hidden cursor-pointer ${
-                      idx === currentPageIndex
-                        ? 'ring-2 ring-blue-500'
-                        : 'ring-1 ring-gray-200 hover:ring-gray-400'
-                    }`}
+                    className={`vw-thumb${idx === currentPageIndex ? ' is-current' : ''}`}
                   >
                     {pg.aiProblemId ? (
-                      <div className="w-full aspect-video flex items-center justify-center bg-indigo-50 text-indigo-600 text-xs font-medium">AI 코칭</div>
+                      <div className="vw-thumb-kind vw-thumb-kind--ai">AI 코칭</div>
                     ) : pg.htmlUrl ? (
-                      <div className="w-full aspect-video flex items-center justify-center bg-emerald-50 text-emerald-600 text-xs font-medium">HTML</div>
+                      <div className="vw-thumb-kind vw-thumb-kind--html">HTML</div>
                     ) : pg.videoUrl ? (
-                      <div className="relative">
-                        <PageVideoThumb videoUrl={pg.videoUrl} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover bg-gray-900" loading="lazy" decoding="async" />
+                      <div className="vw-thumb-video">
+                        <PageVideoThumb videoUrl={pg.videoUrl} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover" loading="lazy" decoding="async" />
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="bg-red-600 rounded-full p-1"><svg className="h-3 w-3 text-white fill-white" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div>
+                          <div className="vw-thumb-play"><svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg></div>
                         </div>
                       </div>
                     ) : (
                       <PageThumb page={pg} alt={`p.${idx + 1}`} className="w-full h-auto object-contain bg-white" />
                     )}
-                    <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] text-center py-0.5">
+                    <div className="vw-thumb-tab" aria-hidden="true">
                       {idx + 1}
                     </div>
                   </button>
@@ -996,25 +994,27 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
     );
   }
 
+  // 도구바가 보이면 페이지 목록 버튼은 도구바 맨 앞에, 아니면 상단 바에 둔다
+  const toolbarShown = drawMode && !toolbarCollapsed && !currentPage?.videoUrl;
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: embedded ? '100%' : '100vh' }}>
+    <div className="vw-root flex flex-col" style={{ height: embedded ? '100%' : '100vh' }}>
 
       {/* ── 내비게이션 바 ── */}
-      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="vw-top">
+        <div className="vw-top-l">
           <button
             onClick={exitViewer}
             title={embedded ? '영상으로 돌아가기' : '학급으로 돌아가기'}
-            className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer">
+            className="vw-ibtn">
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <span className="font-semibold text-gray-900 truncate">{chapter?.title}</span>
+          <span className="vw-top-title">{chapter?.title}</span>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="vw-top-r">
           {/* 저장 상태: 필기 모드 + 영상/HTML 아닐 때만 */}
           {drawMode && !currentPage?.videoUrl && (
-            <span className={`text-xs whitespace-nowrap ${saveStatus === 'saved' ? 'text-green-600' : 'text-gray-400'}`}>
+            <span className={`vw-status${saveStatus === 'saved' ? ' is-saved' : ''}`}>
               {saveStatus === 'saved'  && '저장됨'}
               {saveStatus === 'saving' && '저장 중...'}
             </span>
@@ -1045,7 +1045,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
                 downloadMultiplePages(title, pageDataList);
               }}
               isDownloading={isDownloading}
-              className="mt-0 ml-1 py-1 px-2 text-[10px]"
+              className="vw-pdf"
             />
           )}
 
@@ -1053,11 +1053,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
           <button
             onClick={() => setShowTeacherNotesModal((v) => !v)}
             title="교사 필기"
-            className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-              showTeacherNotesModal
-                ? 'bg-amber-100 text-amber-700'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
+            className={`vw-ibtn${showTeacherNotesModal ? ' is-tint-mustard' : ''}`}
           >
             <GraduationCap className="h-5 w-5" />
           </button>
@@ -1066,11 +1062,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
           <button
             onClick={() => setDrawMode((v) => !v)}
             title={drawMode ? '뷰 모드로 전환' : '필기 모드로 전환'}
-            className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-              drawMode
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
+            className={`vw-ibtn${drawMode ? ' is-on' : ''}`}
           >
             <Pencil className="h-4 w-4" />
           </button>
@@ -1080,7 +1072,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
             <button
               onClick={() => setToolbarCollapsed((v) => !v)}
               title={toolbarCollapsed ? '툴바 펼치기' : '툴바 접기'}
-              className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+              className="vw-ibtn"
             >
               {toolbarCollapsed
                 ? <ChevronDown className="h-4 w-4" />
@@ -1093,11 +1085,11 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
             onClick={() => prevPage && goToPage(prevPage.id)}
             disabled={!prevPage}
             title="이전 페이지"
-            className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer">
+            className="vw-ibtn vw-ibtn--nav">
             <ChevronLeft className="h-4 w-4" />
           </button>
           {pages.length > 0 && (
-            <span className="text-sm text-gray-400 min-w-[3rem] text-center">
+            <span className="vw-counter">
               {currentIndex + 1} / {pages.length}
             </span>
           )}
@@ -1105,16 +1097,20 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
             onClick={() => nextPage && goToPage(nextPage.id)}
             disabled={!nextPage}
             title="다음 페이지"
-            className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer">
+            className="vw-ibtn vw-ibtn--nav">
             <ChevronRight className="h-4 w-4" />
           </button>
 
-          {/* 사이드바 토글 */}
-          <button onClick={() => setSidebarOpen((v) => !v)}
-            title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
-            className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer">
-            <Menu className="h-5 w-5" />
-          </button>
+          {/* 페이지 목록 — 도구바가 없을 때만 여기(있을 때는 도구바 맨 앞) */}
+          {!toolbarShown && (
+            <button onClick={() => setSidebarOpen((v) => !v)}
+              aria-pressed={sidebarOpen}
+              aria-label={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+              title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+              className="vw-ibtn">
+              {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1123,6 +1119,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
         currentPage?.htmlUrl ? (
           <DrawingToolbar
             apiRef={excalidrawAPIRef}
+            sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)}
             pageId={currentPage?.id}
             showPanel={showExcalidrawPanel}
             onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
@@ -1133,6 +1130,7 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
         ) : (
           <DrawingToolbar
             apiRef={excalidrawAPIRef}
+            sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)}
             pageId={currentPage?.id}
             showPanel={showExcalidrawPanel}
             onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
@@ -1150,15 +1148,15 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
 
         {/* 페이지 목록 사이드바 */}
         {sidebarOpen && (
-          <div ref={sidebarScrollRef} className="w-44 bg-white border-r overflow-y-auto flex-shrink-0">
-            <div className="px-3 py-2 border-b flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">페이지</span>
+          <div ref={sidebarScrollRef} className="vw-side">
+            <div className="vw-side-head">
+              <span>페이지 {pages.length}</span>
               <button onClick={() => setSidebarOpen(false)} title="목록 숨기기"
-                className="text-gray-400 hover:text-gray-600 cursor-pointer">
+                className="vw-ibtn">
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-            <div className="space-y-2 p-2">
+            <div className="vw-side-list">
               {pages.map((pg, idx) => (
                 // 임베드 모드에서는 라우트를 바꾸지 않도록 <Link> 대신 <button>
                 <SidebarItem
@@ -1167,25 +1165,23 @@ const StudyViewer = ({ chapterId: chapterIdProp, pageId: pageIdProp, onNavigateP
                   ref={pg.id === currentPage?.id ? activeSidebarItemRef : null}
                   to={`/student/study/${chapterId}/page/${pg.id}`}
                   onSelect={() => goToPage(pg.id)}
-                  className={`relative block w-full text-left rounded-md overflow-hidden transition-colors cursor-pointer ${
-                    pg.id === currentPage?.id ? 'border-4 border-blue-500' : 'border-4 border-transparent hover:border-gray-300'
-                  }`}
+                  className={`vw-thumb${pg.id === currentPage?.id ? ' is-current' : ''}`}
                 >
                   {pg.aiProblemId ? (
-                    <div className="w-full aspect-video flex items-center justify-center bg-indigo-50 text-indigo-600 text-xs font-medium">AI 코칭</div>
+                    <div className="vw-thumb-kind vw-thumb-kind--ai">AI 코칭</div>
                   ) : pg.htmlUrl ? (
-                    <div className="w-full aspect-video flex items-center justify-center bg-emerald-50 text-emerald-600 text-xs font-medium">HTML</div>
+                    <div className="vw-thumb-kind vw-thumb-kind--html">HTML</div>
                   ) : pg.videoUrl ? (
-                    <div className="relative">
-                      <PageVideoThumb videoUrl={pg.videoUrl} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover bg-gray-900" loading="lazy" decoding="async" />
+                    <div className="vw-thumb-video">
+                      <PageVideoThumb videoUrl={pg.videoUrl} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover" loading="lazy" decoding="async" />
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="bg-red-600 rounded-full p-1"><svg className="h-3 w-3 text-white fill-white" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div>
+                        <div className="vw-thumb-play"><svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg></div>
                       </div>
                     </div>
                   ) : (
                     <PageThumb page={pg} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" />
                   )}
-                  <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
+                  <div className="vw-thumb-tab" aria-hidden="true">
                     {idx + 1}
                   </div>
                 </SidebarItem>
