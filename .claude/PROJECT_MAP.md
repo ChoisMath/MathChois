@@ -56,7 +56,7 @@ packages/
 │       │                       #   Assignment, Board, Admin, Problems(문제은행), Visualizations(시각화자료), Videos(영상자료 VideosPage + 학급 시청 ClassroomVideoWatch + 영상 2분할 필기 ClassroomVideoSplit), History(코칭기록),
 │       │                       #   Whiteboard(StudentWhiteboardViewer 학생 모둠 보드, TeacherWhiteboardPage 교사 격자/단일 + 설정),
 │       │                       #   AiHub(AiHubRoute 가드+데이터 공급자, AiHubLayout 상단 바 가운데 슬롯의 제목·탭 칩 + 소개 머리글(학급으로), MotionGalleryPage/MotionDetailPage/MotionEditorPage, SlideGalleryPage, BrandPage) 등
-│       ├── hooks/              # useVideoSubtitles(플레이어 자막 목록·문장 로딩), useMediaQuery(matchMedia 구독), useSortOrder(목록 정렬 순서 — 사용자별 localStorage), useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
+│       ├── hooks/              # useInlineEdit(클릭 → 입력 → Enter/blur 저장·Esc 취소 — 챕터 편집 머리글의 제목·설명; 규칙은 lib/inlineEdit.js resolveInlineEdit: 공백 제거·불변이면 저장 안 함·allowEmpty 면 비움=null), useVideoSubtitles(플레이어 자막 목록·문장 로딩), useMediaQuery(matchMedia 구독), useSortOrder(목록 정렬 순서 — 사용자별 localStorage), useExcalidrawTouch(입력모드 게이트), useExcalidrawUndo(자체 undo/redo),
 │       │                       #   useScribbleErase(문지르기 지우개), useFreedrawSmoothing, usePenDiagnostics,
 │       │                       #   useWetInk(웻잉크 오버레이 — 펜 라이브 렌더), useOrientation(세로 화면 → 위/아래 분할),
 │       │                       #   useWhiteboardCollab(보드 1개 소켓 협업 — 변경 요소 100ms 스로틀 전송/포인터/파일), useWhiteboardGrid(교사 격자 — 소켓 하나로 N 보드 장면 유지),
