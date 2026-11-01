@@ -3,13 +3,28 @@ import { getInputMode, shouldBlockTouchDraw } from '../lib/inputMode';
 import { BG_ELEMENT_ID } from '../lib/excalidrawUtils';
 import { sceneStrokeWidth } from '../lib/penWidth';
 
+// @excalidraw/excalidraw 0.18 의 CaptureUpdateAction.NEVER 값. 훅이 번들을 import 하지 않도록 리터럴로 둔다
+// (스냅샷만 갱신하고 undo 증분을 만들지 않는다 — 핀치 진입 부작용 되돌리기에 사용).
+const CAPTURE_UPDATE_NEVER = 'NEVER';
+
+// Excalidraw 의 newElementWith 처럼 version/versionNonce/updated 를 올린 사본. 화이트보드 요소 동기화는
+// "마지막 전송 이후 version 이 바뀐 요소"만 내보내고 version 큰 쪽이 이기므로, 되돌리기가 version 을 올리지
+// 않으면 로컬만 바뀌고 모둠원에게는 전파되지 않는다.
+const bumped = (el, updates) => ({
+  ...el, ...updates, version: (el.version || 0) + 1, versionNonce: Math.floor(Math.random() * 2 ** 31), updated: Date.now(),
+});
+
 /**
  * Excalidraw 터치/제스처 제어 훅
  *
  * 입력 모드(스타일러스/손가락)로 그리기 입력을 결정적으로 게이트한다.
  * - 스타일러스 모드: 단일 손가락 + 그리기 도구 → 그리기는 차단(손바닥 연결선 원천 차단)하되
  *   잠금이 아니면 그 손가락으로 화면을 좌우/상하 팬한다.
- * - 두 손가락: 커스텀 핀치줌 + 팬 (freedraw)
+ * - 두 손가락: 커스텀 핀치줌 + 팬 — 모든 도구(펜·지우개·선택·도형·손)에서 동일. Excalidraw 의 드래그 핸들러는
+ *   pointerId 를 가리지 않아 내장 핀치에 맡기면 두 번째 손가락의 이동이 지우개 궤적/요소 드래그로 새므로,
+ *   두 번째 손가락부터는 Excalidraw 전달을 끊고(합성 pointerup 으로 첫 손가락 입력 종료) 훅이 핀치를 처리한다.
+ *   핀치 진입이 남긴 부작용은 80ms 뒤 되돌린다: 손가락 획(discardLeakedStroke), 지우개가 지운 요소(restoreErasedSince),
+ *   선택 도구가 바꾼 선택(restoreSelection) — 모두 captureUpdate NEVER 라 undo 스택에 증분을 남기지 않는다.
  * - screenLocked=true: 2손가락 이상 줌/팬 차단, 1손가락 팬도 비활성(HTML 오버레이는 뷰포트 고정)
  * - S Pen 배럴버튼: 그리기 전달 차단
  * - baseStrokeWidthRef: 줌-독립 펜 두께 (핀치줌 시 자동 보정)
@@ -48,6 +63,7 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
   const touchPointerIdsRef   = useRef(new Set());
   const touchLastPosRef      = useRef(new Map()); // pointerId → [clientX, clientY] — 핀치 진입 시 합성 pointerup 좌표
   const touchDrawRef         = useRef(null);      // { pointerId, downTime } — 차단되지 않고 그리기로 전달된 1손가락
+  const selectionSnapRef     = useRef(null);      // 선택 도구 1손가락 다운 직전의 { selectedElementIds, selectedGroupIds }
   const isSyntheticUpRef     = useRef(false);
   const barrelEraserRef      = useRef(false);  // S Pen 배럴버튼 지우개 활성 중
   const prevToolRef          = useRef('freedraw');
@@ -122,10 +138,38 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
       }
       if (newest) {
         api.updateScene({
-          elements: els.map((el) => (el.id === newest.id ? { ...el, isDeleted: true } : el)),
-          commitToHistory: false,
+          elements: els.map((el) => (el.id === newest.id ? bumped(el, { isDeleted: true }) : el)),
+          captureUpdate: CAPTURE_UPDATE_NEVER,
         });
       }
+    };
+
+    // 지우개 도구에서 핀치 진입의 합성 pointerup 은 Excalidraw 의 eraseElements 를 실행한다 — 첫 손가락이 스친
+    // pending 요소뿐 아니라, 손가락이 움직이지 않았으면(draggedDistance 0) 손가락 아래 요소를 탭 지우기로 지운다.
+    // 핀치 의도였으므로 그때 지워진(= armTime 이후 isDeleted 로 바뀐) 요소를 되살린다. 스냅샷만 갱신하므로
+    // Excalidraw 가 남긴 삭제 증분은 undo 시 "보이는 변화 없음"으로 건너뛰어진다.
+    const restoreErasedSince = (armTime) => {
+      const api = excalidrawAPIRef.current;
+      if (!api?.getSceneElementsIncludingDeleted) return;
+      const els = api.getSceneElementsIncludingDeleted();
+      let changed = false;
+      const next = els.map((el) => {
+        if (!el.isDeleted || (el.updated || 0) < armTime) return el;
+        changed = true;
+        return bumped(el, { isDeleted: false });
+      });
+      if (changed) api.updateScene({ elements: next, captureUpdate: CAPTURE_UPDATE_NEVER });
+    };
+
+    // 선택 도구에서 첫 손가락의 다운/합성 업이 바꾼 선택(요소 아래면 그 요소 선택, 빈 곳이면 해제)을 되돌린다
+    // (Excalidraw 가 Safari gesture 이벤트에서 하는 것과 같은 처리).
+    const restoreSelection = (snap) => {
+      const api = excalidrawAPIRef.current;
+      if (!api || !snap) return;
+      api.updateScene({
+        appState: { selectedElementIds: snap.selectedElementIds, selectedGroupIds: snap.selectedGroupIds },
+        captureUpdate: CAPTURE_UPDATE_NEVER,
+      });
     };
 
     const handlePointerDown = (e) => {
@@ -145,10 +189,19 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         touchPointerIdsRef.current.add(e.pointerId);
         touchLastPosRef.current.set(e.pointerId, [e.clientX, e.clientY]);
         const count = touchPointerIdsRef.current.size;
+        const tool = getActiveTool();
+
+        // 선택 도구 첫 손가락: Excalidraw 가 다운에서 선택을 바꾸기 전에 스냅샷(핀치로 이어지면 복원)
+        if (count === 1) {
+          const appState = tool === 'selection' ? excalidrawAPIRef.current?.getAppState() : null;
+          selectionSnapRef.current = appState
+            ? { selectedElementIds: appState.selectedElementIds || {}, selectedGroupIds: appState.selectedGroupIds || {} }
+            : null;
+        }
 
         // 결정적 모드 규칙: 스타일러스 모드에서 1손가락 그리기 차단
         // (잠금이 아니면 touch 핸들러가 같은 손가락으로 팬한다 — 여기선 그리기 전달만 막는다)
-        if (shouldBlockTouchDraw(getInputMode(), getActiveTool(), count)) {
+        if (shouldBlockTouchDraw(getInputMode(), tool, count)) {
           e.preventDefault();
           e.stopPropagation();
           discardTouchIdRef.current = e.pointerId;
@@ -162,10 +215,11 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
           return;
         }
 
-        // freedraw + 2번째 손가락: 진행 중 획 종료(커스텀 핀치 진입)
-        if (!screenLockedRef.current && count >= 2 && getActiveTool() === 'freedraw') {
+        // 2번째 손가락(모든 도구): 첫 손가락 입력(획·지우개 궤적·드래그) 종료 → 커스텀 핀치 진입
+        if (!screenLockedRef.current && count >= 2) {
           e.stopPropagation();
           e.preventDefault();
+          const armTime = Date.now();
           const firstPointerId = [...touchPointerIdsRef.current].find((id) => id !== e.pointerId);
           if (firstPointerId !== undefined) {
             const canvas = containerRef.current?.querySelector('.excalidraw canvas');
@@ -185,6 +239,13 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
             if (drawn && drawn.pointerId === firstPointerId) {
               touchDrawRef.current = null;
               setTimeout(() => discardLeakedStroke(drawn.downTime), 80);
+            }
+            // 지우개/선택 도구가 합성 pointerup 에서 남기는 부작용도 커밋 settle 후 되돌린다
+            if (tool === 'eraser') setTimeout(() => restoreErasedSince(armTime), 80);
+            if (tool === 'selection') {
+              const snap = selectionSnapRef.current;
+              selectionSnapRef.current = null;
+              if (snap) setTimeout(() => restoreSelection(snap), 80);
             }
           }
           return;
@@ -217,8 +278,9 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         e.stopPropagation();
         return;
       }
-      // 핀치 진행 중 freedraw 로 새지 않도록 pointermove 전파 차단 (커스텀 핀치는 touchmove 가 처리)
-      if (!screenLockedRef.current && count >= 2 && getActiveTool() === 'freedraw') {
+      // 핀치 진행 중 두 손가락의 이동이 Excalidraw 드래그 핸들러(획·지우개·요소 드래그)로 새지 않도록 차단
+      // (커스텀 핀치는 touchmove 가 처리)
+      if (!screenLockedRef.current && count >= 2) {
         e.stopPropagation();
         e.preventDefault();
       }
@@ -279,8 +341,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         if (e.cancelable) e.preventDefault();
         return;
       }
-      // 2손가락 핀치 진입 (펜이 안 닿았을 때만 — 펜 드로잉 중 손가락 줌 방지)
-      if (!locked && count >= 2 && !penDownRef.current && tool === 'freedraw') {
+      // 2손가락 핀치 진입 — 모든 도구 (펜이 안 닿았을 때만 — 펜 드로잉 중 손가락 줌 방지)
+      if (!locked && count >= 2 && !penDownRef.current) {
         const t0 = e.touches[0], t1 = e.touches[1];
         const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
         const cx = (t0.clientX + t1.clientX) / 2;
@@ -330,8 +392,8 @@ export function useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLocke
         if (e.cancelable) e.preventDefault();
         return;
       }
-      // 2손가락 핀치줌 + 팬 (펜이 안 닿았을 때만)
-      if (!locked && count >= 2 && pinchStateRef.current && !penDownRef.current && tool === 'freedraw') {
+      // 2손가락 핀치줌 + 팬 — 모든 도구 (펜이 안 닿았을 때만)
+      if (!locked && count >= 2 && pinchStateRef.current && !penDownRef.current) {
         e.stopPropagation();
         if (e.cancelable) e.preventDefault();
         const t0 = e.touches[0], t1 = e.touches[1];
