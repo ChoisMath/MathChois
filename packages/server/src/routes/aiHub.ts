@@ -37,7 +37,7 @@ const motionImport = z.array(z.object({
   cues: z.array(row),
 })).superRefine(uniqueIds);
 const slideImport = z.array(z.object({
-  id: z.string().regex(/^\d{2,3}$/),
+  id: z.string().regex(/^\d{2,4}$/), // SLIDE_ID 와 같게(오빠두 1000번대)
   prompt: z.string().min(1),
 })).superRefine(uniqueIds);
 

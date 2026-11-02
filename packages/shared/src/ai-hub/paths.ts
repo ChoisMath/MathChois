@@ -1,7 +1,7 @@
 // 허용 경로(업로드·서빙 공통). 슬라이드 장 번호는 1–12, 브랜드 상세(brand/<slug>.html)는 index 를 슬러그로 쓰지 않는다.
 // `rel` 은 ai-hub 버킷 루트 기준 상대 경로이며 쿼리·`..`·앞 슬래시를 허용하지 않는다.
 export const MOTION_FILE = /^motion\/\d{2,3}-[a-z0-9-]+\/(video\.mp4|preview\.mp4|poster\.webp)$/;
-export const SLIDE_FILE = /^slide\/\d{2,3}\/(?:[st]\/)?(?:[1-9]|1[0-2])\.webp$/; // 슬라이드는 한 덱에 최대 12장
+export const SLIDE_FILE = /^slide\/\d{2,4}\/(?:[st]\/)?(?:[1-9]|1[0-2])\.webp$/; // 슬라이드는 한 덱에 최대 12장
 /**
  * 브랜드 룩북 사본이 갖는 자산(목록·상세 HTML 과 브랜드별 data/hero·detail JSON 말고 전부). 사본 빌더(`ai:oppadu`)·`ai:brand:import`·
  * 서버 허용 경로(`BRAND_FILE`)가 이 목록 하나를 같이 쓴다. 2026-10-29 오빠두 목록의 색 탭·찾기 칸을 그리는 pcf-resources.js/.css·

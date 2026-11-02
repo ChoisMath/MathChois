@@ -19,6 +19,8 @@ describe('ai-hub catalog', () => {
     expect(validateMotionCatalog([{ ...MOTION_CATALOG[0] }, { ...MOTION_CATALOG[0] }])).toContain('duplicate motion id: 01-pixel');
     expect(validateMotionCatalog([{ ...MOTION_CATALOG[0], id: 'pixel' }])).toContain('bad motion id: pixel');
     expect(validateSlideCatalog([{ ...SLIDE_CATALOG[0], cover: 99 }])).toContain('cover/body out of range: 24');
+    expect(validateSlideCatalog([{ ...SLIDE_CATALOG[0], id: '1237' }])).toEqual([]); // 오빠두 1000번대
+    expect(validateSlideCatalog([{ ...SLIDE_CATALOG[0], id: '12345' }])).toContain('bad slide id: 12345');
     expect(validateMotionCatalog([{ ...MOTION_CATALOG[0], source: 'x' }])).toContain('bad source: 01-pixel');
   });
   it('validate reports duplicate no, slides > 12, non-array', () => {
