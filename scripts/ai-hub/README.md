@@ -10,6 +10,8 @@
 | `npm run ai:pull` | **1회성 이전.** me.chois.pro 에서 manifest 3개·파일 전부·비공개 프롬프트를 `.media-out/` 으로 내려받는다. sha256 대조(실패 시 3회 재시도), 같은 sha 는 건너뜀. `-- --dry-run` 은 받을 개수만, `-- --set motion` 은 한 묶음만. 모션·슬라이드 파일은 공개 `/media/…`, **브랜드 파일과 프롬프트는 토큰 경로 `/api/media/file?path=…`**(공개 `/ai/brand/site` 는 HTML 을 가공해 sha 가 어긋남). 묶음의 manifest 가 비었거나 프롬프트(`private/*-admin.json`)가 200 이 아니면 실패(종료 코드 1) |
 | `npm run ai:push -- --set motion\|slide\|brand` | 서버 manifest 와 sha 를 비교해 바뀐 파일만 올리고(동시 4개, 429 는 기다렸다 재시도), 프롬프트 JSON 을 보내고, 마지막에 manifest 를 올린다. `--dry-run` 은 올릴 목록만. motion·slide 는 `.media-out/prompts/<set>.json` 이 없으면 아무것도 올리기 전에 멈춘다 — 미디어만 올릴 때만 `--no-prompts`. 프롬프트는 **서버에 없는 id 만 넣는다**(끝에 `N inserted, M skipped`) — 관리자가 웹 편집기(`/ai/motion/:id/edit`)에서 고친 원본 템플릿은 다시 push 해도 그대로다. 파일 내용으로 덮어써야 할 때만 `--overwrite-prompts`(`N inserted, M updated`). **2단계 이후 주의:** `--overwrite-prompts` 는 오빠두 원본 프롬프트까지 모두 1단계 `<set>.json` 내용으로 되돌리고 보낸 모션 행의 웹 편집 표시(`edited_at`)를 모두 지운다 — 일부러 그럴 때만 쓴다(오빠두 원본 갱신은 `--sync-prompts`) |
 | `npm run ai:push -- --set motion\|slide --sync-prompts` | **`ai:oppadu` 뒤에 쓴다.** `.media-out/prompts/<set>.oppadu.json` 을 `PUT /api/ai/prompts/:set?mode=sync` 로 보낸다. 서버는 원본(`source: oppadu`) 행만 맞춘다 — 바뀐 행은 갱신, 같은 행은 그대로, **웹에서 고친 행(`edited_at`)은 건너뜀**(`skippedEdited`). 갱신된 행의 이전 내용은 `.oppadu/<날짜>/replaced-prompts-<set>.json` 에 백업(같은 날 여러 번 push 해도 합쳐 쌓임)하고, 결과 줄은 그날 `report.md` 끝에 덧붙인다. 변형본(`chois`·`school`) id 가 섞여 있으면 요청 전체가 400. `--overwrite-prompts`·`--no-prompts` 와는 함께 못 쓴다 |
+| `npm run ai:push -- --set motion --sync-remakes` | **`ai:remake-upgrade` 뒤에 쓴다.** `.media-out/prompts/motion.remakes.json` 을 `PUT /api/ai/prompts/motion?mode=remakes` 로 보낸다. `--sync-prompts` 와 같은 규칙(바뀐 행 갱신·같은 행 그대로·**웹에서 고친 행은 건너뜀**·바뀐 행은 `.oppadu/<날짜>/replaced-prompts-motion.json` 에 백업)을 변형본(`chois`) 행에만 쓴다. 원본 id 가 섞이면 요청 전체가 400. `--sync-prompts`·`--overwrite-prompts`·`--no-prompts` 와는 함께 못 쓴다 |
+| `npm run ai:remake-upgrade` | **변형본 모션 틀을 오빠두 새 판 구성으로.** 아래 「변형본 틀 새 판으로 올리기」 참고 |
 | `npm run ai:oppadu` | **오빠두 새 자료 반영.** 북마클릿 수집본·오빠두 공개 페이지에서 새·바뀐 모션·슬라이드·브랜드를 모아 카탈로그(`*.data.ts`, git)·`.media-out/`·보고서에 증분 반영한다. 아래 「오빠두 새 자료 반영」 참고 |
 | `npm run ai:prepare` | 새 모션 렌더 mp4 → `video.mp4`·`preview.mp4`·`poster.webp` + manifest (`MOTION_SRC`, ffmpeg·cwebp 필요) |
 | `npm run ai:motion:import` | 원천 JSON → `packages/shared/src/ai-hub/motion.data.ts`(git) + `.media-out/prompts/motion.json` |
@@ -121,3 +123,22 @@ SD 카드의 원천 폴더가 없으므로 `ai:pull` + `ai:push` 가 기본 경�
                                 #   push 뒤 replaced-prompts-<set>.json
 .media-out/prompts/{motion,slide}.oppadu.json            # --sync-prompts 본문
 ```
+
+## 변형본 틀 새 판으로 올리기 (`ai:remake-upgrade`)
+
+변형본(`chois`) 모션 50편은 우리 채널에 맞게 고친 틀을 쓴다. 오빠두가 틀 구성을 새로 바꾸면(예: 2026-11 옛 01–50 편을 v2 — 방식·로고·사운드·렌더링·길이·화면·화면 글자
+옵션 — 로 바꿈) 변형본 편집기는 옛 빈칸만 보이므로, 아래 순서로 변형본 틀도 새 구성으로 올린다. 장면표·소리 큐는 변형본 것 그대로 둔다.
+
+1. 모션 북마클릿 수집본을 받는다(「오빠두 새 자료 반영」 1–2). `.media-out/prompts/motion.json`(1단계 `ai:pull` 이 받은 변형본 틀)이 있어야 한다.
+2. **`npm run ai:remake-upgrade`**(`-- --motion <파일>`, `-- --dry-run`) — 편마다 세 판(오빠두 옛 틀 → 변형본, 오빠두 옛 틀 → 오빠두 새 틀)을 줄·낱말 단위로 합친다.
+   - 새 틀의 줄 구성·옵션 칸(`{{@…}}`)·조건 줄(`{{#…}}`)을 그대로 따른다.
+   - 변형본이 고친 줄(세계·이야기 박자·모티프·글꼴 등)은 **「예시 그대로」(`{{#a}}`)** 쪽에 들어가고, **「내 주제에 맞게」(`{{#b}}`)** 는 오빠두의 일반 글을 쓴다.
+   - 채널 이름·한 줄 소개·주제·숫자 칸은 새 틀의 칸 이름에 변형본 기본값(과 `?`/`-` 표시)을 넣는다.
+   - 새 판이 옵션으로 바꾼 로고 줄, 10초 기준 시각을 뺀 「첫 1초」 줄, 조사 오타뿐인 첫 문장은 새 판 글을 쓰고 보고서에 적는다.
+   - 결과 `.media-out/prompts/motion.remakes.json`, 보고서 `.oppadu/<날짜>/remake-upgrade.md`. 틀 검사(`validateTemplate`)를 하나라도 못 넘으면 아무것도 쓰지 않는다.
+3. **`npm run ai:push -- --set motion --sync-remakes`** — 웹 편집기에서 고친 변형본 행(`edited_at`)은 건너뛰고 결과에 `웹에서 고쳐 건너뜀 N` 으로 나온다.
+   그런 편은 편집기 머리에 「웹에서 고친 변형본 · 새 판 올리기에서 제외됨」 이 보인다. 그 편도 새 판으로 바꾸려면 「다음 올리기에서 새 판 틀 받기」로 표시를 지운 뒤
+   다시 push 한다(웹에서 고친 내용은 사라지므로 먼저 옮겨 적는다).
+4. `/ai/motion/<id>/edit` 에서 변형본이 방식(예시 그대로·내 주제에 맞게)·로고·사운드·렌더링·길이·화면·화면 글자 옵션과 함께 열리는지 확인한다.
+
+> 처음 한 번은 `?mode=remakes` 가 든 서버가 먼저 배포돼 있어야 한다. 배포 전 서버는 `400 unknown mode` 로 거절한다(아무것도 바뀌지 않음).

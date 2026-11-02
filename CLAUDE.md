@@ -41,6 +41,8 @@ npm run ai:push -- --set motion|slide|brand   # .media-out/ → server (AI_PUSH_
 npm run ai:prepare | ai:motion:import | ai:slide:import | ai:brand:import   # add new material later
 npm run ai:oppadu                     # sync new/changed oppadu motion/slide/brand material (bookmarklet JSON → catalogs + .media-out/ + report);
                                       #   then `ai:push -- --set motion|slide --sync-prompts` and `--set brand` (scripts/ai-hub/README.md)
+npm run ai:remake-upgrade             # move the Chois remake motion templates (.media-out/prompts/motion.json) onto oppadu's new template layout
+                                      #   → .media-out/prompts/motion.remakes.json; then `ai:push -- --set motion --sync-remakes`
 
 # DB (run inside packages/server)
 npm run db:push -w @mathchois/server      # Push Drizzle schema to DB
@@ -158,7 +160,11 @@ YouTube playlists): `units` table, `chapters.unit_id`/`classroom_videos.unit_id`
   `ai:push --sync-prompts` sends `.media-out/prompts/<set>.oppadu.json` to `PUT /api/ai/prompts/:set?mode=sync`: it updates only oppadu rows the
   admin has not edited on the web (`ai_motion_prompts.edited_at`, set by `PUT /api/ai/motion/:id/prompt`), backs up replaced rows, and rejects
   remake ids with 400. Admin `DELETE /api/ai/motion/:id/edited` clears the mark ("다음 동기화에서 오빠두 원본 받기" in the editor); `GET /api/ai/motion`
-  items carry `prompt.editedAt`. Original (oppadu) v2 motions copy as 「예시 그대로」 + the item's secs. Spec:
+  items carry `prompt.editedAt`. Original (oppadu) v2 motions copy as 「예시 그대로」 + the item's secs.
+  **Remake templates**: the 50 `chois` motions keep their own prompts but follow oppadu's template layout (option panel: 방식·로고·사운드·렌더링·길이·화면·화면 글자).
+  When oppadu reworks its templates, `npm run ai:remake-upgrade` 3-way merges (oppadu old → Chois remake, oppadu old → oppadu new; `shared/src/ai-hub/remakeUpgrade.ts`):
+  remake edits go into the `{{#a}}` (예시 그대로) lines, `{{#b}}` (내 주제에 맞게) stays oppadu's generic text, blank defaults carry over;
+  `ai:push --set motion --sync-remakes` sends it to `PUT /api/ai/prompts/motion?mode=remakes` (remake ids only, web-edited rows skipped, replaced rows backed up). Spec:
   `docs/superpowers/specs/2026-10-29-ai-hub-oppadu-sync-design.md`; procedure + flags: `scripts/ai-hub/README.md`. Browser smoke: `packages/server/scripts/ai-hub-e2e-setup.ts` + `packages/client/e2e/ai-hub.smoke.mjs`.
 - Server handlers: notes ①②④ → `routes/notes.ts`; comments ③⑤ → `routes/comments.ts`.
   DB logic concentrated in `services/note.service.ts`.

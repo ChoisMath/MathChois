@@ -140,10 +140,11 @@ export async function aiHubRoutes(app: FastifyInstance) {
     return (await readManifest(set)) ?? {};
   });
 
-  // ─── PUT /api/ai/prompts/:set[?overwrite=1|?mode=sync] — 프롬프트 일괄 가져오기 (토큰) ───
+  // ─── PUT /api/ai/prompts/:set[?overwrite=1|?mode=sync|?mode=remakes] — 프롬프트 일괄 가져오기 (토큰) ───
   // 기본은 없는 id 만 넣는다 — ai:push 를 다시 돌려도 관리자가 웹 편집기에서 고친 원본 템플릿을 덮어쓰지 않는다.
   // ?overwrite=1 (ai:push --overwrite-prompts) 일 때만 이미 있는 행도 파일 내용으로 바꾼다.
   // ?mode=sync (ai:oppadu) 는 오빠두 원본을 행 단위로 맞춘다 — 웹에서 고친 행(edited_at)과 변형본 id 는 건드리지 않는다.
+  // ?mode=remakes (ai:remake-upgrade 뒤 ai:push --sync-remakes, 모션만) 는 같은 규칙으로 변형본(chois) 행만 맞춘다 — 원본 id 가 섞이면 거절.
   app.put<{ Params: { set: string }; Querystring: { overwrite?: unknown; mode?: unknown } }>('/api/ai/prompts/:set', {
     onRequest: [requireUploadToken],
     bodyLimit: 20 * 1024 * 1024,
@@ -151,19 +152,25 @@ export async function aiHubRoutes(app: FastifyInstance) {
     const { set } = request.params;
     const overwrite = request.query.overwrite === '1';
     // 모르는 mode 를 조용히 기본(없는 id 만 넣기)으로 처리하면 호출한 쪽이 동기화된 줄 안다 — 거절한다.
-    if (request.query.mode !== undefined && request.query.mode !== 'sync') {
+    if (request.query.mode !== undefined && request.query.mode !== 'sync' && request.query.mode !== 'remakes') {
       return reply.status(400).send({ error: 'unknown mode' });
     }
-    const sync = request.query.mode === 'sync';
+    const remakes = request.query.mode === 'remakes';
+    const sync = request.query.mode === 'sync' || remakes;
     if (sync && request.query.overwrite !== undefined) {
-      return reply.status(400).send({ error: 'mode=sync and overwrite cannot be combined' });
+      return reply.status(400).send({ error: `mode=${String(request.query.mode)} and overwrite cannot be combined` });
     }
+    if (remakes && set !== 'motion') return reply.status(400).send({ error: 'mode=remakes is for motion only' });
     if (set === 'motion') {
       const parsed = motionImport.safeParse(request.body);
       if (!parsed.success) return reply.status(400).send({ error: 'invalid body', issues: parsed.error.issues.slice(0, 20) });
       if (sync) {
-        const ids = remakeIdsIn(MOTION_CATALOG, parsed.data.map((m) => m.id));
-        if (ids.length) return reply.status(400).send({ error: 'remake ids in sync', ids });
+        const sent = parsed.data.map((m) => m.id);
+        const remakeIds = remakeIdsIn(MOTION_CATALOG, sent);
+        if (!remakes && remakeIds.length) return reply.status(400).send({ error: 'remake ids in sync', ids: remakeIds });
+        if (remakes && remakeIds.length !== sent.length) {
+          return reply.status(400).send({ error: 'non-remake ids in remakes', ids: sent.filter((id) => !remakeIds.includes(id)) });
+        }
         for (const m of parsed.data) {
           const errors = validateTemplate(m.prompt).concat(validateTemplate(m.ko));
           if (errors.length) return reply.status(400).send({ error: 'invalid template', id: m.id, errors });
@@ -171,7 +178,7 @@ export async function aiHubRoutes(app: FastifyInstance) {
         const result = await syncMotionPrompts(
           parsed.data.map((m) => ({ id: m.id, en: m.prompt, ko: m.ko, shots: m.shots, cues: m.cues })),
         );
-        return { ok: true, mode: 'sync', count: parsed.data.length, ...result };
+        return { ok: true, mode: 'sync', ...(remakes ? { scope: 'remakes' } : {}), count: parsed.data.length, ...result };
       }
       const result = await importMotionPrompts(
         parsed.data.map((m) => ({ id: m.id, en: m.prompt, ko: m.ko, shots: m.shots, cues: m.cues })),

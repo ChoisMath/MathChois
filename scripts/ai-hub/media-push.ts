@@ -1,11 +1,13 @@
 // .media-out/ai-hub/ 을 서버(class.chois.pro)와 비교해 바뀐 파일만 올린다.
-// 사용: npm run ai:push -- --set motion|slide|brand [--dry-run] [--no-prompts] [--overwrite-prompts] [--sync-prompts]
+// 사용: npm run ai:push -- --set motion|slide|brand [--dry-run] [--no-prompts] [--overwrite-prompts] [--sync-prompts] [--sync-remakes]
 // 순서: 원격 manifest 와 sha 비교 → 바뀐 파일 PUT /api/ai/media(스트리밍, 동시 4개) → 프롬프트 JSON PUT /api/ai/prompts/:set
 // → 마지막에 manifest. 하나라도 실패하면 manifest 는 올리지 않는다(다음 실행이 실패한 파일을 다시 찾도록).
 // 프롬프트는 기본으로 서버에 없는 id 만 들어간다 — 관리자가 웹에서 고친 원본 템플릿을 덮어쓰지 않는다.
 // 파일 내용으로 덮어써야 할 때만 --overwrite-prompts (PUT …?overwrite=1).
 // --sync-prompts(motion|slide): ai:oppadu 가 만든 .media-out/prompts/<set>.oppadu.json 을 PUT …?mode=sync 로 보낸다 — 웹에서 고치지 않은
 // 원본만 갱신하고, 바뀐 행의 이전 내용은 .oppadu/<날짜>/replaced-prompts-<set>.json 에 백업, 결과 줄은 그날 report.md 에 덧붙인다.
+// --sync-remakes(motion): ai:remake-upgrade 가 만든 .media-out/prompts/motion.remakes.json 을 PUT …?mode=remakes 로 보낸다 — 같은 규칙으로
+// 변형본(chois) 행만 맞춘다(웹에서 고친 행은 건너뜀, 바뀐 행은 같은 백업 파일에 쌓임).
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -13,7 +15,7 @@ import { Readable } from 'node:stream';
 import { diffManifest, formatPushBlock, formatPushResult, readSyncResponse, validateManifest, type Manifest, type PromptSyncResult } from '@mathchois/shared';
 import { baseUrl, fetchRetry, mapLimit, requireEnv } from './http.js';
 import { sha256File } from './manifest.js';
-import { AI_DIR, OPPADU_DIR, hasFlag, latestOppaduDir, manifestFile, parseSetArg, promptsFile, syncPromptsFile, type AiSet } from './volumeLayout.js';
+import { AI_DIR, OPPADU_DIR, hasFlag, latestOppaduDir, manifestFile, parseSetArg, promptsFile, remakePromptsFile, syncPromptsFile, type AiSet } from './volumeLayout.js';
 
 const CONCURRENCY = 4;
 // 파일이 수천 개면(오빠두 슬라이드 그림 1만여 장) 분당 300 요청 한도에 계속 걸려 기본 6번으로는 일부가 떨어진다.
@@ -57,9 +59,14 @@ async function main() {
   const dryRun = hasFlag(argv, '--dry-run');
   const noPrompts = hasFlag(argv, '--no-prompts');
   const overwritePrompts = hasFlag(argv, '--overwrite-prompts');
-  const syncPrompts = hasFlag(argv, '--sync-prompts');
+  const syncRemakes = hasFlag(argv, '--sync-remakes');
+  const syncOriginals = hasFlag(argv, '--sync-prompts');
+  if (syncRemakes && syncOriginals) throw new Error('--sync-prompts and --sync-remakes are separate pushes — run them one after the other');
+  const syncPrompts = syncOriginals || syncRemakes;
+  const flag = syncRemakes ? '--sync-remakes' : '--sync-prompts';
   if (syncPrompts) {
-    if (overwritePrompts || noPrompts) throw new Error('--sync-prompts cannot be combined with --overwrite-prompts/--no-prompts');
+    if (overwritePrompts || noPrompts) throw new Error(`${flag} cannot be combined with --overwrite-prompts/--no-prompts`);
+    if (syncRemakes && set !== 'motion') throw new Error('--sync-remakes needs --set motion (only motion remakes have editable templates)');
     if (set === 'brand') throw new Error('--sync-prompts needs --set motion|slide (brand has no prompts)');
   }
   const base = baseUrl(process.env.AI_PUSH_URL, 'http://localhost:3001');
@@ -70,9 +77,9 @@ async function main() {
     throw new Error(`${path.relative(process.cwd(), manifestPath)} missing — run ai:pull (first migration) or ai:${set === 'motion' ? 'prepare' : set + ':import'} first`);
   }
   // 프롬프트는 DB 에만 들어가는 유일한 비공개 자료다. 파일이 없는데 조용히 넘어가면 me.chois.pro 폐쇄 뒤 영영 잃으므로 올리기 전에 멈춘다.
-  const promptPath = set === 'brand' ? null : syncPrompts ? syncPromptsFile(set) : promptsFile(set);
+  const promptPath = set === 'brand' ? null : syncRemakes ? remakePromptsFile() : syncPrompts ? syncPromptsFile(set) : promptsFile(set);
   if (promptPath && syncPrompts && !existsSync(promptPath)) {
-    throw new Error(`${path.relative(process.cwd(), promptPath)} missing — run npm run ai:oppadu first`);
+    throw new Error(`${path.relative(process.cwd(), promptPath)} missing — run npm run ${syncRemakes ? 'ai:remake-upgrade' : 'ai:oppadu'} first`);
   }
   if (promptPath && !syncPrompts && !noPrompts && !existsSync(promptPath)) {
     throw new Error(`${path.relative(process.cwd(), promptPath)} missing — run ai:pull / ai:${set}:import first, or pass --no-prompts for a media-only push`);
@@ -133,7 +140,7 @@ async function main() {
     } else {
       const body = JSON.stringify(await readJsonFile(promptPath));
       await attempt(`prompts/${set}`, async () => {
-        const query = syncPrompts ? '?mode=sync' : overwritePrompts ? '?overwrite=1' : '';
+        const query = syncRemakes ? '?mode=remakes' : syncPrompts ? '?mode=sync' : overwritePrompts ? '?overwrite=1' : '';
         const res = await fetchRetry(`${base}/api/ai/prompts/${set}${query}`, () => ({
           method: 'PUT', headers: { ...auth, 'content-type': 'application/json' }, body,
         }), { label: `prompts/${set}` });

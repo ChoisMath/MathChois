@@ -22,7 +22,8 @@
     "ai:motion:import": "tsx scripts/ai-hub/motion-import.ts",
     "ai:slide:import": "tsx scripts/ai-hub/slide-import.ts",
     "ai:brand:import": "tsx scripts/ai-hub/brand-import.ts",
-    "ai:oppadu": "tsx scripts/ai-hub/oppadu/main.ts"
+    "ai:oppadu": "tsx scripts/ai-hub/oppadu/main.ts",
+    "ai:remake-upgrade": "tsx scripts/ai-hub/oppadu/remake-upgrade.ts"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

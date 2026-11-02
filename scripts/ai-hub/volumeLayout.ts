@@ -18,6 +18,8 @@ export const manifestFile = (set: AiSet) => path.join(AI_DIR, 'manifest', `${set
 export const promptsFile = (set: 'motion' | 'slide') => path.join(OUT_DIR, 'prompts', `${set}.json`);
 /** `ai:oppadu` 가 만드는 동기화 대상(오빠두 원본 행만) 프롬프트 JSON — `ai:push --sync-prompts` 가 `?mode=sync` 로 보낸다. */
 export const syncPromptsFile = (set: 'motion' | 'slide') => path.join(OUT_DIR, 'prompts', `${set}.oppadu.json`);
+/** `ai:remake-upgrade` 가 만드는 변형본(chois) 모션 틀 — `ai:push --set motion --sync-remakes` 가 `?mode=remakes` 로 보낸다. */
+export const remakePromptsFile = () => path.join(OUT_DIR, 'prompts', 'motion.remakes.json');
 
 /** `ai:oppadu` 보고서·백업 보관 폴더(`.oppadu/YYYY-MM-DD/`)의 부모. */
 export const OPPADU_DIR = path.resolve('.oppadu');
