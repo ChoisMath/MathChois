@@ -151,6 +151,8 @@ YouTube playlists): `units` table, `chapters.unit_id`/`classroom_videos.unit_id`
   media + manifests (`isAiHubPublicFile`), brand files 404 there; the brand copy is served only via `/api/ai/brand/site/*` with a
   `frame-ancestors` CSP, and `BrandPage` frames it through `toolUrl()` on the separate `VITE_TOOLS_ORIGIN` so the third-party
   lookbook JS never runs on the app origin). A list only contains items whose files are all in the manifest.
+  `GET /api/files/ai-hub/*` is exempt from the 300/min rate limit (`server/src/utils/rateLimitExempt.ts`) — the slide gallery alone loads
+  two thumbnails per card (2,000+), and 429'd `<img>`s stay blank.
   Material goes in with `npm run ai:*` (token-authenticated upload; the generic `/api/files` upload/delete and
   `storage.service` `removeFile`/`removeDirectoryIfEmpty` refuse this bucket). `PUT /api/ai/prompts/:set` inserts missing ids
   only, so re-running `ai:push` never overwrites admin web edits; `ai:push --overwrite-prompts` (`?overwrite=1`) replaces them. Spec: `docs/superpowers/specs/2026-10-28-ai-hub-migration-design.md`; first migration steps:
