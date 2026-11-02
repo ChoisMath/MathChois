@@ -7,6 +7,7 @@ import {
   decideGestureAxis, verticalGestureKind, dragToLevel, createScrubSeeker,
   SUBTITLE_SIZES, pickSubtitleTrack,
   pickFullscreenMethod, isIphoneUserAgent, fullscreenElementOf,
+  HOLD_MS, HOLD_RATE, holdKind, rewindTarget,
 } from './videoPlayer.js';
 
 function fakeStorage() {
@@ -135,6 +136,29 @@ describe('long-press drag gestures', () => {
     expect(dragToLevel(1, -65, 100, BRIGHTNESS_MIN, BRIGHTNESS_MAX)).toBeCloseTo(1.5 + 0, 2); // 1 + 0.65·1.3 → 1.845 → 1.5 로 고정
     expect(dragToLevel(1, 50, 100, BRIGHTNESS_MIN, BRIGHTNESS_MAX)).toBeCloseTo(0.35, 2);
     expect(dragToLevel(5, 0, 100, BRIGHTNESS_MIN, BRIGHTNESS_MAX)).toBe(BRIGHTNESS_MAX); // 시작값도 범위 안으로
+  });
+});
+
+describe('press-and-hold (2x / rewind)', () => {
+  it('holds for half a second at double speed', () => {
+    expect(HOLD_MS).toBe(500);
+    expect(HOLD_RATE).toBe(2);
+  });
+
+  it('the right half fast-forwards and the left half rewinds', () => {
+    expect(holdKind(300, 0, 400)).toBe('fast');
+    expect(holdKind(100, 0, 400)).toBe('rewind');
+    expect(holdKind(200, 0, 400)).toBe('fast'); // 정중앙은 오른쪽으로 친다
+    expect(holdKind(150, 100, 400)).toBe('rewind'); // left 오프셋 반영
+    expect(holdKind(10, 0, 0)).toBe('fast'); // 폭을 모르면 2배속
+  });
+
+  it('rewinds at the hold rate from the start time and stops at zero', () => {
+    expect(rewindTarget(30, 1000, 2)).toBe(28);
+    expect(rewindTarget(30, 2500, 2)).toBe(25);
+    expect(rewindTarget(3, 5000, 2)).toBe(0);
+    expect(rewindTarget(30, 0, 2)).toBe(30);
+    expect(rewindTarget(30, -100, 2)).toBe(30); // 음수 경과 시간은 무시
   });
 });
 

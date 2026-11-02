@@ -98,3 +98,95 @@ describe('VideoPlayer drag gestures (no long press)', () => {
     m.unmount();
   });
 });
+
+/* 꾹 누르기: 움직이지 않고 500ms 누르고 있으면 오른쪽 절반은 2배속, 왼쪽 절반은 2배속 되감기. 떼면 원상 복귀. */
+describe('VideoPlayer press-and-hold', () => {
+  const setPaused = (video, paused) => Object.defineProperty(video, 'paused', { configurable: true, value: paused });
+
+  it('holding the right half plays at 2x and restores the rate on release', () => {
+    const m = mount();
+    setPaused(m.video, false);
+    pointer(m.video, 'pointerdown', { x: 300, y: 100 });
+    act(() => { vi.advanceTimersByTime(499); });
+    expect(m.host.textContent).not.toContain('2배속');
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(m.host.textContent).toContain('2배속');
+    expect(m.video.playbackRate).toBe(2);
+    pointer(m.video, 'pointerup', { x: 300, y: 100 });
+    expect(m.video.playbackRate).toBe(1);
+    expect(m.host.textContent).not.toContain('2배속');
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(play).not.toHaveBeenCalled(); // 꾹 누르기는 탭이 아니다
+    expect(pause).not.toHaveBeenCalled(); // 재생 중이었으니 계속 재생
+    m.unmount();
+  });
+
+  it('holding the right half while paused plays for the hold and pauses again on release', () => {
+    const m = mount();
+    pointer(m.video, 'pointerdown', { x: 300, y: 100 });
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(play).toHaveBeenCalledTimes(1);
+    pointer(m.video, 'pointerup', { x: 300, y: 100 });
+    expect(pause).toHaveBeenCalled();
+    expect(m.video.playbackRate).toBe(1);
+    m.unmount();
+  });
+
+  it('holding the left half rewinds at 2x and resumes playback from there on release', () => {
+    const m = mount();
+    setPaused(m.video, false);
+    m.video.currentTime = 50;
+    pointer(m.video, 'pointerdown', { x: 100, y: 100 });
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(m.host.textContent).toContain('되감기');
+    expect(pause).toHaveBeenCalled(); // 되감는 동안 정지
+    // 1초 누름 → 2초 뒤로. 탐색은 한 번에 하나만 나가므로 브라우저처럼 틱마다 seeked 를 돌려준다.
+    for (let i = 0; i < 10; i++) {
+      act(() => { vi.advanceTimersByTime(100); });
+      act(() => { m.video.dispatchEvent(new Event('seeked')); });
+    }
+    expect(m.video.currentTime).toBeCloseTo(48, 0);
+    pointer(m.video, 'pointerup', { x: 100, y: 100 });
+    expect(m.video.currentTime).toBeCloseTo(48, 0);
+    expect(play).toHaveBeenCalledTimes(1); // 재생 중이었으니 복귀
+    expect(m.host.textContent).not.toContain('되감기');
+    m.unmount();
+  });
+
+  it('moving before the hold starts is still a drag gesture', () => {
+    const m = mount();
+    m.video.currentTime = 50;
+    pointer(m.video, 'pointerdown', { x: 300, y: 100 });
+    act(() => { vi.advanceTimersByTime(300); });
+    pointer(m.video, 'pointermove', { x: 340, y: 102 });
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(m.host.textContent).toContain('좌우로 드래그하여 이동');
+    expect(m.host.textContent).not.toContain('2배속');
+    expect(m.video.playbackRate).toBe(1);
+    pointer(m.video, 'pointerup', { x: 340, y: 102 });
+    m.unmount();
+  });
+
+  it('releasing before the hold starts is still a tap', () => {
+    const m = mount();
+    pointer(m.video, 'pointerdown', { x: 300, y: 100 });
+    act(() => { vi.advanceTimersByTime(300); });
+    pointer(m.video, 'pointerup', { x: 300, y: 100 });
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(m.host.textContent).not.toContain('2배속');
+    expect(play).toHaveBeenCalledTimes(1); // 단일 탭 → 재생
+    m.unmount();
+  });
+
+  it('a cancelled pointer during a hold restores the rate immediately', () => {
+    const m = mount();
+    setPaused(m.video, false);
+    pointer(m.video, 'pointerdown', { x: 300, y: 100 });
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(m.video.playbackRate).toBe(2);
+    pointer(m.video, 'pointercancel', { x: 300, y: 100 });
+    expect(m.video.playbackRate).toBe(1);
+    expect(m.host.textContent).not.toContain('2배속');
+    m.unmount();
+  });
+});
