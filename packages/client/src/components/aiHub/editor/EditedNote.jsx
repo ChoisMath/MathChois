@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { api } from '../../../lib/api';
 
 /**
- * 웹에서 고친 오빠두 원본 표시(관리자) — 편집기 머리 바로 밑 띠. 원본 편집을 켜지 않아도 보인다.
- * 이 행은 `ai:push --sync-prompts` 가 건너뛴다. 단추는 표시만 지운다(DELETE /edited) — 다음 동기화가 오빠두 원본으로 덮어쓴다.
+ * 웹에서 고친 틀 표시(관리자) — 편집기 머리 바로 밑 띠. 원본 편집을 켜지 않아도 보인다.
+ * 오빠두 원본은 `ai:push --sync-prompts`, 변형본(remake)은 `ai:push --sync-remakes` 가 이 행을 건너뛴다.
+ * 단추는 표시만 지운다(DELETE /edited) — 다음 동기화·새 판 올리기가 그 틀로 덮어쓴다.
  */
-export default function EditedNote({ id, reload }) {
+export default function EditedNote({ id, reload, remake = false }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -24,9 +25,11 @@ export default function EditedNote({ id, reload }) {
 
   return (
     <div className="ai-ed-edited" data-testid="original-edited">
-      <p className="ai-ed-edited-note" role="note">웹에서 고친 원본 · 오빠두 동기화에서 제외됨</p>
+      <p className="ai-ed-edited-note" role="note">
+        {remake ? '웹에서 고친 변형본 · 새 판 올리기에서 제외됨' : '웹에서 고친 원본 · 오빠두 동기화에서 제외됨'}
+      </p>
       <button type="button" className="ai-btn" data-testid="original-unmark" disabled={busy} onClick={unmark}>
-        다음 동기화에서 오빠두 원본 받기
+        {remake ? '다음 올리기에서 새 판 틀 받기' : '다음 동기화에서 오빠두 원본 받기'}
       </button>
       {error ? <p className="ai-ed-edited-err" role="alert">{error}</p> : null}
     </div>

@@ -2,15 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { MOTION_CATALOG, SLIDE_CATALOG, validateMotionCatalog, validateSlideCatalog, MOTION_SOURCES } from '@mathchois/shared';
 
 describe('ai-hub catalog', () => {
-  it('motion catalog: 110 items, ids unique, 01-pixel first', () => {
-    expect(MOTION_CATALOG.length).toBe(110);
-    expect(new Set(MOTION_CATALOG.map((m) => m.id)).size).toBe(110);
+  it('motion catalog: 124 items, ids unique, 01-pixel first', () => {
+    expect(MOTION_CATALOG.length).toBe(124);
+    expect(new Set(MOTION_CATALOG.map((m) => m.id)).size).toBe(124);
     expect(MOTION_CATALOG[0].id).toBe('01-pixel');
     expect(validateMotionCatalog(MOTION_CATALOG)).toEqual([]);
     expect(MOTION_SOURCES).toEqual(['chois', 'oppadu']);
   });
-  it('slide catalog: 798 items, popularity order kept, 118 school', () => {
-    expect(SLIDE_CATALOG.length).toBe(798);
+  it('slide catalog: 1233 items, popularity order kept, 118 school', () => {
+    expect(SLIDE_CATALOG.length).toBe(1233);
     expect(SLIDE_CATALOG.filter((s) => s.source === 'school').length).toBe(118);
     expect(SLIDE_CATALOG[0].id).toBe('24');
     expect(validateSlideCatalog(SLIDE_CATALOG)).toEqual([]);
@@ -19,6 +19,8 @@ describe('ai-hub catalog', () => {
     expect(validateMotionCatalog([{ ...MOTION_CATALOG[0] }, { ...MOTION_CATALOG[0] }])).toContain('duplicate motion id: 01-pixel');
     expect(validateMotionCatalog([{ ...MOTION_CATALOG[0], id: 'pixel' }])).toContain('bad motion id: pixel');
     expect(validateSlideCatalog([{ ...SLIDE_CATALOG[0], cover: 99 }])).toContain('cover/body out of range: 24');
+    expect(validateSlideCatalog([{ ...SLIDE_CATALOG[0], id: '1237' }])).toEqual([]); // 오빠두 1000번대
+    expect(validateSlideCatalog([{ ...SLIDE_CATALOG[0], id: '12345' }])).toContain('bad slide id: 12345');
     expect(validateMotionCatalog([{ ...MOTION_CATALOG[0], source: 'x' }])).toContain('bad source: 01-pixel');
   });
   it('validate reports duplicate no, slides > 12, non-array', () => {

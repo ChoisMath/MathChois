@@ -29,7 +29,7 @@ export type SlidePublic = {
   source: SlideSource;
 };
 
-const SLIDE_ID = /^\d{2,3}$/;
+const SLIDE_ID = /^\d{2,4}$/; // 오빠두 슬라이드 번호가 1000 을 넘었다(2026-11)
 const MAX_SLIDES = 12;
 
 /** 오류 문장 배열(빈 배열 = 정상). 목록 순서는 화면의 기본 순서(인기순)이므로 건드리지 않는다. */

@@ -162,7 +162,7 @@ export default function MotionEditorPage() {
         ) : null}
       </header>
       {/* 웹에서 고친 오빠두 원본 — 원본 편집을 켜지 않아도 머리 밑에 보인다(관리자) */}
-      {access.canEditOriginal && item.source === 'oppadu' && prompt?.editedAt ? <EditedNote id={item.id} reload={reload} /> : null}
+      {access.canEditOriginal && prompt?.editedAt ? <EditedNote id={item.id} reload={reload} remake={item.source !== 'oppadu'} /> : null}
 
       <div className="ai-ed-body">
         <div className="ai-ed-main">

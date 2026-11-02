@@ -12,3 +12,4 @@ export * from './merge.js';
 export * from './oppaduSync.js';
 export * from './promptSync.js';
 export * from './oppaduReport.js';
+export * from './remakeUpgrade.js';

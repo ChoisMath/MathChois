@@ -8,7 +8,7 @@
 // 순서: manifest 확인 → 수집본 점검 → 병합(순수 함수) → 내려받기(.oppadu/cache) → 엔진 해시 → 브랜드 사본 → 보고서
 //       → (--dry-run 이 아니면) 쓰기: 미디어 → manifest → 브랜드 바꿔 넣기 → 동기화 프롬프트 → *.data.ts → .oppadu/<날짜>/ 보관.
 // 쓰기는 모든 내려받기·병합·검증이 끝난 뒤에만 한다. 그 전에 실패하면 종료 코드 1, .media-out/·카탈로그는 그대로.
-import { copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,6 +22,7 @@ import { mapLimit } from '../http.js';
 import { sha256File, writeManifest } from '../manifest.js';
 import { AI_DIR, SETS, hasFlag, manifestFile, parseSetArg, syncPromptsFile, type AiSet } from '../volumeLayout.js';
 import { writeBookmarkletsPage } from './bookmarklets.js';
+import { latestDownload } from './downloads.js';
 import { buildBrandSite } from './brand-build.js';
 import { ENGINE_SHA256 } from './engine.js';
 import { cachePath, fetchToCache } from './fetchCache.js';
@@ -67,19 +68,6 @@ function checkArgs(argv: readonly string[]): void {
     if (a === '--set' && !['motion', 'slide', 'brand'].includes(value)) throw new Stop(`--set 은 motion, slide, brand 중 하나입니다 (받은 값: ${value})`);
     i++;
   }
-}
-
-/** ~/Downloads 에서 가장 최근 수집본 — 이름의 날짜 내림차순, 같은 날이면 Chrome 이 붙인 ` (n)` 이 큰 것. */
-async function latestDownload(kind: 'motion' | 'slide'): Promise<string | null> {
-  const dir = path.join(os.homedir(), 'Downloads');
-  if (!existsSync(dir)) return null;
-  const pattern = new RegExp(`^oppadu-${kind}-(\\d{4}-\\d{2}-\\d{2})(?: \\((\\d+)\\))?\\.json$`);
-  const found = (await readdir(dir))
-    .map((name) => ({ name, m: pattern.exec(name) }))
-    .filter((x): x is { name: string; m: RegExpExecArray } => x.m !== null)
-    .map(({ name, m }) => ({ name, date: m[1] as string, n: Number(m[2] ?? 0) }))
-    .sort((a, b) => (a.date === b.date ? b.n - a.n : a.date < b.date ? 1 : -1));
-  return found.length ? path.join(dir, found[0]!.name) : null;
 }
 
 /** 수집본을 찾아 읽고 점검한다. 찾지 못하면 `required` 일 때 멈추고, 아니면 null(그 set 건너뜀). */
