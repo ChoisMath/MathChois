@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   Play, Pause, Volume2, VolumeX, Settings, Maximize, Minimize, SkipBack, SkipForward, Check, Sun,
-  Captions, CaptionsOff,
+  Captions, CaptionsOff, FastForward, Rewind,
 } from 'lucide-react';
 import {
   SEEK_STEPS, PLAYBACK_RATES, VOLUME_STEP,
@@ -10,6 +10,7 @@ import {
   loadResumePosition, saveResumePosition, isTypingTarget,
   decideGestureAxis, verticalGestureKind, dragToLevel, SUBTITLE_SIZES, createScrubSeeker,
   pickFullscreenMethod, isIphoneUserAgent, fullscreenElementOf, DRAG_START_PX,
+  HOLD_MS, HOLD_RATE, holdKind, rewindTarget,
 } from '../../lib/videoPlayer';
 import useVideoSubtitles from '../../hooks/useVideoSubtitles';
 import SubtitleOverlay from './SubtitleOverlay';
@@ -402,15 +403,31 @@ export default function VideoPlayer({
      · 상하 = 누른 위치가 화면 왼쪽 절반이면 밝기, 오른쪽 절반이면 볼륨(`verticalGestureKind`).
        위로 끌면 커지고 화면 높이만큼 끌면 전체 범위가 바뀐다(`dragToLevel`). 재생은 건드리지 않는다.
      <video> 는 `touch-action: none` 이라 브라우저가 끌기를 먼저 가져가지 않는다(페이지 스크롤은 영상 밖에서).
-     non-passive touchmove 리스너의 preventDefault 는 그 보강이다. */
+     non-passive touchmove 리스너의 preventDefault 는 그 보강이다.
+
+     ── 꾹 누르기 ──
+     움직이지 않고 HOLD_MS 동안 누르고 있으면(그 전에 움직이면 드래그, 떼면 탭) 누른 쪽에 따라(`holdKind`):
+     · 오른쪽 절반 = 누르는 동안 HOLD_RATE 배속 재생. 정지 상태였으면 재생했다가 떼면 다시 정지한다.
+       떼면 설정 배속으로 돌아가고 설정은 저장하지 않는다.
+     · 왼쪽 절반 = 누르는 동안 HOLD_RATE 배속 되감기. 음수 playbackRate(역재생)는 대부분의 브라우저가 지원하지
+       않으므로 재생을 멈추고 `rewindTarget` 으로 목표 시각을 뒤로 옮기며(탐색은 `createScrubSeeker` 로 한 번에
+       하나만), 0초에서 멈춘다. 떼면 그 위치에서 원래 재생 상태로 돌아간다. */
   const SCRUB_EXP = 1.6;
-  const pressRef = useRef(null);      // { id, x, y, active }
+  const REWIND_TICK_MS = 100;
+  const pressRef = useRef(null);      // { id, x, y, active, hold }
   const scrubRef = useRef(null);      // { startTime, width, wasPlaying, seeker }
   const levelRef = useRef(null);      // { kind: 'volume'|'brightness', start, height, value }
-  // 오버레이용: { kind: 'scrub', target, delta } | { kind: 'volume'|'brightness', value }
+  const holdTimerRef = useRef(null);  // 꾹 누르기 시작 대기 타이머
+  const holdRef = useRef(null);       // { kind: 'fast'|'rewind', wasPlaying, startTime, t0, target, timer, seeker }
+  // 오버레이용: { kind: 'scrub', target, delta } | { kind: 'volume'|'brightness', value } | { kind: 'fast' } | { kind: 'rewind', target }
   const [gesture, setGesture] = useState(null);
 
-  useEffect(() => () => { scrubRef.current?.seeker.dispose(); }, []); // 언마운트 시 진행 중 스크럽의 seeked 리스너 정리
+  useEffect(() => () => { // 언마운트 시 진행 중 스크럽·되감기의 타이머와 seeked 리스너 정리
+    clearTimeout(holdTimerRef.current);
+    scrubRef.current?.seeker.dispose();
+    clearInterval(holdRef.current?.timer);
+    holdRef.current?.seeker?.dispose();
+  }, []);
 
   // 제스처 중(그리고 플레이어 전체화면 중)에는 터치 스크롤을 막는다(React 의 onTouchMove 는 passive 라 preventDefault 가 안 먹음).
   useEffect(() => {
@@ -426,7 +443,66 @@ export default function VideoPlayer({
     if (e.pointerType === 'mouse') return; // 마우스는 클릭·더블클릭만
     const v = videoRef.current;
     if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return;
-    pressRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, active: false };
+    const press = { id: e.pointerId, x: e.clientX, y: e.clientY, active: false, hold: false };
+    pressRef.current = press;
+    const target = e.currentTarget;
+    clearTimeout(holdTimerRef.current);
+    holdTimerRef.current = setTimeout(() => {
+      holdTimerRef.current = null;
+      startHold(press, target);
+    }, HOLD_MS);
+  };
+
+  /** 꾹 누르기 시작(HOLD_MS 동안 움직이지 않았을 때). 그 사이 드래그가 시작됐거나 뗐으면 아무것도 하지 않는다. */
+  const startHold = (press, target) => {
+    const v = videoRef.current;
+    if (!v || pressRef.current !== press || press.active) return;
+    press.active = true;
+    press.hold = true;
+    clearTimeout(tapTimerRef.current);
+    tapTimerRef.current = null;
+    lastTapRef.current = 0;
+    try { target.setPointerCapture(press.id); } catch { /* ignore */ }
+    setControlsVisible(true);
+    const rect = target.getBoundingClientRect();
+    const kind = holdKind(press.x, rect.left, rect.width);
+    const wasPlaying = !v.paused;
+    if (kind === 'fast') {
+      holdRef.current = { kind, wasPlaying };
+      v.playbackRate = HOLD_RATE;
+      if (!wasPlaying) v.play().catch(() => {});
+      setGesture({ kind: 'fast' });
+      return;
+    }
+    const hold = { kind, wasPlaying, startTime: v.currentTime, t0: Date.now(), target: v.currentTime, seeker: createScrubSeeker(v), timer: null };
+    holdRef.current = hold;
+    v.pause();
+    setGesture({ kind: 'rewind', target: hold.target });
+    hold.timer = setInterval(() => {
+      hold.target = rewindTarget(hold.startTime, Date.now() - hold.t0, HOLD_RATE);
+      hold.seeker.request(hold.target);
+      setCurrentTime(hold.target);
+      setGesture({ kind: 'rewind', target: hold.target });
+      if (hold.target <= 0) { clearInterval(hold.timer); hold.timer = null; }
+    }, REWIND_TICK_MS);
+  };
+
+  /** 꾹 누르기 종료: 배속·재생 상태를 되돌리고(되감기는 멈춘 위치에서) 오버레이를 지운다. */
+  const finishHold = (v) => {
+    const hold = holdRef.current;
+    holdRef.current = null;
+    setGesture(null);
+    if (!hold) return;
+    if (hold.kind === 'fast') {
+      v.playbackRate = settingsRef.current.playbackRate;
+      if (!hold.wasPlaying) v.pause();
+      return;
+    }
+    clearInterval(hold.timer);
+    hold.seeker.finish(hold.target);
+    setCurrentTime(hold.target);
+    if (hold.wasPlaying) v.play().catch(() => {});
+    showFlash(`${formatTime(hold.target)} (−${formatTime(Math.abs(hold.target - hold.startTime))})`);
   };
 
   const startScrub = (v, target) => {
@@ -477,6 +553,7 @@ export default function VideoPlayer({
     const v = videoRef.current;
     const press = pressRef.current;
     if (!v || !press || press.id !== e.pointerId) return;
+    if (press.hold) return; // 꾹 누르는 동안의 손 움직임은 무시
     const dx = e.clientX - press.x;
     const dy = e.clientY - press.y;
     if (!press.active) {
@@ -484,6 +561,8 @@ export default function VideoPlayer({
       const axis = decideGestureAxis(dx, dy, DRAG_START_PX);
       if (!axis) return;
       press.active = true;
+      clearTimeout(holdTimerRef.current); // 움직였으니 꾹 누르기는 취소
+      holdTimerRef.current = null;
       clearTimeout(tapTimerRef.current);
       tapTimerRef.current = null;
       lastTapRef.current = 0;
@@ -507,9 +586,18 @@ export default function VideoPlayer({
   const finishGesture = (e) => {
     const v = videoRef.current;
     const press = pressRef.current;
-    if (press && press.id === e.pointerId) pressRef.current = null;
+    if (press && press.id === e.pointerId) {
+      pressRef.current = null;
+      clearTimeout(holdTimerRef.current); // 꾹 누르기 전에 뗐으면 시작하지 않는다
+      holdTimerRef.current = null;
+    }
     if (!press?.active || !v) return false;
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    if (press.hold) {
+      finishHold(v);
+      revealControls();
+      return true;
+    }
     const sc = scrubRef.current;
     const lv = levelRef.current;
     // pointercancel(브라우저가 제스처를 가져감)은 좌표가 비어 올 수 있어 마지막 적용값으로 마무리한다.
@@ -689,6 +777,18 @@ export default function VideoPlayer({
             </span>
           </span>
           <span className="px-2 py-0.5 rounded bg-black/50 text-white/80 text-[11px]">좌우로 드래그하여 이동 · 짧게 끌면 미세 이동</span>
+        </div>
+      )}
+      {(gesture?.kind === 'fast' || gesture?.kind === 'rewind') && (
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1">
+          <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/70 text-white text-xl font-semibold tabular-nums">
+            {gesture.kind === 'fast'
+              ? <><FastForward className="h-6 w-6 fill-current" />{HOLD_RATE}배속</>
+              : <><Rewind className="h-6 w-6 fill-current" />되감기 · {formatTime(gesture.target)}</>}
+          </span>
+          <span className="px-2 py-0.5 rounded bg-black/50 text-white/80 text-[11px]">
+            {gesture.kind === 'fast' ? `누르고 있는 동안 ${HOLD_RATE}배속 재생` : `누르고 있는 동안 ${HOLD_RATE}배속 되감기`}
+          </span>
         </div>
       )}
       {(gesture?.kind === 'volume' || gesture?.kind === 'brightness') && (() => {

@@ -179,6 +179,32 @@ export function dragToLevel(start, dy, height, min, max) {
   return clamp(Math.round(next * 100) / 100, min, max);
 }
 
+// ─── 꾹 누르기(2배속 / 되감기) ──────────────────────
+
+/** 손가락·펜을 움직이지 않고 이만큼(ms) 누르고 있으면 꾹 누르기가 시작된다. 그 전에 움직이면 드래그, 떼면 탭. */
+export const HOLD_MS = 500;
+/** 꾹 누르는 동안의 배속(오른쪽 = 2배속 재생, 왼쪽 = 2배속 되감기) */
+export const HOLD_RATE = 2;
+
+/**
+ * 꾹 누른 위치가 화면의 어느 절반인지로 동작을 정한다.
+ * 왼쪽 절반 → 'rewind'(되감기), 오른쪽 절반(정중앙 포함) → 'fast'(2배속). 폭을 모르면 'fast'.
+ */
+export function holdKind(x, left, width) {
+  const w = Number(width) || 0;
+  if (w <= 0) return 'fast';
+  return (Number(x) || 0) - (Number(left) || 0) < w / 2 ? 'rewind' : 'fast';
+}
+
+/**
+ * 되감기 목표 시각: 누르기 시작 시각에서 경과 시간 × 배속만큼 뒤로, 0 아래로는 내려가지 않는다.
+ * 브라우저 대부분이 음수 playbackRate(역재생)를 지원하지 않아 되감기는 currentTime 을 옮겨서 구현한다.
+ */
+export function rewindTarget(startTime, elapsedMs, rate = HOLD_RATE) {
+  const elapsed = Math.max(0, Number(elapsedMs) || 0);
+  return Math.max(0, (Number(startTime) || 0) - (elapsed / 1000) * rate);
+}
+
 // ─── 스크럽 중 탐색 스케줄러 ──────────────────────
 
 /** 같은 목표로 다시 탐색하지 않을 최소 간격(초) */
