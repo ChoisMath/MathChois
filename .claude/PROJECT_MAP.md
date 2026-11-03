@@ -387,7 +387,7 @@ me.chois.pro 의 AI활용 세 갤러리를 옮겼다(오빠두엑셀 출처 표�
 ## Claude Code 개발 환경 (로컬 + 클라우드 세션)
 - **`.mcp.json`** — 프로젝트 MCP 서버(`playwright`, `chrome-devtools`). `command: node` + `.claude/mcp/launch.mjs <server>`로 띄움 → Windows(`cmd /c` 불필요)·Linux·클라우드 공용. 버전은 launch.mjs에 고정(업그레이드 시 함께 수정).
   클라우드(`CLAUDE_CODE_REMOTE=true`)에서는 headless + `/opt/pw-browsers/chromium` + `--no-sandbox` + `--isolated`를 자동 추가.
-- **`.claude/hooks/session-start.sh`** — SessionStart 훅(클라우드 세션 전용): `npm install` → `PW_CHROMIUM_EXECUTABLE` 내보내기(`playwright.config.ts`의 `launchOptions.executablePath`가 사용) → MCP 패키지 npx 캐시 예열.
+- **`.claude/hooks/session-start.sh`** — SessionStart 훅(클라우드 세션 전용): `npm install` → `PW_CHROMIUM_EXECUTABLE` 내보내기(`playwright.config.ts`의 `launchOptions.executablePath`가 사용) → MCP 패키지 npx 캐시 예열 → 사용자 스킬 설치(`~/.claude/skills`, 없을 때만, 실패해도 경고만): `design-taste-frontend`(`npx skills@1.7.6 add Leonxlnx/taste-skill -g -a claude-code --copy`), `motionsites`(xiiiabu/motionsites.ai 프롬프트 라이브러리 — SKILL.md가 없는 저장소라 README/LICENSE/prompts만 sparse clone 후 `.claude/hooks/skills/motionsites/SKILL.md` 래퍼를 복사, 영상 ~780MB 제외).
 - **`.claude/skills/`** — 저장소에 커밋된 프로젝트 스킬(클라우드 세션에서도 로드): `ui-ux-pro-max`(nextlevelbuilder, `uipro init --ai claude` 산출물, Python 3 검색 스크립트), `web-design-guidelines`(vercel-labs/agent-skills), `frontend-design`(anthropics/skills). 각 폴더에 원본 LICENSE 포함. superpowers·design 스킬은 claude.ai 계정 플러그인(`superpowers:*`, `design:*`)으로 동기화되므로 저장소에 두지 않음.
 
 ## 문서 / 상세 참조

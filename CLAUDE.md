@@ -56,7 +56,8 @@ port 3001 — start both. E2E tests use Playwright (`@playwright/test`) in `pack
 
 Claude Code tooling: project MCP servers (`playwright`, `chrome-devtools`) live in `.mcp.json`
 and start through `.claude/mcp/launch.mjs` (cross-platform; adds headless/Chromium flags in cloud
-sessions). Cloud sessions run `.claude/hooks/session-start.sh` (npm install + Chromium env).
+sessions). Cloud sessions run `.claude/hooks/session-start.sh` (npm install + Chromium env + user-level skills
+`design-taste-frontend` (taste-skill) and `motionsites` into `~/.claude/skills`).
 Project skills are committed under `.claude/skills/`. Details in `.claude/PROJECT_MAP.md`.
 
 ## Environment Variables
