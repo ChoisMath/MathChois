@@ -26,6 +26,15 @@ describe('ibWatermark.service', () => {
     for (let i = 0; i < 400_000; i++) if (data[i] < min) min = data[i];
     expect(min).toBeLessThan(250); // ink landed in the top rows too
   });
+  it('marks a black page', async () => {
+    // 어두운 영역에서도 보여야 한다: 밝은 글자 줄이 회색을 올린다.
+    const page = await sharp({ create: { width: 1600, height: 2263, channels: 3, background: '#000000' } }).webp().toBuffer();
+    const out = await applyWatermark(page, await buildWatermarkTile('홍길동 · a@b.kr · 2026-11-10'));
+    const { data } = await sharp(out).greyscale().raw().toBuffer({ resolveWithObject: true });
+    let max = 0;
+    for (let i = 0; i < data.length; i++) if (data[i] > max) max = data[i];
+    expect(max).toBeGreaterThan(40);
+  });
   it('survives markup characters in the name', async () => {
     const tile = await buildWatermarkTile('A&B <script> "x" · a@b.kr · 2026-11-10');
     expect((await sharp(tile).metadata()).width).toBeGreaterThan(100);

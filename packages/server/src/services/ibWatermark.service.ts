@@ -44,9 +44,11 @@ export async function buildWatermarkTile(text: string, fontFile: string = WATERM
   } catch {
     throw new Error(`watermark font missing: ${fontFile}`);
   }
-  const markup = `<span foreground="#000000" alpha="14%">${escapeMarkup(text)}</span>`;
+  // 어두운 줄은 흰 배경, 밝은 줄은 검은/어두운 배경에서 읽힌다. 한 색만 쓰면 어두운 영역에서 사라진다.
+  const t = escapeMarkup(text);
+  const markup = `<span foreground="#000000" alpha="14%">${t}</span>\n<span foreground="#ffffff" alpha="28%">${t}</span>`;
   const padded = await sharp({
-    text: { text: markup, font: 'Pretendard 18', fontfile: fontFile, rgba: true, dpi: 144 },
+    text: { text: markup, font: 'Pretendard 18', fontfile: fontFile, rgba: true, dpi: 144, spacing: 18 },
   })
     .extend({ top: 36, bottom: 36, left: 24, right: 24, background: TRANSPARENT })
     .png()
