@@ -9,7 +9,7 @@
  *
  * 검증(10): 스위치 꺼짐 → 학생에게 IB안내 단추 없음·/ib/ia 는 /student/classrooms 로 → 교사가 스위치 켬 → 학생 목록 카드 2장 →
  *   예시 1 쪽 보기(캔버스 3개, 1 / 3) → 3쪽에서 탭 이동(주석본 3 / 3, 채점 코멘트 1 / 1, 학생 보고서 3 / 3) → 예시 2 의 빈 탭 비활성 →
- *   네트워크(PDF·/api/files/ib-guide 없음, 쪽 응답 no-store, <img>·blob: 없음) → 인쇄 매체에서 캔버스 숨김 →
+ *   네트워크(PDF·/api/files/ib-guide 없음, 쪽 응답 no-store, blob:·/api/ib/ <img> 없음, URL.createObjectURL 호출 0회) → 인쇄 매체에서 캔버스 숨김 →
  *   교사가 스위치를 끈 뒤 아직 안 받은 쪽(다른 탭)을 열면 /student/classrooms 로 → 콘솔 오류 0개.
  */
 import fs from 'node:fs';
@@ -28,11 +28,20 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 const errors = [];
 const responses = [];
+// URL.createObjectURL 호출 수 — 문서(새로 고침·주소 이동)가 바뀌어도 이어지도록 Node 쪽에 센다.
+// performance.getEntries() 는 blob: 을 기록하지 않으므로 직접 감싸서 센다.
+let objectUrls = 0;
 // 9단계(스위치를 끈 뒤 쪽 요청)의 403 은 의도한 것 — 브라우저가 남기는 "Failed to load resource ... 403" 만 뺀다
 let expect403 = false;
 
 async function session(email, opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...opts });
+  // 첫 이동 전에 설치 — 모든 문서에서 createObjectURL 을 감싸 호출을 알린다
+  await ctx.exposeBinding('__ibCountObjectUrl', () => { objectUrls++; });
+  await ctx.addInitScript(() => {
+    const orig = URL.createObjectURL;
+    URL.createObjectURL = (...a) => { window.__ibCountObjectUrl?.(); return orig.apply(URL, a); };
+  });
   const res = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email, password: cfg.password } });
   if (!res.ok()) throw new Error(`login failed ${email}: ${res.status()} ${await res.text()}`);
   const page = await ctx.newPage(); // 브라우저 탭은 refresh 쿠키로 세션을 복원한다
@@ -169,11 +178,11 @@ try {
   const pdfResp = responses.filter((r) => !r.request && (r.headers['content-type'] ?? '').includes('pdf'));
   const filesReq = responses.filter((r) => r.url.includes('/api/files/ib-guide'));
   const badCache = pageResps.filter((r) => r.status === 200 && r.headers['cache-control'] !== 'private, no-store');
-  const imgs = await sp.evaluate(() => [...document.images].map((i) => i.src).filter((s) => s.includes('/api/ib/')));
-  const blobs = await sp.evaluate(() => performance.getEntries().map((e) => e.name).filter((n) => n.startsWith('blob:')));
-  check('7. network: no PDF, no /api/files/ib-guide, page responses private no-store, no <img> of /api/ib/, no blob: URLs',
-    pageResps.length > 0 && pdfResp.length === 0 && filesReq.length === 0 && badCache.length === 0 && imgs.length === 0 && blobs.length === 0,
-    { pages: pageResps.length, pdfResp, filesReq, badCache, imgs, blobs });
+  const imgs = await sp.evaluate(() => [...document.images].map((i) => i.src).filter((s) => s.startsWith('blob:') || s.includes('/api/ib/')));
+  await sleep(100); // 바인딩 호출(비동기)이 Node 쪽에 닿을 여유
+  check('7. network: no PDF, no /api/files/ib-guide, page responses private no-store, no <img> of blob:/api/ib/, URL.createObjectURL never called',
+    pageResps.length > 0 && pdfResp.length === 0 && filesReq.length === 0 && badCache.length === 0 && imgs.length === 0 && objectUrls === 0,
+    { pages: pageResps.length, pdfResp, filesReq, badCache, imgs, objectUrls });
 
   // 8. 인쇄 매체
   await sp.emulateMedia({ media: 'print' });
