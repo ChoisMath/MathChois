@@ -280,6 +280,10 @@ export async function runStartupMigrations(log: FastifyBaseLogger): Promise<void
     )`;
   log.info('startup migration: ai hub ensured');
 
+  // IB교육과정 안내: 학급별 학생 공개 스위치
+  await pgClient`ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS ib_guide_enabled boolean NOT NULL DEFAULT false`;
+  log.info('startup migration: classrooms.ib_guide_enabled ensured');
+
   await ensureAccessTables(log);
   await backfillClassroomColors(log);
 }
