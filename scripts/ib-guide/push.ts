@@ -18,6 +18,10 @@ import { renderPdf } from './render.js';
 const CONCURRENCY = 4;
 // 예시 30개 × 문서 3개면 쪽이 수백 장이라 분당 300 요청 한도에 걸릴 수 있다. 하나라도 떨어지면 manifest 를 못 올리므로 오래 기다린다.
 const MEDIA_ATTEMPTS = 30;
+// 연결 끊김·프록시 오류(502/503/504)는 잠깐 뒤 다시 보내면 대개 붙는다. 4번까지, 2·4·8초 간격.
+const TRANSIENT_ATTEMPTS = 4;
+const TRANSIENT_STATUS = new Set([502, 503, 504]);
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** 저장소 루트(npm run 실행 위치) 기준 `.ib-out/` — 서버 `<VOLUME_PATH>/ib-guide/` 와 같은 배치. git 에 넣지 않는다. */
 const OUT_DIR = path.resolve('.ib-out');
@@ -61,7 +65,14 @@ async function renderItem(dirIn: string, item: IaFile): Promise<{ record: Source
   // 쪽 수가 줄어든 PDF 의 남은 쪽이 섞이지 않도록 폴더째 비운다.
   await rm(out, { recursive: true, force: true });
   console.info(`render ${item.name} → ${path.relative(process.cwd(), out)}`);
-  const { pages, popupNotes } = await renderPdf(pdf, out);
+  let rendered: { pages: number; popupNotes: number };
+  try {
+    rendered = await renderPdf(pdf, out);
+  } catch (err) {
+    // 처음 실행에서 어느 PDF 가 깨졌는지 바로 알 수 있게 파일 이름을 붙인다.
+    throw new Error(`render ${item.name}: ${err instanceof Error ? err.message : err}`);
+  }
+  const { pages, popupNotes } = rendered;
   const record: SourceRecord = { file: item.name, sha256, pages, popupNotes };
   await writeFile(path.join(out, SOURCE_FILE), `${JSON.stringify(record, null, 2)}\n`);
   return { record, rendered: true };
@@ -73,8 +84,13 @@ async function readExampleTexts(dirIn: string, known: Set<string>): Promise<Map<
   const file = path.join(dirIn, 'examples.json');
   const out = new Map<string, ExampleText>();
   if (!existsSync(file)) return out;
-  const json = JSON.parse(await readFile(file, 'utf8')) as unknown;
-  if (typeof json !== 'object' || json === null || Array.isArray(json)) throw new Error('examples.json must be an object like { "ex26": { "title": "…", "note": "…" } }');
+  let json: unknown;
+  try {
+    json = JSON.parse(await readFile(file, 'utf8'));
+  } catch (err) {
+    throw new Error(`examples.json: ${err instanceof Error ? err.message : err}`);
+  }
+  if (typeof json !== 'object' || json === null || Array.isArray(json)) throw new Error('examples.json: must be an object like { "ex26": { "title": "…", "note": "…" } }');
   for (const [id, v] of Object.entries(json)) {
     if (!known.has(id)) {
       console.warn(`examples.json: ${id} has no PDF in the folder — ignored`);
@@ -177,6 +193,11 @@ async function main() {
   }
 
   // 6. 바뀐 쪽 올리기
+  const retryLater = async (rel: string, why: string, attempt: number) => {
+    const wait = 2000 * 2 ** (attempt - 1);
+    console.warn(`${why} ${rel}: retrying in ${wait / 1000}s (attempt ${attempt + 1}/${TRANSIENT_ATTEMPTS})`);
+    await sleep(wait);
+  };
   const putFile = async (rel: string) => {
     const file = outPath(rel);
     const sha = await sha256File(file);
@@ -184,13 +205,28 @@ async function main() {
     const expected = manifest.files[rel]?.sha256;
     if (expected && sha !== expected) throw new Error('file changed since the manifest was built — rerun');
     const size = statSync(file).size;
-    const res = await fetchRetry(`${base}/api/ib/media?path=${encodeURIComponent(rel)}`, () => ({
-      method: 'PUT',
-      headers: { ...auth, 'x-content-sha256': sha, 'content-length': String(size), 'content-type': 'application/octet-stream' },
-      body: Readable.toWeb(createReadStream(file)) as ReadableStream,
-      duplex: 'half',
-    } as RequestInit), { label: rel, attempts: MEDIA_ATTEMPTS });
-    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+    for (let attempt = 1; ; attempt++) {
+      let res: Response;
+      try {
+        // 스트림 본문은 다시 쓸 수 없으므로 요청 설정은 시도마다 새로 만든다(fetchRetry 의 init 도 마찬가지). 429 는 fetchRetry 가 기다린다.
+        res = await fetchRetry(`${base}/api/ib/media?path=${encodeURIComponent(rel)}`, () => ({
+          method: 'PUT',
+          headers: { ...auth, 'x-content-sha256': sha, 'content-length': String(size), 'content-type': 'application/octet-stream' },
+          body: Readable.toWeb(createReadStream(file)) as ReadableStream,
+          duplex: 'half',
+        } as RequestInit), { label: rel, attempts: MEDIA_ATTEMPTS });
+      } catch (err) {
+        // fetch 의 네트워크 실패는 TypeError 다. 429 를 다 기다리고도 실패한 것(Error)은 다시 보내지 않는다.
+        if (!(err instanceof TypeError) || attempt >= TRANSIENT_ATTEMPTS) throw err;
+        const cause = err.cause instanceof Error ? ` (${err.cause.message})` : '';
+        await retryLater(rel, `${err.message}${cause}`, attempt);
+        continue;
+      }
+      if (res.ok) return;
+      const body = await res.text();
+      if (!TRANSIENT_STATUS.has(res.status) || attempt >= TRANSIENT_ATTEMPTS) throw new Error(`${res.status} ${body}`);
+      await retryLater(rel, String(res.status), attempt);
+    }
   };
 
   const failures: string[] = [];
