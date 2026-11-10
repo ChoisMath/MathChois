@@ -71,8 +71,9 @@ export async function readIaPage(exId: string, doc: IaDoc, n: number): Promise<B
   }
 }
 
-// 합성은 CPU·메모리를 많이 쓰므로 동시에 4개까지만 돌리고 나머지는 줄을 세운다.
-const MAX_CONCURRENT_COMPOSITES = 4;
+// 합성은 CPU·메모리를 많이 쓰고 sharp 는 libuv 스레드풀에서 돈다. 스레드풀을 합성이 다 차지하면
+// 다른 요청의 fs·gzip·bcrypt·DNS 가 밀리므로 동시에 2개까지만 돌리고 나머지는 줄을 세운다.
+const MAX_CONCURRENT_COMPOSITES = 2;
 let running = 0;
 const waiting: (() => void)[] = [];
 
@@ -94,16 +95,21 @@ async function withCompositeSlot<T>(task: () => Promise<T>): Promise<T> {
 
 const tileCache = createTileCache();
 
-/** 사용자별 워터마크를 합성한 WebP. 실패하면 던진다(호출하는 쪽이 500 으로 답한다). */
+/**
+ * 사용자별 워터마크를 합성한 WebP. 실패하면 던진다(호출하는 쪽이 500 으로 답한다).
+ * clientGone 이 자리를 얻은 시점에 true 면 합성하지 않고 null 을 돌려준다 — 호출하는 쪽은 아무것도 보내지 않는다.
+ */
 export async function watermarkedIaPage(
   page: Buffer,
   who: { id: string; name: string; email: string },
   now: Date = new Date(),
-): Promise<Buffer> {
+  clientGone: () => boolean = () => false,
+): Promise<Buffer | null> {
   const text = watermarkText(who, now);
   // 날짜가 문구에 들어 있으므로 하루가 지나면 키가 바뀌어 새 타일을 만든다.
   const tile = await tileCache.get(`${who.id}|${text}`, () => buildWatermarkTile(text));
-  return withCompositeSlot(() => applyWatermark(page, tile));
+  // 줄을 서는 동안 페이지를 넘기거나 창을 닫은 요청은 자리를 얻어도 합성하지 않고 다음 차례로 넘긴다.
+  return withCompositeSlot(async () => (clientGone() ? null : applyWatermark(page, tile)));
 }
 
 // ─── 토큰 업로드 ────────────────────────────────────

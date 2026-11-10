@@ -58,14 +58,25 @@ export async function ibGuideRoutes(app: FastifyInstance) {
       request.log.error({ userId }, 'ib-guide page: profile missing');
       return reply.status(500).send({ error: 'Internal Server Error' });
     }
-    let image: Buffer;
+    let image: Buffer | null;
     try {
       const original = await readIaPage(exId, doc, page);
       if (!original) return reply.status(404).send({ error: 'Not found' });
-      image = await watermarkedIaPage(original, { id: profile.id, name: profile.name ?? '', email: profile.email ?? '' });
+      // request.raw.destroyed 는 본문을 다 읽은 정상 GET 에서도 true 가 되므로 연결(소켓) 상태로 판단한다.
+      const clientGone = () => request.socket.destroyed;
+      image = await watermarkedIaPage(
+        original, { id: profile.id, name: profile.name ?? '', email: profile.email ?? '' }, undefined, clientGone,
+      );
     } catch (err) {
       request.log.error({ err, userId, exId, doc, page }, 'ib-guide page: watermark failed');
       return reply.status(500).send({ error: 'Internal Server Error' });
+    }
+    if (!image) {
+      // 이미 떠난 클라이언트 — 합성하지 않았고 아무것도 보내지 않는다(원본은 절대 보내지 않는다).
+      request.log.info({ userId, exId, doc, page }, 'ib-guide page: client gone, skipped');
+      reply.hijack();
+      reply.raw.destroy();
+      return reply;
     }
     request.log.info({ userId, exId, doc, page }, 'ib-guide page view');
     reply.header('Content-Type', 'image/webp');

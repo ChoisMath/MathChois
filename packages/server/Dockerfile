@@ -30,6 +30,8 @@ RUN npm run build -w @mathchois/client
 # ─── Production image ─────────────────────────────
 FROM base AS production
 ENV NODE_ENV=production
+# sharp 합성(IB 워터마크)이 libuv 스레드풀을 쓰므로 기본 4개에서 늘려 fs·gzip·bcrypt·DNS 가 밀리지 않게 한다.
+ENV UV_THREADPOOL_SIZE=8
 
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
