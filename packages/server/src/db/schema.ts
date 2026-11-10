@@ -30,6 +30,8 @@ export const classrooms = pgTable('classrooms', {
   color: text('color'),
   // 이 학급 학생에게 AI활용 허브를 열어 줄지 여부 (교사·관리자는 항상 사용 가능)
   aiHubEnabled: boolean('ai_hub_enabled').notNull().default(false),
+  // 이 학급 학생에게 IB교육과정 안내를 열어 줄지 여부 (교사·관리자는 항상 사용 가능)
+  ibGuideEnabled: boolean('ib_guide_enabled').notNull().default(false),
 });
 
 // ─── classroom_members ──────────────────────────────

@@ -1,0 +1,134 @@
+/*
+ * IA 예시 쪽 보기 — 허브(IbGuide.css)와 같은 남색 막대·흰 탭 칩, 읽는 바탕은 쪽 가장자리가 보이도록 중립 짙은 회색.
+ * 누르는 영역 44px 이상. 글자 선택·길게 눌러 저장 메뉴를 막는다(완전한 차단이 아니라 억지책).
+ */
+.ia-viewer {
+  --ib-ink: #1c2b4a;
+  --ib-pen: #2453a6;
+  --ib-muted: #56627c;
+  --ia-desk: #3b3f46;
+  display: flex; flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--ia-desk); color: var(--ib-ink);
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.ia-viewer :focus-visible { outline: 3px solid #f2b544; outline-offset: 2px; }
+.ia-viewer--msg { align-items: center; justify-content: center; background: #f8fafd; color: var(--ib-muted); }
+
+/* ── 상단 바: 넓으면 한 줄, 좁으면 두 줄(제목·쪽·앞뒤 예시 / 탭·확대) ── */
+.ia-viewer-bar {
+  position: sticky; top: 0; z-index: 2;
+  display: grid; align-items: center; column-gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
+  grid-template-areas: 'back heading tabs zoom ind nav';
+  padding: 4px 12px;
+  background: var(--ib-ink); color: #fff;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .25);
+}
+.ia-viewer-back { grid-area: back; }
+.ia-viewer-heading { grid-area: heading; }
+.ia-viewer-tabs { grid-area: tabs; }
+.ia-viewer-zoom { grid-area: zoom; }
+.ia-viewer-indicator { grid-area: ind; }
+.ia-viewer-nav { grid-area: nav; }
+@media (max-width: 900px) {
+  .ia-viewer-bar {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: 'back heading ind nav' 'tabs tabs tabs zoom';
+    padding: 2px 4px 4px;
+  }
+}
+
+.ia-viewer .ia-viewer-btn { color: #c9d4ee; }
+@media (hover: hover) {
+  .ia-viewer .ia-viewer-btn:not(:disabled):hover .icon-btn-face { background: rgba(255, 255, 255, .1); color: #fff; }
+}
+.ia-viewer .ia-viewer-btn:disabled { opacity: .35; cursor: default; }
+
+.ia-viewer-heading {
+  display: flex; align-items: baseline; gap: 8px; flex: 1 1 auto; min-width: 0;
+  padding: 0 4px; font-size: 17px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2;
+}
+.ia-viewer-no { flex-shrink: 0; white-space: nowrap; }
+.ia-viewer-title {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 14px; font-weight: 500; color: #c9d4ee;
+}
+.ia-viewer-nav { display: flex; flex-shrink: 0; }
+
+/* 탭: 허브의 탭 칩과 같은 모양. 좁으면 가로로 밀어 볼 수 있다. */
+.ia-viewer-tabs {
+  display: flex; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none;
+  padding: 2px;
+}
+.ia-viewer-tabs::-webkit-scrollbar { display: none; }
+.ia-viewer-tab {
+  flex-shrink: 0; min-height: 44px; padding: 0 16px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .22); background: transparent;
+  color: #c9d4ee; font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+.ia-viewer-tab:not(:disabled):not([aria-selected='true']):hover { background: rgba(255, 255, 255, .08); color: #fff; }
+.ia-viewer-tab[aria-selected='true'] { background: #fff; border-color: #fff; color: var(--ib-ink); }
+.ia-viewer-tab:disabled { opacity: .4; cursor: not-allowed; border-style: dashed; }
+
+.ia-viewer-zoom { display: flex; align-items: center; flex-shrink: 0; }
+.ia-viewer-percent { min-width: 44px; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; color: #c9d4ee; }
+.ia-viewer-indicator {
+  flex-shrink: 0; min-width: 52px; padding: 4px 10px; border-radius: 999px;
+  background: rgba(255, 255, 255, .1); text-align: center;
+  font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .ia-viewer-tabs { gap: 4px; }
+  .ia-viewer-tab { padding: 0 9px; font-size: 13px; }
+  .ia-viewer-percent { min-width: 34px; font-size: 12px; }
+  .ia-viewer-bar { column-gap: 4px; }
+}
+
+/* ── 읽는 바탕 ── */
+.ia-viewer-scroll {
+  flex: 1 1 auto; min-height: 0; overflow: auto;
+  padding: 16px; overscroll-behavior: contain;
+}
+@media (min-width: 768px) { .ia-viewer-scroll { padding: 24px; } }
+.ia-viewer-scroll:focus-visible { outline-offset: -3px; }
+/* 확대해서 쪽이 넓어지면 목록 폭도 함께 늘어나 왼쪽이 잘리지 않는다 */
+.ia-viewer-pages {
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  width: max-content; min-width: 100%;
+}
+
+.ia-page {
+  position: relative; max-width: none;
+  background: #fff; border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .25);
+  overflow: hidden;
+}
+.ia-page-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; -webkit-user-drag: none; }
+.ia-page-placeholder {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 40px; font-weight: 700; color: #e3e8f1; font-variant-numeric: tabular-nums;
+}
+.ia-page-error {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  padding: 16px; text-align: center; color: var(--ib-muted); font-size: 15px;
+}
+.ia-page-retry {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: 12px;
+  border: 1px solid #dbe3f0; background: #fff; color: var(--ib-pen); font-size: 14px; font-weight: 500; cursor: pointer;
+}
+.ia-page-retry svg { width: 16px; height: 16px; }
+.ia-page-retry:hover { background: #eef2f8; }
+
+/* 인쇄: 쪽 대신 안내만 */
+@media print {
+  .ia-viewer > * { display: none !important; }
+  .ia-viewer { height: auto; background: #fff; }
+  .ia-viewer::after {
+    content: '인쇄할 수 없는 자료입니다';
+    display: block; padding: 48px 0; text-align: center; font-size: 20px; color: #000;
+  }
+}

@@ -27,6 +27,8 @@ const envSchema = z.object({
   // AI활용 허브 이전 스크립트용 업로드 토큰(PUT /api/ai/media 등). 없으면(빈 문자열 포함) 업로드 API 가 503.
   // 32자 미만이면 기동은 막지 않고 경고 뒤 없는 것으로 친다(loadEnv) — 선택 기능의 잘못된 값 하나로 앱 전체가 내려가지 않게.
   AI_MEDIA_UPLOAD_TOKEN: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+  // IB교육과정 안내 자료 업로드 토큰(AI_MEDIA_UPLOAD_TOKEN 과 같은 규칙). 없으면 IB 안내 업로드 API 가 503.
+  IB_MEDIA_UPLOAD_TOKEN: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
 });
 
 const MIN_UPLOAD_TOKEN_LENGTH = 32;
@@ -39,9 +41,16 @@ function loadEnv() {
     process.exit(1);
   }
   const data = result.data;
-  if (data.AI_MEDIA_UPLOAD_TOKEN !== undefined && data.AI_MEDIA_UPLOAD_TOKEN.length < MIN_UPLOAD_TOKEN_LENGTH) {
-    console.warn(`[env] AI_MEDIA_UPLOAD_TOKEN 이 ${MIN_UPLOAD_TOKEN_LENGTH}자보다 짧아 무시합니다 — AI활용 허브 업로드 API 가 503 으로 꺼집니다 (openssl rand -hex 32 로 다시 만드세요)`);
-    data.AI_MEDIA_UPLOAD_TOKEN = undefined;
+  const uploadTokens = [
+    ['AI_MEDIA_UPLOAD_TOKEN', 'AI활용 허브'],
+    ['IB_MEDIA_UPLOAD_TOKEN', 'IB교육과정 안내'],
+  ] as const;
+  for (const [name, label] of uploadTokens) {
+    const token = data[name];
+    if (token !== undefined && token.length < MIN_UPLOAD_TOKEN_LENGTH) {
+      console.warn(`[env] ${name} 이 ${MIN_UPLOAD_TOKEN_LENGTH}자보다 짧아 무시합니다 — ${label} 업로드 API 가 503 으로 꺼집니다 (openssl rand -hex 32 로 다시 만드세요)`);
+      data[name] = undefined;
+    }
   }
   const volumePath = data.VOLUME_PATH || data.RAILWAY_VOLUME_MOUNT_PATH || './local-storage';
   if (data.NODE_ENV === 'production' && !data.VOLUME_PATH && !data.RAILWAY_VOLUME_MOUNT_PATH) {

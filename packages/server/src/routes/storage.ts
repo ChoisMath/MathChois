@@ -3,7 +3,7 @@ import { Readable } from 'node:stream';
 import { isAiHubPublicFile } from '@mathchois/shared';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
-import { uploadFile, removeFile, statFile, openFileStream, aiHubRelPath } from '../services/storage.service.js';
+import { uploadFile, removeFile, statFile, openFileStream, aiHubRelPath, ibGuideRelPath } from '../services/storage.service.js';
 import { env } from '../config/env.js';
 import { checkUploadPolicy, HTML_ONLY_BUCKETS, INLINE_SAFE_IMAGE_RE } from '../utils/uploadPolicy.js';
 
@@ -30,6 +30,13 @@ export function buildFrameAncestors(): string {
 const AI_HUB_WRITE_DENIED = { error: 'This bucket is managed by the AI hub upload API' };
 function touchesAiHub(...segments: string[]): boolean {
   return aiHubRelPath(...segments) !== null;
+}
+
+// IB 안내 버킷(ib-guide)은 워터마크 없는 원본 페이지라 일반 라우트에서는 읽기·쓰기·삭제를 모두 막는다.
+// 원본은 IB 전용 라우트가 로그인·권한 확인과 워터마크 합성을 거친 뒤에만 내보낸다.
+const IB_GUIDE_WRITE_DENIED = { error: 'This bucket is managed by the IB guide upload API' };
+function touchesIbGuide(...segments: string[]): boolean {
+  return ibGuideRelPath(...segments) !== null;
 }
 
 // 학생 업로드 허용 버킷
@@ -125,6 +132,7 @@ export async function storageRoutes(app: FastifyInstance) {
     }
 
     if (touchesAiHub(bucket, directory)) return reply.status(403).send(AI_HUB_WRITE_DENIED);
+    if (touchesIbGuide(bucket, directory)) return reply.status(403).send(IB_GUIDE_WRITE_DENIED);
 
     // 학생은 허용 버킷만 접근 가능
     if (request.user.role === 'student' && !STUDENT_ALLOWED_BUCKETS.has(bucket)) {
@@ -184,6 +192,7 @@ export async function storageRoutes(app: FastifyInstance) {
     }
 
     if (touchesAiHub(bucket, directory)) return reply.status(403).send(AI_HUB_WRITE_DENIED);
+    if (touchesIbGuide(bucket, directory)) return reply.status(403).send(IB_GUIDE_WRITE_DENIED);
 
     // 학생은 허용 버킷만 접근 가능
     if (request.user.role === 'student' && !STUDENT_ALLOWED_BUCKETS.has(bucket)) {
@@ -261,6 +270,10 @@ export async function storageRoutes(app: FastifyInstance) {
     // 열리면 그 스크립트가 로그인 쿠키로 /api 를 부를 수 있으므로 404 — 브랜드는 /api/ai/brand/site/* 로만 나간다.
     const aiHubRel = aiHubRelPath(bucket, filePath);
     if (aiHubRel !== null && !isAiHubPublicFile(aiHubRel)) {
+      return reply.status(404).send({ error: 'File not found' });
+    }
+    // ib-guide 에는 공개 파일이 없다 — 존재 여부도 드러내지 않도록 statFile 전에 404.
+    if (touchesIbGuide(bucket, filePath)) {
       return reply.status(404).send({ error: 'File not found' });
     }
 
@@ -350,6 +363,7 @@ export async function storageRoutes(app: FastifyInstance) {
     const filePath = decodePath(rest.slice(slashIdx + 1));
 
     if (touchesAiHub(bucket, filePath)) return reply.status(403).send(AI_HUB_WRITE_DENIED);
+    if (touchesIbGuide(bucket, filePath)) return reply.status(403).send(IB_GUIDE_WRITE_DENIED);
 
     const deleted = await removeFile(bucket, filePath);
     if (!deleted) {

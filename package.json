@@ -23,11 +23,15 @@
     "ai:slide:import": "tsx scripts/ai-hub/slide-import.ts",
     "ai:brand:import": "tsx scripts/ai-hub/brand-import.ts",
     "ai:oppadu": "tsx scripts/ai-hub/oppadu/main.ts",
-    "ai:remake-upgrade": "tsx scripts/ai-hub/oppadu/remake-upgrade.ts"
+    "ai:remake-upgrade": "tsx scripts/ai-hub/oppadu/remake-upgrade.ts",
+    "ib:push": "tsx scripts/ib-guide/push.ts"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.1.0",
     "concurrently": "^9.1.2",
     "esbuild": "0.27.3",
+    "pdfjs-dist": "6.4.299",
+    "sharp": "^0.35.5",
     "tsx": "^4",
     "typescript": "^5.8.3"
   },

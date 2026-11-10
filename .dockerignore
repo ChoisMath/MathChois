@@ -8,3 +8,10 @@
 legacy_rails
 tests
 .playwright
+**/.env
+**/.env.*
+**/local-storage
+.superpowers
+.ib-out
+.media-out
+.oppadu

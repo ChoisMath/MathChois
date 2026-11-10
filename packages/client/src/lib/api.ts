@@ -21,11 +21,15 @@ export function getAccessToken(): string | null {
 
 // ─── Core fetch wrapper ──────────────────────────
 
-async function apiFetch<T>(
+/**
+ * 요청 공통부 — Bearer 헤더, 401 이면 refresh 한 번 뒤 재시도, ok 가 아니면 ApiError.
+ * 성공한 Response 를 그대로 돌려준다(본문 해석은 부르는 쪽: JSON 은 apiFetch, 이진은 api.blob).
+ */
+async function authedFetch(
   url: string,
   options: RequestInit = {},
   retry = true,
-): Promise<T> {
+): Promise<Response> {
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string> ?? {}),
   };
@@ -45,7 +49,7 @@ async function apiFetch<T>(
   if (res.status === 401 && retry) {
     const refreshed = await refreshTokenOnce();
     if (refreshed) {
-      return apiFetch<T>(url, options, false);
+      return authedFetch(url, options, false);
     }
     // refresh도 실패 → 토큰 제거 (AuthContext에서 logout 처리)
     _accessToken = null;
@@ -56,6 +60,16 @@ async function apiFetch<T>(
     const body = await res.json().catch(() => ({}));
     throw new ApiError(res.status, body.error ?? res.statusText, body);
   }
+
+  return res;
+}
+
+async function apiFetch<T>(
+  url: string,
+  options: RequestInit = {},
+  retry = true,
+): Promise<T> {
+  const res = await authedFetch(url, options, retry);
 
   // 204 No Content
   if (res.status === 204) return undefined as T;
@@ -230,6 +244,15 @@ export const api = {
 
   delete<T>(url: string): Promise<T> {
     return apiFetch<T>(url, { method: 'DELETE' });
+  },
+
+  /**
+   * 이진 본문을 Blob 으로 받는다(GET). 인증·refresh 재시도·오류는 다른 요청과 같다.
+   * 같은 주소라도 묶지 않는다 — signal 로 각자 취소할 수 있어야 해서.
+   */
+  async blob(url: string, init: { signal?: AbortSignal } = {}): Promise<Blob> {
+    const res = await authedFetch(url, { signal: init.signal });
+    return res.blob();
   },
 
   /** Multipart 파일 업로드 (FormData) */

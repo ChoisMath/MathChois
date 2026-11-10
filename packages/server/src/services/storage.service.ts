@@ -4,29 +4,42 @@ import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
 import path from 'node:path';
 import { env } from '../config/env.js';
+import { bucketRelPath } from '../utils/bucketPath.js';
 
 const VOLUME_ROOT = path.resolve(env.VOLUME_PATH);
-const AI_HUB_ROOT = path.join(VOLUME_ROOT, 'ai-hub');
 
 /**
  * 해석된 경로가 AI활용 허브 버킷(ai-hub) 안이면 버킷 기준 상대 경로('/' 구분, 버킷 자체면 ''), 아니면 null.
  * 버킷 이름 문자열만 비교하면 `x/../ai-hub` 나 경로 안의 `..` 로 우회되므로 실제로 해석된 경로로 판단한다.
  */
 export function aiHubRelPath(...segments: string[]): string | null {
-  const target = path.resolve(VOLUME_ROOT, ...segments);
-  if (target === AI_HUB_ROOT) return '';
-  if (!target.startsWith(AI_HUB_ROOT + path.sep)) return null;
-  return target.slice(AI_HUB_ROOT.length + 1).split(path.sep).join('/');
+  return bucketRelPath(VOLUME_ROOT, 'ai-hub', ...segments);
 }
 
 /**
- * 경로 traversal 방지: 최종 경로가 Volume 루트 내인지 확인
+ * aiHubRelPath 와 같은 규칙으로 IB 안내 버킷(ib-guide) 안인지 판단한다.
+ * ib-guide 에는 워터마크 없는 원본 페이지가 있어 공개 파일이 하나도 없다 — 이 모듈의 일반 함수는
+ * 읽기·쓰기·확인·삭제를 모두 거부하고, 원본은 IB 전용 서비스가 권한 확인·워터마크 합성 뒤에만 내보낸다.
+ */
+export function ibGuideRelPath(...segments: string[]): string | null {
+  return bucketRelPath(VOLUME_ROOT, 'ib-guide', ...segments);
+}
+
+function ibGuideDenied(): Error {
+  return Object.assign(new Error('ib-guide 버킷은 일반 저장소 경로로 접근할 수 없습니다'), { statusCode: 403 });
+}
+
+/**
+ * 경로 traversal 방지: 최종 경로가 Volume 루트 내인지 확인.
+ * ib-guide 버킷 안으로 해석되는 경로도 던진다 — 위 함수들의 앞선 확인(null/false 반환)을 빠뜨린
+ * 새 함수가 생겨도 원본 페이지에 닿지 못하고 닫힌 쪽으로 실패하게 한다.
  */
 function safePath(...segments: string[]): string {
   const resolved = path.resolve(VOLUME_ROOT, ...segments);
   if (!resolved.startsWith(VOLUME_ROOT)) {
     throw new Error('Path traversal detected');
   }
+  if (ibGuideRelPath(...segments) !== null) throw ibGuideDenied();
   return resolved;
 }
 
@@ -37,6 +50,7 @@ export async function uploadFile(
   fileName: string,
   data: Buffer,
 ): Promise<string> {
+  if (ibGuideRelPath(bucket, directory, fileName) !== null) throw ibGuideDenied();
   const dir = safePath(bucket, directory);
   await fs.mkdir(dir, { recursive: true });
 
@@ -58,6 +72,7 @@ export async function uploadStream(
   source: Readable,
   isTruncated?: () => boolean,
 ): Promise<{ url: string; size: number }> {
+  if (ibGuideRelPath(bucket, directory, fileName) !== null) throw ibGuideDenied();
   const dir = safePath(bucket, directory);
   await fs.mkdir(dir, { recursive: true });
   const filePath = safePath(bucket, directory, fileName);
@@ -80,6 +95,7 @@ export async function statFile(bucket: string, filePath: string): Promise<{
   size: number;
   mimeType: string;
 } | null> {
+  if (ibGuideRelPath(bucket, filePath) !== null) return null;
   try {
     const absPath = safePath(bucket, filePath);
     const st = await fs.stat(absPath);
@@ -92,6 +108,7 @@ export async function statFile(bucket: string, filePath: string): Promise<{
 
 /** 파일 읽기 스트림 (Range 요청용 start/end 는 inclusive 바이트 오프셋) */
 export function openFileStream(bucket: string, filePath: string, range?: { start: number; end: number }) {
+  if (ibGuideRelPath(bucket, filePath) !== null) throw ibGuideDenied();
   const absPath = safePath(bucket, filePath);
   return createReadStream(absPath, range ? { start: range.start, end: range.end } : undefined);
 }
@@ -101,6 +118,7 @@ export async function readFile(bucket: string, filePath: string): Promise<{
   data: Buffer;
   mimeType: string;
 } | null> {
+  if (ibGuideRelPath(bucket, filePath) !== null) return null;
   try {
     const absPath = safePath(bucket, filePath);
     const data = await fs.readFile(absPath);
@@ -112,11 +130,12 @@ export async function readFile(bucket: string, filePath: string): Promise<{
 }
 
 /**
- * 파일 삭제. ai-hub 버킷은 토큰 업로드 API 만 관리하므로 지우지 않는다(false = 지운 것 없음) —
- * DB 에 저장된 URL 을 지우는 서비스가 어떤 경로로든 허브 자료를 지우지 못하게 한다.
+ * 파일 삭제. ai-hub·ib-guide 버킷은 토큰 업로드 API 만 관리하므로 지우지 않는다(false = 지운 것 없음) —
+ * DB 에 저장된 URL 을 지우는 서비스가 어떤 경로로든 허브·IB 자료를 지우지 못하게 한다.
  */
 export async function removeFile(bucket: string, filePath: string): Promise<boolean> {
   if (aiHubRelPath(bucket, filePath) !== null) return false;
+  if (ibGuideRelPath(bucket, filePath) !== null) return false;
   try {
     const absPath = safePath(bucket, filePath);
     await fs.unlink(absPath);
@@ -126,14 +145,15 @@ export async function removeFile(bucket: string, filePath: string): Promise<bool
   }
 }
 
-/** 여러 파일 삭제 (removeFile 을 거치므로 ai-hub 는 건너뛴다) */
+/** 여러 파일 삭제 (removeFile 을 거치므로 ai-hub·ib-guide 는 건너뛴다) */
 export async function removeFiles(bucket: string, filePaths: string[]): Promise<void> {
   await Promise.all(filePaths.map((p) => removeFile(bucket, p)));
 }
 
-/** 디렉토리 삭제 (비어 있을 때만, ai-hub 버킷은 건드리지 않는다) */
+/** 디렉토리 삭제 (비어 있을 때만, ai-hub·ib-guide 버킷은 건드리지 않는다) */
 export async function removeDirectoryIfEmpty(bucket: string, dirPath: string): Promise<boolean> {
   if (aiHubRelPath(bucket, dirPath) !== null) return false;
+  if (ibGuideRelPath(bucket, dirPath) !== null) return false;
   try {
     const absPath = safePath(bucket, dirPath);
     const entries = await fs.readdir(absPath);
@@ -153,13 +173,17 @@ export function urlToParentDir(url: string): { bucket: string; dir: string } | n
   if (!parsed) return null;
   const lastSlash = parsed.path.lastIndexOf('/');
   if (lastSlash === -1) return null;
-  return {
-    bucket: parsed.bucket,
-    dir: parsed.path.slice(0, lastSlash),
-  };
+  const dir = parsed.path.slice(0, lastSlash);
+  // 마지막 조각이 `..` 이면 파일 경로는 버킷 밖이어도 부모는 ib-guide 일 수 있다 — 부모도 따로 본다.
+  if (ibGuideRelPath(parsed.bucket, dir) !== null) return null;
+  return { bucket: parsed.bucket, dir };
 }
 
-/** URL에서 storage path 추출: /api/files/chapter-pages/chapters/xxx → chapters/xxx */
+/**
+ * URL에서 storage path 추출: /api/files/chapter-pages/chapters/xxx → chapters/xxx
+ * ib-guide 를 가리키는 URL 은 null — DB 에 저장된 URL 을 받아 파일을 읽거나 복제하는 호출부
+ * (copyHtmlToChapterTools, 코칭·문제 이미지 읽기 등)가 원본 페이지에 닿지 못하게 한다.
+ */
 export function urlToStoragePath(url: string): { bucket: string; path: string } | null {
   const prefix = '/api/files/';
   const idx = url.indexOf(prefix);
@@ -169,10 +193,10 @@ export function urlToStoragePath(url: string): { bucket: string; path: string } 
   const slashIdx = rest.indexOf('/');
   if (slashIdx === -1) return null;
 
-  return {
-    bucket: rest.slice(0, slashIdx),
-    path: rest.slice(slashIdx + 1),
-  };
+  const bucket = rest.slice(0, slashIdx);
+  const filePath = rest.slice(slashIdx + 1);
+  if (ibGuideRelPath(bucket, filePath) !== null) return null;
+  return { bucket, path: filePath };
 }
 
 /**
