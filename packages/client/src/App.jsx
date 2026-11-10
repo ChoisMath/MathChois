@@ -53,6 +53,9 @@ const MotionDetailPage   = lazy(() => import('./pages/AiHub/MotionDetailPage'));
 const SlideGalleryPage   = lazy(() => import('./pages/AiHub/SlideGalleryPage'));
 const BrandPage          = lazy(() => import('./pages/AiHub/BrandPage'));
 const MotionEditorPage   = lazy(() => import('./pages/AiHub/MotionEditorPage'));
+const IbGuideRoute       = lazy(() => import('./pages/IbGuide/IbGuideRoute'));
+const IbGuideLayout      = lazy(() => import('./pages/IbGuide/IbGuideLayout'));
+const IaListPage         = lazy(() => import('./pages/IbGuide/IaListPage'));
 
 /* 관리자 */
 const AdminPanel = lazy(() => import('./pages/Admin/AdminPanel'));
@@ -185,6 +188,15 @@ function App() {
             </Route>
             {/* 편집기: 전체 화면(레이아웃 밖), 교사·관리자 */}
             <Route path="/ai/motion/:id/edit" element={<MotionEditorPage />} />
+          </Route>
+
+          {/* IB교육과정 안내 허브 — 로그인·역할·접근 허락은 IbGuideRoute 가 판정 */}
+          <Route element={<IbGuideRoute />}>
+            <Route element={<IbGuideLayout />}>
+              <Route path="/ib" element={<Navigate to="/ib/ia" replace />} />
+              <Route path="/ib/ia" element={<IaListPage />} />
+            </Route>
+            {/* /ib/ia/:exId 는 다음 작업에서 추가 */}
           </Route>
 
           {/* Admin Routes */}
