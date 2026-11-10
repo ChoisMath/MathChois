@@ -13,5 +13,5 @@
       "@mathchois/shared/*": ["../packages/shared/src/*"]
     }
   },
-  "include": ["ai-hub"]
+  "include": ["ai-hub", "ib-guide"]
 }
