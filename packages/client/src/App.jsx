@@ -56,6 +56,7 @@ const MotionEditorPage   = lazy(() => import('./pages/AiHub/MotionEditorPage'));
 const IbGuideRoute       = lazy(() => import('./pages/IbGuide/IbGuideRoute'));
 const IbGuideLayout      = lazy(() => import('./pages/IbGuide/IbGuideLayout'));
 const IaListPage         = lazy(() => import('./pages/IbGuide/IaListPage'));
+const IaViewerPage       = lazy(() => import('./pages/IbGuide/IaViewerPage'));
 
 /* 관리자 */
 const AdminPanel = lazy(() => import('./pages/Admin/AdminPanel'));
@@ -196,7 +197,8 @@ function App() {
               <Route path="/ib" element={<Navigate to="/ib/ia" replace />} />
               <Route path="/ib/ia" element={<IaListPage />} />
             </Route>
-            {/* /ib/ia/:exId 는 다음 작업에서 추가 */}
+            {/* 쪽 보기: 전체 화면(허브 틀 밖) */}
+            <Route path="/ib/ia/:exId" element={<IaViewerPage />} />
           </Route>
 
           {/* Admin Routes */}
