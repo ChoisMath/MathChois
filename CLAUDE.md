@@ -18,7 +18,7 @@ The core of the app is **5 annotation pages** (see the table below).
 
 | Package | Name | Stack |
 |---|---|---|
-| `packages/server` | `@mathchois/server` | Fastify 5 + Drizzle ORM 0.45 + PostgreSQL (`postgres` driver) + Socket.IO 4 + JWT/Google OAuth + nodemailer. `tsx` (dev) / `tsc` (build). |
+| `packages/server` | `@mathchois/server` | Fastify 5 + Drizzle ORM 0.45 + PostgreSQL (`postgres` driver) + Socket.IO 4 + JWT/Google OAuth + nodemailer + sharp (IB watermark). `tsx` (dev) / `tsc` (build). |
 | `packages/client` | `@mathchois/client` | React 19 + Vite 7 + Tailwind 4 + React Router 7 + Excalidraw 0.18 + dnd-kit + jspdf + socket.io-client. PWA. |
 | `packages/shared` | `@mathchois/shared` | Shared TS types (exported from source, not a build artifact). |
 
@@ -43,6 +43,10 @@ npm run ai:oppadu                     # sync new/changed oppadu motion/slide/bra
                                       #   then `ai:push -- --set motion|slide --sync-prompts` and `--set brand` (scripts/ai-hub/README.md)
 npm run ai:remake-upgrade             # move the Chois remake motion templates (.media-out/prompts/motion.json) onto oppadu's new template layout
                                       #   → .media-out/prompts/motion.remakes.json; then `ai:push -- --set motion --sync-remakes`
+
+# IB교육과정 안내 material (repo root; details: scripts/ib-guide/README.md)
+npm run ib:push -- --dir "<IA PDF folder>" [--dry-run] [--only exNN]   # PDFs → 1600px WebP pages in .ib-out/ (on this PC)
+                                      #   → server (IB_PUSH_URL + IB_MEDIA_UPLOAD_TOKEN); PDFs never leave the PC
 
 # DB (run inside packages/server)
 npm run db:push -w @mathchois/server      # Push Drizzle schema to DB
@@ -77,6 +81,8 @@ NODE_ENV=development
 # AI_MEDIA_UPLOAD_TOKEN (optional, >= 32 chars; `openssl rand -hex 32`) — bearer token for the ai:push upload routes
 #   (PUT /api/ai/media, GET /api/ai/media/manifest, PUT /api/ai/prompts/:set). Empty/unset = uploads disabled (503);
 #   shorter than 32 chars = boot warning + treated as unset.
+# IB_MEDIA_UPLOAD_TOKEN (optional, same rules) — bearer token for the ib:push upload routes
+#   (PUT /api/ib/media, GET /api/ib/media/manifest). Empty/unset/short = uploads disabled (503).
 ```
 
 Production domain is **`https://class.chois.pro`** (moved from `class.chois.ai.kr`). The
@@ -168,6 +174,23 @@ YouTube playlists): `units` table, `chapters.unit_id`/`classroom_videos.unit_id`
   remake edits go into the `{{#a}}` (예시 그대로) lines, `{{#b}}` (내 주제에 맞게) stays oppadu's generic text, blank defaults carry over;
   `ai:push --set motion --sync-remakes` sends it to `PUT /api/ai/prompts/motion?mode=remakes` (remake ids only, web-edited rows skipped, replaced rows backed up). Spec:
   `docs/superpowers/specs/2026-10-29-ai-hub-oppadu-sync-design.md`; procedure + flags: `scripts/ai-hub/README.md`. Browser smoke: `packages/server/scripts/ai-hub-e2e-setup.ts` + `packages/client/e2e/ai-hub.smoke.mjs`.
+- **IB교육과정 안내 (`/ib/*`)** — protected viewing of IB Math IA write-up examples (IA작성예시): `/ib` (→ `/ib/ia`), `/ib/ia`
+  (example list), `/ib/ia/:exId` (fullscreen viewer, doc tabs student / annotated / comments). Outside DashboardLayout
+  (`pages/IbGuide/{IbGuideRoute,IbGuideLayout,IaListPage,IaViewerPage}.jsx`; `IbGuideRoute` is guard + data provider, `useIbGuideData()`).
+  **Access rule** (`@mathchois/shared` `ib-guide/access.ts` `canUseIbGuide`, server `requireIbGuide` + `GET /api/ib/access`, client
+  `lib/ibGuide/guard.js`): teachers/admins always; a student only if one of their classrooms has `classrooms.ib_guide_enabled`
+  (teacher switch **"학생에게 IB 안내 열기"** in the `#` panel of ClassroomDetail; the **IB안내** header button), re-checked on every
+  request, never cached. **Data**: PDFs stay on the teacher's PC — `npm run ib:push` renders them to 1600px WebP pages and uploads only
+  pages + `manifest/ia.json` to the Volume bucket `ib-guide` (token routes `PUT /api/ib/media`, `GET /api/ib/media/manifest`; allowed
+  paths `ia/exNN/(student|annotated|comments)/NNN.webp` + `manifest/ia.json`, `shared/src/ib-guide/paths.ts`; manifest last, server checks
+  every listed page is on disk). `GET /api/ib/ia` lists examples from the manifest; `GET /api/ib/ia/:exId/:doc/pages/:n` is the **only**
+  way a page leaves the Volume: it composites a per-user diagonal watermark (name · email · Seoul date, `services/ibWatermark.service.ts`,
+  bundled font `packages/server/assets/fonts/Pretendard-Regular.otf`, tile LRU, max 4 concurrent composites) and returns
+  `private, no-store` WebP; any failure between reading the page and finishing the composite is a 500, never an unwatermarked image.
+  The viewer (`components/ibGuide/ProtectedPage.jsx`, `lib/ibGuide/pageFetch.js`) fetches with `api.blob` and draws on `<canvas>` via
+  `createImageBitmap` — no `<img>`, object URL or cache; no download/print (print CSS + Ctrl/⌘+P·S blocked). Spec:
+  `docs/superpowers/specs/2026-11-10-ib-guide-ia-examples-design.md`; procedure: `scripts/ib-guide/README.md`. Smokes:
+  `packages/server/scripts/ib-guide-e2e-setup.ts`, `ib-guide-api-smoke.ts`, `packages/client/e2e/ib-guide.smoke.mjs`.
 - Server handlers: notes ①②④ → `routes/notes.ts`; comments ③⑤ → `routes/comments.ts`.
   DB logic concentrated in `services/note.service.ts`.
 - Socket handlers: `socket/handlers/notes.ts` (①②), `comments.ts` (③), `assignments.ts` (④⑤).
@@ -190,7 +213,7 @@ Tables: `profiles`, `allowed_teachers` (teacher allowlist), `classrooms`, `class
 `whiteboard_groups`/`whiteboard_group_members` (shared boards),
 `posts`/`post_files`/`post_classrooms` (board), `assignments`/`assignment_pages` (also `pdfUrl`/`pdfPage`)/
 `assignment_submissions`/`assignment_submission_files`, `videos`/`classroom_videos`/`video_comments`/
-`video_subtitles` (video library), `ai_motion_prompts`/`ai_slide_prompts` (AI활용 hub prompts; `classrooms.ai_hub_enabled`), `units` (classroom units; `chapters.unit_id`, `classroom_videos.unit_id`). Migrations via Drizzle Kit;
+`video_subtitles` (video library), `ai_motion_prompts`/`ai_slide_prompts` (AI활용 hub prompts; `classrooms.ai_hub_enabled`), `classrooms.ib_guide_enabled` (IB guide switch, no IB tables — material lives in the `ib-guide` bucket), `units` (classroom units; `chapters.unit_id`, `classroom_videos.unit_id`). Migrations via Drizzle Kit;
 additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures the
 `pages.html_url` column).
 `classrooms.color` — one of six named colors (coral/mustard/sage/sky/lavender/rose); backfilled at boot by
@@ -232,7 +255,10 @@ additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures th
   `hooks/useScribbleErase.js` (S-Pen barrel button, scribble-to-erase, palm rejection).
 - File storage uses `VOLUME_PATH`; buckets: `chapter-pages`, `chapter-pdfs` (PDF only, 100MB, teacher-only; one file shared by
   all of its pages), `chapter-tools` (HTML only),
-  `visualizations` (HTML only), `whiteboard-files` (raster images ≤ 2MB, students allowed), `ai-hub` (AI활용 hub material — written only through the `AI_MEDIA_UPLOAD_TOKEN` routes, never `/api/files/upload`; read via `/api/files/ai-hub/*` for motion/slide media + manifests only; brand files only via `/api/ai/brand/site/*`), `videos` (teacher-only, uploaded through the streaming route
+  `visualizations` (HTML only), `whiteboard-files` (raster images ≤ 2MB, students allowed), `ai-hub` (AI활용 hub material — written only through the `AI_MEDIA_UPLOAD_TOKEN` routes, never `/api/files/upload`; read via `/api/files/ai-hub/*` for motion/slide media + manifests only; brand files only via `/api/ai/brand/site/*`), `ib-guide` (IB IA example pages + `manifest/ia.json`, **stored unwatermarked** — so nothing may
+  ever serve from it except the watermarking route `GET /api/ib/ia/:exId/:doc/pages/:n`; closed to `/api/files/*` (404 on read, 403 on
+  upload/delete) and to every generic `storage.service` function (`ibGuideRelPath`, `urlToStoragePath` → null); written only through the
+  `IB_MEDIA_UPLOAD_TOKEN` routes), `videos` (teacher-only, uploaded through the streaming route
   `POST /api/videos/upload`, not `/api/files/upload` which buffers whole files in memory),
   `submission-files`, post attachments. Served via `/api/files/*` as a stream with HTTP Range
   support (required for `<video>` seeking).

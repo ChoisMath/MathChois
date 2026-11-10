@@ -35,8 +35,9 @@ COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
-# --omit=optional: pdfjs-dist 의 선택 의존성(@napi-rs/canvas 네이티브 바이너리)은 브라우저에서만 쓰는 pdf.js 에 불필요
-RUN npm ci --omit=dev --omit=optional --ignore-scripts
+# sharp(IB 워터마크 합성)는 네이티브 바이너리를 선택 의존성(@img/sharp-*)으로 받으므로 optional 을 빼면 안 된다.
+# 대신 pdfjs-dist 의 선택 의존성 @napi-rs/canvas(브라우저에서만 쓰는 pdf.js 에 불필요한 네이티브 바이너리)는 설치 후 지운다.
+RUN npm ci --omit=dev --ignore-scripts && rm -rf node_modules/@napi-rs
 
 COPY --from=build-server /app/packages/shared/dist packages/shared/dist
 COPY --from=build-server /app/packages/shared/package.json packages/shared/
@@ -44,6 +45,8 @@ COPY --from=build-server /app/packages/server/dist packages/server/dist
 COPY --from=build-server /app/packages/server/package.json packages/server/
 COPY --from=build-client /app/packages/client/dist packages/client/dist
 COPY --from=build-client /app/packages/client/package.json packages/client/
+# IB 워터마크용 한글 폰트(이미지에 시스템 폰트가 없어 번들 폰트를 직접 읽는다)
+COPY packages/server/assets packages/server/assets
 
 # Fix shared package.json for production (source .ts → compiled .js)
 RUN sed -i 's|"./src/index.ts"|"./dist/index.js"|g; s|"./src/\*"|"./dist/\*"|g' packages/shared/package.json
