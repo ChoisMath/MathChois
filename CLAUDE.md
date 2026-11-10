@@ -246,7 +246,7 @@ additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures th
   to the paper plus any ink outside it (`bgFit.contentExtent`), once per mount, like `resolveBgLayout` does for image pages. pdf.js is loaded from its legacy build (the modern
   build needs `Map.prototype.getOrInsertComputed`). With default options pdf.js streams the **whole** PDF on first
   open (first page renders before the download ends; the file is then cached immutable) — HTTP Range only fills gaps
-  ahead of the stream, it is not range-only loading. `GET /api/files/*` is unauthenticated (all buckets), so the
+  ahead of the stream, it is not range-only loading. `GET /api/files/*` is unauthenticated (all buckets except `ib-guide`, always 404 there, and the `ai-hub` brand files), so the
   viewer fetches the PDF by bare URL. Spec: `docs/superpowers/specs/2026-10-30-pdf-pages-design.md`.
 - **Icon-only buttons** use `components/common/IconButton.jsx` (`label` → `title` + `aria-label`, 44px hit area,
   variants ghost/primary/danger/danger-solid). Icon dictionary and keep-text rules:

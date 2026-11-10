@@ -63,7 +63,7 @@ export async function saveTokenUpload(o: TokenUploadOptions): Promise<UploadResu
     if (hash.digest('hex') !== expectedSha) return { ok: false, status: 422, error: 'sha256 mismatch' };
     if (validate) {
       const errors = await validate(rel, tmp);
-      if (errors.length) return { ok: false, status: 422, error: 'invalid manifest' };
+      if (errors.length) return { ok: false, status: 422, error: `invalid manifest: ${errors.slice(0, 3).join('; ')}` };
     }
     await rename(tmp, dest);
     return { ok: true, path: rel, size: bytes };

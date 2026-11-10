@@ -78,10 +78,10 @@ describe('saveTokenUpload', () => {
     const buf = Buffer.from('new');
     const r = await saveTokenUpload({
       root, rel: 'm/ia.json', stream: Readable.from([buf]), expectedSha: sha(buf), maxBytes: 1000, isAllowed: allowAll,
-      validate: async () => ['bad'],
+      validate: async () => ['bad one', 'bad two', 'bad three', 'bad four'],
     });
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.status).toBe(422);
+    // 이유를 앞의 3개까지 붙여 올리는 쪽(ib:push·ai:push)이 422 의 원인을 볼 수 있게 한다.
+    expect(r).toEqual({ ok: false, status: 422, error: 'invalid manifest: bad one; bad two; bad three' });
     expect(await readFile(path.join(root, 'm/ia.json'), 'utf8')).toBe('old');
     expect((await allFiles(root)).filter((f) => f.endsWith('.part'))).toEqual([]);
   });

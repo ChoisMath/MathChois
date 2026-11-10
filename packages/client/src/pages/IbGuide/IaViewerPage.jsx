@@ -197,7 +197,10 @@ function IaViewer({ example, examples }) {
   // ── 인쇄·저장 단축키 막기(화면에 있는 동안만) ──
   useEffect(() => {
     const onKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && ['p', 's'].includes(e.key.toLowerCase())) e.preventDefault();
+      if (!(e.ctrlKey || e.metaKey)) return;
+      // 한글 입력 상태에서는 e.key 가 ㅔ·ㄴ 으로 오므로 물리 키(e.code)도 본다.
+      const key = (e.key ?? '').toLowerCase();
+      if (e.code === 'KeyP' || e.code === 'KeyS' || key === 'p' || key === 's') e.preventDefault();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);

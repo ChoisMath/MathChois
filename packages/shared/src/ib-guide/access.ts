@@ -1,4 +1,4 @@
-// IB교육과정 안내 접근 규칙. 서버 가드·/api/ib-guide/access 와 클라이언트 가드가 같은 함수를 쓴다.
+// IB교육과정 안내 접근 규칙. 서버 가드·/api/ib/access 와 클라이언트 가드가 같은 함수를 쓴다.
 export type IbGuideAccessInput = {
   role: 'teacher' | 'student' | null;
   isAdmin: boolean;

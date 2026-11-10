@@ -30,13 +30,16 @@ function ibGuideDenied(): Error {
 }
 
 /**
- * 경로 traversal 방지: 최종 경로가 Volume 루트 내인지 확인
+ * 경로 traversal 방지: 최종 경로가 Volume 루트 내인지 확인.
+ * ib-guide 버킷 안으로 해석되는 경로도 던진다 — 위 함수들의 앞선 확인(null/false 반환)을 빠뜨린
+ * 새 함수가 생겨도 원본 페이지에 닿지 못하고 닫힌 쪽으로 실패하게 한다.
  */
 function safePath(...segments: string[]): string {
   const resolved = path.resolve(VOLUME_ROOT, ...segments);
   if (!resolved.startsWith(VOLUME_ROOT)) {
     throw new Error('Path traversal detected');
   }
+  if (ibGuideRelPath(...segments) !== null) throw ibGuideDenied();
   return resolved;
 }
 
