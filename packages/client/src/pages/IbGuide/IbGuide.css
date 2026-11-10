@@ -75,6 +75,12 @@
 .ib-guide-card:hover { border-color: var(--ib-pen); box-shadow: 0 2px 10px rgba(28, 43, 74, .08); background: #fcfdff; }
 .ib-guide-card-no { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
 .ib-guide-card-title { font-size: 14px; line-height: 1.5; color: var(--ib-muted); word-break: keep-all; }
+/* 설명은 한 줄만 — 넘치면 말줄임. 그리드 칸이 긴 설명에 밀려 넓어지지 않도록 칸(li)의 최소 너비를 0 으로 둔다. */
+.ib-guide-grid > li { min-width: 0; }
+.ib-guide-card-note {
+  font-size: 13px; line-height: 1.5; color: var(--ib-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .ib-guide-badges { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
 .ib-guide-badge {
   padding: 3px 10px; border-radius: 999px; background: #eef2f8; color: var(--ib-pen);

@@ -16,6 +16,7 @@ export default function IaListPage() {
           <Link to={`/ib/ia/${ex.id}`} className="ib-guide-card">
             <span className="ib-guide-card-no">예시 {ex.no}</span>
             {ex.title && <span className="ib-guide-card-title">{ex.title}</span>}
+            {ex.note && <span className="ib-guide-card-note" title={ex.note}>{ex.note}</span>}
             <span className="ib-guide-badges">
               {IA_DOCS.filter((d) => ex.docs?.[d]).map((d) => (
                 <span key={d} className="ib-guide-badge">{IA_DOC_LABELS[d]} {ex.docs[d].pages}쪽</span>
