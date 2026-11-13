@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { FolderInput, FolderOutput, X } from 'lucide-react';
 import IconButton from '../common/IconButton';
 import { api } from '../../lib/api';
@@ -25,6 +25,7 @@ export default function UnitTransferModal({ mode, classroomId, units, onDone, on
   const [classrooms, setClassrooms] = useState([]);       // 다른 학급 { id, name }
   const [sourceCid, setSourceCid] = useState('');          // 불러오기: 고른 학급
   const [sourceUnits, setSourceUnits] = useState(null);    // 불러오기: 그 학급 단원(null = 아직 안 고름/읽는 중)
+  const latestSourceCid = useRef('');                       // 학급을 빨리 바꿀 때 늦게 온 이전 응답을 버린다
   const [unitIds, setUnitIds] = useState(() => new Set());
   const [targetIds, setTargetIds] = useState(() => new Set());
   const [busy, setBusy] = useState(false);
@@ -45,14 +46,16 @@ export default function UnitTransferModal({ mode, classroomId, units, onDone, on
 
   const handleSourceChange = async (cid) => {
     setSourceCid(cid);
+    latestSourceCid.current = cid;
     setUnitIds(new Set());
     setSourceUnits(null);
     setError('');
     if (!cid) return;
     try {
-      setSourceUnits(await listUnits(cid));
+      const list = await listUnits(cid);
+      if (latestSourceCid.current === cid) setSourceUnits(list);
     } catch (err) {
-      setError(err?.message || '단원 목록을 불러오지 못했습니다.');
+      if (latestSourceCid.current === cid) setError(err?.message || '단원 목록을 불러오지 못했습니다.');
     }
   };
 

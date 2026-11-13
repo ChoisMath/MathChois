@@ -9,7 +9,7 @@
  *   npx tsx --env-file=.env scripts/unit-transfer-e2e-setup.ts > "$SCRATCH/ut.json"   # (packages/server 에서)
  *   npx tsx --env-file=.env scripts/unit-transfer-e2e-setup.ts --cleanup
  */
-import { eq, like, inArray } from 'drizzle-orm';
+import { eq, and, like, inArray } from 'drizzle-orm';
 import { db, pgClient } from '../src/config/database.js';
 import { profiles, classrooms, units, chapters, pages, videos, classroomVideos } from '../src/db/schema.js';
 import { hashPassword } from '../src/services/auth.service.js';
@@ -27,17 +27,18 @@ async function ensureTeacher() {
   return row;
 }
 
-/** 이전 실행이 만든 학급(단원·챕터·배정은 CASCADE)과 영상을 지운다 */
-async function wipe() {
-  await db.delete(classrooms).where(like(classrooms.name, `${PREFIX}%`));
-  const stale = db.select({ id: videos.id }).from(videos).where(like(videos.title, `${PREFIX}%`));
+/** 이전 실행이 만든 학급(단원·챕터·배정은 CASCADE)과 영상을 지운다 — 테스트 교사의 것만(다른 교사 데이터는 건드리지 않음) */
+async function wipe(teacherId: string) {
+  await db.delete(classrooms).where(and(eq(classrooms.teacherId, teacherId), like(classrooms.name, `${PREFIX}%`)));
+  const stale = db.select({ id: videos.id }).from(videos)
+    .where(and(eq(videos.createdBy, teacherId), like(videos.title, `${PREFIX}%`)));
   await db.delete(classroomVideos).where(inArray(classroomVideos.videoId, stale)); // videoId FK 는 RESTRICT
-  await db.delete(videos).where(like(videos.title, `${PREFIX}%`));
+  await db.delete(videos).where(and(eq(videos.createdBy, teacherId), like(videos.title, `${PREFIX}%`)));
 }
 
 async function main() {
   const teacher = await ensureTeacher();
-  await wipe();
+  await wipe(teacher.id);
   if (process.argv[2] === '--cleanup') {
     await pgClient.end();
     return;

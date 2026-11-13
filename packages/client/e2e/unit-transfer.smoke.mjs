@@ -109,6 +109,14 @@ async function runUi() {
   await page.goto(`${BASE}/teacher/classrooms/${cfg.T1}?tab=chapters`);
   await page.getByRole('button', { name: '단원 불러오기' }).click();
   await dialog.waitFor();
+  // 학급을 빨리 바꿨을 때 늦게 도착한 이전 학급의 단원 목록이 보이면 안 된다(S 응답을 늦춘 뒤 S → T2)
+  const slowS = `**/api/classrooms/${cfg.S}/units`;
+  await page.route(slowS, async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
+  await dialog.locator('select').selectOption(cfg.S);
+  await dialog.locator('select').selectOption(cfg.T2);
+  await page.waitForTimeout(2500);
+  check('늦게 온 이전 학급 단원 목록 무시', !(await dialog.getByText('UT E2E 2단원').isVisible()), await dialog.innerText());
+  await page.unroute(slowS);
   await dialog.locator('select').selectOption(cfg.S);
   await dialog.getByText('UT E2E 2단원').waitFor();
   await dialog.getByLabel('전체 선택').check();
