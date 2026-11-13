@@ -4,19 +4,21 @@
  *       미분류 챕터 미분
  *   T1: 비어 있음
  *   T2: 단원 `UT E2E 1단원`(보임), 미분류 챕터 ` 수열 `, V2 배정(메모 `기존`, 필기 없음)
- * 이 스크립트가 만든 학급·영상은 이름이 `UT E2E ` 로 시작해 다음 실행·--cleanup 에서 알아보고 지운다.
+ * 이 스크립트가 만든 학급·영상은 이름이 `UT E2E ` 로 시작해 다음 실행·--cleanup 에서 알아보고 지운다(테스트 교사 것만).
+ * 교사 허용 목록 행은 표식(note=ALLOWED_NOTE)을 달아 넣고, --cleanup 은 그 표식이 있는 행만 지운다.
  *
  *   npx tsx --env-file=.env scripts/unit-transfer-e2e-setup.ts > "$SCRATCH/ut.json"   # (packages/server 에서)
  *   npx tsx --env-file=.env scripts/unit-transfer-e2e-setup.ts --cleanup
  */
 import { eq, and, like, inArray } from 'drizzle-orm';
 import { db, pgClient } from '../src/config/database.js';
-import { profiles, classrooms, units, chapters, pages, videos, classroomVideos } from '../src/db/schema.js';
+import { profiles, allowedTeachers, classrooms, units, chapters, pages, videos, classroomVideos } from '../src/db/schema.js';
 import { hashPassword } from '../src/services/auth.service.js';
 
 const PASSWORD = 'Test1234!';
 const PREFIX = 'UT E2E ';
 const EMAIL = 'ut.teacher@chois.test';
+const ALLOWED_NOTE = `${PREFIX}fixture teacher`;
 
 async function ensureTeacher() {
   const existing = await db.select().from(profiles).where(eq(profiles.email, EMAIL)).limit(1);
@@ -40,9 +42,13 @@ async function main() {
   const teacher = await ensureTeacher();
   await wipe(teacher.id);
   if (process.argv[2] === '--cleanup') {
+    await db.delete(allowedTeachers).where(and(eq(allowedTeachers.email, EMAIL), eq(allowedTeachers.note, ALLOWED_NOTE)));
     await pgClient.end();
     return;
   }
+
+  // 교사 역할은 로그인 때 허용 목록으로 다시 정해진다
+  await db.insert(allowedTeachers).values({ email: EMAIL, note: ALLOWED_NOTE }).onConflictDoNothing({ target: allowedTeachers.email });
 
   const mkClass = async (name: string, code: string) =>
     (await db.insert(classrooms).values({ name: `${PREFIX}${name}`, teacherId: teacher.id, classCode: code }).returning())[0];
