@@ -56,6 +56,7 @@ export default function VideoPlayer({
   const videoRef = useRef(null);
   const containerRef = useRef(null);
   const hideTimerRef = useRef(null);
+  const pressRef = useRef(null);      // 영상 위 누름 { id, x, y, active, hold } — 숨김 타이머도 읽는다(제스처 중 숨기지 않기)
   const flashTimerRef = useRef(null);
   const lastSaveRef = useRef(0);
   const lastReportRef = useRef(0);
@@ -78,6 +79,7 @@ export default function VideoPlayer({
   const inputModeRef = useRef('mouse');
   const [touchMode, setTouchMode] = useState(false);
   const pressWasTouchModeRef = useRef(false); // 이번 누름 전에도 터치 모드였는지 = 가운데 버튼까지 다 보였는지
+  const lastDownTargetRef = useRef(null);      // 마지막으로 포인터를 누른 요소(유령 클릭 판정)
   const [fullscreen, setFullscreen] = useState(false);
   const [pseudoFullscreen, setPseudoFullscreen] = useState(false); // Fullscreen API 없는 환경의 CSS 폴백 상태
   const onPseudoFullscreenChangeRef = useRef(onPseudoFullscreenChange);
@@ -129,6 +131,7 @@ export default function VideoPlayer({
     hideTimerRef.current = setTimeout(() => {
       const v = videoRef.current;
       if (showSettingsRef.current) return; // 설정 창을 연 채로는 숨기지 않는다(닫을 때 다시 센다)
+      if (pressRef.current?.active) return; // 끌기·꾹 누르기 중에는 숨기지 않는다(끝날 때 finishGesture 가 다시 센다)
       if (v && shouldAutoHide({ inputMode, paused: v.paused })) setControlsVisible(false);
     }, inputMode === 'touch' ? TOUCH_HIDE_MS : MOUSE_HIDE_MS);
   }, []);
@@ -141,11 +144,25 @@ export default function VideoPlayer({
   /** 컨테이너 안 어디든 포인터를 누르면 입력 모드를 기억한다(가운데 버튼·재생 바 버튼 포함).
       영상 밖(조작 창 안의 버튼·설정·볼륨 등)을 손가락으로 누르면 숨김 3초를 새로 센다 — 영상 위 탭은 탭 처리가 정한다. */
   const noteInputMode = (e) => {
+    lastDownTargetRef.current = e.target;
     pressWasTouchModeRef.current = inputModeRef.current === 'touch';
     const mode = pointerInputMode(e.pointerType);
     inputModeRef.current = mode;
-    setTouchMode(mode === 'touch');
+    // 마우스로 바뀐 것은 마우스를 움직일 때(onPointerMove) 화면에 반영한다 — 누르는 순간 가운데 버튼이 사라지면
+    // 터치 직후 그 버튼을 마우스로 누른 click 이 버튼 대신 영상에 떨어진다.
+    if (mode === 'touch') setTouchMode(true);
     if (mode === 'touch' && e.target !== videoRef.current) revealControls();
+  };
+
+  /** 유령 클릭 막기: 영상을 탭하면 브라우저가 그 자리에 click 을 하나 더 만드는데, 그 사이 손가락 밑에 나타난
+      가운데 버튼·재생 바 버튼이 그 click 을 받는다. 누른(pointerdown) 요소와 상관없는 요소에 떨어진 click 은 버린다.
+      키보드로 누른 버튼(click.detail === 0)은 그대로 둔다. */
+  const swallowGhostClick = (e) => {
+    const down = lastDownTargetRef.current;
+    if (e.detail === 0 || !down) return;
+    if (down === e.target || down.contains?.(e.target) || e.target.contains?.(down)) return;
+    e.stopPropagation();
+    e.preventDefault();
   };
 
   useEffect(() => () => {
@@ -439,7 +456,6 @@ export default function VideoPlayer({
        하나만), 0초에서 멈춘다. 떼면 그 위치에서 원래 재생 상태로 돌아간다. */
   const SCRUB_EXP = 1.6;
   const REWIND_TICK_MS = 100;
-  const pressRef = useRef(null);      // { id, x, y, active, hold }
   const scrubRef = useRef(null);      // { startTime, width, wasPlaying, seeker }
   const levelRef = useRef(null);      // { kind: 'volume'|'brightness', start, height, value }
   const holdTimerRef = useRef(null);  // 꾹 누르기 시작 대기 타이머
@@ -758,6 +774,7 @@ export default function VideoPlayer({
       }}
       tabIndex={0}
       onPointerDownCapture={noteInputMode}
+      onClickCapture={swallowGhostClick}
       // 마우스만: 터치 뒤 브라우저가 보내는 호환 mouse 이벤트로 방금 닫은 조작 창이 다시 열리지 않게
       onPointerMove={(e) => { if (e.pointerType === 'mouse') { inputModeRef.current = 'mouse'; setTouchMode(false); revealControls(); } }}
       onPointerLeave={(e) => { if (e.pointerType === 'mouse' && playing) setControlsVisible(false); }}
@@ -784,10 +801,6 @@ export default function VideoPlayer({
         onPointerMove={onVideoPointerMove}
         onPointerUp={onVideoPointerUp}
         onPointerCancel={finishGesture}
-        // 터치 뒤 브라우저가 만드는 click·호환 mouse 이벤트를 막는다 — 탭으로 막 연 가운데 재생 버튼이 손가락 밑에 있어
-        // 그 click 을 받아 재생/정지가 바뀌는 일(유령 클릭)과 mousemove 로 방금 닫은 창이 다시 열리는 일을 막는다.
-        // 영상 위 탭·제스처는 모두 포인터 핸들러가 처리하므로 click 은 쓰지 않는다. (touchend 는 passive 가 아니다)
-        onTouchEnd={(e) => { if (e.cancelable) e.preventDefault(); }}
         onLoadedMetadata={onLoadedMetadata}
         onTimeUpdate={onTimeUpdate}
         onProgress={onBuffered}
@@ -820,7 +833,8 @@ export default function VideoPlayer({
       )}
       {/* 꾹 누르기: 화면을 가리지 않게 위쪽 가운데에 알약만 */}
       {(gesture?.kind === 'fast' || gesture?.kind === 'rewind') && (
-        <div className="pointer-events-none absolute inset-x-0 top-4 flex justify-center">
+        <div className={`pointer-events-none absolute inset-x-0 flex justify-center ${
+          ownPseudoFullscreen ? 'top-[calc(env(safe-area-inset-top,0px)+1rem)]' : 'top-4'}`}>
           <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/70 text-white text-xl font-semibold tabular-nums">
             {gesture.kind === 'fast'
               ? <><FastForward className="h-6 w-6 fill-current" />{HOLD_RATE}배속</>
@@ -854,18 +868,19 @@ export default function VideoPlayer({
       {/* 터치 조작 창 가운데: 뒤로 · 재생/일시정지 · 앞으로 (아래 재생 바와 함께 열리고 닫힌다) */}
       {touchMode && controlsVisible && !gesture && !error && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-8 text-white">
-          <div role="group" aria-label="재생 조작" className="flex items-center gap-8">
-            <button type="button" onClick={(e) => onCenterButton(e, 'back')}
+          {/* 아래 재생 바에 같은 버튼이 있으므로 화면 읽기·키보드 탭 순서에서는 뺀다(터치 전용 바로가기) */}
+          <div role="group" aria-label="재생 조작" aria-hidden="true" className="flex items-center gap-8">
+            <button type="button" tabIndex={-1} onClick={(e) => onCenterButton(e, 'back')}
               className="pointer-events-auto h-14 w-14 rounded-full bg-black/50 flex items-center justify-center gap-0.5"
               aria-label={`${settings.seekStep}초 뒤로`}>
               <SkipBack className="h-5 w-5" /><span className="text-xs">{settings.seekStep}</span>
             </button>
-            <button type="button" onClick={(e) => onCenterButton(e, 'play')}
+            <button type="button" tabIndex={-1} onClick={(e) => onCenterButton(e, 'play')}
               className="pointer-events-auto h-20 w-20 rounded-full bg-black/50 flex items-center justify-center"
               aria-label={playing ? '일시정지' : '재생'}>
               {playing ? <Pause className="h-9 w-9 fill-current" /> : <Play className="h-9 w-9 fill-current ml-1" />}
             </button>
-            <button type="button" onClick={(e) => onCenterButton(e, 'forward')}
+            <button type="button" tabIndex={-1} onClick={(e) => onCenterButton(e, 'forward')}
               className="pointer-events-auto h-14 w-14 rounded-full bg-black/50 flex items-center justify-center gap-0.5"
               aria-label={`${settings.seekStep}초 앞으로`}>
               <span className="text-xs">{settings.seekStep}</span><SkipForward className="h-5 w-5" />
@@ -1035,8 +1050,9 @@ export default function VideoPlayer({
         )}
       </div>
 
-      {title && !playing && controlsVisible && !gesture && (
-        <div className="pointer-events-none absolute top-0 inset-x-0 px-3 py-2 bg-gradient-to-b from-black/70 to-transparent text-white text-sm font-medium truncate">
+      {title && !playing && controlsVisible && !gesture && !(flash && touchMode) && (
+        <div className={`pointer-events-none absolute top-0 inset-x-0 px-3 pb-2 bg-gradient-to-b from-black/70 to-transparent text-white text-sm font-medium truncate ${
+          ownPseudoFullscreen ? 'pt-[calc(env(safe-area-inset-top,0px)+0.5rem)]' : 'pt-2'}`}>
           {title}
         </div>
       )}
