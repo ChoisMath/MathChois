@@ -13,4 +13,5 @@ export * from './whiteboard/merge.js';
 export * from './classroom/color.js';
 export * from './subtitles/subtitles.js';
 export * from './units/units.js';
+export * from './units/copyPlan.js';
 export * from './chapter/title.js';

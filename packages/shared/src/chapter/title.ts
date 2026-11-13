@@ -3,10 +3,13 @@
  * 서버(가져오기 거절)·클라이언트(목록 표시)가 같은 규칙을 쓴다.
  */
 
-/** 비교용 키: 유니코드 NFC, 앞뒤 공백 제거, 안쪽 연속 공백은 하나로. 대소문자는 구분한다. */
-export function chapterTitleKey(title: string | null | undefined): string {
+/** 비교용 키: 유니코드 NFC, 앞뒤 공백 제거, 안쪽 연속 공백은 하나로. 대소문자는 구분한다. 단원 이름에도 쓴다. */
+export function titleKey(title: string | null | undefined): string {
   return (title ?? '').normalize('NFC').trim().replace(/\s+/g, ' ');
 }
+
+/** 챕터 이름 비교 키 — titleKey 와 같다 */
+export const chapterTitleKey = titleKey;
 
 /** chapters 중에 title 과 같은 이름(chapterTitleKey 기준)이 있는가 */
 export function hasSameChapterTitle(

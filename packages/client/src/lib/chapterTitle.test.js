@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chapterTitleKey, hasSameChapterTitle } from '@mathchois/shared';
+import { chapterTitleKey, hasSameChapterTitle, titleKey } from '@mathchois/shared';
 
 describe('chapterTitleKey', () => {
   it('앞뒤 공백을 빼고 안쪽 연속 공백은 하나로', () => {
@@ -10,6 +10,9 @@ describe('chapterTitleKey', () => {
   });
   it('대소문자는 구분한다', () => {
     expect(chapterTitleKey('Ch1')).not.toBe(chapterTitleKey('ch1'));
+  });
+  it('titleKey 와 같은 규칙', () => {
+    expect(titleKey('  1단원   함수 ')).toBe(chapterTitleKey('  1단원   함수 '));
   });
   it('null/undefined 는 빈 문자열', () => {
     expect(chapterTitleKey(null)).toBe('');
