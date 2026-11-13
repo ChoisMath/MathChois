@@ -71,6 +71,8 @@ export default function VideoPlayer({
   const [duration, setDuration] = useState(0);
   const [buffered, setBuffered] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  const showSettingsRef = useRef(false); // 숨김 타이머가 읽는 미러
+  useEffect(() => { showSettingsRef.current = showSettings; }, [showSettings]);
   const [controlsVisible, setControlsVisible] = useState(true);
   // 마지막 입력이 손가락·펜이면 'touch' — 가운데 버튼 묶음을 보이고, 정지 중에도 조작 창을 숨긴다
   const inputModeRef = useRef('mouse');
@@ -126,6 +128,7 @@ export default function VideoPlayer({
     const inputMode = inputModeRef.current;
     hideTimerRef.current = setTimeout(() => {
       const v = videoRef.current;
+      if (showSettingsRef.current) return; // 설정 창을 연 채로는 숨기지 않는다(닫을 때 다시 센다)
       if (v && shouldAutoHide({ inputMode, paused: v.paused })) setControlsVisible(false);
     }, inputMode === 'touch' ? TOUCH_HIDE_MS : MOUSE_HIDE_MS);
   }, []);
@@ -135,12 +138,14 @@ export default function VideoPlayer({
     setControlsVisible(false);
   }, []);
 
-  /** 컨테이너 안 어디든 포인터를 누르면 입력 모드를 기억한다(가운데 버튼·재생 바 버튼 포함) */
+  /** 컨테이너 안 어디든 포인터를 누르면 입력 모드를 기억한다(가운데 버튼·재생 바 버튼 포함).
+      영상 밖(조작 창 안의 버튼·설정·볼륨 등)을 손가락으로 누르면 숨김 3초를 새로 센다 — 영상 위 탭은 탭 처리가 정한다. */
   const noteInputMode = (e) => {
     pressWasTouchModeRef.current = inputModeRef.current === 'touch';
     const mode = pointerInputMode(e.pointerType);
     inputModeRef.current = mode;
     setTouchMode(mode === 'touch');
+    if (mode === 'touch' && e.target !== videoRef.current) revealControls();
   };
 
   useEffect(() => () => {
@@ -670,6 +675,20 @@ export default function VideoPlayer({
     }
   };
 
+  /** 가운데 버튼: 탭으로 막 연 버튼에 두 번째 탭이 떨어지면 버튼 대신 두 번 탭 이동(그쪽 절반)으로 처리한다 */
+  const onCenterButton = (e, action) => {
+    const v = videoRef.current;
+    const step = settingsRef.current.seekStep;
+    if (v && Date.now() - lastTapRef.current < DOUBLE_TAP_MS) {
+      lastTapRef.current = 0;
+      const r = v.getBoundingClientRect();
+      seekBy(e.clientX - r.left > r.width / 2 ? step : -step);
+      return;
+    }
+    if (action === 'play') togglePlay();
+    else seekBy(action === 'forward' ? step : -step);
+  };
+
   /* ── <video> 이벤트 ── */
   const onLoadedMetadata = () => {
     const v = videoRef.current;
@@ -836,17 +855,17 @@ export default function VideoPlayer({
       {touchMode && controlsVisible && !gesture && !error && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-8 text-white">
           <div role="group" aria-label="재생 조작" className="flex items-center gap-8">
-            <button type="button" onClick={() => seekBy(-settings.seekStep)}
+            <button type="button" onClick={(e) => onCenterButton(e, 'back')}
               className="pointer-events-auto h-14 w-14 rounded-full bg-black/50 flex items-center justify-center gap-0.5"
               aria-label={`${settings.seekStep}초 뒤로`}>
               <SkipBack className="h-5 w-5" /><span className="text-xs">{settings.seekStep}</span>
             </button>
-            <button type="button" onClick={togglePlay}
+            <button type="button" onClick={(e) => onCenterButton(e, 'play')}
               className="pointer-events-auto h-20 w-20 rounded-full bg-black/50 flex items-center justify-center"
               aria-label={playing ? '일시정지' : '재생'}>
               {playing ? <Pause className="h-9 w-9 fill-current" /> : <Play className="h-9 w-9 fill-current ml-1" />}
             </button>
-            <button type="button" onClick={() => seekBy(settings.seekStep)}
+            <button type="button" onClick={(e) => onCenterButton(e, 'forward')}
               className="pointer-events-auto h-14 w-14 rounded-full bg-black/50 flex items-center justify-center gap-0.5"
               aria-label={`${settings.seekStep}초 앞으로`}>
               <span className="text-xs">{settings.seekStep}</span><SkipForward className="h-5 w-5" />

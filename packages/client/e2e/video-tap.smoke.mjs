@@ -87,7 +87,7 @@ try {
   // 3. 가운데 일시정지 → 정지, 정지 중에도 3초 뒤 닫힘
   await sleep(400);
   await tap(center);
-  await sleep(150);
+  await sleep(400); // 두 번 탭 판정(350ms)이 지난 뒤 버튼을 누른다 — 그 안이면 두 번 탭 이동으로 처리된다
   const pauseBtn = centerGroup.locator('button[aria-label="일시정지"]');
   const pb = await pauseBtn.boundingBox();
   await tap({ x: pb.x + pb.width / 2, y: pb.y + pb.height / 2 });

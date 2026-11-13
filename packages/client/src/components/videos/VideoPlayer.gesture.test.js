@@ -106,6 +106,35 @@ describe('VideoPlayer drag gestures (no long press)', () => {
     m.unmount();
   });
 
+  it('touching a control inside the overlay (settings) restarts the 3s hide timer', () => {
+    const m = mount();
+    const group = () => m.host.querySelector('[role="group"][aria-label="재생 조작"]');
+    pointer(m.video, 'pointerdown', { x: 100, y: 100 });
+    pointer(m.video, 'pointerup', { x: 100, y: 100 });
+    expect(group()).not.toBeNull();
+    act(() => { vi.advanceTimersByTime(2000); });
+    const settings = m.host.querySelector('button[aria-label="설정"]');
+    pointer(settings, 'pointerdown', { x: 380, y: 190 });
+    act(() => { settings.click(); });
+    act(() => { vi.advanceTimersByTime(2000); }); // 처음 탭에서 4초 — 설정을 누른 때부터는 2초
+    expect(group()).not.toBeNull();
+    m.unmount();
+  });
+
+  it('a double tap whose second tap lands on the center play button still seeks (no play toggle)', () => {
+    const m = mount();
+    m.video.currentTime = 50;
+    pointer(m.video, 'pointerdown', { x: 300, y: 100 });
+    pointer(m.video, 'pointerup', { x: 300, y: 100 });
+    act(() => { vi.advanceTimersByTime(150); });
+    const playBtn = m.host.querySelector('[role="group"][aria-label="재생 조작"] button[aria-label="재생"]');
+    pointer(playBtn, 'pointerdown', { x: 300, y: 100 });
+    act(() => { playBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 300, clientY: 100 })); });
+    expect(play).not.toHaveBeenCalled();
+    expect(m.video.currentTime).toBeCloseTo(60, 0); // 오른쪽 절반 → 앞으로 10초
+    m.unmount();
+  });
+
   it('a mouse drag does not scrub', () => {
     const m = mount();
     pointer(m.video, 'pointerdown', { x: 100, y: 100, pointerType: 'mouse' });
