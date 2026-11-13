@@ -8,6 +8,7 @@ import {
   SUBTITLE_SIZES, pickSubtitleTrack,
   pickFullscreenMethod, isIphoneUserAgent, fullscreenElementOf,
   HOLD_MS, HOLD_RATE, holdKind, rewindTarget,
+  touchTapAction, shouldAutoHide, pointerInputMode, DOUBLE_TAP_MS, TOUCH_HIDE_MS, MOUSE_HIDE_MS,
 } from './videoPlayer.js';
 
 function fakeStorage() {
@@ -296,5 +297,32 @@ describe('scrub seeker (one seek in flight at a time)', () => {
     expect(v.seeks).toEqual([10, 25]);
     s.finish(30); // 두 번 호출해도 안전
     expect(v.seeks).toEqual([10, 25, 30]);
+  });
+});
+
+describe('touch tap controls', () => {
+  it('한 번 탭: 창이 닫혀 있으면 열고, 열려 있으면 닫는다', () => {
+    expect(touchTapAction({ now: 1000, lastTapAt: 0, controlsVisible: false })).toBe('show');
+    expect(touchTapAction({ now: 1000, lastTapAt: 0, controlsVisible: true })).toBe('hide');
+  });
+  it('350ms 안의 두 번째 탭은 이동, 350ms 이상이면 다시 열기/닫기', () => {
+    expect(touchTapAction({ now: 1300, lastTapAt: 1000, controlsVisible: true })).toBe('seek');
+    expect(touchTapAction({ now: 1349, lastTapAt: 1000, controlsVisible: false })).toBe('seek');
+    expect(touchTapAction({ now: 1350, lastTapAt: 1000, controlsVisible: true })).toBe('hide');
+    expect(touchTapAction({ now: 1350, lastTapAt: 1000, controlsVisible: false })).toBe('show');
+    expect(DOUBLE_TAP_MS).toBe(350);
+  });
+  it('자동 숨김: 터치는 정지 중에도, 마우스는 재생 중일 때만', () => {
+    expect(shouldAutoHide({ inputMode: 'touch', paused: true })).toBe(true);
+    expect(shouldAutoHide({ inputMode: 'touch', paused: false })).toBe(true);
+    expect(shouldAutoHide({ inputMode: 'mouse', paused: true })).toBe(false);
+    expect(shouldAutoHide({ inputMode: 'mouse', paused: false })).toBe(true);
+    expect([TOUCH_HIDE_MS, MOUSE_HIDE_MS]).toEqual([3000, 2500]);
+  });
+  it('입력 종류: 마우스만 mouse, 손가락·펜·알 수 없음은 touch', () => {
+    expect(pointerInputMode('mouse')).toBe('mouse');
+    expect(pointerInputMode('touch')).toBe('touch');
+    expect(pointerInputMode('pen')).toBe('touch');
+    expect(pointerInputMode('')).toBe('touch');
   });
 });
