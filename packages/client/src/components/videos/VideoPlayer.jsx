@@ -75,6 +75,7 @@ export default function VideoPlayer({
   // 마지막 입력이 손가락·펜이면 'touch' — 가운데 버튼 묶음을 보이고, 정지 중에도 조작 창을 숨긴다
   const inputModeRef = useRef('mouse');
   const [touchMode, setTouchMode] = useState(false);
+  const pressWasTouchModeRef = useRef(false); // 이번 누름 전에도 터치 모드였는지 = 가운데 버튼까지 다 보였는지
   const [fullscreen, setFullscreen] = useState(false);
   const [pseudoFullscreen, setPseudoFullscreen] = useState(false); // Fullscreen API 없는 환경의 CSS 폴백 상태
   const onPseudoFullscreenChangeRef = useRef(onPseudoFullscreenChange);
@@ -136,6 +137,7 @@ export default function VideoPlayer({
 
   /** 컨테이너 안 어디든 포인터를 누르면 입력 모드를 기억한다(가운데 버튼·재생 바 버튼 포함) */
   const noteInputMode = (e) => {
+    pressWasTouchModeRef.current = inputModeRef.current === 'touch';
     const mode = pointerInputMode(e.pointerType);
     inputModeRef.current = mode;
     setTouchMode(mode === 'touch');
@@ -644,9 +646,11 @@ export default function VideoPlayer({
     const forward = e.clientX - rect.left > rect.width / 2;
     const now = Date.now();
     const isMouse = e.pointerType === 'mouse';
+    // 마우스로 보던 재생 바만 떠 있던 상태의 첫 터치는 '닫기'가 아니라 가운데 버튼까지 '열기'
+    const touchControlsShown = controlsVisible && pressWasTouchModeRef.current;
 
     if (isMouse ? now - lastTapRef.current < DOUBLE_TAP_MS
-      : touchTapAction({ now, lastTapAt: lastTapRef.current, controlsVisible }) === 'seek') {
+      : touchTapAction({ now, lastTapAt: lastTapRef.current, controlsVisible: touchControlsShown }) === 'seek') {
       // 두 번째 탭 → 이동
       lastTapRef.current = 0;
       if (isMouse && pausedByClickRef.current) v.play().catch(() => {});
@@ -659,7 +663,7 @@ export default function VideoPlayer({
     if (isMouse) {
       pausedByClickRef.current = !v.paused; // 이 클릭이 정지시키는지 기억
       togglePlay();
-    } else if (controlsVisible) {
+    } else if (touchControlsShown) {
       hideControls();
     } else {
       revealControls();

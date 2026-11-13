@@ -73,14 +73,36 @@ describe('VideoPlayer drag gestures (no long press)', () => {
     m.unmount();
   });
 
-  it('a touch without movement is still a tap that toggles playback', () => {
+  it('a touch without movement is a tap: it opens the touch controls and leaves playback alone', () => {
     const m = mount();
     pointer(m.video, 'pointerdown', { x: 100, y: 100 });
     pointer(m.video, 'pointermove', { x: 103, y: 102 }); // 손떨림 수준
     pointer(m.video, 'pointerup', { x: 103, y: 102 });
     expect(m.host.textContent).not.toContain('좌우로 드래그하여 이동');
-    act(() => { vi.advanceTimersByTime(400); }); // 더블탭 대기 뒤 단일 탭 확정
-    expect(play).toHaveBeenCalledTimes(1);
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(play).not.toHaveBeenCalled();
+    // 처음 터치(재생 바만 보이던 상태)는 닫지 않고 가운데 버튼까지 연다
+    expect(m.host.querySelector('[role="group"][aria-label="재생 조작"]')).not.toBeNull();
+    m.unmount();
+  });
+
+  it('a second single tap closes the touch controls, and they also close by themselves after 3s', () => {
+    const m = mount();
+    const group = () => m.host.querySelector('[role="group"][aria-label="재생 조작"]');
+    pointer(m.video, 'pointerdown', { x: 100, y: 100 });
+    pointer(m.video, 'pointerup', { x: 100, y: 100 });
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(group()).not.toBeNull();
+    pointer(m.video, 'pointerdown', { x: 100, y: 100 });
+    pointer(m.video, 'pointerup', { x: 100, y: 100 });
+    expect(group()).toBeNull();
+    act(() => { vi.advanceTimersByTime(400); });
+    pointer(m.video, 'pointerdown', { x: 100, y: 100 });
+    pointer(m.video, 'pointerup', { x: 100, y: 100 });
+    expect(group()).not.toBeNull();
+    act(() => { vi.advanceTimersByTime(3100); }); // 정지 상태여도 3초 뒤 숨김
+    expect(group()).toBeNull();
+    expect(play).not.toHaveBeenCalled();
     m.unmount();
   });
 
@@ -174,7 +196,8 @@ describe('VideoPlayer press-and-hold', () => {
     pointer(m.video, 'pointerup', { x: 300, y: 100 });
     act(() => { vi.advanceTimersByTime(600); });
     expect(m.host.textContent).not.toContain('2배속');
-    expect(play).toHaveBeenCalledTimes(1); // 단일 탭 → 재생
+    expect(play).not.toHaveBeenCalled(); // 단일 탭 → 조작 창만(재생 상태는 그대로)
+    expect(m.host.querySelector('[role="group"][aria-label="재생 조작"]')).not.toBeNull();
     m.unmount();
   });
 
