@@ -237,15 +237,22 @@ export default function ClassroomVideoTab({ classroomId, isTeacher, units, unitP
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [fetchList]);
 
-  /* 교사: 학급 챕터 목록(필기 챕터 선택지). 실패해도 영상 목록은 표시 — 보조 정보 */
-  useEffect(() => {
-    if (!isTeacher) return undefined;
-    let alive = true;
+  /* 교사: 학급 챕터 목록(필기 챕터 선택지). 실패해도 영상 목록은 표시 — 보조 정보.
+     탭은 학급마다 key 로 다시 그려지므로 다른 학급의 응답이 늦게 도착할 일은 없다. */
+  const reloadChapters = useCallback(() => {
+    if (!isTeacher) return;
     api.get(`/api/classrooms/${classroomId}/chapters`)
-      .then((list) => { if (alive) setChapters([...(list || [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))); })
+      .then((list) => setChapters([...(list || [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))))
       .catch(() => { /* 유지 */ });
-    return () => { alive = false; };
   }, [classroomId, isTeacher]);
+
+  useEffect(() => { reloadChapters(); }, [reloadChapters]);
+
+  /* 단원 불러오기 뒤: 영상 목록과 필기 챕터 선택지를 함께 다시 읽는다 */
+  const reloadAfterImport = () => {
+    fetchList();
+    reloadChapters();
+  };
 
   const openWatch = (cv) => {
     navigate(`/${isTeacher ? 'teacher' : 'student'}/classrooms/${classroomId}/videos/${cv.id}`);
@@ -398,6 +405,7 @@ export default function ClassroomVideoTab({ classroomId, isTeacher, units, unitP
           onUnitParamChange={onUnitParamChange}
           coverOfItem={videoCover}
           onUnitsChanged={onUnitsChanged}
+          onItemsChanged={reloadAfterImport}
           renderItems={renderVideos}
           toolbar={renderToolbar}
         />

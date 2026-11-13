@@ -92,8 +92,74 @@ async function runApi() {
   check('없는 단원 → 404', res.status() === 404, res.status());
 }
 
+async function runUi() {
+  const api = await apiClient();
+  const errors = [];
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const login = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email: cfg.email, password: cfg.password } });
+  if (!login.ok()) throw new Error(`login failed: ${login.status()}`);
+  const page = await ctx.newPage(); // 탭은 refresh 쿠키로 세션을 복원한다
+  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('dialog', (d) => { errors.push(`dialog: ${d.message()}`); d.dismiss(); });
+  const shot = (name) => (shotDir ? page.screenshot({ path: path.join(shotDir, `${name}.png`) }) : Promise.resolve());
+  const dialog = page.getByRole('dialog');
+
+  // 1. T1 챕터 탭에서 S 의 두 단원 불러오기
+  await page.goto(`${BASE}/teacher/classrooms/${cfg.T1}?tab=chapters`);
+  await page.getByRole('button', { name: '단원 불러오기' }).click();
+  await dialog.waitFor();
+  await dialog.locator('select').selectOption(cfg.S);
+  await dialog.getByText('UT E2E 2단원').waitFor();
+  await dialog.getByLabel('전체 선택').check();
+  await dialog.getByRole('button', { name: '불러오기', exact: true }).click();
+  const importLine = dialog.getByText(/단원 새로 2/);
+  await importLine.waitFor();
+  const importText = await importLine.innerText();
+  check('불러오기 결과 줄', importText.includes('단원 새로 2') && importText.includes('필기 챕터 연결 못 함 1'), importText);
+  await page.mouse.click(5, 5);
+  await page.waitForTimeout(300);
+  check('배경 클릭으로 안 닫힘', await dialog.isVisible());
+  await shot('1-import-result');
+  await dialog.getByRole('button', { name: '닫기', exact: true }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  const cards = page.locator('button[aria-label*=" · 챕터 "]');
+  await cards.first().waitFor();
+  check('T1 단원 카드 2장', (await cards.count()) === 2, await cards.allInnerTexts());
+
+  // 2. S 영상 탭에서 1단원만 T2 로 내보내기
+  await page.goto(`${BASE}/teacher/classrooms/${cfg.S}?tab=videos`);
+  await page.getByRole('button', { name: '단원 내보내기' }).click();
+  await dialog.waitFor();
+  await dialog.getByLabel('UT E2E 1단원').check();
+  await dialog.getByLabel('UT E2E 겹친반').check();
+  await dialog.getByRole('button', { name: '내보내기', exact: true }).click();
+  const exportLine = dialog.getByText(/UT E2E 겹친반:/);
+  await exportLine.waitFor();
+  const exportText = await exportLine.innerText();
+  check('내보내기 결과 합침 1', exportText.includes('합침 1'), exportText);
+  await shot('2-export-result');
+  await dialog.getByRole('button', { name: '닫기', exact: true }).click();
+
+  // 3. T1 1단원 영상 카드의 필기 챕터 선택지 = 그 단원 챕터만
+  const t1Units = await api.get(`/api/classrooms/${cfg.T1}/units`);
+  const u1 = t1Units.find((u) => u.title === 'UT E2E 1단원');
+  await page.goto(`${BASE}/teacher/classrooms/${cfg.T1}?tab=videos&unit=${u1.id}`);
+  const card = page.locator('div', { has: page.getByText('UT E2E V1', { exact: true }) })
+    .filter({ has: page.locator('select[title^="학생이 2분할"]') }).last();
+  const select = card.locator('select[title^="학생이 2분할"]');
+  await select.waitFor();
+  await page.waitForFunction((el) => el.options.length > 1, await select.elementHandle()); // 챕터 목록은 따로 읽는다
+  const options = await select.locator('option').allInnerTexts();
+  check('V1 필기 챕터 선택지 = 연결 없음, 수열, 급수', same(options, ['연결 없음', '수열', '급수']), options);
+  await shot('3-dropdown');
+
+  check('콘솔 오류 없음', errors.length === 0, errors);
+}
+
 try {
   if (mode === '--api') await runApi();
+  else if (mode === '--ui') await runUi();
   else throw new Error(`unknown mode ${mode}`);
 } catch (err) {
   console.error(err);

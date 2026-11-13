@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { FolderPlus, Library } from 'lucide-react';
+import { FolderInput, FolderOutput, FolderPlus, Library } from 'lucide-react';
 import UnitGrid from './UnitGrid';
 import UnitHeader from './UnitHeader';
 import UnitFormModal from './UnitFormModal';
 import UnitDeleteModal from './UnitDeleteModal';
+import UnitTransferModal from './UnitTransferModal';
 import IconButton from '../common/IconButton';
 import { createUnit, updateUnit, deleteUnit, reorderUnits } from '../../lib/units';
 import { resolveUnitView, applyUnitOrder, firstCover } from '../../lib/unitBrowser';
@@ -33,17 +34,19 @@ const NOT_FOUND = '단원을 찾을 수 없습니다';
  * @param {(next: string|null) => void} props.onUnitParamChange 단원 id | 'none' | null(단원 목록)
  * @param {(item: object) => string|null} [props.coverOfItem] 단원 카드 그림
  * @param {() => void} props.onUnitsChanged 단원 목록을 다시 읽게 한다
+ * @param {() => void} [props.onItemsChanged] 이 탭의 항목을 다시 읽게 한다(단원 불러오기 뒤)
  * @param {(items: object[], ctx: object) => import('react').ReactNode} props.renderItems
  * @param {(ctx: object) => import('react').ReactNode} [props.toolbar] 보일 것이 없으면 null 을 돌려준다
  */
 export default function UnitBrowser({
   classroomId, tab, units, items, isTeacher, unitParam, onUnitParamChange,
-  coverOfItem, onUnitsChanged, renderItems, toolbar,
+  coverOfItem, onUnitsChanged, onItemsChanged, renderItems, toolbar,
 }) {
   // 드래그한 순서 — 다음 단원 목록(units 새 배열)이 올 때까지만 쓴다
   const [pendingOrder, setPendingOrder] = useState(null); // { base: units, ids }
   const [form, setForm] = useState(null);                 // null | { unit?: object }
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [transfer, setTransfer] = useState(null);         // null | 'import' | 'export'
 
   const orderedUnits = useMemo(
     () => applyUnitOrder(units, pendingOrder?.base === units ? pendingOrder.ids : null),
@@ -104,8 +107,26 @@ export default function UnitBrowser({
     onUnitsChanged();
   };
 
+  /* 불러오기로 이 학급의 단원·항목이 바뀐다. 내보내기는 다른 학급만 바뀐다. */
+  const handleTransferDone = () => {
+    if (transfer !== 'import') return;
+    onUnitsChanged();
+    onItemsChanged?.();
+  };
+
+  const importButton = <IconButton icon={FolderInput} label="단원 불러오기" onClick={() => setTransfer('import')} />;
+
   const modals = (
     <>
+      {transfer && (
+        <UnitTransferModal
+          mode={transfer}
+          classroomId={classroomId}
+          units={units}
+          onDone={handleTransferDone}
+          onClose={() => setTransfer(null)}
+        />
+      )}
       {form && (
         <UnitFormModal
           initial={form.unit}
@@ -133,6 +154,7 @@ export default function UnitBrowser({
         {(tools || showNewUnit) && (
           <div className="flex items-center justify-end gap-3 mb-3 flex-wrap">
             {showNewUnit && <IconButton icon={FolderPlus} label="새 단원" onClick={() => setForm({})} />}
+            {showNewUnit && importButton}
             {tools}
           </div>
         )}
@@ -146,6 +168,12 @@ export default function UnitBrowser({
   if (view.mode === 'grid') {
     return (
       <>
+        {isTeacher && (
+          <div className="flex items-center justify-end gap-3 mb-3 flex-wrap">
+            {importButton}
+            <IconButton icon={FolderOutput} label="단원 내보내기" onClick={() => setTransfer('export')} />
+          </div>
+        )}
         <UnitGrid
           units={view.shown}
           tab={tab}
