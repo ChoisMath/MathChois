@@ -13,6 +13,7 @@ import {
   updateClassroomVideo, formatDuration, getClassroomVideoProgress, progressPercent, getClassroomVideoUnread,
 } from '../../lib/videos';
 import VideoPickerModal from './VideoPickerModal';
+import { chapterOptionsForVideo } from '../../lib/chapterOptions';
 import SortOrderSelect from '../common/SortOrderSelect';
 import IconButton from '../common/IconButton';
 import { useAuth } from '../../contexts/AuthContext';
@@ -126,7 +127,8 @@ function VideoCard({ cv, isTeacher, sortable = isTeacher, progress, unread = 0, 
               title="학생이 2분할 화면에서 옆에 놓고 필기할 챕터"
             >
               <option value="">연결 없음</option>
-              {chapters.map((ch) => (
+              {/* 단원 영상은 그 단원 챕터만(현재 연결은 유지), 미분류·단원 없는 학급은 전부 */}
+              {chapterOptionsForVideo(chapters, cv, units).map((ch) => (
                 <option key={ch.id} value={ch.id}>{ch.title}</option>
               ))}
               {/* 삭제되지 않았지만 목록 로드에 실패한 경우에도 현재 값이 표시되도록 */}
