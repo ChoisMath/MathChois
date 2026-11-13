@@ -82,7 +82,7 @@ type NewChapter = {
   sourceChapterId?: string | null;
   unitId?: string | null;
 };
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 async function insertChapter(tx: Tx, data: NewChapter) {
   // position 미지정 시 새 챕터를 맨 앞(0)에 넣고 기존 챕터는 한 칸씩 뒤로 민다.

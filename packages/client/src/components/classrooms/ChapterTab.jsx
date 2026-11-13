@@ -496,6 +496,7 @@ export default function ChapterTab({ classroomId, isTeacher, units, unitParam, o
           onUnitParamChange={onUnitParamChange}
           coverOfItem={chapterCover}
           onUnitsChanged={onUnitsChanged}
+          onItemsChanged={fetchChapters}
           renderItems={renderChapters}
           toolbar={renderToolbar}
         />

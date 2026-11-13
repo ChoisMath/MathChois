@@ -319,3 +319,29 @@ export function fullscreenElementOf(doc) {
   if (!doc || typeof doc !== 'object') return null;
   return doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
 }
+
+/* ── 터치 탭 = 조작 창 열기/닫기 ──
+   손가락·펜으로 한 번 탭하면 재생 상태는 그대로 두고 조작 창(가운데 재생·이동 버튼 + 아래 재생 바)을 열거나 닫는다.
+   DOUBLE_TAP_MS 안의 두 번째 탭은 지금처럼 그쪽 절반으로 이동한다. 마우스는 클릭 = 재생/정지(바꾸지 않음).
+   스펙: docs/superpowers/specs/2026-11-13-video-tap-controls-design.md */
+export const DOUBLE_TAP_MS = 350;
+/** 터치로 연 조작 창은 마지막 조작 3초 뒤 숨긴다(정지 중에도) */
+export const TOUCH_HIDE_MS = 3000;
+/** 마우스로 보일 때는 재생 중일 때만 2.5초 뒤 숨긴다 */
+export const MOUSE_HIDE_MS = 2500;
+
+/** @returns {'seek'|'show'|'hide'} */
+export function touchTapAction({ now, lastTapAt, controlsVisible }) {
+  if (now - lastTapAt < DOUBLE_TAP_MS) return 'seek';
+  return controlsVisible ? 'hide' : 'show';
+}
+
+/** 숨김 타이머가 끝났을 때 조작 창을 숨길지 */
+export function shouldAutoHide({ inputMode, paused }) {
+  return inputMode === 'touch' ? true : !paused;
+}
+
+/** 포인터 종류 → 입력 모드. 마우스만 'mouse', 손가락·펜·알 수 없음은 'touch' */
+export function pointerInputMode(pointerType) {
+  return pointerType === 'mouse' ? 'mouse' : 'touch';
+}

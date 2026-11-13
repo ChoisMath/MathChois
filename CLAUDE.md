@@ -134,7 +134,10 @@ subtitles (`video_subtitles`; .srt/.vtt normalized to WebVTT by the shared parse
 A classroom's [챕터] and [영상] tabs (ClassroomDetail) can group its chapters and videos into teacher-made **units** (단원, shown like
 YouTube playlists): `units` table, `chapters.unit_id`/`classroom_videos.unit_id` (NULL = unassigned), address
 `?tab=…&unit=<id|none>`, hide-from-students only affects lists (detail URLs stay open), UI in `components/units/`
-(see `docs/superpowers/specs/2026-10-25-classroom-units-design.md`).
+(see `docs/superpowers/specs/2026-10-25-classroom-units-design.md`). Units can be imported/exported between a teacher's
+classrooms in bulk (`POST /api/units/copy`, `UnitTransferModal`): same-name units merge, same-name chapters / already-assigned
+videos are moved instead of duplicated, and each video's 필기 챕터 is re-linked by chapter name; merge rules are the pure
+`planUnitCopy` in `shared/src/units/copyPlan.ts` (see `docs/superpowers/specs/2026-10-28-unit-transfer-design.md`).
 
 - **⑥ Whiteboard (모둠 공유 보드)** — a `pages.page_type = 'whiteboard'` page gives every
   classroom group its own shared Excalidraw board (`whiteboard_groups`, keyed by page + classroom +

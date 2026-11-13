@@ -10,11 +10,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const SRC = 'https://example.test/sample.mp4';
 const RECT = { left: 0, top: 0, width: 400, height: 200, right: 400, bottom: 200, x: 0, y: 0, toJSON() {} };
 
-function mount() {
+function mount(props = {}) {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const root = createRoot(host);
-  act(() => { root.render(createElement(VideoPlayer, { src: SRC, hotkeys: false })); });
+  act(() => { root.render(createElement(VideoPlayer, { src: SRC, hotkeys: false, ...props })); });
   const video = host.querySelector('video');
   Object.defineProperty(video, 'duration', { configurable: true, value: 100 });
   video.getBoundingClientRect = () => RECT;
@@ -73,14 +73,65 @@ describe('VideoPlayer drag gestures (no long press)', () => {
     m.unmount();
   });
 
-  it('a touch without movement is still a tap that toggles playback', () => {
+  it('a touch without movement is a tap: it opens the touch controls and leaves playback alone', () => {
     const m = mount();
     pointer(m.video, 'pointerdown', { x: 100, y: 100 });
     pointer(m.video, 'pointermove', { x: 103, y: 102 }); // 손떨림 수준
     pointer(m.video, 'pointerup', { x: 103, y: 102 });
     expect(m.host.textContent).not.toContain('좌우로 드래그하여 이동');
-    act(() => { vi.advanceTimersByTime(400); }); // 더블탭 대기 뒤 단일 탭 확정
-    expect(play).toHaveBeenCalledTimes(1);
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(play).not.toHaveBeenCalled();
+    // 처음 터치(재생 바만 보이던 상태)는 닫지 않고 가운데 버튼까지 연다
+    expect(m.host.querySelector('[role="group"][aria-label="재생 조작"]')).not.toBeNull();
+    m.unmount();
+  });
+
+  it('a second single tap closes the touch controls, and they also close by themselves after 3s', () => {
+    const m = mount();
+    const group = () => m.host.querySelector('[role="group"][aria-label="재생 조작"]');
+    pointer(m.video, 'pointerdown', { x: 100, y: 100 });
+    pointer(m.video, 'pointerup', { x: 100, y: 100 });
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(group()).not.toBeNull();
+    pointer(m.video, 'pointerdown', { x: 100, y: 100 });
+    pointer(m.video, 'pointerup', { x: 100, y: 100 });
+    expect(group()).toBeNull();
+    act(() => { vi.advanceTimersByTime(400); });
+    pointer(m.video, 'pointerdown', { x: 100, y: 100 });
+    pointer(m.video, 'pointerup', { x: 100, y: 100 });
+    expect(group()).not.toBeNull();
+    act(() => { vi.advanceTimersByTime(3100); }); // 정지 상태여도 3초 뒤 숨김
+    expect(group()).toBeNull();
+    expect(play).not.toHaveBeenCalled();
+    m.unmount();
+  });
+
+  it('touching a control inside the overlay (settings) restarts the 3s hide timer', () => {
+    const m = mount();
+    const group = () => m.host.querySelector('[role="group"][aria-label="재생 조작"]');
+    pointer(m.video, 'pointerdown', { x: 100, y: 100 });
+    pointer(m.video, 'pointerup', { x: 100, y: 100 });
+    expect(group()).not.toBeNull();
+    act(() => { vi.advanceTimersByTime(2000); });
+    const settings = m.host.querySelector('button[aria-label="설정"]');
+    pointer(settings, 'pointerdown', { x: 380, y: 190 });
+    act(() => { settings.click(); });
+    act(() => { vi.advanceTimersByTime(2000); }); // 처음 탭에서 4초 — 설정을 누른 때부터는 2초
+    expect(group()).not.toBeNull();
+    m.unmount();
+  });
+
+  it('a double tap whose second tap lands on the center play button still seeks (no play toggle)', () => {
+    const m = mount();
+    m.video.currentTime = 50;
+    pointer(m.video, 'pointerdown', { x: 300, y: 100 });
+    pointer(m.video, 'pointerup', { x: 300, y: 100 });
+    act(() => { vi.advanceTimersByTime(150); });
+    const playBtn = m.host.querySelector('[role="group"][aria-label="재생 조작"] button[aria-label="재생"]');
+    pointer(playBtn, 'pointerdown', { x: 300, y: 100 });
+    act(() => { playBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 300, clientY: 100 })); });
+    expect(play).not.toHaveBeenCalled();
+    expect(m.video.currentTime).toBeCloseTo(60, 0); // 오른쪽 절반 → 앞으로 10초
     m.unmount();
   });
 
@@ -174,7 +225,8 @@ describe('VideoPlayer press-and-hold', () => {
     pointer(m.video, 'pointerup', { x: 300, y: 100 });
     act(() => { vi.advanceTimersByTime(600); });
     expect(m.host.textContent).not.toContain('2배속');
-    expect(play).toHaveBeenCalledTimes(1); // 단일 탭 → 재생
+    expect(play).not.toHaveBeenCalled(); // 단일 탭 → 조작 창만(재생 상태는 그대로)
+    expect(m.host.querySelector('[role="group"][aria-label="재생 조작"]')).not.toBeNull();
     m.unmount();
   });
 
@@ -187,6 +239,89 @@ describe('VideoPlayer press-and-hold', () => {
     pointer(m.video, 'pointercancel', { x: 300, y: 100 });
     expect(m.video.playbackRate).toBe(1);
     expect(m.host.textContent).not.toContain('2배속');
+    m.unmount();
+  });
+});
+
+describe('VideoPlayer touch overlay details', () => {
+  const group = (m) => m.host.querySelector('[role="group"][aria-label="재생 조작"]');
+  const barShown = (m) => m.host.querySelector('input[aria-label="재생 위치"]').closest('.bottom-0').className.includes('opacity-100');
+  const openOverlay = (m) => {
+    pointer(m.video, 'pointerdown', { x: 100, y: 100 });
+    pointer(m.video, 'pointerup', { x: 100, y: 100 });
+    act(() => { vi.advanceTimersByTime(400); }); // 두 번 탭 판정이 지난 뒤
+  };
+  const click = (el, detail) => act(() => { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail, clientX: 100, clientY: 100 })); });
+
+  it('the bar stays up during a touch scrub longer than 3s', () => {
+    const m = mount();
+    openOverlay(m);
+    pointer(m.video, 'pointerdown', { x: 100, y: 100 });
+    pointer(m.video, 'pointermove', { x: 160, y: 100 });
+    act(() => { vi.advanceTimersByTime(4000); });
+    expect(barShown(m)).toBe(true);
+    pointer(m.video, 'pointerup', { x: 160, y: 100 });
+    m.unmount();
+  });
+
+  it('the title strip hides while a feedback flash shows over the touch overlay', () => {
+    const m = mount({ title: '테스트 영상' });
+    openOverlay(m);
+    click(group(m).querySelector('button[aria-label="재생"]'), 0); // 키보드식 click(detail 0)
+    act(() => { m.video.dispatchEvent(new Event('pause')); });
+    expect(m.host.textContent).toContain('▶'); // 피드백 표시 중
+    expect(m.host.textContent).not.toContain('테스트 영상');
+    act(() => { vi.advanceTimersByTime(1000); }); // 피드백이 사라지면 제목이 돌아온다
+    expect(m.host.textContent).toContain('테스트 영상');
+    m.unmount();
+  });
+
+  it('does not cancel touchend (keeps focus/blur and outside-tap menus working)', () => {
+    const m = mount();
+    const ev = new Event('touchend', { bubbles: true, cancelable: true });
+    act(() => { m.video.dispatchEvent(ev); });
+    expect(ev.defaultPrevented).toBe(false);
+    m.unmount();
+  });
+
+  it('ignores the ghost click a tap produces on the center button that just appeared under the finger', () => {
+    const m = mount();
+    m.video.currentTime = 50;
+    pointer(m.video, 'pointerdown', { x: 100, y: 100 });
+    pointer(m.video, 'pointerup', { x: 100, y: 100 });
+    click(group(m).querySelector('button[aria-label="재생"]'), 1); // pointerdown 없이 온 click
+    expect(play).not.toHaveBeenCalled();
+    expect(m.video.currentTime).toBe(50);
+    expect(group(m)).not.toBeNull();
+    m.unmount();
+  });
+
+  it('center buttons are hidden from screen readers and the tab order (the bar has the same buttons)', () => {
+    const m = mount();
+    openOverlay(m);
+    expect(group(m).getAttribute('aria-hidden')).toBe('true');
+    group(m).querySelectorAll('button').forEach((b) => expect(b.tabIndex).toBe(-1));
+    m.unmount();
+  });
+
+  it('a mouse click on a center button right after touching still presses it', () => {
+    const m = mount();
+    openOverlay(m);
+    const btn = group(m).querySelector('button[aria-label="재생"]');
+    pointer(btn, 'pointerdown', { x: 100, y: 100, pointerType: 'mouse' });
+    click(btn, 1);
+    expect(play).toHaveBeenCalledTimes(1);
+    m.unmount();
+  });
+
+  it("in the player's own fullscreen the press-and-hold pill sits below the safe-area inset", () => {
+    const m = mount();
+    act(() => { m.host.querySelector('button[aria-label="전체화면"]').click(); }); // jsdom: 요소 전체화면 API 없음 → CSS 전체화면
+    pointer(m.video, 'pointerdown', { x: 300, y: 100 });
+    act(() => { vi.advanceTimersByTime(500); });
+    const pill = [...m.host.querySelectorAll('span')].find((el) => el.textContent === '2배속');
+    expect(pill.parentElement.className).toContain('safe-area-inset-top');
+    pointer(m.video, 'pointerup', { x: 300, y: 100 });
     m.unmount();
   });
 });
