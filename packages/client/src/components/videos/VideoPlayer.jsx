@@ -11,6 +11,7 @@ import {
   decideGestureAxis, verticalGestureKind, dragToLevel, SUBTITLE_SIZES, createScrubSeeker,
   pickFullscreenMethod, isIphoneUserAgent, fullscreenElementOf, DRAG_START_PX,
   HOLD_MS, HOLD_RATE, holdKind, rewindTarget,
+  DOUBLE_TAP_MS, TOUCH_HIDE_MS, MOUSE_HIDE_MS, touchTapAction, shouldAutoHide, pointerInputMode,
 } from '../../lib/videoPlayer';
 import useVideoSubtitles from '../../hooks/useVideoSubtitles';
 import SubtitleOverlay from './SubtitleOverlay';
@@ -45,7 +46,7 @@ const PROGRESS_REPORT_INTERVAL_MS = 10000;
  * 단축키: ←/→ 설정된 초만큼 이동, ↑/↓ 볼륨, Space/K 재생·정지, M 음소거, F 전체화면,
  *        , / . 배속 내림/올림, 0~9 해당 % 위치, C 자막. ⚙ 설정: 이동 시간(10/20/30/60초)·배속(0.7~2.5×)·자막.
  * 자막: 영상자료 라이브러리 src 면 등록된 자막을 직접 조회해 오버레이로 그린다(useVideoSubtitles).
- * 제스처(터치·펜): 탭 재생·정지, 더블탭 좌/우 절반 = 뒤로/앞으로, 바로 드래그 —
+ * 제스처(터치·펜): 탭 = 조작 창(가운데 재생·이동 버튼 + 재생 바) 열기/닫기(3초 뒤 저절로 숨김), 더블탭 좌/우 절반 = 뒤로/앞으로, 바로 드래그 —
  *        좌우 = 시간 이동(스크럽), 상하 = 화면 왼쪽 절반에서 밝기 / 오른쪽 절반에서 볼륨. 마우스는 클릭·더블클릭만.
  */
 export default function VideoPlayer({
@@ -71,6 +72,9 @@ export default function VideoPlayer({
   const [buffered, setBuffered] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
+  // 마지막 입력이 손가락·펜이면 'touch' — 가운데 버튼 묶음을 보이고, 정지 중에도 조작 창을 숨긴다
+  const inputModeRef = useRef('mouse');
+  const [touchMode, setTouchMode] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [pseudoFullscreen, setPseudoFullscreen] = useState(false); // Fullscreen API 없는 환경의 CSS 폴백 상태
   const onPseudoFullscreenChangeRef = useRef(onPseudoFullscreenChange);
@@ -113,14 +117,29 @@ export default function VideoPlayer({
     flashTimerRef.current = setTimeout(() => setFlash(null), 900);
   }, []);
 
-  /* ── 컨트롤 자동 숨김 ── */
+  /* ── 컨트롤 자동 숨김 ──
+     터치로 연 조작 창은 마지막 조작 3초 뒤 정지 중에도 숨기고, 마우스는 재생 중일 때만 2.5초 뒤 숨긴다(shouldAutoHide). */
   const revealControls = useCallback(() => {
     setControlsVisible(true);
     clearTimeout(hideTimerRef.current);
+    const inputMode = inputModeRef.current;
     hideTimerRef.current = setTimeout(() => {
-      if (videoRef.current && !videoRef.current.paused) setControlsVisible(false);
-    }, 2500);
+      const v = videoRef.current;
+      if (v && shouldAutoHide({ inputMode, paused: v.paused })) setControlsVisible(false);
+    }, inputMode === 'touch' ? TOUCH_HIDE_MS : MOUSE_HIDE_MS);
   }, []);
+
+  const hideControls = useCallback(() => {
+    clearTimeout(hideTimerRef.current);
+    setControlsVisible(false);
+  }, []);
+
+  /** 컨테이너 안 어디든 포인터를 누르면 입력 모드를 기억한다(가운데 버튼·재생 바 버튼 포함) */
+  const noteInputMode = (e) => {
+    const mode = pointerInputMode(e.pointerType);
+    inputModeRef.current = mode;
+    setTouchMode(mode === 'touch');
+  };
 
   useEffect(() => () => {
     clearTimeout(hideTimerRef.current);
@@ -384,14 +403,13 @@ export default function VideoPlayer({
     };
   }, [reportProgress]);
 
-  /* ── 탭/클릭: 한 번 = 재생·정지, 두 번 = 오른쪽 절반 앞으로 / 왼쪽 절반 뒤로 (설정된 초) ──
+  /* ── 탭/클릭: 두 번 = 오른쪽 절반 앞으로 / 왼쪽 절반 뒤로 (설정된 초) ──
      전체화면(특히 태블릿·휴대폰)에서 더블탭이 전체화면을 해제하지 않도록 더블클릭=전체화면은 제거했다.
-     마우스는 첫 클릭을 즉시 반영하고 더블클릭이면 원래 재생 상태로 되돌린 뒤 이동한다(YouTube 데스크톱과 동일).
-     터치/펜은 두 번째 탭을 기다렸다가(350ms) 단일 탭이면 재생·정지한다. */
+     마우스: 클릭 한 번 = 즉시 재생·정지, 더블클릭이면 원래 재생 상태로 되돌린 뒤 이동한다(YouTube 데스크톱과 동일).
+     터치/펜: 탭 한 번 = 조작 창(가운데 재생·이동 버튼 + 아래 재생 바) 바로 열기/닫기 — 재생 상태는 그대로(YouTube 앱과 동일).
+     DOUBLE_TAP_MS 안의 두 번째 탭은 이동(이동하면 창이 보이고 3초 뒤 숨는다). 규칙은 lib/videoPlayer `touchTapAction`. */
   const lastTapRef = useRef(0);
-  const tapTimerRef = useRef(null);
   const pausedByClickRef = useRef(false);
-  useEffect(() => () => clearTimeout(tapTimerRef.current), []);
 
   /* ── 드래그 제스처(바로 시작) ──
      손가락·펜을 대고 DRAG_START_PX 이상 움직이면 그 자리에서 제스처가 시작되고, 첫 이동 방향으로 종류를 정한다
@@ -459,8 +477,6 @@ export default function VideoPlayer({
     if (!v || pressRef.current !== press || press.active) return;
     press.active = true;
     press.hold = true;
-    clearTimeout(tapTimerRef.current);
-    tapTimerRef.current = null;
     lastTapRef.current = 0;
     try { target.setPointerCapture(press.id); } catch { /* ignore */ }
     setControlsVisible(true);
@@ -563,8 +579,6 @@ export default function VideoPlayer({
       press.active = true;
       clearTimeout(holdTimerRef.current); // 움직였으니 꾹 누르기는 취소
       holdTimerRef.current = null;
-      clearTimeout(tapTimerRef.current);
-      tapTimerRef.current = null;
       lastTapRef.current = 0;
       try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ }
       setControlsVisible(true);
@@ -631,11 +645,10 @@ export default function VideoPlayer({
     const now = Date.now();
     const isMouse = e.pointerType === 'mouse';
 
-    if (now - lastTapRef.current < 350) {
+    if (isMouse ? now - lastTapRef.current < DOUBLE_TAP_MS
+      : touchTapAction({ now, lastTapAt: lastTapRef.current, controlsVisible }) === 'seek') {
       // 두 번째 탭 → 이동
       lastTapRef.current = 0;
-      clearTimeout(tapTimerRef.current);
-      tapTimerRef.current = null;
       if (isMouse && pausedByClickRef.current) v.play().catch(() => {});
       pausedByClickRef.current = false;
       seekBy(forward ? settingsRef.current.seekStep : -settingsRef.current.seekStep);
@@ -646,12 +659,10 @@ export default function VideoPlayer({
     if (isMouse) {
       pausedByClickRef.current = !v.paused; // 이 클릭이 정지시키는지 기억
       togglePlay();
+    } else if (controlsVisible) {
+      hideControls();
     } else {
       revealControls();
-      tapTimerRef.current = setTimeout(() => {
-        tapTimerRef.current = null;
-        togglePlay();
-      }, 350);
     }
   };
 
@@ -723,9 +734,10 @@ export default function VideoPlayer({
         } : null),
       }}
       tabIndex={0}
-      onMouseMove={revealControls}
-      onTouchStart={revealControls}
-      onMouseLeave={() => { if (playing) setControlsVisible(false); }}
+      onPointerDownCapture={noteInputMode}
+      // 마우스만: 터치 뒤 브라우저가 보내는 호환 mouse 이벤트로 방금 닫은 조작 창이 다시 열리지 않게
+      onPointerMove={(e) => { if (e.pointerType === 'mouse') { inputModeRef.current = 'mouse'; setTouchMode(false); revealControls(); } }}
+      onPointerLeave={(e) => { if (e.pointerType === 'mouse' && playing) setControlsVisible(false); }}
     >
       <video
         ref={videoRef}
@@ -749,12 +761,16 @@ export default function VideoPlayer({
         onPointerMove={onVideoPointerMove}
         onPointerUp={onVideoPointerUp}
         onPointerCancel={finishGesture}
+        // 터치 뒤 브라우저가 만드는 click·호환 mouse 이벤트를 막는다 — 탭으로 막 연 가운데 재생 버튼이 손가락 밑에 있어
+        // 그 click 을 받아 재생/정지가 바뀌는 일(유령 클릭)과 mousemove 로 방금 닫은 창이 다시 열리는 일을 막는다.
+        // 영상 위 탭·제스처는 모두 포인터 핸들러가 처리하므로 click 은 쓰지 않는다. (touchend 는 passive 가 아니다)
+        onTouchEnd={(e) => { if (e.cancelable) e.preventDefault(); }}
         onLoadedMetadata={onLoadedMetadata}
         onTimeUpdate={onTimeUpdate}
         onProgress={onBuffered}
         onPlay={() => { setPlaying(true); revealControls(); }}
-        onPause={() => { setPlaying(false); setControlsVisible(true); persistPosition(); }}
-        onEnded={() => { setPlaying(false); setControlsVisible(true); persistPosition(); }}
+        onPause={() => { setPlaying(false); revealControls(); persistPosition(); }}
+        onEnded={() => { setPlaying(false); revealControls(); persistPosition(); }}
         onError={() => setError('영상을 불러올 수 없습니다. 파일이 삭제되었거나 브라우저가 지원하지 않는 형식입니다.')}
       >
         {/* 평소엔 꺼진 상태(default 없음) — iPhone 기본 전체화면에서만 켠다. 일반 화면은 SubtitleOverlay 가 그린다. */}
@@ -779,15 +795,13 @@ export default function VideoPlayer({
           <span className="px-2 py-0.5 rounded bg-black/50 text-white/80 text-[11px]">좌우로 드래그하여 이동 · 짧게 끌면 미세 이동</span>
         </div>
       )}
+      {/* 꾹 누르기: 화면을 가리지 않게 위쪽 가운데에 알약만 */}
       {(gesture?.kind === 'fast' || gesture?.kind === 'rewind') && (
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1">
+        <div className="pointer-events-none absolute inset-x-0 top-4 flex justify-center">
           <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/70 text-white text-xl font-semibold tabular-nums">
             {gesture.kind === 'fast'
               ? <><FastForward className="h-6 w-6 fill-current" />{HOLD_RATE}배속</>
               : <><Rewind className="h-6 w-6 fill-current" />되감기 · {formatTime(gesture.target)}</>}
-          </span>
-          <span className="px-2 py-0.5 rounded bg-black/50 text-white/80 text-[11px]">
-            {gesture.kind === 'fast' ? `누르고 있는 동안 ${HOLD_RATE}배속 재생` : `누르고 있는 동안 ${HOLD_RATE}배속 되감기`}
           </span>
         </div>
       )}
@@ -814,9 +828,34 @@ export default function VideoPlayer({
         );
       })()}
 
+      {/* 터치 조작 창 가운데: 뒤로 · 재생/일시정지 · 앞으로 (아래 재생 바와 함께 열리고 닫힌다) */}
+      {touchMode && controlsVisible && !gesture && !error && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-8 text-white">
+          <div role="group" aria-label="재생 조작" className="flex items-center gap-8">
+            <button type="button" onClick={() => seekBy(-settings.seekStep)}
+              className="pointer-events-auto h-14 w-14 rounded-full bg-black/50 flex items-center justify-center gap-0.5"
+              aria-label={`${settings.seekStep}초 뒤로`}>
+              <SkipBack className="h-5 w-5" /><span className="text-xs">{settings.seekStep}</span>
+            </button>
+            <button type="button" onClick={togglePlay}
+              className="pointer-events-auto h-20 w-20 rounded-full bg-black/50 flex items-center justify-center"
+              aria-label={playing ? '일시정지' : '재생'}>
+              {playing ? <Pause className="h-9 w-9 fill-current" /> : <Play className="h-9 w-9 fill-current ml-1" />}
+            </button>
+            <button type="button" onClick={() => seekBy(settings.seekStep)}
+              className="pointer-events-auto h-14 w-14 rounded-full bg-black/50 flex items-center justify-center gap-0.5"
+              aria-label={`${settings.seekStep}초 앞으로`}>
+              <span className="text-xs">{settings.seekStep}</span><SkipForward className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 중앙 피드백 */}
       {flash && !gesture && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        // 터치 조작 창이 떠 있으면 가운데 버튼을 가리지 않게 위로 비켜 선다
+        <div className={`pointer-events-none absolute inset-x-0 flex justify-center ${
+          touchMode && controlsVisible ? 'top-[18%]' : 'inset-y-0 items-center'}`}>
           <span className="px-4 py-2 rounded-full bg-black/60 text-white text-lg font-semibold">{flash}</span>
         </div>
       )}
@@ -973,7 +1012,7 @@ export default function VideoPlayer({
         )}
       </div>
 
-      {title && !playing && controlsVisible && (
+      {title && !playing && controlsVisible && !gesture && (
         <div className="pointer-events-none absolute top-0 inset-x-0 px-3 py-2 bg-gradient-to-b from-black/70 to-transparent text-white text-sm font-medium truncate">
           {title}
         </div>
