@@ -18,14 +18,12 @@ The core of the app is **5 annotation pages** (see the table below).
 
 | Package | Name | Stack |
 |---|---|---|
-| `packages/server` | `@mathchois/server` | Fastify 5 + Drizzle ORM 0.45 + PostgreSQL (`postgres` driver) + Socket.IO 4 + JWT/Google OAuth + nodemailer. `tsx` (dev) / `tsc` (build). |
+| `packages/server` | `@mathchois/server` | Fastify 5 + Drizzle ORM 0.45 + PostgreSQL (`postgres` driver) + Socket.IO 4 + JWT/Google OAuth + nodemailer + sharp (IB watermark). `tsx` (dev) / `tsc` (build). |
 | `packages/client` | `@mathchois/client` | React 19 + Vite 7 + Tailwind 4 + React Router 7 + Excalidraw 0.18 + dnd-kit + jspdf + socket.io-client. PWA. |
 | `packages/shared` | `@mathchois/shared` | Shared TS types (exported from source, not a build artifact). |
 
 Deploy: **Railway** (`packages/server/Dockerfile`, healthcheck `/api/health`). In
 production the server serves `client/dist` statically with SPA fallback.
-
-`legacy_rails/` is an old Ruby on Rails app — **unused, do not read or modify**.
 
 ## Commands
 
@@ -36,6 +34,19 @@ npm run dev:client   # Client only — Vite, port 3000
 npm run build        # Build shared → client → server
 npm run start        # Production: node dist/index.js (server serves client/dist)
 npm run lint         # ESLint (client)
+
+# AI활용 허브 material scripts (run at the repo root; details + first-migration steps: scripts/ai-hub/README.md)
+npm run ai:pull                       # one-time: me.chois.pro → .media-out/ (keep it, it is the backup)
+npm run ai:push -- --set motion|slide|brand   # .media-out/ → server (AI_PUSH_URL + AI_MEDIA_UPLOAD_TOKEN)
+npm run ai:prepare | ai:motion:import | ai:slide:import | ai:brand:import   # add new material later
+npm run ai:oppadu                     # sync new/changed oppadu motion/slide/brand material (bookmarklet JSON → catalogs + .media-out/ + report);
+                                      #   then `ai:push -- --set motion|slide --sync-prompts` and `--set brand` (scripts/ai-hub/README.md)
+npm run ai:remake-upgrade             # move the Chois remake motion templates (.media-out/prompts/motion.json) onto oppadu's new template layout
+                                      #   → .media-out/prompts/motion.remakes.json; then `ai:push -- --set motion --sync-remakes`
+
+# IB교육과정 안내 material (repo root; details: scripts/ib-guide/README.md)
+npm run ib:push -- --dir "<IA PDF folder>" [--dry-run] [--only exNN]   # PDFs → 1600px WebP pages in .ib-out/ (on this PC)
+                                      #   → server (IB_PUSH_URL + IB_MEDIA_UPLOAD_TOKEN); PDFs never leave the PC
 
 # DB (run inside packages/server)
 npm run db:push -w @mathchois/server      # Push Drizzle schema to DB
@@ -67,6 +78,11 @@ PORT=3001
 NODE_ENV=development
 # SMTP (optional — password-reset email): SMTP_HOST/PORT/USER/PASS/FROM, APP_URL
 # FRAME_ANCESTORS (optional) — extra origins allowed to frame HTML tool pages (space-separated)
+# AI_MEDIA_UPLOAD_TOKEN (optional, >= 32 chars; `openssl rand -hex 32`) — bearer token for the ai:push upload routes
+#   (PUT /api/ai/media, GET /api/ai/media/manifest, PUT /api/ai/prompts/:set). Empty/unset = uploads disabled (503);
+#   shorter than 32 chars = boot warning + treated as unset.
+# IB_MEDIA_UPLOAD_TOKEN (optional, same rules) — bearer token for the ib:push upload routes
+#   (PUT /api/ib/media, GET /api/ib/media/manifest). Empty/unset/short = uploads disabled (503).
 ```
 
 Production domain is **`https://class.chois.pro`** (moved from `class.chois.ai.kr`). The
@@ -84,7 +100,16 @@ Google OAuth + email/password (bcrypt). JWT access/refresh tokens, role `teacher
 `student` (+ `isAdmin`). Server middleware: `middleware/auth.ts` (JWT),
 `middleware/roleGuard.ts` (`requireRole`). Client auth state in
 `src/contexts/AuthContext.jsx`; `src/components/ProtectedRoute.jsx` guards routes
-(not logged in → `/`; no role → `/choose-role`; wrong role → own dashboard).
+(not logged in → `/`; wrong role → own dashboard).
+
+**Roles are decided by the server, never chosen by the user.** Only emails on the admin-managed
+`allowed_teachers` list are teachers; every other signup (Google or email) is a student. Admins are
+always teachers (teacher + admin). `services/access.service.ts` `applyAccessRules` re-evaluates this on every
+login and token refresh (rules in `@mathchois/shared` `auth/access.ts` `resolveRole`), so removing a
+teacher from the list takes effect within 15 minutes. Teachers can pre-register student emails per
+classroom (`classroom_invites`); when that email signs in as a student it is moved into
+`classroom_members` without a class code. Admin UI: AdminPanel [교사 등록] tab; teacher UI: classroom
+[학생] tab. Spec: `docs/superpowers/specs/2026-10-28-teacher-allowlist-and-student-preregistration-design.md`.
 
 ### Core feature: the 5 annotation pages
 
@@ -121,6 +146,54 @@ videos are moved instead of duplicated, and each video's 필기 챕터 is re-lin
   Client: `components/whiteboard/WhiteboardCanvas.jsx`, student `pages/Whiteboard/StudentWhiteboardViewer.jsx`,
   teacher `pages/Whiteboard/TeacherWhiteboardPage.jsx` (grid / single + settings). Templates (34) in
   `lib/whiteboardTemplates.js`. Spec: `docs/superpowers/specs/2026-10-18-whiteboard-design.md`.
+- **AI활용 허브 (`/ai/*`)** — the three galleries moved here from me.chois.pro: **모션** (`/ai/motion`, `/ai/motion/:id`,
+  Chois-made HyperFrames intros + prompts), **슬라이드** (`/ai/slide`, slide-style prompts) and **브랜드** (`/ai/brand`,
+  design-system lookbook in an iframe), plus the prompt editor `/ai/motion/:id/edit`. Outside DashboardLayout
+  (`pages/AiHub/AiHubLayout.jsx`); `AiHubRoute` is the guard + data provider (`useAiHubData()`). **Access rule**
+  (`@mathchois/shared` `ai-hub/access.ts`, same function on server `requireAiHub`/`GET /api/ai/access` and client guard):
+  logged-in teachers/admins always; a student only if one of their classrooms has `classrooms.ai_hub_enabled`
+  (teacher switch **"학생에게 AI활용 열기"** in the `#` panel of ClassroomDetail; the **AI활용** button shows in the header
+  when allowed). Editor: blanks/options/copy for any teacher (browser-local), original template + shot/cue tables admin only
+  (`PUT /api/ai/motion/:id/prompt`). **Data**: the catalog (106 motion / 748 slide at stage 1; grows with `ai:oppadu`; `source: chois|school|oppadu`) lives in
+  git at `packages/shared/src/ai-hub/*.data.ts`; prompts in Postgres (`ai_motion_prompts`, `ai_slide_prompts`); media +
+  `manifest/{motion,slide,brand}.json` in the Volume bucket `ai-hub` (public `/api/files/ai-hub/…?v=<sha8>` serves only motion/slide
+  media + manifests (`isAiHubPublicFile`), brand files 404 there; the brand copy is served only via `/api/ai/brand/site/*` with a
+  `frame-ancestors` CSP, and `BrandPage` frames it through `toolUrl()` on the separate `VITE_TOOLS_ORIGIN` so the third-party
+  lookbook JS never runs on the app origin). A list only contains items whose files are all in the manifest.
+  `GET /api/files/ai-hub/*` is exempt from the 300/min rate limit (`server/src/utils/rateLimitExempt.ts`) — the slide gallery alone loads
+  two thumbnails per card (2,000+), and 429'd `<img>`s stay blank.
+  Material goes in with `npm run ai:*` (token-authenticated upload; the generic `/api/files` upload/delete and
+  `storage.service` `removeFile`/`removeDirectoryIfEmpty` refuse this bucket). `PUT /api/ai/prompts/:set` inserts missing ids
+  only, so re-running `ai:push` never overwrites admin web edits; `ai:push --overwrite-prompts` (`?overwrite=1`) replaces them. Spec: `docs/superpowers/specs/2026-10-28-ai-hub-migration-design.md`; first migration steps:
+  `scripts/ai-hub/README.md`.
+  **Stage 2 (oppadu sync)**: `npm run ai:oppadu` folds new/changed oppadu motion/slide/brand material into the catalogs + `.media-out/`
+  (bookmarklet JSON from a logged-in Chrome → report in `.oppadu/<date>/`); remake/school items (`source: chois|school`) are never touched.
+  `ai:push --sync-prompts` sends `.media-out/prompts/<set>.oppadu.json` to `PUT /api/ai/prompts/:set?mode=sync`: it updates only oppadu rows the
+  admin has not edited on the web (`ai_motion_prompts.edited_at`, set by `PUT /api/ai/motion/:id/prompt`), backs up replaced rows, and rejects
+  remake ids with 400. Admin `DELETE /api/ai/motion/:id/edited` clears the mark ("다음 동기화에서 오빠두 원본 받기" in the editor); `GET /api/ai/motion`
+  items carry `prompt.editedAt`. Original (oppadu) v2 motions copy as 「예시 그대로」 + the item's secs.
+  **Remake templates**: the 50 `chois` motions keep their own prompts but follow oppadu's template layout (option panel: 방식·로고·사운드·렌더링·길이·화면·화면 글자).
+  When oppadu reworks its templates, `npm run ai:remake-upgrade` 3-way merges (oppadu old → Chois remake, oppadu old → oppadu new; `shared/src/ai-hub/remakeUpgrade.ts`):
+  remake edits go into the `{{#a}}` (예시 그대로) lines, `{{#b}}` (내 주제에 맞게) stays oppadu's generic text, blank defaults carry over;
+  `ai:push --set motion --sync-remakes` sends it to `PUT /api/ai/prompts/motion?mode=remakes` (remake ids only, web-edited rows skipped, replaced rows backed up). Spec:
+  `docs/superpowers/specs/2026-10-29-ai-hub-oppadu-sync-design.md`; procedure + flags: `scripts/ai-hub/README.md`. Browser smoke: `packages/server/scripts/ai-hub-e2e-setup.ts` + `packages/client/e2e/ai-hub.smoke.mjs`.
+- **IB교육과정 안내 (`/ib/*`)** — protected viewing of IB Math IA write-up examples (IA작성예시): `/ib` (→ `/ib/ia`), `/ib/ia`
+  (example list), `/ib/ia/:exId` (fullscreen viewer, doc tabs student / annotated / comments). Outside DashboardLayout
+  (`pages/IbGuide/{IbGuideRoute,IbGuideLayout,IaListPage,IaViewerPage}.jsx`; `IbGuideRoute` is guard + data provider, `useIbGuideData()`).
+  **Access rule** (`@mathchois/shared` `ib-guide/access.ts` `canUseIbGuide`, server `requireIbGuide` + `GET /api/ib/access`, client
+  `lib/ibGuide/guard.js`): teachers/admins always; a student only if one of their classrooms has `classrooms.ib_guide_enabled`
+  (teacher switch **"학생에게 IB 안내 열기"** in the `#` panel of ClassroomDetail; the **IB안내** header button), re-checked on every
+  request, never cached. **Data**: PDFs stay on the teacher's PC — `npm run ib:push` renders them to 1600px WebP pages and uploads only
+  pages + `manifest/ia.json` to the Volume bucket `ib-guide` (token routes `PUT /api/ib/media`, `GET /api/ib/media/manifest`; allowed
+  paths `ia/exNN/(student|annotated|comments)/NNN.webp` + `manifest/ia.json`, `shared/src/ib-guide/paths.ts`; manifest last, server checks
+  every listed page is on disk). `GET /api/ib/ia` lists examples from the manifest; `GET /api/ib/ia/:exId/:doc/pages/:n` is the **only**
+  way a page leaves the Volume: it composites a per-user diagonal watermark (name · email · Seoul date, `services/ibWatermark.service.ts`,
+  bundled font `packages/server/assets/fonts/Pretendard-Regular.otf`, tile LRU, max 4 concurrent composites) and returns
+  `private, no-store` WebP; any failure between reading the page and finishing the composite is a 500, never an unwatermarked image.
+  The viewer (`components/ibGuide/ProtectedPage.jsx`, `lib/ibGuide/pageFetch.js`) fetches with `api.blob` and draws on `<canvas>` via
+  `createImageBitmap` — no `<img>`, object URL or cache; no download/print (print CSS + Ctrl/⌘+P·S blocked). Spec:
+  `docs/superpowers/specs/2026-11-10-ib-guide-ia-examples-design.md`; procedure: `scripts/ib-guide/README.md`. Smokes:
+  `packages/server/scripts/ib-guide-e2e-setup.ts`, `ib-guide-api-smoke.ts`, `packages/client/e2e/ib-guide.smoke.mjs`.
 - Server handlers: notes ①②④ → `routes/notes.ts`; comments ③⑤ → `routes/comments.ts`.
   DB logic concentrated in `services/note.service.ts`.
 - Socket handlers: `socket/handlers/notes.ts` (①②), `comments.ts` (③), `assignments.ts` (④⑤).
@@ -136,13 +209,14 @@ videos are moved instead of duplicated, and each video's 필기 챕터 is re-lin
 
 ### Data model (Drizzle: `packages/server/src/db/schema.ts`)
 
-Tables: `profiles`, `classrooms`, `classroom_members`, `chapters`, `pages`
-(`imageUrl`/`videoUrl`/**`htmlUrl`**/`pageType`/`whiteboardTemplate`/position), the 5 annotation tables above,
+Tables: `profiles`, `allowed_teachers` (teacher allowlist), `classrooms`, `classroom_members`, `classroom_invites`
+(pre-registered student emails), `chapters`, `pages`
+(`imageUrl`/`videoUrl`/**`htmlUrl`**/**`pdfUrl`**/`pdfPage`/`pageType`/`whiteboardTemplate`/position), the 5 annotation tables above,
 `classroom_groups`/`classroom_group_members` (default groups), `whiteboard_page_settings`/
 `whiteboard_groups`/`whiteboard_group_members` (shared boards),
-`posts`/`post_files`/`post_classrooms` (board), `assignments`/`assignment_pages`/
+`posts`/`post_files`/`post_classrooms` (board), `assignments`/`assignment_pages` (also `pdfUrl`/`pdfPage`)/
 `assignment_submissions`/`assignment_submission_files`, `videos`/`classroom_videos`/`video_comments`/
-`video_subtitles` (video library), `units` (classroom units; `chapters.unit_id`, `classroom_videos.unit_id`). Migrations via Drizzle Kit;
+`video_subtitles` (video library), `ai_motion_prompts`/`ai_slide_prompts` (AI활용 hub prompts; `classrooms.ai_hub_enabled`), `classrooms.ib_guide_enabled` (IB guide switch, no IB tables — material lives in the `ib-guide` bucket), `units` (classroom units; `chapters.unit_id`, `classroom_videos.unit_id`). Migrations via Drizzle Kit;
 additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures the
 `pages.html_url` column).
 `classrooms.color` — one of six named colors (coral/mustard/sage/sky/lavender/rose); backfilled at boot by
@@ -162,13 +236,32 @@ additionally `db/startupMigrate.ts` runs idempotent DDL on boot (e.g. ensures th
   Template application goes through `POST /api/whiteboards/groups/:gid/apply-template`, which
   only succeeds on an empty board (the server never imports Excalidraw). The server keeps board
   scenes in memory → single-instance deployment assumption.
+- **Classroom detail tabs** (`pages/Classrooms/ClassroomDetail.jsx`): board, student list and dashboard are
+  ledger-style tables (`components/classrooms/classroomTabs.css`, `.ledger`); the group settings card is a
+  drag board (`components/whiteboard/GroupAssignmentPanel.jsx`, dnd-kit chips → desks, 모둠 수 input resizes the
+  desks via `lib/groupAssign.js` `resizeGroups`). The teacher dashboard is 보기(챕터별·영상별·학생별) × 대상
+  (`?view=`, `?unit=` shared with the chapter/video tabs, `?student=`); pure calculations live in
+  `lib/dashboardViews.js`. [학생] tab row-end [AI 풀이 초기화] calls
+  `POST /api/coaching/classrooms/:cid/students/:sid/reset` (resets quota for every AI-coaching page of the classroom, keeps
+  attempt records). Spec: `docs/superpowers/specs/2026-10-28-classroom-tabs-tables-groups-dashboard-design.md`.
+- **PDF pages have no background image element.** `PdfPageLayer` sits under Excalidraw, follows the viewport and
+  re-renders only the visible clip; the paper rect is `bgPosition`. On open, `usePdfBackground.applyScene` fits the viewport
+  to the paper plus any ink outside it (`bgFit.contentExtent`), once per mount, like `resolveBgLayout` does for image pages. pdf.js is loaded from its legacy build (the modern
+  build needs `Map.prototype.getOrInsertComputed`). With default options pdf.js streams the **whole** PDF on first
+  open (first page renders before the download ends; the file is then cached immutable) — HTTP Range only fills gaps
+  ahead of the stream, it is not range-only loading. `GET /api/files/*` is unauthenticated (all buckets except `ib-guide`, always 404 there, and the `ai-hub` brand files), so the
+  viewer fetches the PDF by bare URL. Spec: `docs/superpowers/specs/2026-10-30-pdf-pages-design.md`.
 - **Icon-only buttons** use `components/common/IconButton.jsx` (`label` → `title` + `aria-label`, 44px hit area,
   variants ghost/primary/danger/danger-solid). Icon dictionary and keep-text rules:
   `docs/superpowers/specs/2026-10-20-icon-buttons-design.md`. `DrawingToolbar` keeps its own buttons.
 - **Pen/eraser input** is custom-handled: `hooks/useExcalidrawTouch.js`,
   `hooks/useScribbleErase.js` (S-Pen barrel button, scribble-to-erase, palm rejection).
-- File storage uses `VOLUME_PATH`; buckets: `chapter-pages`, `chapter-tools` (HTML only),
-  `visualizations` (HTML only), `whiteboard-files` (raster images ≤ 2MB, students allowed), `videos` (teacher-only, uploaded through the streaming route
+- File storage uses `VOLUME_PATH`; buckets: `chapter-pages`, `chapter-pdfs` (PDF only, 100MB, teacher-only; one file shared by
+  all of its pages), `chapter-tools` (HTML only),
+  `visualizations` (HTML only), `whiteboard-files` (raster images ≤ 2MB, students allowed), `ai-hub` (AI활용 hub material — written only through the `AI_MEDIA_UPLOAD_TOKEN` routes, never `/api/files/upload`; read via `/api/files/ai-hub/*` for motion/slide media + manifests only; brand files only via `/api/ai/brand/site/*`), `ib-guide` (IB IA example pages + `manifest/ia.json`, **stored unwatermarked** — so nothing may
+  ever serve from it except the watermarking route `GET /api/ib/ia/:exId/:doc/pages/:n`; closed to `/api/files/*` (404 on read, 403 on
+  upload/delete) and to every generic `storage.service` function (`ibGuideRelPath`, `urlToStoragePath` → null); written only through the
+  `IB_MEDIA_UPLOAD_TOKEN` routes), `videos` (teacher-only, uploaded through the streaming route
   `POST /api/videos/upload`, not `/api/files/upload` which buffers whole files in memory),
   `submission-files`, post attachments. Served via `/api/files/*` as a stream with HTTP Range
   support (required for `<video>` seeking).

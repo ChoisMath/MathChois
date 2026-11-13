@@ -13,7 +13,7 @@
  */
 import { eq } from 'drizzle-orm';
 import { db, pgClient } from '../src/config/database.js';
-import { profiles, classrooms, classroomMembers } from '../src/db/schema.js';
+import { profiles, classrooms, classroomMembers, allowedTeachers } from '../src/db/schema.js';
 import { hashPassword } from '../src/services/auth.service.js';
 
 const TEACHER = { email: 'test.teacher@chois.test', name: '테스트 교사', role: 'teacher' as const };
@@ -58,6 +58,15 @@ async function upsertClassroom(teacherId: string) {
   return { row: created, created: true };
 }
 
+/** 교사는 허용 목록에 있어야 한다 — 없으면 첫 로그인/갱신 때 applyAccessRules 가 학생으로 내린다 */
+async function ensureAllowedTeacher(email: string) {
+  const inserted = await db.insert(allowedTeachers)
+    .values({ email: email.toLowerCase(), note: '테스트 교사(시드)' })
+    .onConflictDoNothing({ target: allowedTeachers.email })
+    .returning({ id: allowedTeachers.id });
+  return inserted.length > 0;
+}
+
 async function ensureMembership(classroomId: string, studentId: string) {
   const existing = await db.select().from(classroomMembers)
     .where(eq(classroomMembers.classroomId, classroomId)).limit(50);
@@ -68,12 +77,13 @@ async function ensureMembership(classroomId: string, studentId: string) {
 
 async function main() {
   const teacher = await upsertEmailUser(TEACHER);
+  const allowed = await ensureAllowedTeacher(TEACHER.email);
   const student = await upsertEmailUser(STUDENT);
   const classroom = await upsertClassroom(teacher.row.id);
   const joined = await ensureMembership(classroom.row.id, student.row.id);
 
   console.info('=== 테스트 계정 시드 완료 ===');
-  console.info(`교사  ${TEACHER.email} (${teacher.created ? '생성' : '갱신'})  id=${teacher.row.id}`);
+  console.info(`교사  ${TEACHER.email} (${teacher.created ? '생성' : '갱신'})  id=${teacher.row.id}  허용 목록 ${allowed ? '등록' : '이미 있음'}`);
   console.info(`학생  ${STUDENT.email} (${student.created ? '생성' : '갱신'})  id=${student.row.id}`);
   console.info(`클래스 ${CLASS_NAME} [${CLASS_CODE}] (${classroom.created ? '생성' : '확인'})  id=${classroom.row.id}`);
   console.info(`멤버십 학생→클래스 ${joined ? '추가' : '이미 존재'}`);

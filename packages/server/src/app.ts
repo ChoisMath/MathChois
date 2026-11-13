@@ -10,6 +10,7 @@ import path from 'node:path';
 import { sql } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import { env } from './config/env.js';
+import { isRateLimitExempt } from './utils/rateLimitExempt.js';
 import { db } from './config/database.js';
 import { authRoutes } from './routes/auth.js';
 import { classroomRoutes } from './routes/classrooms.js';
@@ -31,6 +32,8 @@ import { unitRoutes } from './routes/units.js';
 import { videoSubtitleRoutes } from './routes/videoSubtitles.js';
 import { classroomGroupRoutes } from './routes/classroomGroups.js';
 import { whiteboardRoutes } from './routes/whiteboards.js';
+import { aiHubRoutes } from './routes/aiHub.js';
+import { ibGuideRoutes } from './routes/ibGuide.js';
 
 export function buildApp() {
   const app = Fastify({
@@ -65,15 +68,8 @@ export function buildApp() {
       return request.ip;
     },
 
-    // 정적 파일, Socket.IO, Health check는 rate limit에서 제외
-    allowList: (request, _key) => {
-      const url = request.url;
-      return url.startsWith('/assets/')
-        || url.startsWith('/socket.io/')
-        || url === '/favicon.svg'
-        || url === '/favicon.ico'
-        || url === '/api/health';
-    },
+    // 정적 파일, Socket.IO, Health check, AI활용 허브 미디어 읽기는 rate limit 에서 제외(utils/rateLimitExempt.ts)
+    allowList: (request) => isRateLimitExempt(request.method, request.url),
 
     // 429 발생 시 로깅 (디버깅용)
     onExceeded: (request, key) => {
@@ -115,6 +111,8 @@ export function buildApp() {
   app.register(unitRoutes);
   app.register(classroomGroupRoutes);
   app.register(whiteboardRoutes);
+  app.register(aiHubRoutes);
+  app.register(ibGuideRoutes);
 
   // ─── Global Error Handler ──────────────────────────
 

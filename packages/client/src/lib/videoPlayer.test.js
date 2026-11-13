@@ -4,8 +4,10 @@ import {
   normalizeSeekStep, normalizeRate, normalizeSettings, stepRate, formatRate, formatTime,
   loadSettings, saveSettings, loadResumePosition, saveResumePosition, isTypingTarget,
   BRIGHTNESS_MIN, BRIGHTNESS_MAX, GESTURE_AXIS_THRESHOLD,
-  decideGestureAxis, verticalGestureKind, dragToLevel,
+  decideGestureAxis, verticalGestureKind, dragToLevel, createScrubSeeker,
   SUBTITLE_SIZES, pickSubtitleTrack,
+  pickFullscreenMethod, isIphoneUserAgent, fullscreenElementOf,
+  HOLD_MS, HOLD_RATE, holdKind, rewindTarget,
 } from './videoPlayer.js';
 
 function fakeStorage() {
@@ -134,5 +136,165 @@ describe('long-press drag gestures', () => {
     expect(dragToLevel(1, -65, 100, BRIGHTNESS_MIN, BRIGHTNESS_MAX)).toBeCloseTo(1.5 + 0, 2); // 1 + 0.65·1.3 → 1.845 → 1.5 로 고정
     expect(dragToLevel(1, 50, 100, BRIGHTNESS_MIN, BRIGHTNESS_MAX)).toBeCloseTo(0.35, 2);
     expect(dragToLevel(5, 0, 100, BRIGHTNESS_MIN, BRIGHTNESS_MAX)).toBe(BRIGHTNESS_MAX); // 시작값도 범위 안으로
+  });
+});
+
+describe('press-and-hold (2x / rewind)', () => {
+  it('holds for half a second at double speed', () => {
+    expect(HOLD_MS).toBe(500);
+    expect(HOLD_RATE).toBe(2);
+  });
+
+  it('the right half fast-forwards and the left half rewinds', () => {
+    expect(holdKind(300, 0, 400)).toBe('fast');
+    expect(holdKind(100, 0, 400)).toBe('rewind');
+    expect(holdKind(200, 0, 400)).toBe('fast'); // 정중앙은 오른쪽으로 친다
+    expect(holdKind(150, 100, 400)).toBe('rewind'); // left 오프셋 반영
+    expect(holdKind(10, 0, 0)).toBe('fast'); // 폭을 모르면 2배속
+  });
+
+  it('rewinds at the hold rate from the start time and stops at zero', () => {
+    expect(rewindTarget(30, 1000, 2)).toBe(28);
+    expect(rewindTarget(30, 2500, 2)).toBe(25);
+    expect(rewindTarget(3, 5000, 2)).toBe(0);
+    expect(rewindTarget(30, 0, 2)).toBe(30);
+    expect(rewindTarget(30, -100, 2)).toBe(30); // 음수 경과 시간은 무시
+  });
+});
+
+describe('fullscreen method selection', () => {
+  const base = { hasRequest: false, hasWebkitRequest: false, hasVideoNative: true, hasExternalTarget: false, isIphone: false };
+
+  it('prefers the standard API, then the webkit-prefixed one (older iPadOS)', () => {
+    expect(pickFullscreenMethod({ ...base, hasRequest: true })).toBe('api');
+    expect(pickFullscreenMethod({ ...base, hasRequest: true, isIphone: true })).toBe('api');
+    expect(pickFullscreenMethod({ ...base, hasWebkitRequest: true })).toBe('webkit');
+  });
+
+  it('keeps the CSS fallback for an external target (2분할 루트) when there is no API', () => {
+    expect(pickFullscreenMethod({ ...base, hasExternalTarget: true })).toBe('pseudo');
+    expect(pickFullscreenMethod({ ...base, hasExternalTarget: true, isIphone: true })).toBe('pseudo');
+  });
+
+  it('hands the video to the native player only on iPhone', () => {
+    expect(pickFullscreenMethod({ ...base, isIphone: true })).toBe('native');
+    expect(pickFullscreenMethod({ ...base, isIphone: true, hasVideoNative: false })).toBe('pseudo');
+  });
+
+  it('fills the window with the custom player on iPad-class browsers without the element API', () => {
+    // iPad in-app browsers / WKWebView without element fullscreen: native player would drop every web gesture
+    expect(pickFullscreenMethod(base)).toBe('pseudo');
+    expect(pickFullscreenMethod({ ...base, hasVideoNative: false })).toBe('pseudo');
+  });
+
+  it('detects iPhone/iPod user agents but not iPad (desktop-mode UA says Macintosh)', () => {
+    expect(isIphoneUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15')).toBe(true);
+    expect(isIphoneUserAgent('Mozilla/5.0 (iPod touch; CPU iPhone OS 15_0 like Mac OS X)')).toBe(true);
+    expect(isIphoneUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.4 Safari/605.1.15')).toBe(false);
+    expect(isIphoneUserAgent('Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15 CriOS/124.0')).toBe(false);
+    expect(isIphoneUserAgent('Mozilla/5.0 (Linux; Android 14; SM-X916B) Chrome/124')).toBe(false);
+    expect(isIphoneUserAgent('')).toBe(false);
+    expect(isIphoneUserAgent(undefined)).toBe(false);
+  });
+
+  it('reads the fullscreen element with or without the webkit prefix', () => {
+    const el = {};
+    expect(fullscreenElementOf({ fullscreenElement: el })).toBe(el);
+    expect(fullscreenElementOf({ fullscreenElement: null, webkitFullscreenElement: el })).toBe(el);
+    expect(fullscreenElementOf({ fullscreenElement: null, webkitFullscreenElement: null })).toBeNull();
+    expect(fullscreenElementOf({})).toBeNull();
+    expect(fullscreenElementOf(null)).toBeNull();
+  });
+});
+
+describe('scrub seeker (one seek in flight at a time)', () => {
+  /** <video> 흉내: currentTime 대입/fastSeek 호출을 기록하고, completeSeek() 로 seeked 를 발생시킨다 */
+  function fakeVideo({ fastSeek = false } = {}) {
+    const listeners = {};
+    let t = 0;
+    const v = {
+      seeking: false,
+      seeks: [],
+      fastSeeks: [],
+      addEventListener: (type, fn) => { (listeners[type] ||= new Set()).add(fn); },
+      removeEventListener: (type, fn) => { listeners[type]?.delete(fn); },
+      completeSeek() { v.seeking = false; listeners.seeked?.forEach((fn) => fn()); },
+      listenerCount: (type) => listeners[type]?.size ?? 0,
+    };
+    Object.defineProperty(v, 'currentTime', {
+      get: () => t,
+      set: (x) => { t = x; v.seeking = true; v.seeks.push(x); },
+    });
+    if (fastSeek) v.fastSeek = (x) => { t = x; v.seeking = true; v.fastSeeks.push(x); };
+    return v;
+  }
+
+  it('sends the first request immediately and queues the rest until seeked', () => {
+    const v = fakeVideo();
+    const s = createScrubSeeker(v);
+    expect(s.request(10)).toBe(true);
+    expect(v.seeks).toEqual([10]);
+    // 탐색 중에는 새 요청을 보내지 않고 마지막 목표만 기억한다
+    expect(s.request(20)).toBe(false);
+    expect(s.request(30)).toBe(false);
+    expect(v.seeks).toEqual([10]);
+    v.completeSeek();
+    expect(v.seeks).toEqual([10, 30]); // 끝나면 가장 최근 목표 하나만 보낸다
+    v.completeSeek();
+    expect(v.seeks).toEqual([10, 30]); // 대기 중인 목표가 없으면 아무것도 안 한다
+  });
+
+  it('ignores targets that barely differ from the last seek', () => {
+    const v = fakeVideo();
+    const s = createScrubSeeker(v, { minStep: 0.5 });
+    s.request(10);
+    v.completeSeek();
+    expect(s.request(10.2)).toBe(false);
+    expect(v.seeks).toEqual([10]);
+    expect(s.request(10.6)).toBe(true);
+    expect(v.seeks).toEqual([10, 10.6]);
+    // 대기열에 들어간 미세 변화도 seeked 뒤에 보내지 않는다
+    s.request(10.7);
+    v.completeSeek();
+    expect(v.seeks).toEqual([10, 10.6]);
+  });
+
+  it('prefers fastSeek (keyframe) while scrubbing but finishes with an exact seek', () => {
+    const v = fakeVideo({ fastSeek: true });
+    const s = createScrubSeeker(v);
+    s.request(42);
+    expect(v.fastSeeks).toEqual([42]);
+    expect(v.seeks).toEqual([]);
+    v.completeSeek();
+    s.finish(43.3);
+    expect(v.seeks).toEqual([43.3]);
+    expect(v.currentTime).toBe(43.3);
+  });
+
+  it('falls through after a stalled seek so a frozen seeked never blocks scrubbing', () => {
+    let now = 1000;
+    const v = fakeVideo();
+    const s = createScrubSeeker(v, { stallMs: 500, now: () => now });
+    s.request(10);
+    now += 200;
+    expect(s.request(20)).toBe(false);
+    now += 400; // 600ms 동안 seeked 가 안 왔다 → 막혀 있다고 보고 다시 보낸다
+    expect(s.request(30)).toBe(true);
+    expect(v.seeks).toEqual([10, 30]);
+  });
+
+  it('finish() drops the queue, detaches the listener and seeks exactly once', () => {
+    const v = fakeVideo();
+    const s = createScrubSeeker(v);
+    s.request(10);
+    s.request(20);
+    expect(v.listenerCount('seeked')).toBe(1);
+    s.finish(25);
+    expect(v.seeks).toEqual([10, 25]);
+    expect(v.listenerCount('seeked')).toBe(0);
+    v.completeSeek(); // 늦게 온 seeked 가 대기 목표를 되살리지 않는다
+    expect(v.seeks).toEqual([10, 25]);
+    s.finish(30); // 두 번 호출해도 안전
+    expect(v.seeks).toEqual([10, 25, 30]);
   });
 });

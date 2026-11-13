@@ -10,7 +10,6 @@ import {
   verifyPassword,
   updatePassword,
   setMustResetPassword,
-  updateProfileRole,
   updateProfileName,
   signAccessToken,
   signRefreshToken,
@@ -21,6 +20,7 @@ import {
   verifyEmailVerificationToken,
 } from '../services/auth.service.js';
 import { isMailConfigured, sendPasswordResetEmail, sendVerificationEmail } from '../services/mail.service.js';
+import { applyAccessRules } from '../services/access.service.js';
 import { authenticate } from '../middleware/auth.js';
 import { env } from '../config/env.js';
 import { APP_ORIGIN } from './storage.js';
@@ -131,7 +131,8 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     try {
-      const profile = await createEmailProfile(data.email, data.passwordHash, data.name);
+      // 가입은 학생으로 — 교사 허용 목록·학급 사전 등록은 applyAccessRules 가 적용한다
+      const profile = await applyAccessRules(await createEmailProfile(data.email, data.passwordHash, data.name));
 
       const accessToken = signAccessToken(profile);
       const refreshTokenValue = signRefreshToken(profile.id);
@@ -160,28 +161,31 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: '이메일과 비밀번호를 입력해 주세요.' });
     }
 
-    const profile = await getProfileByEmail(email.toLowerCase().trim());
-    if (!profile || profile.authMethod !== 'email' || !profile.passwordHash) {
+    const found = await getProfileByEmail(email.toLowerCase().trim());
+    if (!found || found.authMethod !== 'email' || !found.passwordHash) {
       return reply.status(401).send({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
     }
 
     // mustResetPassword 상태: 입력한 비밀번호가 새 비밀번호가 됨
-    if (profile.mustResetPassword) {
+    if (found.mustResetPassword) {
       const newHash = await hashPassword(password);
-      const updated = await updatePassword(profile.id, newHash);
+      const updated = await updatePassword(found.id, newHash);
       if (updated) {
-        const accessToken = signAccessToken(updated);
-        const refreshToken = signRefreshToken(updated.id);
+        const profile = await applyAccessRules(updated);
+        const accessToken = signAccessToken(profile);
+        const refreshToken = signRefreshToken(profile.id);
         reply.setCookie('refresh_token', refreshToken, REFRESH_COOKIE_OPTIONS);
-        return { token: accessToken, profile: toProfileResponse(updated), passwordReset: true };
+        return { token: accessToken, profile: toProfileResponse(profile), passwordReset: true };
       }
     }
 
-    const valid = await verifyPassword(password, profile.passwordHash);
+    const valid = await verifyPassword(password, found.passwordHash);
     if (!valid) {
       return reply.status(401).send({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
     }
 
+    // 로그인마다 역할을 규칙대로 다시 정한다(허용 목록 변경 반영, 사전 등록 소비)
+    const profile = await applyAccessRules(found);
     const accessToken = signAccessToken(profile);
     const refreshToken = signRefreshToken(profile.id);
     reply.setCookie('refresh_token', refreshToken, REFRESH_COOKIE_OPTIONS);
@@ -297,7 +301,8 @@ export async function authRoutes(app: FastifyInstance) {
     try {
       const redirectUri = `${getBaseUrl(request)}/api/auth/google/callback`;
       const googleUser = await exchangeGoogleCode(code, redirectUri);
-      const profile = await findOrCreateProfile(googleUser);
+      // 허용 목록에 없는 계정은 교사가 될 수 없다(학생으로 들어온다). 사전 등록된 학급에는 바로 들어간다.
+      const profile = await applyAccessRules(await findOrCreateProfile(googleUser));
 
       const accessToken = signAccessToken(profile);
       const refreshToken = signRefreshToken(profile.id);
@@ -327,11 +332,14 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: 'Invalid refresh token' });
     }
 
-    const profile = await getProfileById(profileId);
-    if (!profile) {
+    const stored = await getProfileById(profileId);
+    if (!stored) {
       reply.clearCookie('refresh_token', { path: '/api/auth' });
       return reply.status(401).send({ error: 'User not found' });
     }
+
+    // 갱신마다 역할을 다시 정한다 — 허용 목록에서 빠진 교사는 늦어도 access token 만료(15분) 안에 학생이 된다
+    const profile = await applyAccessRules(stored);
 
     // 토큰 로테이션: 새 refresh token 발급
     const newAccessToken = signAccessToken(profile);
@@ -374,34 +382,6 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Profile not found' });
     }
     return { id: profile.id, name: profile.name, avatarUrl: profile.avatarUrl };
-  });
-
-  // ─── PATCH /api/profiles/role — 역할 설정 ───────
-
-  app.patch<{
-    Body: { role: 'teacher' | 'student' };
-  }>('/api/profiles/role', {
-    preHandler: [authenticate],
-  }, async (request, reply) => {
-    const { role } = request.body;
-    if (role !== 'teacher' && role !== 'student') {
-      return reply.status(400).send({ error: 'Invalid role' });
-    }
-
-    const updated = await updateProfileRole(request.user.sub, role);
-    if (!updated) {
-      return reply.status(404).send({ error: 'Profile not found' });
-    }
-
-    // 새 access token 발급 (role이 변경되었으므로)
-    const newAccessToken = signAccessToken(updated);
-    const newRefreshToken = signRefreshToken(updated.id);
-    reply.setCookie('refresh_token', newRefreshToken, REFRESH_COOKIE_OPTIONS);
-
-    return {
-      token: newAccessToken,
-      profile: toProfileResponse(updated),
-    };
   });
 }
 

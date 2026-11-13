@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { isClassroomColor, pickLeastUsedColor } from '@mathchois/shared';
+import { isClassroomColor, pickLeastUsedColor, parseEmailList, EMAIL_LIST_MAX } from '@mathchois/shared';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import {
@@ -14,10 +14,11 @@ import {
   joinClassroomByCode,
   removeClassroomMember,
   isClassroomOwner,
-  getClassroomImageUrls,
-  findSharedClassroomImageUrls,
+  getClassroomFileUrls,
+  findSharedClassroomFileUrls,
 } from '../services/classroom.service.js';
 import { getChaptersByClassroom, getLinkedChapterIds } from '../services/chapter.service.js';
+import { listClassroomInvites, addClassroomInvites, removeClassroomInvite } from '../services/classroomInvite.service.js';
 import { removeFile, urlToStoragePath, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
 
 export async function classroomRoutes(app: FastifyInstance) {
@@ -99,7 +100,7 @@ export async function classroomRoutes(app: FastifyInstance) {
 
   app.patch<{
     Params: { id: string };
-    Body: { name?: string; color?: string };
+    Body: { name?: string; color?: string; aiHubEnabled?: boolean; ibGuideEnabled?: boolean };
   }>('/api/classrooms/:id', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
@@ -107,17 +108,25 @@ export async function classroomRoutes(app: FastifyInstance) {
     if (!isOwner) {
       return reply.status(403).send({ error: 'Not the classroom owner' });
     }
-    // 본문 통째 전달 금지 — teacherId·classCode 등은 무시하고 name/color 만 반영
-    const { name, color } = request.body ?? {};
+    // 본문 통째 전달 금지 — teacherId·classCode 등은 무시하고 name/color/aiHubEnabled/ibGuideEnabled 만 반영
+    const { name, color, aiHubEnabled, ibGuideEnabled } = request.body ?? {};
     if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
       return reply.status(400).send({ error: 'Name is required' });
     }
     if (color !== undefined && !isClassroomColor(color)) {
       return reply.status(400).send({ error: 'Invalid color' });
     }
+    if (aiHubEnabled !== undefined && typeof aiHubEnabled !== 'boolean') {
+      return reply.status(400).send({ error: 'aiHubEnabled must be boolean' });
+    }
+    if (ibGuideEnabled !== undefined && typeof ibGuideEnabled !== 'boolean') {
+      return reply.status(400).send({ error: 'ibGuideEnabled must be boolean' });
+    }
     const patch = {
       ...(name !== undefined && { name: name.trim() }),
       ...(color !== undefined && { color }),
+      ...(aiHubEnabled !== undefined && { aiHubEnabled }),
+      ...(ibGuideEnabled !== undefined && { ibGuideEnabled }),
     };
     if (Object.keys(patch).length === 0) {
       return reply.status(400).send({ error: 'Nothing to update' });
@@ -158,13 +167,13 @@ export async function classroomRoutes(app: FastifyInstance) {
       }
     }
 
-    // Storage 파일 정리: orphan 이미지만 삭제 (다른 교실에서 공유되지 않는 것)
-    const imageUrls = await getClassroomImageUrls(request.params.id);
-    const sharedUrls = await findSharedClassroomImageUrls(imageUrls, request.params.id);
+    // Storage 파일 정리: orphan 이미지·PDF만 삭제 (다른 교실에서 공유되지 않는 것)
+    const fileUrls = await getClassroomFileUrls(request.params.id);
+    const sharedUrls = await findSharedClassroomFileUrls(fileUrls, request.params.id);
     const sharedSet = new Set(sharedUrls);
-    const orphanUrls = imageUrls.filter((url) => !sharedSet.has(url));
+    const orphanUrls = fileUrls.filter((url) => !sharedSet.has(url));
 
-    app.log.info({ classroomId: request.params.id, total: imageUrls.length, shared: sharedUrls.length, orphans: orphanUrls.length }, 'Classroom storage cleanup');
+    app.log.info({ classroomId: request.params.id, total: fileUrls.length, shared: sharedUrls.length, orphans: orphanUrls.length }, 'Classroom storage cleanup');
 
     await deleteClassroom(request.params.id);
 
@@ -229,6 +238,48 @@ export async function classroomRoutes(app: FastifyInstance) {
     }
 
     await removeClassroomMember(id, studentId);
+    return reply.status(204).send();
+  });
+
+  // ─── 학생 사전 등록 — 교사가 올린 이메일로 가입하면 코드 없이 바로 구성원 ─────
+
+  // GET /api/classrooms/:id/invites — 가입 대기 명단(소유 교사)
+  app.get<{ Params: { id: string } }>('/api/classrooms/:id/invites', {
+    preHandler: [authenticate, requireRole('teacher')],
+  }, async (request, reply) => {
+    if (!(await isClassroomOwner(request.params.id, request.user.sub))) {
+      return reply.status(403).send({ error: 'Not the classroom owner' });
+    }
+    return listClassroomInvites(request.params.id);
+  });
+
+  // POST /api/classrooms/:id/invites — { emails } 여러 개. 이미 가입한 학생은 바로 구성원, 아니면 대기 명단.
+  app.post<{ Params: { id: string }; Body: { emails?: string[] | string } }>('/api/classrooms/:id/invites', {
+    preHandler: [authenticate, requireRole('teacher')],
+  }, async (request, reply) => {
+    if (!(await isClassroomOwner(request.params.id, request.user.sub))) {
+      return reply.status(403).send({ error: 'Not the classroom owner' });
+    }
+    const parsed = parseEmailList(request.body?.emails ?? '');
+    if (parsed.tooMany) {
+      return reply.status(400).send({ error: `한 번에 ${EMAIL_LIST_MAX}명까지 등록할 수 있습니다.` });
+    }
+    if (parsed.valid.length === 0) {
+      return reply.status(400).send({ error: '등록할 이메일을 입력해 주세요.', invalid: parsed.invalid });
+    }
+    const result = await addClassroomInvites(request.params.id, parsed.valid, request.user.sub);
+    return reply.status(201).send({ ...result, invalid: parsed.invalid });
+  });
+
+  // DELETE /api/classrooms/:id/invites/:inviteId
+  app.delete<{ Params: { id: string; inviteId: string } }>('/api/classrooms/:id/invites/:inviteId', {
+    preHandler: [authenticate, requireRole('teacher')],
+  }, async (request, reply) => {
+    if (!(await isClassroomOwner(request.params.id, request.user.sub))) {
+      return reply.status(403).send({ error: 'Not the classroom owner' });
+    }
+    const removed = await removeClassroomInvite(request.params.id, request.params.inviteId);
+    if (!removed) return reply.status(404).send({ error: 'Not found' });
     return reply.status(204).send();
   });
 }

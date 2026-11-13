@@ -5,6 +5,7 @@ import { getClassroomVideo, getVideoProgress, reportVideoProgress } from '../../
 import ProgressSaveStatus from '../../components/videos/ProgressSaveStatus';
 import { getCachedChapterAndPages } from '../../lib/dataCache';
 import { loadSplitSettings, saveSplitSettings, loadSplitPage, saveSplitPage } from '../../lib/splitLayout';
+import { fullscreenElementOf } from '../../lib/videoPlayer';
 import { useOrientation } from '../../hooks/useOrientation';
 import SplitPane from '../../components/common/SplitPane';
 import IconButton from '../../components/common/IconButton';
@@ -126,9 +127,16 @@ export default function ClassroomVideoSplit() {
 
   /* ── 전체화면 상태 추적 + CSS 폴백 Esc 해제 ── */
   useEffect(() => {
-    const onChange = () => setRealFull(!!document.fullscreenElement && document.fullscreenElement === rootRef.current);
+    const onChange = () => {
+      const current = fullscreenElementOf(document);
+      setRealFull(!!current && current === rootRef.current);
+    };
     document.addEventListener('fullscreenchange', onChange);
-    return () => document.removeEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange); // 접두사만 있는 WebKit(iPadOS 12~16.3)
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
   }, []);
   useEffect(() => {
     if (!pseudoFull) return undefined;

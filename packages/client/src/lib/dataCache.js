@@ -41,3 +41,22 @@ export function invalidatePagesCache(chapterId) {
   _chapterCache.delete(chapterId);
   _pagesCache.delete(chapterId);
 }
+
+/**
+ * AI활용 허브 목록(access·motion·slide) 캐시 — 브라우저 세션 동안 유지, 새로고침 시 초기화.
+ * `AiHubRoute` 가 읽고 쓴다. 값은 { access, motion, slide } 한 덩어리.
+ */
+const _aiHubCache = new Map();
+const AI_HUB_KEY = 'hub';
+
+export function getAiHubCache() {
+  return _aiHubCache.get(AI_HUB_KEY) ?? null;
+}
+
+export function setAiHubCache(value) {
+  _aiHubCache.set(AI_HUB_KEY, value);
+}
+
+export function invalidateAiHubCache() {
+  _aiHubCache.clear();
+}

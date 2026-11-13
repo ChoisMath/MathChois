@@ -31,7 +31,7 @@ export default function PageNavOverlay({ onPrev, onNext, hasPrev, hasNext }) {
             opacity-15 hover:opacity-50 active:opacity-50 transition-opacity cursor-pointer select-none"
           aria-label="이전 페이지"
         >
-          <ChevronLeft className="h-6 w-6 text-gray-600" />
+          <ChevronLeft className="h-6 w-6 vw-edge-nav" />
         </div>
       )}
       {hasNext && (
@@ -42,7 +42,7 @@ export default function PageNavOverlay({ onPrev, onNext, hasPrev, hasNext }) {
             opacity-15 hover:opacity-50 active:opacity-50 transition-opacity cursor-pointer select-none"
           aria-label="다음 페이지"
         >
-          <ChevronRight className="h-6 w-6 text-gray-600" />
+          <ChevronRight className="h-6 w-6 vw-edge-nav" />
         </div>
       )}
     </>

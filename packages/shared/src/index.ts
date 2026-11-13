@@ -15,3 +15,7 @@ export * from './subtitles/subtitles.js';
 export * from './units/units.js';
 export * from './units/copyPlan.js';
 export * from './chapter/title.js';
+export * from './ai-hub/index.js';
+export * from './ib-guide/index.js';
+export * from './auth/access.js';
+export * from './page/kind.js';

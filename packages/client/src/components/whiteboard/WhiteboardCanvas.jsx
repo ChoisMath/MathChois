@@ -5,6 +5,7 @@ import ExcalidrawErrorBoundary from '../ExcalidrawErrorBoundary';
 import { api } from '../../lib/api';
 import { useWhiteboardCollab } from '../../hooks/useWhiteboardCollab';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
+import { useWetInk } from '../../hooks/useWetInk';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
 import { TOUCH_CSS } from '../../lib/excalidrawUtils';
 import {
@@ -88,6 +89,17 @@ function WhiteboardCanvasInner({
     containerRef, screenLockedRef: noopRef, baseStrokeWidthRef: widthRef,
   });
   useScribbleErase({ excalidrawAPIRef: penTouchHandling ? apiRef : { current: null }, excludePrefixes: [GUIDE_ELEMENT_ID] });
+  /* 웻잉크 펜 렌더 + 멈춤 도형 보정 (필기 뷰어와 같은 훅). 읽기 전용이면 끔, Excalidraw 내장 펜 도구일 때만 가로챔.
+     commit 은 IMMEDIATELY 로 내장 undo 에 바로 잡히고, onChange → collab.sendElements 로 요소 단위 동기화를 탄다. */
+  const wetInkOverlayRef = useRef(null);
+  const drawModeRef = useRef(!effectiveReadOnly);
+  useEffect(() => { drawModeRef.current = !effectiveReadOnly; }, [effectiveReadOnly]);
+  const penActiveRef = useRef(false);
+  useWetInk({
+    excalidrawAPIRef: penTouchHandling ? apiRef : { current: null },
+    overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef,
+    captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+  });
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -282,6 +294,7 @@ function WhiteboardCanvasInner({
 
   /* ── Excalidraw onChange ── */
   const handleChange = useCallback((elements, appState, files) => {
+    penActiveRef.current = appState?.activeTool?.type === 'freedraw';
     if (isTeacher && onAuthorChange) {
       const sel = Object.keys(appState.selectedElementIds || {});
       let name = null;
@@ -366,6 +379,11 @@ function WhiteboardCanvasInner({
             name={`whiteboard-${boardId}`}
           />
         </ExcalidrawErrorBoundary>
+        <canvas
+          ref={wetInkOverlayRef}
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          style={{ zIndex: 3 }}
+        />
         {startPicker && (
           <TemplatePickerDialog variant="overlay" onSelect={handleStartPick} onClose={() => handleStartPick(null)} />
         )}

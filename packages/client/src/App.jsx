@@ -12,7 +12,6 @@ import ResetPassword from './pages/ResetPassword';
 import VerifyEmail from './pages/VerifyEmail';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
-const ChooseRole      = lazy(() => import('./pages/ChooseRole'));
 const ClassroomList   = lazy(() => import('./pages/Classrooms/ClassroomList'));
 const ClassroomDetail = lazy(() => import('./pages/Classrooms/ClassroomDetail'));
 const ChapterMonitor  = lazy(() => import('./pages/Monitor/ChapterMonitor'));
@@ -45,6 +44,19 @@ const ClassroomVideoSplit = lazy(() => import('./pages/Videos/ClassroomVideoSpli
 /* 코칭 기록 */
 const MyCoachingHistory     = lazy(() => import('./pages/History/MyCoachingHistory'));
 const StudentCoachingHistory = lazy(() => import('./pages/Monitor/StudentCoachingHistory'));
+
+/* AI활용 허브 */
+const AiHubRoute         = lazy(() => import('./pages/AiHub/AiHubRoute'));
+const AiHubLayout        = lazy(() => import('./pages/AiHub/AiHubLayout'));
+const MotionGalleryPage  = lazy(() => import('./pages/AiHub/MotionGalleryPage'));
+const MotionDetailPage   = lazy(() => import('./pages/AiHub/MotionDetailPage'));
+const SlideGalleryPage   = lazy(() => import('./pages/AiHub/SlideGalleryPage'));
+const BrandPage          = lazy(() => import('./pages/AiHub/BrandPage'));
+const MotionEditorPage   = lazy(() => import('./pages/AiHub/MotionEditorPage'));
+const IbGuideRoute       = lazy(() => import('./pages/IbGuide/IbGuideRoute'));
+const IbGuideLayout      = lazy(() => import('./pages/IbGuide/IbGuideLayout'));
+const IaListPage         = lazy(() => import('./pages/IbGuide/IaListPage'));
+const IaViewerPage       = lazy(() => import('./pages/IbGuide/IaViewerPage'));
 
 /* 관리자 */
 const AdminPanel = lazy(() => import('./pages/Admin/AdminPanel'));
@@ -104,7 +116,8 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route element={<MainLayout />}>
             <Route path="/login" element={<Navigate to="/" replace />} />
-            <Route path="/choose-role" element={<ChooseRole />} />
+            {/* 역할은 서버가 정한다(교사 허용 목록) — 예전 주소는 홈으로 */}
+            <Route path="/choose-role" element={<Navigate to="/" replace />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsOfService />} />
           </Route>
@@ -163,6 +176,29 @@ function App() {
               path="/teacher/classrooms/:classroomId/assignments/:assignmentId/monitor/:studentId"
               element={<AssignmentWorkViewer />}
             />
+          </Route>
+
+          {/* AI활용 허브 — 로그인·역할·접근 허락은 AiHubRoute 가 판정 */}
+          <Route element={<AiHubRoute />}>
+            <Route element={<AiHubLayout />}>
+              <Route path="/ai" element={<Navigate to="/ai/motion" replace />} />
+              <Route path="/ai/motion" element={<MotionGalleryPage />} />
+              <Route path="/ai/motion/:id" element={<MotionDetailPage />} />
+              <Route path="/ai/slide" element={<SlideGalleryPage />} />
+              <Route path="/ai/brand" element={<BrandPage />} />
+            </Route>
+            {/* 편집기: 전체 화면(레이아웃 밖), 교사·관리자 */}
+            <Route path="/ai/motion/:id/edit" element={<MotionEditorPage />} />
+          </Route>
+
+          {/* IB교육과정 안내 허브 — 로그인·역할·접근 허락은 IbGuideRoute 가 판정 */}
+          <Route element={<IbGuideRoute />}>
+            <Route element={<IbGuideLayout />}>
+              <Route path="/ib" element={<Navigate to="/ib/ia" replace />} />
+              <Route path="/ib/ia" element={<IaListPage />} />
+            </Route>
+            {/* 쪽 보기: 전체 화면(허브 틀 밖) */}
+            <Route path="/ib/ia/:exId" element={<IaViewerPage />} />
           </Route>
 
           {/* Admin Routes */}

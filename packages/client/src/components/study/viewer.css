@@ -1,0 +1,268 @@
+/*
+ * 필기 뷰어 공용 크롬 — 상단 바 · 도구바 · 페이지 목록 · 플로팅 버튼
+ * (StudyViewer · TeacherStudyViewer · StudentWorkViewer · AssignmentStudyViewer · AssignmentWorkViewer · CoachingViewer 도구바)
+ *
+ * 생각: 앱 틀이 "책상 위의 공책"(남색 상단 바, 종이색 본문, 학급 표지 색)이므로 필기창은 펼친 공책이다.
+ * 종이(캔버스)만 희고, 그 둘레(상단 바·도구바·페이지 목록)는 한 덩어리의 종이색 띠에 머문다. 흰 막대 두 장을 겹치고
+ * 그림자를 깔던 전 모습을 버린다. 색은 상태에만 쓴다: 켜진 도구 = 잉크 남색, 그 밖의 상태 색은 학급 표지 여섯 색의
+ * 옅은 칠/짙은 글씨 짝(lib/classroomColor.js COLOR_STYLES 와 같은 값, 글씨 대비 4.5:1 이상)에서 가져온다.
+ * 크기는 px 로만 쓴다 — html 루트 글자 크기가 화면 폭마다 바뀐다(shell.css 와 같은 이유). 누르는 영역은 40px 이상.
+ */
+/* 토큰은 뷰어 루트와, body 로 포털되는 메모지 팝오버·자리 정하기 덮개에도 건다 (포털은 .vw-root 바깥) */
+.vw-root, .vw-tb-pop, .vw-sticky-placer {
+  --vw-ink: #1c2b4a;        /* 잉크 — 글씨, 켜진 도구 */
+  --vw-soft: #56627c;       /* 보조 글씨·아이콘 */
+  --vw-mute: #8a94ab;       /* 흐린 글씨(저장 중…) */
+  --vw-paper: #f8fafd;      /* 크롬 띠 */
+  --vw-desk: #e6ebf3;       /* 캔버스 바깥 책상 */
+  --vw-line: #d3d9e6;       /* 머리선 */
+  --vw-pen: #2453a6;        /* 포커스 테두리 */
+  --vw-mustard-t: #fcefc7; --vw-mustard-d: #7d5200;   /* 형광펜 · 교사 필기 · 화면 고정 */
+  --vw-coral-t: #fde3dc;   --vw-coral-d: #a63b24;     /* 레이저 포인터 · 전체 지우기 · 영상 */
+  --vw-sage-t: #dff0dc;    --vw-sage-d: #2c6537;      /* 이미지 이동 · 저장됨 · HTML */
+  --vw-lavender-t: #ece4fa; --vw-lavender-d: #563a99; /* Excalidraw 세부설정 · 첨부 · AI */
+  --vw-sky-t: #dcebfa;     --vw-sky-d: #1d5893;       /* 손가락 필기 */
+  --vw-sans: 'IBM Plex Sans KR', 'Noto Sans KR', system-ui, sans-serif;
+}
+.vw-root { background: var(--vw-desk); color: var(--vw-ink); font-family: var(--vw-sans); }
+.vw-tb-pop, .vw-sticky-placer { color: var(--vw-ink); font-family: var(--vw-sans); }   /* 포털: 배경은 각자 (덮개는 투명) */
+.vw-top :focus-visible, .vw-tb :focus-visible, .vw-side :focus-visible, .vw-fab:focus-visible {
+  outline: 3px solid var(--vw-pen); outline-offset: 2px;
+}
+
+/* ── 상단 바 ── 56px. 아래 1px 선은 box-shadow 라서 바로 아래에 도구바가 오면 도구바 배경에 가려 한 덩어리가 된다. */
+.vw-top {
+  position: sticky; top: 0; z-index: 60; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  height: 56px; padding: 0 8px 0 4px;
+  background: var(--vw-paper);
+  box-shadow: 0 1px 0 var(--vw-line);
+}
+.vw-top-l { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.vw-top-r { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.vw-top-title {
+  font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: var(--vw-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vw-top-sub { font-size: 13px; color: var(--vw-soft); white-space: nowrap; flex-shrink: 0; }
+.vw-chip {
+  display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; white-space: nowrap; flex-shrink: 0;
+  background: var(--vw-mustard-t); color: var(--vw-mustard-d);
+}
+.vw-chip--sage { background: var(--vw-sage-t); color: var(--vw-sage-d); }
+.vw-chip--sky { background: var(--vw-sky-t); color: var(--vw-sky-d); }
+.vw-chip--coral { background: var(--vw-coral-t); color: var(--vw-coral-d); }
+.vw-chip--lavender { background: var(--vw-lavender-t); color: var(--vw-lavender-d); }
+
+/* 상단 바 아이콘 버튼 40px / 아이콘 20px */
+.vw-ibtn {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 40px; height: 40px; border-radius: 10px;
+  color: var(--vw-soft); cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.vw-ibtn svg { width: 20px; height: 20px; }
+.vw-ibtn:disabled { opacity: .35; cursor: default; }
+.vw-ibtn.is-on { background: var(--vw-ink); color: #fff; }
+.vw-ibtn.is-tint-mustard { background: var(--vw-mustard-t); color: var(--vw-mustard-d); }
+.vw-ibtn.is-tint-lavender { background: var(--vw-lavender-t); color: var(--vw-lavender-d); }
+.vw-ibtn.is-tint-sage { background: var(--vw-sage-t); color: var(--vw-sage-d); }
+.vw-ibtn.is-tint-coral { background: var(--vw-coral-t); color: var(--vw-coral-d); }
+.vw-ibtn--primary { background: var(--vw-ink); color: #fff; }
+.vw-ibtn--sage { background: var(--vw-sage-d); color: #fff; }
+.vw-ibtn-badge {
+  position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; background: var(--vw-lavender-d); color: #fff;
+}
+@media (hover: hover) {
+  .vw-ibtn:not(:disabled):not(.is-on):not([class*="is-tint-"]):not(.vw-ibtn--primary):not(.vw-ibtn--sage):hover { background: rgba(28, 43, 74, .08); color: var(--vw-ink); }
+  .vw-ibtn.is-on:not(:disabled):hover, .vw-ibtn--primary:not(:disabled):hover { background: #142039; }
+  .vw-ibtn--sage:not(:disabled):hover { background: #245430; }
+}
+.vw-counter {
+  min-width: 52px; text-align: center; font-size: 13px; color: var(--vw-soft);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.vw-status { font-size: 12px; color: var(--vw-mute); white-space: nowrap; padding: 0 6px; }
+.vw-status.is-saved { color: var(--vw-sage-d); }
+
+/* ── 도구바 ── 48px 한 줄, 좁으면 가로 스크롤. 상단 바와 같은 종이색이라 두 줄이 한 덩어리로 읽힌다. */
+.vw-tb {
+  position: sticky; top: 56px; z-index: 50; flex-shrink: 0;
+  display: flex; align-items: center; gap: 2px;
+  height: 48px; padding: 0 8px;
+  background: var(--vw-paper);
+  border-bottom: 1px solid var(--vw-line);
+  overflow-x: auto; scrollbar-width: none;
+}
+.vw-tb::-webkit-scrollbar { display: none; }
+.vw-tb-btn {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center; gap: 1px; flex-shrink: 0;
+  width: 40px; height: 40px; border-radius: 10px;
+  color: var(--vw-soft); cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.vw-tb-btn svg { width: 18px; height: 18px; }
+.vw-tb-btn .vw-tb-caret { width: 10px; height: 10px; margin-left: -3px; opacity: .6; }
+.vw-tb-btn--wide { width: 46px; }
+.vw-tb-btn:disabled { opacity: .35; cursor: default; }
+.vw-tb-btn.is-on { background: var(--vw-ink); color: #fff; }
+.vw-tb-btn--hl.is-on { background: var(--vw-mustard-t); color: var(--vw-mustard-d); }
+.vw-tb-btn--laser.is-on { background: var(--vw-coral-t); color: var(--vw-coral-d); }
+.vw-tb-btn--image.is-on { background: var(--vw-sage-t); color: var(--vw-sage-d); }
+.vw-tb-btn--settings.is-on { background: var(--vw-lavender-t); color: var(--vw-lavender-d); }
+.vw-tb-btn--finger.is-on { background: var(--vw-sky-t); color: var(--vw-sky-d); }
+.vw-tb-btn--danger { color: var(--vw-coral-d); }
+@media (hover: hover) {
+  .vw-tb-btn:not(:disabled):not(.is-on):hover { background: rgba(28, 43, 74, .07); color: var(--vw-ink); }
+  .vw-tb-btn--danger:not(:disabled):hover { background: var(--vw-coral-t); color: var(--vw-coral-d); }
+  .vw-tb-btn.is-on:not(:disabled):hover { filter: brightness(.96); }
+}
+.vw-tb-sep { width: 1px; height: 24px; margin: 0 5px; background: var(--vw-line); flex-shrink: 0; }
+
+/* 색 바로가기 5칸 */
+.vw-swatch {
+  width: 24px; height: 24px; margin: 0 3px; border-radius: 50%; flex-shrink: 0; cursor: pointer;
+  border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(28, 43, 74, .18);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.vw-swatch.is-current { box-shadow: 0 0 0 2px var(--vw-ink); transform: scale(1.1); }
+@media (hover: hover) { .vw-swatch:not(.is-current):hover { transform: scale(1.1); } }
+
+/* 두께 슬라이더 + 미리보기 */
+.vw-tb-width { display: flex; align-items: center; gap: 6px; padding: 0 6px; flex-shrink: 0; }
+.vw-tb-width input[type="range"] { width: 112px; accent-color: var(--vw-ink); cursor: pointer; }
+.vw-tb-width.is-hl input[type="range"] { accent-color: #c98a00; }
+
+/* 이미지 W/H 미세 조절 */
+.vw-tb-mini { display: flex; align-items: center; flex-shrink: 0; margin: 0 2px; border: 1px solid var(--vw-line); border-radius: 10px; height: 32px; overflow: hidden; }
+.vw-tb-mini-label { width: 20px; text-align: center; font-size: 11px; font-weight: 700; color: var(--vw-soft); }
+.vw-tb-mini button { width: 30px; height: 32px; display: inline-flex; align-items: center; justify-content: center; color: var(--vw-soft); cursor: pointer; }
+.vw-tb-mini button svg { width: 14px; height: 14px; }
+@media (hover: hover) { .vw-tb-mini button:hover { background: rgba(28, 43, 74, .07); color: var(--vw-ink); } }
+
+/* 메모지 고르기 팝오버 (StickyPicker) — 도구바 아래 흰 판, 유형 4줄 × 친구 6칸 + 무늬 */
+.vw-tb-pop { position: fixed; left: 50%; transform: translateX(-50%); z-index: 60; background: #fff; border: 1px solid var(--vw-line); border-radius: 8px; box-shadow: 0 6px 18px rgba(28, 43, 74, .14); padding: 8px 10px; max-height: calc(100vh - 120px); overflow-y: auto; }
+.vw-tb-pop-row { display: flex; align-items: center; gap: 4px; }
+.vw-tb-pop-head { width: 64px; font-size: 12px; color: var(--vw-soft); flex-shrink: 0; }
+.vw-tb-pop-cell { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 2px solid transparent; cursor: pointer; background: none; padding: 0; }
+.vw-tb-pop-cell img { width: 40px; height: 40px; object-fit: contain; display: block; }
+.vw-tb-pop-cell[aria-current="true"] { border-color: var(--vw-ink); }
+.vw-tb-pop-pattern { border-top: 1px solid var(--vw-line); margin-top: 6px; padding-top: 6px; }
+.vw-tb-pop-pattern button { height: 36px; padding: 0 10px; border-radius: 8px; font-size: 12px; display: inline-flex; gap: 6px; align-items: center; color: var(--vw-soft); cursor: pointer; background: none; border: 0; }
+.vw-tb-pop-pattern button svg { width: 16px; height: 16px; }
+.vw-tb-pop-pattern button[aria-pressed="true"] { background: var(--vw-ink); color: #fff; }
+/* 메모지 자리 정하기 (StickyPlacer) — 캔버스를 덮는 투명 덮개 + 포인터를 따라다니는 50% 그림자 */
+.vw-sticky-placer { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 55; cursor: copy; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.vw-sticky-placer * { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.vw-sticky-ghost { position: fixed; pointer-events: none; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(28, 43, 74, .25)); }
+.vw-sticky-hint { position: fixed; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 4px 6px 4px 14px; border-radius: 999px; background: var(--vw-ink); color: #fff; font-size: 12px; white-space: nowrap; opacity: .94; }
+.vw-sticky-cancel { height: 30px; padding: 0 12px; border-radius: 999px; background: #fff; color: var(--vw-ink); font-size: 12px; font-weight: 700; cursor: pointer; border: 0; }
+@media (max-width: 640px) { .vw-sticky-hint { font-size: 11px; gap: 8px; } }
+
+@media (hover: hover) {
+  .vw-tb-pop-cell:not([aria-current="true"]):hover { background: rgba(28, 43, 74, .07); }
+  .vw-tb-pop-pattern button:not([aria-pressed="true"]):hover { background: rgba(28, 43, 74, .07); color: var(--vw-ink); }
+}
+
+/* ── 페이지 목록 ── 쪽 번호는 왼쪽 위 인덱스 탭(앱 사이드바의 색 인덱스 탭과 같은 어법) */
+.vw-side {
+  width: 160px; flex-shrink: 0; overflow-y: auto;
+  background: var(--vw-paper); border-right: 1px solid var(--vw-line);
+}
+@media (max-width: 640px) { .vw-side { width: 116px; } }
+.vw-side-head {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 40px; padding: 0 4px 0 12px; font-size: 12px; color: var(--vw-soft);
+}
+.vw-side-head .vw-ibtn { width: 36px; height: 36px; }
+.vw-side-list { display: flex; flex-direction: column; gap: 10px; padding: 2px 10px 14px; }
+.vw-thumb {
+  position: relative; display: block; width: 100%; text-align: left; cursor: pointer;
+  border-radius: 6px; overflow: hidden; background: #fff;
+  border: 1px solid var(--vw-line); box-shadow: 0 1px 2px rgba(28, 43, 74, .08);
+  transition: box-shadow .15s ease, border-color .15s ease;
+}
+.vw-thumb img { display: block; width: 100%; height: auto; }
+@media (hover: hover) { .vw-thumb:not(.is-current):hover { border-color: #aeb9cf; } }
+.vw-thumb.is-current { border-color: var(--vw-ink); box-shadow: 0 0 0 2px var(--vw-ink), 0 2px 6px rgba(28, 43, 74, .18); }
+.vw-thumb-tab {
+  position: absolute; top: 0; left: 0; min-width: 24px; height: 18px; padding: 0 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1;
+  color: var(--vw-soft); background: var(--vw-paper);
+  border-right: 1px solid var(--vw-line); border-bottom: 1px solid var(--vw-line); border-bottom-right-radius: 6px;
+}
+.vw-thumb.is-current .vw-thumb-tab { background: var(--vw-ink); color: #fff; border-color: var(--vw-ink); }
+.vw-thumb-kind { width: 100%; aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+.vw-thumb-kind--ai { background: var(--vw-lavender-t); color: var(--vw-lavender-d); }
+.vw-thumb-kind--html { background: var(--vw-sage-t); color: var(--vw-sage-d); }
+.vw-thumb-video { position: relative; background: #1c2b4a; }
+.vw-thumb-video img { opacity: .9; }
+.vw-thumb-play {
+  position: absolute; inset: 0; margin: auto; width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: var(--vw-coral-d); color: #fff;
+}
+.vw-thumb-play svg { width: 10px; height: 10px; fill: currentColor; margin-left: 1px; }
+
+/* ── 화면 고정 플로팅 버튼(캔버스 오른쪽 위) ── */
+.vw-fab {
+  position: absolute; top: 10px; right: 10px; z-index: 30;
+  width: 40px; height: 40px; border-radius: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(248, 250, 253, .94); color: var(--vw-soft);
+  border: 1px solid var(--vw-line); box-shadow: 0 2px 8px rgba(28, 43, 74, .12);
+  transition: background-color .15s ease, color .15s ease;
+}
+.vw-fab svg { width: 18px; height: 18px; }
+.vw-fab.is-locked { background: var(--vw-mustard-t); color: var(--vw-mustard-d); border-color: #e9cf85; }
+@media (hover: hover) { .vw-fab:not(.is-locked):hover { background: #fff; color: var(--vw-ink); } }
+
+/* 양쪽 가장자리 이전/다음 */
+.vw-edge-nav { color: var(--vw-ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .vw-ibtn, .vw-tb-btn, .vw-swatch, .vw-thumb, .vw-fab { transition: none; }
+}
+
+/* ── 뷰어 안의 작은 변형 ── */
+.vw-side--narrow { width: 116px; }
+.vw-top--modal { position: static; height: 52px; padding-left: 16px; }
+.vw-top .vw-pdf, .vw-top .vw-pdf:hover { background: transparent; color: var(--vw-soft); padding: 0 6px; height: 40px; border-radius: 10px; margin: 0; font-size: 12px; }
+@media (hover: hover) { .vw-top .vw-pdf:not(:disabled):hover { background: rgba(28, 43, 74, .08); color: var(--vw-ink); } }
+.vw-top .vw-pdf svg { width: 20px; height: 20px; }
+.vw-top .vw-pdf svg + svg { width: 14px; height: 14px; }
+.vw-score { display: flex; align-items: center; gap: 4px; height: 36px; padding: 0 8px 0 10px; border: 1px solid var(--vw-line); border-radius: 10px; background: #fff; }
+.vw-score svg { width: 16px; height: 16px; color: var(--vw-soft); }
+.vw-score-input { width: 52px; height: 32px; text-align: center; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--vw-ink); background: transparent; border: 0; outline: 0; }
+.vw-score-max { font-size: 12px; color: var(--vw-soft); white-space: nowrap; }
+
+/* ── 좁은 화면(폰) ── 제목이 먼저 살아남고, 오른쪽 묶음은 넘치면 가로 스크롤한다.
+ * 이전/다음 화살표는 숨긴다(가장자리 화살표 PageNavOverlay 와 페이지 목록이 대신), 저장 상태는 점 하나로 줄인다. */
+.vw-top-l { flex: 1 1 0; }
+.vw-top-r { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.vw-top-r::-webkit-scrollbar { display: none; }
+@media (max-width: 640px) {
+  .vw-tb-pop { left: 8px; right: 8px; transform: none; padding: 8px; }
+  .vw-tb-pop-row { flex-wrap: wrap; }                 /* 360px 폰: 유형 이름을 칸 위에 두어 여섯 칸이 다 보이게 */
+  .vw-tb-pop-head { width: 100%; padding: 4px 2px 0; }
+  .vw-top { padding-right: 4px; }
+  .vw-top-title { font-size: 15px; }
+  .vw-top .vw-ibtn--nav { display: none; }
+  .vw-counter { min-width: 40px; font-size: 12px; }
+  .vw-status { width: 20px; height: 40px; padding: 0; font-size: 0; display: inline-flex; align-items: center; justify-content: center; }
+  .vw-status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .vw-top .vw-pdf svg + svg { display: none; }
+}
+@media (max-width: 640px) {
+  .vw-top-title { min-width: 72px; }
+  .vw-top-sub { display: none; }   /* 학생 이름 등 부제는 폰에서 숨긴다 — 제목이 먼저 */
+  .vw-score { height: 32px; padding: 0 6px 0 8px; }
+  .vw-score-input { width: 40px; }
+}

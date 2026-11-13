@@ -28,6 +28,10 @@ export const classrooms = pgTable('classrooms', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   // 학급 색(shared CLASSROOM_COLORS 중 하나). null 이면 클라이언트가 자동 색을 쓴다.
   color: text('color'),
+  // 이 학급 학생에게 AI활용 허브를 열어 줄지 여부 (교사·관리자는 항상 사용 가능)
+  aiHubEnabled: boolean('ai_hub_enabled').notNull().default(false),
+  // 이 학급 학생에게 IB교육과정 안내를 열어 줄지 여부 (교사·관리자는 항상 사용 가능)
+  ibGuideEnabled: boolean('ib_guide_enabled').notNull().default(false),
 });
 
 // ─── classroom_members ──────────────────────────────
@@ -90,6 +94,10 @@ export const pages = pgTable('pages', {
   pageType: text('page_type'),
   /** 화이트보드 기본 템플릿 key (null = 학생 선택) */
   whiteboardTemplate: text('whiteboard_template'),
+  /** PDF 교재 파일 URL (한 PDF 의 모든 페이지가 공유) — pdfPage 와 함께 쓴다 */
+  pdfUrl: text('pdf_url'),
+  /** PDF 안의 페이지 번호 (1부터) */
+  pdfPage: integer('pdf_page'),
 }, (t) => [
   index('idx_pages_chapter').on(t.chapterId),
 ]);
@@ -191,6 +199,10 @@ export const assignmentPages = pgTable('assignment_pages', {
   assignmentId: uuid('assignment_id').notNull().references(() => assignments.id, { onDelete: 'cascade' }),
   imageUrl: text('image_url'),
   videoUrl: text('video_url'),
+  /** PDF 교재 파일 URL (pages.pdf_url 과 같은 의미) */
+  pdfUrl: text('pdf_url'),
+  /** PDF 안의 페이지 번호 (1부터) */
+  pdfPage: integer('pdf_page'),
   position: integer('position').default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
@@ -524,4 +536,49 @@ export const whiteboardGroupMembers = pgTable('whiteboard_group_members', {
 }, (t) => [
   unique('uq_wb_group_members_group_student').on(t.groupId, t.studentId),
   index('idx_wb_group_members_student').on(t.studentId),
+]);
+
+// ─── AI활용 허브 프롬프트 ─────────────────────────────
+
+/** 모션 프롬프트 원본·샷/큐 목록 (id = 프롬프트 키) */
+export const aiMotionPrompts = pgTable('ai_motion_prompts', {
+  id: text('id').primaryKey(),
+  promptEn: text('prompt_en').notNull(),
+  promptKo: text('prompt_ko').notNull(),
+  shots: jsonb('shots').$type<[string, string, string][]>().notNull(),
+  cues: jsonb('cues').$type<[string, string, string][]>().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  /** 관리자가 웹 편집기에서 저장한 시각 — 있으면 오빠두 동기화(?mode=sync)가 이 행을 건드리지 않는다. */
+  editedAt: timestamp('edited_at', { withTimezone: true }),
+});
+
+/** 슬라이드 프롬프트 원본 (id = 프롬프트 키) */
+export const aiSlidePrompts = pgTable('ai_slide_prompts', {
+  id: text('id').primaryKey(),
+  prompt: text('prompt').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+// ─── allowed_teachers (관리자가 등록한 교사 이메일 — 여기 있어야 교사) ──
+
+export const allowedTeachers = pgTable('allowed_teachers', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  /** 소문자 */
+  email: text('email').notNull().unique(),
+  note: text('note'),
+  createdBy: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── classroom_invites (교사가 학급에 미리 올린 학생 이메일 — 가입 시 classroom_members 로 소비) ──
+
+export const classroomInvites = pgTable('classroom_invites', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  classroomId: uuid('classroom_id').notNull().references(() => classrooms.id, { onDelete: 'cascade' }),
+  /** 소문자 */
+  email: text('email').notNull(),
+  createdBy: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  unique('uq_classroom_invites_classroom_email').on(t.classroomId, t.email),
+  index('idx_classroom_invites_email').on(t.email),
 ]);

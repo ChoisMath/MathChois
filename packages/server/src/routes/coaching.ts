@@ -4,7 +4,7 @@ import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import { readFile, urlToStoragePath } from '../services/storage.service.js';
 import { convertSolutionToLatex, reviewSolution, AI_MODEL_NAME } from '../services/ai.service.js';
-import { createAttempt, listAttempts, listStudentHistory, listClassroomStudentHistory, getAttemptUsage, resetQuota, listPageStudents, COACHING_ATTEMPT_LIMIT } from '../services/coaching.service.js';
+import { createAttempt, listAttempts, listStudentHistory, listClassroomStudentHistory, getAttemptUsage, resetQuota, resetQuotaForClassroom, listPageStudents, COACHING_ATTEMPT_LIMIT } from '../services/coaching.service.js';
 import { getPageById } from '../services/page.service.js';
 import { getProblem, updateProblem } from '../services/problem.service.js';
 import { isClassroomOwner, isClassroomMember } from '../services/classroom.service.js';
@@ -170,6 +170,22 @@ export async function coachingRoutes(app: FastifyInstance) {
       await resetQuota(studentId, pageId);
       const usage = await getAttemptUsage(studentId, pageId);
       return { used: usage.used, limit: usage.limit, resetAt: usage.resetAt };
+    },
+  );
+
+  // 교사: 학생의 이 학급 모든 페이지 횟수 리셋(학생 탭 "AI 풀이 초기화"). attempt 기록은 보존.
+  app.post<{ Params: { classroomId: string; studentId: string } }>(
+    '/api/coaching/classrooms/:classroomId/students/:studentId/reset',
+    { preHandler: [authenticate, requireRole('teacher')] },
+    async (req, reply) => {
+      const { classroomId, studentId } = req.params;
+      if (!(await isClassroomOwner(classroomId, req.user.sub))) {
+        return reply.status(403).send({ error: '이 클래스의 담당 교사가 아닙니다' });
+      }
+      if (!(await isClassroomMember(classroomId, studentId))) {
+        return reply.status(403).send({ error: '이 클래스의 학생이 아닙니다' });
+      }
+      return resetQuotaForClassroom(studentId, classroomId);
     },
   );
 

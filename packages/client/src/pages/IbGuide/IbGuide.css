@@ -1,0 +1,88 @@
+/*
+ * IB교육과정 안내 허브 — AI활용 허브(AiHubLayout.css)와 같은 색·간격. 그쪽 CSS 는 건드리지 않고 필요한 규칙만 옮겼다.
+ * 색은 앱 틀과 같은 남색 #1c2b4a / 펜 #2453a6 / 종이 #f8fafd. 누르는 영역은 44px 이상.
+ */
+.ib-guide {
+  --ib-ink: #1c2b4a;
+  --ib-pen: #2453a6;
+  --ib-muted: #56627c;
+  --ib-line: #dbe3f0;
+  display: flex; flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #f8fafd; color: var(--ib-ink);
+}
+.ib-guide :focus-visible { outline: 3px solid var(--ib-pen); outline-offset: 2px; }
+
+/* 상단 바 가운데 슬롯(Navbar children): 제목 + 탭 칩 */
+.ib-guide-title {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  padding: 0 8px 0 6px;
+  color: #fff; font-size: 17px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; white-space: nowrap;
+}
+.ib-guide-title-icon { width: 20px; height: 20px; color: #f2b544; }
+@media (min-width: 768px) {
+  .ib-guide-title { margin-left: 6px; padding-left: 14px; border-left: 1px solid rgba(255, 255, 255, .18); }
+}
+
+.ib-guide-tabs { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.ib-guide-tab {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  min-height: 40px; padding: 0 16px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .22); background: transparent;
+  color: #c9d4ee; font-size: 14px; font-weight: 500; white-space: nowrap;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+.ib-guide-tab:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+.ib-guide-tab[aria-current='page'] { background: #fff; border-color: #fff; color: var(--ib-ink); }
+@media (min-width: 768px) { .ib-guide-tab { min-height: 44px; padding: 0 18px; font-size: 15px; } }
+
+/* 머리글: 소개(왼쪽) + [학급으로](오른쪽 끝) */
+.ib-guide-head { background: #fff; border-bottom: 1px solid var(--ib-line); }
+.ib-guide-head-inner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  max-width: 80rem; margin: 0 auto; padding: 6px 16px;
+}
+@media (min-width: 768px) { .ib-guide-head-inner { padding: 10px 24px; } }
+.ib-guide-intro {
+  flex: 1 1 auto; min-width: 0; max-width: 52rem;
+  word-break: keep-all; font-size: 14px; line-height: 1.6; color: var(--ib-muted);
+}
+@media (min-width: 768px) { .ib-guide-intro { font-size: 15px; } }
+.ib-guide-back {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  min-height: 44px; padding: 0 12px; border-radius: 12px;
+  color: var(--ib-pen); font-size: 14px; font-weight: 500; white-space: nowrap;
+  transition: background-color .15s ease;
+}
+.ib-guide-back:hover { background: #eef2f8; }
+
+.ib-guide-main { flex: 1; width: 100%; max-width: 80rem; margin: 0 auto; padding: 20px 16px 32px; }
+@media (min-width: 768px) { .ib-guide-main { padding: 24px 24px 40px; } }
+.ib-guide-loading, .ib-guide-empty { padding: 64px 0; text-align: center; color: var(--ib-muted); }
+
+/* 예시 카드 목록 — 카드 전체가 링크 */
+.ib-guide-grid {
+  display: grid; gap: 16px; list-style: none; margin: 0; padding: 0;
+  grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+}
+.ib-guide-card {
+  display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 44px; padding: 16px;
+  background: #fff; border: 1px solid var(--ib-line); border-radius: 12px;
+  color: var(--ib-ink); text-decoration: none;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.ib-guide-card:hover { border-color: var(--ib-pen); box-shadow: 0 2px 10px rgba(28, 43, 74, .08); background: #fcfdff; }
+.ib-guide-card-no { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+.ib-guide-card-title { font-size: 14px; line-height: 1.5; color: var(--ib-muted); word-break: keep-all; }
+/* 설명은 한 줄만 — 넘치면 말줄임. 그리드 칸이 긴 설명에 밀려 넓어지지 않도록 칸(li)의 최소 너비를 0 으로 둔다. */
+.ib-guide-grid > li { min-width: 0; }
+.ib-guide-card-note {
+  font-size: 13px; line-height: 1.5; color: var(--ib-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ib-guide-badges { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
+.ib-guide-badge {
+  padding: 3px 10px; border-radius: 999px; background: #eef2f8; color: var(--ib-pen);
+  font-size: 13px; font-weight: 500; white-space: nowrap;
+}

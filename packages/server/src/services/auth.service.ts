@@ -71,7 +71,8 @@ export async function exchangeGoogleCode(code: string, redirectUri: string) {
 
   return {
     googleId: payload.sub,
-    email: payload.email ?? null,
+    // 허용 목록·사전 등록은 소문자 이메일로 비교한다
+    email: payload.email ? payload.email.trim().toLowerCase() : null,
     name: payload.name ?? null,
     avatarUrl: payload.picture ?? null,
   };
@@ -136,7 +137,7 @@ export async function findOrCreateProfile(googleUser: {
     }
   }
 
-  // 3) 새 사용자 생성
+  // 3) 새 사용자 생성 — 가입은 무조건 학생. 교사 허용 목록에 있으면 바로 뒤 applyAccessRules 가 교사로 올린다.
   const [created] = await db
     .insert(profiles)
     .values({
@@ -145,6 +146,7 @@ export async function findOrCreateProfile(googleUser: {
       name: googleUser.name,
       avatarUrl: googleUser.avatarUrl,
       authMethod: 'google',
+      role: 'student',
       isAdmin: shouldBeAdmin,
     })
     .returning();
@@ -159,16 +161,6 @@ export async function getProfileById(id: string) {
     .where(eq(profiles.id, id))
     .limit(1);
   return rows[0] ?? null;
-}
-
-/** 역할 업데이트 */
-export async function updateProfileRole(id: string, role: 'teacher' | 'student') {
-  const [updated] = await db
-    .update(profiles)
-    .set({ role })
-    .where(eq(profiles.id, id))
-    .returning();
-  return updated ?? null;
 }
 
 // ─── Email/Password Auth ─────────────────────────

@@ -9,37 +9,37 @@ import { getCachedChapterAndPages } from '../../lib/dataCache';
 export default function TeacherStudyPageRouter() {
   const { classroomId, chapterId, pageId } = useParams();
   const navigate = useNavigate();
-  // 로드한 결과에 key 를 붙여 두고, 현재 라우트와 key 가 다르면 로딩 중으로 본다
-  // (effect 안에서 loading 을 동기 setState 하지 않기 위함 — react-hooks/set-state-in-effect)
-  const key = `${chapterId}/${pageId}`;
-  const [state, setState] = useState({ key: null, pages: [], page: null });
-  const loading = state.key !== key;
+  // 챕터 단위로 불러와 두고, 쪽은 그 목록에서 **동기적으로** 고른다. 같은 챕터 안에서 쪽을 넘길 때 로딩 화면을 거치지
+  // 않아야 TeacherStudyViewer 가 내렸다 올라오지 않는다(사이드바 열림 같은 화면 상태가 유지된다). 챕터가 바뀔 때만 로딩.
+  // (effect 안에서 동기 setState 를 하지 않기 위해 상태에 chapterId 를 함께 둔다 — react-hooks/set-state-in-effect)
+  const [state, setState] = useState({ chapterId: null, pages: [] });
+  const loading = state.chapterId !== chapterId;
+  const page = loading ? null : state.pages.find((p) => p.id === pageId) || null;
 
   useEffect(() => {
     let alive = true;
     getCachedChapterAndPages(chapterId)
       .then(({ pages }) => {
         if (!alive) return;
-        const page = (pages || []).find((p) => p.id === pageId) || null;
-        setState({ key: `${chapterId}/${pageId}`, pages: pages || [], page });
+        setState({ chapterId, pages: pages || [] });
       })
-      .catch(() => { if (alive) setState({ key: `${chapterId}/${pageId}`, pages: [], page: null }); });
+      .catch(() => { if (alive) setState({ chapterId, pages: [] }); });
     return () => { alive = false; };
-  }, [chapterId, pageId]);
+  }, [chapterId]);
 
   if (loading) {
     return <div className="flex items-center justify-center" style={{ height: '100dvh' }}><p className="text-gray-500">로딩 중...</p></div>;
   }
-  if (state.page?.pageType === 'whiteboard') {
+  if (page?.pageType === 'whiteboard') {
     return <TeacherWhiteboardPage />;
   }
-  if (state.page?.aiProblemId) {
+  if (page?.aiProblemId) {
     const base = `/teacher/classrooms/${classroomId}/chapters/${chapterId}/study/page`;
     return (
       <TeacherCoachingReview
         classroomId={classroomId}
         pages={state.pages}
-        currentPage={state.page}
+        currentPage={page}
         onNavigate={(p) => navigate(`${base}/${p.id}`)}
         onExit={() => navigate(`/teacher/classrooms/${classroomId}/chapters/${chapterId}/monitor`)}
       />

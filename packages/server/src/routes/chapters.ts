@@ -14,7 +14,7 @@ import {
   getLinkedChapterIds,
   isLinkedChapter,
 } from '../services/chapter.service.js';
-import { getPageImageUrls, findSharedImageUrls } from '../services/page.service.js';
+import { getPageFileUrls, findSharedFileUrls } from '../services/page.service.js';
 import { isClassroomOwner } from '../services/classroom.service.js';
 import { isUnitInClassroom } from '../services/unit.service.js';
 import { removeFile, urlToStoragePath, removeDirectoryIfEmpty, urlToParentDir } from '../services/storage.service.js';
@@ -141,12 +141,12 @@ export async function chapterRoutes(app: FastifyInstance) {
     }
 
     // Storage 파일 정리: linked 챕터는 자체 페이지가 없으므로 빈 배열 반환됨
-    const imageUrls = await getPageImageUrls(request.params.id);
-    const sharedUrls = await findSharedImageUrls(imageUrls, request.params.id);
+    const fileUrls = await getPageFileUrls(request.params.id);
+    const sharedUrls = await findSharedFileUrls(fileUrls, request.params.id);
     const sharedSet = new Set(sharedUrls);
-    const orphanUrls = imageUrls.filter((url) => !sharedSet.has(url));
+    const orphanUrls = fileUrls.filter((url) => !sharedSet.has(url));
 
-    app.log.info({ chapterId: request.params.id, total: imageUrls.length, shared: sharedUrls.length, orphans: orphanUrls.length }, 'Chapter storage cleanup');
+    app.log.info({ chapterId: request.params.id, total: fileUrls.length, shared: sharedUrls.length, orphans: orphanUrls.length }, 'Chapter storage cleanup');
 
     await deleteChapter(request.params.id);
 

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch --env-file=.env src/index.ts",
     "build": "tsc",
+    "test": "vitest run",
     "start": "node dist/index.js",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
@@ -29,6 +30,7 @@
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^10.1.2",
     "postgres": "^3.4.7",
+    "sharp": "^0.35.5",
     "socket.io": "^4.8.1",
     "zod": "^3.25.42"
   },
@@ -38,6 +40,7 @@
     "@types/node": "^25.3.0",
     "drizzle-kit": "^0.31.11",
     "tsx": "^4.19.4",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.9"
   }
 }

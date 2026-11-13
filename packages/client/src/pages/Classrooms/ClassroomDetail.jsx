@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import {
-  Copy, Check, Trash2, Plus, Hash, LogOut, Loader, X,
+  Copy, Check, Trash2, Plus, Hash, LogOut, Loader, X, Sparkles, GraduationCap,
 } from 'lucide-react';
 
 const BoardTab      = lazy(() => import('../../components/board/BoardTab'));
@@ -14,7 +14,9 @@ import { refreshSidebar } from '../../lib/sidebarRefresh';
 import { getClassroomVideoUnread } from '../../lib/videos';
 import { listUnits } from '../../lib/units';
 import { resolveClassroomColor, colorVars } from '../../lib/classroomColor';
+import IconButton from '../../components/common/IconButton';
 import ClassroomColorPicker from '../../components/classrooms/ClassroomColorPicker';
+import '../../components/classrooms/classroomTabs.css';
 import ChapterTab from '../../components/classrooms/ChapterTab';
 import StudentsTab from '../../components/classrooms/StudentsTab';
 import ClassroomTabs from '../../components/classrooms/ClassroomTabs';
@@ -24,6 +26,7 @@ import { resolveTab } from '../../lib/classroomTabs';
 const ClassroomDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, profile } = useAuth();
   const isTeacher = profile?.role === 'teacher';
 
@@ -40,6 +43,10 @@ const ClassroomDetail = () => {
 
   const [savingColor, setSavingColor] = useState(false);
   const [colorError, setColorError]   = useState('');
+  const [savingAi, setSavingAi]       = useState(false);
+  const [aiError, setAiError]         = useState('');
+  const [savingIb, setSavingIb]       = useState(false);
+  const [ibError, setIbError]         = useState('');
   const idRef = useRef(id); // 저장이 끝났을 때 아직 같은 학급 화면인지 확인용
 
   /* 활성 탭은 주소 쿼리(?tab=)에 둔다 — 영상·챕터를 열고 뒤로 가도 같은 탭으로 돌아온다. 알 수 없는 값(학생의 dashboard 포함)은 챕터 */
@@ -49,10 +56,23 @@ const ClassroomDetail = () => {
   const selectTab = (key) => {
     const next = new URLSearchParams(searchParams); // unit 등 다른 쿼리는 유지
     next.set('tab', key);
+    if (key !== 'dashboard') { next.delete('view'); next.delete('student'); } // 대시보드 선택값은 다른 탭 주소에 남기지 않는다
     setSearchParams(next, { replace: true });
   };
   /* 보고 있는 단원(?unit= 단원 id | 'none' | 없음=단원 목록). 단원을 열고 닫는 것은 기록을 남겨 뒤로 가기로 단원 목록에 돌아온다 */
   const unitParam = searchParams.get('unit');
+  /* 대시보드 선택(?view= ?student=) — unit 은 챕터·영상 탭과 같은 키를 쓴다. 대시보드가 바꾸는 값은 기록을 남기지 않는다(replace) */
+  const dashboardSelection = { view: searchParams.get('view'), unit: unitParam, student: searchParams.get('student') };
+  const onDashboardSelectionChange = useCallback((patch, { replace = true } = {}) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      for (const [key, value] of Object.entries(patch)) {
+        if (value == null || value === '') next.delete(key);
+        else next.set(key, value);
+      }
+      return next;
+    }, { replace });
+  }, [setSearchParams]);
   const setUnitParam = (nextUnit) => {
     const next = new URLSearchParams(searchParams);
     if (nextUnit) next.set('unit', nextUnit);
@@ -93,6 +113,16 @@ const ClassroomDetail = () => {
   const [showDeleteClassroom, setShowDeleteClassroom] = useState(false);
   const [unsubmittedCount, setUnsubmittedCount] = useState(0);
   const [videoUnreadCount, setVideoUnreadCount] = useState(0); // 영상 탭 미읽음 댓글 배지
+
+  /* ── 구성원만 다시 읽기(학생 사전 등록으로 바로 참여한 학생 반영) ── */
+  const reloadMembers = async () => {
+    try {
+      const mems = await api.get(`/api/classrooms/${id}/members`);
+      setMembers(mems || []);
+    } catch {
+      // 목록은 다음 로드에서 맞춰진다
+    }
+  };
 
   /* ── 데이터 로드 ── */
   const fetchData = async () => {
@@ -140,6 +170,10 @@ const ClassroomDetail = () => {
     idRef.current = id;
     setColorError('');
     setSavingColor(false);
+    setAiError('');
+    setSavingAi(false);
+    setIbError('');
+    setSavingIb(false);
   }, [id]);
 
   /* ── 클래스 이름 인라인 편집 ── */
@@ -184,6 +218,42 @@ const ClassroomDetail = () => {
     if (idRef.current === targetId) setSavingColor(false); // 다른 학급으로 옮겼다면 이미 초기화됨
   };
 
+  /* ── 학생에게 AI활용 열기: 먼저 바꿔 보이고, 저장에 실패하면 되돌린다 ── */
+  const handleAiHubToggle = async (enabled) => {
+    if (savingAi) return;
+    const prevEnabled = !!classroom.aiHubEnabled;
+    const targetId = id;
+    setSavingAi(true);
+    setAiError('');
+    setClassroom((prev) => ({ ...prev, aiHubEnabled: enabled }));
+    try {
+      await api.patch(`/api/classrooms/${targetId}`, { aiHubEnabled: enabled });
+    } catch (err) {
+      console.error('[ClassroomDetail] AI활용 설정 오류:', err);
+      setClassroom((prev) => (prev?.id === targetId ? { ...prev, aiHubEnabled: prevEnabled } : prev));
+      if (idRef.current === targetId) setAiError('AI활용 설정을 저장하지 못했어요');
+    }
+    if (idRef.current === targetId) setSavingAi(false);
+  };
+
+  /* ── 학생에게 IB 안내 열기: AI활용 스위치와 같은 방식 ── */
+  const handleIbGuideToggle = async (enabled) => {
+    if (savingIb) return;
+    const prevEnabled = !!classroom.ibGuideEnabled;
+    const targetId = id;
+    setSavingIb(true);
+    setIbError('');
+    setClassroom((prev) => ({ ...prev, ibGuideEnabled: enabled }));
+    try {
+      await api.patch(`/api/classrooms/${targetId}`, { ibGuideEnabled: enabled });
+    } catch (err) {
+      console.error('[ClassroomDetail] IB 안내 설정 오류:', err);
+      setClassroom((prev) => (prev?.id === targetId ? { ...prev, ibGuideEnabled: prevEnabled } : prev));
+      if (idRef.current === targetId) setIbError('IB 안내 설정을 저장하지 못했어요');
+    }
+    if (idRef.current === targetId) setSavingIb(false);
+  };
+
   const handleNameKeyDown = (e) => {
     if (e.key === 'Enter')  { e.preventDefault(); handleNameSave(); }
     if (e.key === 'Escape') { setEditingName(false); }
@@ -225,10 +295,11 @@ const ClassroomDetail = () => {
 
   return (
     <>
-      <div className="w-full space-y-6">
+      {/* 학급 표지색 변수는 바깥 div 에 두어 헤더와 모든 탭(표 띠·모둠 방)이 함께 쓴다 */}
+      <div className="w-full space-y-6 classroom-tabs" style={colorVars(resolveClassroomColor(classroom))}>
 
         {/* ── 헤더 (학급 색 띠 + 옅은 배경) ── */}
-        <div className="classroom-head" style={colorVars(resolveClassroomColor(classroom))}>
+        <div className="classroom-head">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -287,6 +358,20 @@ const ClassroomDetail = () => {
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            {(isTeacher || profile?.isAdmin || classroom.aiHubEnabled) && (
+              <IconButton
+                icon={Sparkles}
+                label="AI활용"
+                onClick={() => navigate('/ai', { state: { from: location.pathname + location.search } })}
+              />
+            )}
+            {(isTeacher || profile?.isAdmin || classroom.ibGuideEnabled) && (
+              <IconButton
+                icon={GraduationCap}
+                label="IB안내"
+                onClick={() => navigate('/ib', { state: { from: location.pathname + location.search } })}
+              />
+            )}
             {isTeacher ? (
               <>
                 {activeTab === 'board' && (
@@ -316,7 +401,7 @@ const ClassroomDetail = () => {
         </div>
 
         {/* 교사: '#'을 누르면 코드와 함께 색 동그라미가 나타나고, 누르면 바로 바뀐다(글자 없음) */}
-        {isTeacher && (showCode || colorError) && (
+        {isTeacher && (showCode || colorError || aiError || ibError) && (
           <div className="mt-1">
             {showCode && (
               <ClassroomColorPicker
@@ -327,8 +412,42 @@ const ClassroomDetail = () => {
                 disabled={savingColor}
               />
             )}
+            {showCode && (
+              <label className="inline-flex items-center gap-2 min-h-11 mt-1 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-checked={!!classroom.aiHubEnabled}
+                  checked={!!classroom.aiHubEnabled}
+                  onChange={(e) => handleAiHubToggle(e.target.checked)}
+                  disabled={savingAi}
+                  className="h-5 w-5 cursor-pointer"
+                />
+                학생에게 AI활용 열기
+              </label>
+            )}
+            {showCode && (
+              <label className="inline-flex items-center gap-2 min-h-11 mt-1 ml-4 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-checked={!!classroom.ibGuideEnabled}
+                  checked={!!classroom.ibGuideEnabled}
+                  onChange={(e) => handleIbGuideToggle(e.target.checked)}
+                  disabled={savingIb}
+                  className="h-5 w-5 cursor-pointer"
+                />
+                학생에게 IB 안내 열기
+              </label>
+            )}
             {colorError && (
               <p className="text-[14px] text-red-700 mt-1" role="alert">{colorError}</p>
+            )}
+            {aiError && (
+              <p className="text-[14px] text-red-700 mt-1" role="alert">{aiError}</p>
+            )}
+            {ibError && (
+              <p className="text-[14px] text-red-700 mt-1" role="alert">{ibError}</p>
             )}
           </div>
         )}
@@ -388,12 +507,18 @@ const ClassroomDetail = () => {
         )}
 
         {/* ── 학생 탭 ── */}
-        {activeTab === 'students' && <StudentsTab classroomId={id} members={members} isTeacher={isTeacher} />}
+        {activeTab === 'students' && (
+          <StudentsTab classroomId={id} members={members} isTeacher={isTeacher} onMembersChanged={reloadMembers} />
+        )}
 
         {/* ── 대시보드 탭 (교사 전용) ── */}
         {activeTab === 'dashboard' && isTeacher && (
           <Suspense fallback={<p className="text-gray-400 text-sm">로딩 중...</p>}>
-            <ClassroomDashboard classroomId={id} />
+            <ClassroomDashboard
+              classroomId={id}
+              selection={dashboardSelection}
+              onSelectionChange={onDashboardSelectionChange}
+            />
           </Suspense>
         )}
       </div>

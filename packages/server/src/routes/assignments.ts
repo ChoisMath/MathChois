@@ -18,8 +18,8 @@ import {
   getStudentSubmissions,
   upsertSubmission,
   reorderAssignmentPages,
-  getAssignmentPageImageUrls,
-  findSharedAssignmentImageUrls,
+  getAssignmentPageFileUrls,
+  findSharedAssignmentFileUrls,
   getSubmissionFiles,
   getSubmissionFilesByAssignment,
   upsertSubmissionFiles,
@@ -31,6 +31,9 @@ import { removeFile, urlToStoragePath, removeDirectoryIfEmpty, urlToParentDir } 
 import { getIO } from '../socket/index.js';
 import { emitSubmissionUpdated } from '../socket/handlers/assignments.js';
 import { isValidPageVideoUrl, INVALID_VIDEO_URL_MESSAGE } from '../utils/videoUrl.js';
+import { pdfFieldsError } from '../utils/pageBody.js';
+
+type AssignmentPageBody = { imageUrl?: string; videoUrl?: string; pdfUrl?: string; pdfPage?: number; position?: number };
 
 export async function assignmentRoutes(app: FastifyInstance) {
 
@@ -121,16 +124,16 @@ export async function assignmentRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Not the assignment owner' });
     }
 
-    // Storage 파일 정리: orphan 이미지만 삭제 (다른 과제에서 공유되지 않는 것)
-    const imageUrls = await getAssignmentPageImageUrls(request.params.id);
-    const sharedUrls = await findSharedAssignmentImageUrls(imageUrls, request.params.id);
+    // Storage 파일 정리: orphan 이미지·PDF만 삭제 (다른 과제에서 공유되지 않는 것)
+    const fileUrls = await getAssignmentPageFileUrls(request.params.id);
+    const sharedUrls = await findSharedAssignmentFileUrls(fileUrls, request.params.id);
     const sharedSet = new Set(sharedUrls);
-    const orphanUrls = imageUrls.filter((url) => !sharedSet.has(url));
+    const orphanUrls = fileUrls.filter((url) => !sharedSet.has(url));
 
     // 제출 파일 URL 수집 (DB CASCADE 삭제 전에)
     const allSubmissionFileUrls = await getSubmissionFileUrlsByAssignment(request.params.id);
 
-    app.log.info({ assignmentId: request.params.id, total: imageUrls.length, shared: sharedUrls.length, orphans: orphanUrls.length, submissionFiles: allSubmissionFileUrls.length }, 'Assignment storage cleanup');
+    app.log.info({ assignmentId: request.params.id, total: fileUrls.length, shared: sharedUrls.length, orphans: orphanUrls.length, submissionFiles: allSubmissionFileUrls.length }, 'Assignment storage cleanup');
 
     await deleteAssignment(request.params.id);
 
@@ -181,7 +184,7 @@ export async function assignmentRoutes(app: FastifyInstance) {
 
   app.post<{
     Params: { id: string };
-    Body: { imageUrl?: string; videoUrl?: string; position?: number };
+    Body: AssignmentPageBody | { pages: (AssignmentPageBody & { position: number })[] };
   }>('/api/assignments/:id/pages', {
     preHandler: [authenticate, requireRole('teacher')],
   }, async (request, reply) => {
@@ -189,10 +192,35 @@ export async function assignmentRoutes(app: FastifyInstance) {
     if (!isOwner) {
       return reply.status(403).send({ error: 'Not the assignment owner' });
     }
+    const body = request.body as Record<string, unknown>;
 
-    const { imageUrl, videoUrl, position } = request.body;
-    if (!imageUrl && !videoUrl) {
-      return reply.status(400).send({ error: 'imageUrl or videoUrl is required' });
+    // 배치 삽입 (PDF 등록 등)
+    if (Array.isArray(body.pages)) {
+      const bulk = body.pages as (AssignmentPageBody & { position: number })[];
+      if (bulk.some((pg) => pg.videoUrl != null && !isValidPageVideoUrl(pg.videoUrl))) {
+        return reply.status(400).send({ error: INVALID_VIDEO_URL_MESSAGE });
+      }
+      for (const pg of bulk) {
+        const pdfError = pdfFieldsError(pg);
+        if (pdfError) return reply.status(400).send({ error: pdfError });
+      }
+      const created = await createAssignmentPages(bulk.map((pg) => ({
+        assignmentId: request.params.id,
+        imageUrl: pg.imageUrl ?? null,
+        videoUrl: pg.videoUrl ?? null,
+        pdfUrl: pg.pdfUrl ?? null,
+        pdfPage: pg.pdfPage ?? null,
+        position: pg.position,
+      })));
+      return reply.status(201).send(created);
+    }
+
+    // 단일 삽입
+    const { imageUrl, videoUrl, pdfUrl, pdfPage, position } = body as AssignmentPageBody;
+    const pdfError = pdfFieldsError({ pdfUrl, pdfPage });
+    if (pdfError) return reply.status(400).send({ error: pdfError });
+    if (!imageUrl && !videoUrl && !pdfUrl) {
+      return reply.status(400).send({ error: 'imageUrl, videoUrl, or pdfUrl is required' });
     }
     if (videoUrl != null && !isValidPageVideoUrl(videoUrl)) {
       return reply.status(400).send({ error: INVALID_VIDEO_URL_MESSAGE });
@@ -202,6 +230,8 @@ export async function assignmentRoutes(app: FastifyInstance) {
       assignmentId: request.params.id,
       imageUrl,
       videoUrl,
+      pdfUrl,
+      pdfPage,
       position,
     });
     return reply.status(201).send(page);
@@ -272,13 +302,15 @@ export async function assignmentRoutes(app: FastifyInstance) {
       maxScore: sourceAssignment.maxScore ?? undefined,
     });
 
-    // 페이지 복제 (같은 imageUrl 공유)
+    // 페이지 복제 (같은 imageUrl·pdfUrl 공유)
     if (sourcePages.length > 0) {
       await createAssignmentPages(
         sourcePages.map((pg, idx) => ({
           assignmentId: newAssignment.id,
           imageUrl: pg.imageUrl,
           videoUrl: pg.videoUrl,
+          pdfUrl: pg.pdfUrl,
+          pdfPage: pg.pdfPage,
           position: pg.position ?? idx,
         })),
       );

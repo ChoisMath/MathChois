@@ -1,39 +1,53 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ChevronLeft, ChevronRight, Menu, Pencil, Send,
+  ChevronLeft, ChevronRight, Pencil, Send,
   ChevronUp, ChevronDown, GraduationCap, X, Download, Loader, Paperclip
 } from 'lucide-react';
+import PageListIcon from '../../components/study/PageListIcon';
+import { STICKY_ID_PREFIX, relockOwnStickies } from '../../lib/stickyPads';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { api } from '../../lib/api';
 import { subscribeToRoom } from '../../lib/socket';
 import { useAuth } from '../../contexts/AuthContext';
 import DrawingToolbar from '../../components/study/DrawingToolbar';
+import ScreenLockFab from '../../components/study/ScreenLockFab';
 import PageNavOverlay from '../../components/study/PageNavOverlay';
 import { usePdfDownloader } from '../../lib/pdfDownloader';
+import { sceneStrokeWidth } from '../../lib/penWidth';
 import { PdfDownloadButton } from '../../components/common/PdfDownloadButton';
 import {
   BG_ELEMENT_ID, BG_FILE_ID,
   ALWAYS_HIDE_CSS, PANEL_HIDE_CSS, GRID_STYLE,
   fetchAsDataUrl, getImageNaturalSize, createBgElement, prefetchImages,
-  calculateBgPosition, EXCALIDRAW_UI_OPTIONS, TOUCH_CSS, waitForLayout,
+  EXCALIDRAW_UI_OPTIONS, TOUCH_CSS, waitForLayout,
   clearImageCacheForUrl,
 } from '../../lib/excalidrawUtils';
+import { resolveBgLayout, bgViewportAppState } from '../../lib/bgFit';
+import { recordBgLoad } from '../../lib/bgLoadLog';
 import { useExcalidrawTouch } from '../../hooks/useExcalidrawTouch';
 import { useWetInk } from '../../hooks/useWetInk';
+import { useLasso } from '../../hooks/useLasso';
 import { useScribbleErase } from '../../hooks/useScribbleErase';
 import { useFreedrawSmoothing } from '../../hooks/useFreedrawSmoothing';
 import { useExcalidrawUndo } from '../../hooks/useExcalidrawUndo';
 import ExcalidrawErrorBoundary from '../../components/ExcalidrawErrorBoundary';
 import FileAttachmentPanel from './components/FileAttachmentPanel';
 import { PageVideoEmbed, PageVideoThumb } from '../../components/videos/PageVideo';
+import { isPdfPage } from '@mathchois/shared';
+import { usePdfBackground } from '../../hooks/usePdfBackground';
+import { prefetchPdfNeighbors } from '../../hooks/usePdfDocument';
+import PdfPageLayer from '../../components/study/PdfPageLayer';
+import PageThumb from '../../components/common/PageThumb';
 
 /* 세션 내 캐시 */
 const _notesCache    = new Map(); // `${userId}_${pageId}` → { elements, bgPosition, files }
 const _commentsCache = new Map(); // `${userId}_${pageId}` → { elements, files }
 
 const TEACHER_COMMENT_PREFIX = '__atc_';
+/** 올가미·문지르기 지우개가 건드리지 않는 id 접두사: 교사 코멘트 + 메모지 */
+const EXCLUDE_PREFIXES = [TEACHER_COMMENT_PREFIX, STICKY_ID_PREFIX];
 
 /* ─────────── 교사 필기 모달 ─────────── */
 /* TODO: assignment_teacher_notes 테이블/API가 서버에 아직 없음.
@@ -46,6 +60,9 @@ function TeacherNotesModal({ page, onClose }) {
   const { isDownloading, downloadPage } = usePdfDownloader();
   const bgPositionRef = useRef(null);
   const [dbBgPosition] = useState(null);
+  /* PDF 페이지: 저장된 교사 필기 위치(dbBgPosition)로 종이를 놓는다 */
+  const pdfBg = usePdfBackground({ page, containerRef, bgPositionRef, savedBgPosition: dbBgPosition });
+  const { layerRef: pdfLayerRef, applyScene: applyPdfSceneFit } = pdfBg;
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -57,19 +74,21 @@ function TeacherNotesModal({ page, onClose }) {
   // (로드할 데이터가 없어 'loading' 상태 없이 바로 렌더한다)
 
   const handleMount = useCallback(async (apiRef) => {
+    /* PDF 페이지: bg element 없이 필기만 — 종이는 PdfPageLayer 가 캔버스 아래에 그린다 */
+    if (isPdfPage(page)) {
+      await applyPdfSceneFit(apiRef, Object.values(noteFiles), noteElements, page.id);
+      return;
+    }
     if (!page.imageUrl || !containerRef.current) return;
     try {
       const { dataUrl, mimeType } = await fetchAsDataUrl(page.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
 
-      let bgW, bgH, bgX, bgY;
-      if (dbBgPosition && dbBgPosition.width > 10 && dbBgPosition.height > 10) {
-        ({ width: bgW, height: bgH, x: bgX, y: bgY } = dbBgPosition);
-      } else {
-        const { width: W, height: H } = await waitForLayout(containerRef.current);
-        const pos = calculateBgPosition(W, H, iW, iH);
-        bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
-      }
+      const { width: W, height: H } = await waitForLayout(containerRef.current);
+      /* 교사 저장값(비율 보정) 또는 계산값 + 화면 맞춤 뷰포트 (lib/bgFit.js) */
+      const bgLayout = resolveBgLayout({ saved: dbBgPosition, imageW: iW, imageH: iH, containerWidth: W, containerHeight: H });
+      const { x: bgX, y: bgY, width: bgW, height: bgH } = bgLayout.bg;
+      recordBgLoad(bgLayout.diag);
 
       bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
       apiRef.addFiles([{ id: '__bg_file__', dataURL: dataUrl, mimeType, created: Date.now() }]);
@@ -79,12 +98,12 @@ function TeacherNotesModal({ page, onClose }) {
       /* addFiles의 React 상태 커밋 후 updateScene — 별도 렌더 사이클에서 실행해야 이미지가 표시됨 */
       await new Promise((r) => requestAnimationFrame(r));
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
-      apiRef.updateScene({ elements: [bgEl, ...noteElements] });
+      apiRef.updateScene({ appState: bgViewportAppState(bgLayout.viewport), elements: [bgEl, ...noteElements] });
     } catch (err) {
       console.error('교사 필기 모달 bg 로드 실패:', err);
       apiRef.updateScene({ elements: noteElements });
     }
-  }, [page.imageUrl, noteElements, noteFiles, dbBgPosition]);
+  }, [page, noteElements, noteFiles, dbBgPosition, applyPdfSceneFit]);
 
   return (
     <div
@@ -99,7 +118,7 @@ function TeacherNotesModal({ page, onClose }) {
           <span className="font-semibold text-gray-800">교사 필기</span>
           <div className="flex items-center gap-2">
             <PdfDownloadButton
-              onClick={() => downloadPage('교사_필기', noteElements, noteFiles, page.imageUrl, bgPositionRef.current)}
+              onClick={() => downloadPage('교사_필기', noteElements, noteFiles, page, bgPositionRef.current)}
               isDownloading={isDownloading}
               label="PDF 다운로드"
               className="py-1 px-2 text-xs"
@@ -116,6 +135,7 @@ function TeacherNotesModal({ page, onClose }) {
         ) : (
         <div ref={containerRef} className="flex-1 relative overflow-hidden bg-gray-50">
           <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{PANEL_HIDE_CSS}</style>
+          {pdfBg.active && <PdfPageLayer ref={pdfLayerRef} {...pdfBg.layerProps} containerRef={containerRef} />}
           <ExcalidrawErrorBoundary key={page.id + '_modal'}>
           <Excalidraw
             excalidrawAPI={handleMount}
@@ -124,6 +144,7 @@ function TeacherNotesModal({ page, onClose }) {
               appState: { viewBackgroundColor: 'transparent', scrollX: 0, scrollY: 0 },
             }}
             viewModeEnabled={true}
+            onChange={(_, appState) => pdfBg.onViewport(appState)}
             UIOptions={EXCALIDRAW_UI_OPTIONS}
           />
           </ExcalidrawErrorBoundary>
@@ -202,9 +223,14 @@ const AssignmentStudyViewer = () => {
 
   const { triggerPalmRejectionWarmup, isGesturingRef } = useExcalidrawTouch({ excalidrawAPIRef, containerRef, screenLockedRef, baseStrokeWidthRef, onUserDrawStart: handleUserDrawStart });
   useWetInk({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef, penActiveRef });
-  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: [TEACHER_COMMENT_PREFIX] });
+  const lassoActiveRef = useRef(false); // 논리 도구가 올가미인지 (useLasso 가로채기 게이트)
+  useLasso({ excalidrawAPIRef, overlayRef: wetInkOverlayRef, drawModeRef: drawModeRef, lassoActiveRef, excludePrefixes: EXCLUDE_PREFIXES });
+  const { checkForScribble } = useScribbleErase({ excalidrawAPIRef, excludePrefixes: EXCLUDE_PREFIXES });
   const { checkForSmoothing } = useFreedrawSmoothing({ excalidrawAPIRef, excludePrefixes: [TEACHER_COMMENT_PREFIX] });
   const { recordHistory, undo, redo, canUndo, canRedo } = useExcalidrawUndo({ excalidrawAPIRef });
+  /* PDF 페이지 배경: 로딩이 끝나 저장된 bgPosition 이 ref 에 있고 컨테이너가 마운트된 뒤에 페이지를 넘긴다 */
+  const pdfBg = usePdfBackground({ page: loading ? null : currentPage, containerRef, bgPositionRef });
+  const { layerRef: pdfLayerRef, onViewport: onPdfViewport, rerender: rerenderPdf, applyScene: applyPdfSceneFit } = pdfBg;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -228,7 +254,7 @@ const AssignmentStudyViewer = () => {
         baseStrokeWidthRef.current = savedWidth;
         const zoom = apiRef.getAppState()?.zoom?.value || 1;
         lastZoomRef.current = zoom;
-        apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+        apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: sceneStrokeWidth(savedWidth, zoom), currentItemRoundness: 'sharp' }, commitToHistory: false });
         apiRef.setActiveTool({ type: 'freedraw' });
       }
     }
@@ -399,6 +425,8 @@ const AssignmentStudyViewer = () => {
 
   /* onChange: 저장 */
   const handleExcalidrawChange = useCallback((elements, appState) => {
+    /* PDF 레이어는 제스처·복원 중에도 뷰포트를 따라가야 하므로 모든 조기 반환보다 먼저 */
+    onPdfViewport(appState);
     if (isRestoringRef.current || isAdjustingWidthRef.current) return;
 
     if (appState?.penMode) {
@@ -416,7 +444,7 @@ const AssignmentStudyViewer = () => {
       if (tool === 'freedraw' && baseStrokeWidthRef.current) {
         isAdjustingWidthRef.current = true;
         excalidrawAPIRef.current?.updateScene({
-          appState: { currentItemStrokeWidth: Math.max(baseStrokeWidthRef.current / appState.zoom.value, 0.05) },
+          appState: { currentItemStrokeWidth: sceneStrokeWidth(baseStrokeWidthRef.current, appState.zoom.value) },
           commitToHistory: false,
         });
         requestAnimationFrame(() => { isAdjustingWidthRef.current = false; });
@@ -454,10 +482,10 @@ const AssignmentStudyViewer = () => {
     const page = currentPageRef.current;
     const cu   = userRef.current;
     if (!cu || !page) return;
-    const userEls = elements.filter((el) =>
+    const userEls = relockOwnStickies(elements.filter((el) =>
       el.id !== BG_ELEMENT_ID && !el.id.startsWith(TEACHER_COMMENT_PREFIX) && !el.isDeleted
-    );
-    const serialized = JSON.stringify(userEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points, text: el.text, width: el.width, height: el.height, strokeColor: el.strokeColor, strokeWidth: el.strokeWidth })));
+    ));
+    const serialized = JSON.stringify(userEls.map((el) => ({ id: el.id, type: el.type, x: el.x, y: el.y, points: el.points, text: el.text, width: el.width, height: el.height, strokeColor: el.strokeColor, strokeWidth: el.strokeWidth, locked: el.locked })));  // locked: 메모지 잠금 토글도 저장되게
     if (serialized === lastSavedRef.current) return;
 
     /* 페이지 이동 시 flush용 데이터 즉시 캡처 */
@@ -505,7 +533,7 @@ const AssignmentStudyViewer = () => {
       }
       if (mountedRef.current) setSaveStatus('saved');
     }, 1500);
-  }, [assignmentId, isLocked]);
+  }, [assignmentId, isLocked, onPdfViewport]);
 
   const handleToggleScreenLock = useCallback(() => {
     setScreenLocked(prev => {
@@ -527,26 +555,34 @@ const AssignmentStudyViewer = () => {
       baseStrokeWidthRef.current = savedWidth;
       const zoom = apiRef.getAppState()?.zoom?.value || 1;
       lastZoomRef.current = zoom;
-      apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: Math.max(savedWidth / zoom, 0.05), currentItemRoundness: 'sharp' }, commitToHistory: false });
+      apiRef.updateScene({ appState: { currentItemStrokeColor: '#000000', currentItemStrokeWidth: sceneStrokeWidth(savedWidth, zoom), currentItemRoundness: 'sharp' }, commitToHistory: false });
       apiRef.setActiveTool({ type: 'freedraw' });
     }, 0);
 
     const page = currentPageRef.current;
+
+    /* PDF 페이지: bg element 없이 필기·코멘트만 — 종이는 PdfPageLayer 가 그린다 */
+    if (isPdfPage(page)) {
+      await applyPdfSceneFit(
+        apiRef,
+        [...Object.values(savedFilesRef.current), ...Object.values(teacherCommentFilesRef.current)],
+        [...noteElementsRef.current, ...teacherCommentsRef.current],
+        page.id,
+      );
+      return;
+    }
+
     if (!page?.imageUrl || !containerRef.current) return;
 
     try {
       const { dataUrl, mimeType } = await fetchAsDataUrl(page.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
-      let bgX, bgY, bgW, bgH;
-      const saved = bgPositionRef.current;
-      if (saved && saved.width > 10 && saved.height > 10) {
-        ({ x: bgX, y: bgY, width: bgW, height: bgH } = saved);
-      } else {
-        const { width: W, height: H } = await waitForLayout(containerRef.current);
-        const pos = calculateBgPosition(W, H, iW, iH);
-        bgX = pos.x; bgY = pos.y; bgW = pos.width; bgH = pos.height;
-        bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
-      }
+      const { width: W, height: H } = await waitForLayout(containerRef.current);
+      /* 저장값(비율 보정) 또는 계산값 + 화면 맞춤 뷰포트 (lib/bgFit.js) */
+      const bgLayout = resolveBgLayout({ saved: bgPositionRef.current, imageW: iW, imageH: iH, containerWidth: W, containerHeight: H });
+      const { x: bgX, y: bgY, width: bgW, height: bgH } = bgLayout.bg;
+      bgPositionRef.current = { x: bgX, y: bgY, width: bgW, height: bgH };
+      recordBgLoad(bgLayout.diag);
       await new Promise((r) => setTimeout(r, 0));
       apiRef.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);
       const userFilesList = Object.values(savedFilesRef.current);
@@ -556,6 +592,7 @@ const AssignmentStudyViewer = () => {
       await new Promise((r) => requestAnimationFrame(r));
       const bgEl = createBgElement(bgX, bgY, bgW, bgH);
       apiRef.updateScene({
+        appState: bgViewportAppState(bgLayout.viewport),
         elements: [bgEl, ...noteElementsRef.current, ...teacherCommentsRef.current],
         commitToHistory: false,
       });
@@ -563,7 +600,7 @@ const AssignmentStudyViewer = () => {
       console.error('배경 이미지 로드 실패:', err);
       apiRef.updateScene({ elements: noteElementsRef.current, commitToHistory: false });
     }
-  }, []);
+  }, [applyPdfSceneFit]);
 
   /* 파일 첨부 핸들러 */
   const MAX_SUBMISSION_FILES = 5;
@@ -656,6 +693,7 @@ const AssignmentStudyViewer = () => {
 
   /* ── 이미지 리로드 (원본 비율로 재배치) ── */
   const handleReloadImage = useCallback(async () => {
+    if (pdfBg.active) { rerenderPdf(); return; }
     const page = currentPageRef.current;
     const excApi = excalidrawAPIRef.current;
     if (!page?.imageUrl || !excApi || !containerRef.current) return;
@@ -665,17 +703,19 @@ const AssignmentStudyViewer = () => {
       const { dataUrl, mimeType } = await fetchAsDataUrl(page.imageUrl);
       const { w: iW, h: iH } = await getImageNaturalSize(dataUrl);
       const { width: W, height: H } = await waitForLayout(containerRef.current);
-      const pos = calculateBgPosition(W, H, iW, iH);
+      const bgLayout = resolveBgLayout({ saved: null, imageW: iW, imageH: iH, containerWidth: W, containerHeight: H });
+      const pos = bgLayout.bg;
+      recordBgLoad(bgLayout.diag);
       bgPositionRef.current = { x: pos.x, y: pos.y, width: pos.width, height: pos.height };
       excApi.addFiles([{ id: BG_FILE_ID, dataURL: dataUrl, mimeType, created: Date.now() }]);
       await new Promise(r => requestAnimationFrame(r));
       const preserved = excApi.getSceneElements().filter(el => el.id !== BG_ELEMENT_ID);
       const bgEl = createBgElement(pos.x, pos.y, pos.width, pos.height);
-      excApi.updateScene({ elements: [bgEl, ...preserved], commitToHistory: false });
+      excApi.updateScene({ appState: bgViewportAppState(bgLayout.viewport), elements: [bgEl, ...preserved], commitToHistory: false });
     } catch (err) {
       console.error('이미지 리로드 실패:', err);
     }
-  }, []);
+  }, [pdfBg.active, rerenderPdf]);
 
   /* 파생 값 */
   const currentIndex = pages.findIndex((p) => p.id === currentPage?.id);
@@ -684,7 +724,8 @@ const AssignmentStudyViewer = () => {
 
   useEffect(() => {
     prefetchImages([prevPage?.imageUrl, nextPage?.imageUrl].filter(Boolean));
-  }, [prevPage?.imageUrl, nextPage?.imageUrl]);
+    prefetchPdfNeighbors(currentPage, [prevPage, nextPage]); // PDF 는 같은 문서의 이웃 쪽만
+  }, [prevPage?.id, nextPage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* 사이드바 자동 스크롤 */
   useEffect(() => {
@@ -735,24 +776,26 @@ const AssignmentStudyViewer = () => {
   const canSubmit = !isLocked && submission?.status !== 'submitted';
   const fileCount = (submissionFiles.length - deletedFileIds.size) + newFiles.length;
 
+  // 도구바가 보이면 페이지 목록 버튼은 도구바 맨 앞에, 아니면 상단 바에 둔다
+  const toolbarShown = drawMode && !toolbarCollapsed && !isLocked && !currentPage?.videoUrl;
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100vh' }}>
+    <div className="vw-root flex flex-col" style={{ height: '100vh' }}>
 
       {/* 내비게이션 바 */}
-      <div className="h-14 bg-white shadow-sm flex items-center justify-between px-4 border-b flex-shrink-0 sticky top-0 z-[60]">
-        <div className="flex items-center gap-2">
+      <div className="vw-top">
+        <div className="vw-top-l">
           <button
             onClick={() => navigate(assignment?.classroomId ? `/student/classrooms/${assignment.classroomId}?tab=assignments` : '/student/classrooms')}
             aria-label="과제 목록으로 돌아가기" title="과제 목록으로 돌아가기"
-            className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer">
+            className="vw-ibtn">
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <span className="font-semibold text-gray-900">{assignment?.title}</span>
+          <span className="vw-top-title">{assignment?.title}</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="vw-top-r">
           {drawMode && !isLocked && !currentPage?.videoUrl && (
-            <span className={`text-xs ${saveStatus === 'saved' ? 'text-green-600' : 'text-gray-400'}`}>
+            <span className={`vw-status${saveStatus === 'saved' ? ' is-saved' : ''}`}>
               {saveStatus === 'saved' ? '저장됨' : '저장 중...'}
             </span>
           )}
@@ -762,7 +805,7 @@ const AssignmentStudyViewer = () => {
             <PdfDownloadButton
               onClick={() => {
                 const title = `${user?.name || '학생'}_${assignment?.title || '과제'}_${currentPage.position + 1}p`;
-                downloadPage(title, noteElements, savedFilesRef.current, currentPage.imageUrl, bgPositionRef.current);
+                downloadPage(title, noteElements, savedFilesRef.current, currentPage, bgPositionRef.current);
               }}
               onDownloadAll={async () => {
                 const title = `${user?.name || '학생'}_${assignment?.title || '과제'}_전체`;
@@ -775,7 +818,7 @@ const AssignmentStudyViewer = () => {
                   const pageDataList = pages.map(pg => {
                     const note = notesMap[pg.id] || { elements: [], files: {}, bgPosition: null };
                     return {
-                      bgUrl: pg.imageUrl,
+                      bg: pg,
                       elements: note.elements || [],
                       files: note.files || {},
                       bgPosition: note.bgPosition,
@@ -788,7 +831,7 @@ const AssignmentStudyViewer = () => {
                 }
               }}
               isDownloading={isDownloading}
-              className="mt-0 ml-1 py-1 px-2 text-[10px]"
+              className="vw-pdf"
             />
           )}
 
@@ -796,13 +839,11 @@ const AssignmentStudyViewer = () => {
           <button
             onClick={() => setShowFilesPanel(v => !v)}
             title="파일 첨부"
-            className={`relative p-1.5 rounded-md transition-colors cursor-pointer ${
-              showFilesPanel ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:text-gray-700'
-            }`}
+            className={`vw-ibtn${showFilesPanel ? ' is-tint-lavender' : ''}`}
           >
             <Paperclip className="h-5 w-5" />
             {fileCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-purple-600 text-white text-[10px] rounded-full flex items-center justify-center">
+              <span className="vw-ibtn-badge">
                 {fileCount}
               </span>
             )}
@@ -810,7 +851,7 @@ const AssignmentStudyViewer = () => {
 
           {/* 업로드 진행률 */}
           {uploadProgress && (
-            <span className="text-xs text-purple-600">{uploadProgress}</span>
+            <span className="vw-status">{uploadProgress}</span>
           )}
 
           {/* 제출 버튼 */}
@@ -819,7 +860,7 @@ const AssignmentStudyViewer = () => {
               onClick={handleSubmit}
               disabled={submitting}
               title={submitting ? '제출 중...' : '제출하기'}
-              className="flex items-center justify-center p-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 cursor-pointer"
+              className="vw-ibtn vw-ibtn--sage"
             >
               {submitting ? <Loader className="animate-spin h-5 w-5" /> : <Send className="h-5 w-5" />}
             </button>
@@ -829,11 +870,7 @@ const AssignmentStudyViewer = () => {
           <button
             onClick={() => setShowTeacherNotesModal((v) => !v)}
             title="교사 필기"
-            className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-              showTeacherNotesModal
-                ? 'bg-amber-100 text-amber-700'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
+            className={`vw-ibtn${showTeacherNotesModal ? ' is-tint-mustard' : ''}`}
           >
             <GraduationCap className="h-5 w-5" />
           </button>
@@ -843,7 +880,7 @@ const AssignmentStudyViewer = () => {
             <button
               onClick={() => setDrawMode((v) => !v)}
               title={drawMode ? '뷰 모드로 전환' : '필기 모드로 전환'}
-              className={`p-1.5 rounded-md transition-colors cursor-pointer ${drawMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`vw-ibtn${drawMode ? ' is-on' : ''}`}
             >
               <Pencil className="h-4 w-4" />
             </button>
@@ -853,7 +890,7 @@ const AssignmentStudyViewer = () => {
             <button onClick={() => setToolbarCollapsed((v) => !v)}
               aria-label={toolbarCollapsed ? '필기 도구 펼치기' : '필기 도구 접기'}
               title={toolbarCollapsed ? '필기 도구 펼치기' : '필기 도구 접기'}
-              className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 cursor-pointer">
+              className="vw-ibtn">
               {toolbarCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
             </button>
           )}
@@ -862,11 +899,11 @@ const AssignmentStudyViewer = () => {
             onClick={() => prevPage && navigate(`/student/assignments/${assignmentId}/page/${prevPage.id}`)}
             disabled={!prevPage}
             aria-label="이전 페이지" title="이전 페이지"
-            className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer">
+            className="vw-ibtn vw-ibtn--nav">
             <ChevronLeft className="h-4 w-4" />
           </button>
           {pages.length > 0 && (
-            <span className="text-sm text-gray-400 min-w-[3rem] text-center">
+            <span className="vw-counter">
               {currentIndex + 1} / {pages.length}
             </span>
           )}
@@ -874,15 +911,20 @@ const AssignmentStudyViewer = () => {
             onClick={() => nextPage && navigate(`/student/assignments/${assignmentId}/page/${nextPage.id}`)}
             disabled={!nextPage}
             aria-label="다음 페이지" title="다음 페이지"
-            className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer">
+            className="vw-ibtn vw-ibtn--nav">
             <ChevronRight className="h-4 w-4" />
           </button>
 
-          <button onClick={() => setSidebarOpen((v) => !v)}
-            aria-label="페이지 목록" title="페이지 목록"
-            className="p-1.5 text-gray-500 hover:text-gray-700 cursor-pointer">
-            <Menu className="h-5 w-5" />
-          </button>
+          {/* 페이지 목록 — 도구바가 없을 때만 여기(있을 때는 도구바 맨 앞) */}
+          {!toolbarShown && (
+            <button onClick={() => setSidebarOpen((v) => !v)}
+              aria-pressed={sidebarOpen}
+              aria-label={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+              title={sidebarOpen ? '페이지 목록 숨기기' : '페이지 목록 펼치기'}
+              className="vw-ibtn">
+              <PageListIcon />
+            </button>
+          )}
         </div>
       </div>
 
@@ -893,15 +935,16 @@ const AssignmentStudyViewer = () => {
       {drawMode && !toolbarCollapsed && !isLocked && !currentPage?.videoUrl && (
         <DrawingToolbar
           apiRef={excalidrawAPIRef}
+          sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)}
           pageId={currentPage?.id}
+          bgPositionRef={bgPositionRef}
           showPanel={showExcalidrawPanel}
           onTogglePanel={() => setShowExcalidrawPanel((v) => !v)}
-          screenLocked={screenLocked}
-          onToggleScreenLock={handleToggleScreenLock}
           onBaseWidthChange={(w) => { baseStrokeWidthRef.current = w; }}
           onReloadImage={handleReloadImage}
-          onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw'; }}
+          onActiveToolChange={(t) => { penActiveRef.current = t === 'freedraw' || t === 'highlighter'; lassoActiveRef.current = t === 'lasso'; }}
           onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
+          pdfMode={pdfBg.active}
         />
       )}
 
@@ -924,31 +967,31 @@ const AssignmentStudyViewer = () => {
       {/* 본문 */}
       <div className="flex flex-1 overflow-hidden">
         {sidebarOpen && (
-          <div ref={sidebarScrollRef} className="w-44 bg-white border-r overflow-y-auto flex-shrink-0">
-            <div className="px-3 py-2 border-b flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">페이지</span>
-              <button onClick={() => setSidebarOpen(false)} aria-label="페이지 목록 닫기" title="페이지 목록 닫기" className="text-gray-400 hover:text-gray-600 cursor-pointer">
+          <div ref={sidebarScrollRef} className="vw-side">
+            <div className="vw-side-head">
+              <span>페이지 {pages.length}</span>
+              <button onClick={() => setSidebarOpen(false)} aria-label="페이지 목록 닫기" title="페이지 목록 닫기" className="vw-ibtn">
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-            <div className="space-y-2 p-2">
+            <div className="vw-side-list">
               {pages.map((pg, idx) => (
                 <button key={pg.id}
                   ref={pg.id === currentPage?.id ? activeSidebarItemRef : null}
                   onClick={() => navigate(`/student/assignments/${assignmentId}/page/${pg.id}`)}
-                  className={`relative block w-full rounded-md overflow-hidden transition-colors text-left ${pg.id === currentPage?.id ? 'border-4 border-blue-500' : 'border-4 border-transparent hover:border-gray-300'}`}
+                  className={`vw-thumb${pg.id === currentPage?.id ? ' is-current' : ''}`}
                 >
                   {pg.videoUrl ? (
-                    <div className="relative">
-                      <PageVideoThumb videoUrl={pg.videoUrl} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover bg-gray-900" loading="lazy" decoding="async" />
+                    <div className="vw-thumb-video">
+                      <PageVideoThumb videoUrl={pg.videoUrl} alt={`영상 ${idx + 1}`} className="w-full h-auto object-cover" loading="lazy" decoding="async" />
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="bg-red-600 rounded-full p-1"><svg className="h-3 w-3 text-white fill-white" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div>
+                        <div className="vw-thumb-play"><svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg></div>
                       </div>
                     </div>
                   ) : (
-                    <img src={pg.imageUrl} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" loading="lazy" decoding="async" />
+                    <PageThumb page={pg} alt={`페이지 ${idx + 1}`} className="w-full h-auto object-contain bg-white" />
                   )}
-                  <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs text-center py-0.5">
+                  <div className="vw-thumb-tab" aria-hidden="true">
                     {idx + 1}
                   </div>
                 </button>
@@ -966,6 +1009,7 @@ const AssignmentStudyViewer = () => {
         ) : (
         <div ref={containerRef} style={GRID_STYLE} className="w-full h-full relative overflow-hidden">
           <style>{ALWAYS_HIDE_CSS}{TOUCH_CSS}{(drawMode && showExcalidrawPanel) ? '' : PANEL_HIDE_CSS}</style>
+          {pdfBg.active && <PdfPageLayer ref={pdfLayerRef} {...pdfBg.layerProps} containerRef={containerRef} />}
           {currentPage ? (
             <ExcalidrawErrorBoundary key={currentPage.id}>
             <Excalidraw
@@ -996,6 +1040,7 @@ const AssignmentStudyViewer = () => {
               style={{ zIndex: 3 }}
             />
           )}
+          {currentPage && <ScreenLockFab locked={screenLocked} onToggle={handleToggleScreenLock} />}
         </div>
         )}
         <PageNavOverlay

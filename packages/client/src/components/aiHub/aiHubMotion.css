@@ -1,0 +1,117 @@
+/*
+ * AI활용 모션 갤러리·상세 — 색은 AiHubLayout.css 의 --ai-* 토큰(.ai-hub 안에서 상속).
+ * 누르는 영역은 44px 이상(분류 칩만 보이는 높이 32px + 투명 영역으로 44px).
+ */
+
+/* 분류 거르기 */
+.ai-filter { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.ai-filter-select-wrap { flex: 1; min-width: 0; }
+.ai-filter-select {
+  width: 100%; max-width: 16rem; min-height: 44px; padding: 0 14px;
+  border-radius: 999px; border: 1px solid var(--ai-line); background: #fff;
+  color: var(--ai-ink); font-size: 15px;
+}
+.ai-filter-chips { display: none; flex: 1; min-width: 0; gap: 8px; overflow-x: auto; padding: 4px; margin: -4px; }
+.ai-filter-chip {
+  flex-shrink: 0; min-height: 44px; padding: 0 16px; border-radius: 999px;
+  border: 1px solid var(--ai-line); background: #fff; color: var(--ai-ink);
+  font-size: 14px; white-space: nowrap; cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.ai-filter-chip:hover { border-color: var(--ai-pen); }
+.ai-filter-chip[aria-pressed='true'] { background: var(--ai-ink); border-color: var(--ai-ink); color: #fff; }
+.ai-filter-count { margin-left: 4px; font-size: 12px; opacity: .7; font-variant-numeric: tabular-nums; }
+@media (min-width: 768px) {
+  .ai-filter-select-wrap { display: none; }
+  .ai-filter-chips { display: flex; }
+}
+
+/* 카드 격자 2/3/4/5/6열 */
+.ai-motion-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+  list-style: none; margin: 0; padding: 0;
+}
+@media (min-width: 640px) { .ai-motion-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; } }
+@media (min-width: 1024px) { .ai-motion-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1280px) { .ai-motion-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (min-width: 1536px) { .ai-motion-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+
+.ai-motion-card {
+  display: block; height: 100%; overflow: hidden; border-radius: 12px;
+  border: 1px solid var(--ai-line); background: #fff;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ai-motion-card:hover { border-color: var(--ai-pen); box-shadow: 0 2px 8px rgb(28 43 74 / .08); }
+.ai-motion-thumb { position: relative; aspect-ratio: 16 / 9; background: var(--ai-line); }
+.ai-motion-thumb img, .ai-motion-thumb video {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+}
+.ai-motion-thumb video { opacity: 0; transition: opacity .15s ease; }
+.ai-motion-card:hover .ai-motion-thumb video,
+.ai-motion-card:focus-visible .ai-motion-thumb video { opacity: 1; }
+.ai-motion-title { display: flex; align-items: baseline; gap: 8px; padding: 8px 8px 0; }
+.ai-motion-no { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--ai-muted); }
+.ai-motion-name {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 14px; font-weight: 700;
+}
+.ai-motion-use {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 0 8px 8px; font-size: 12px; color: var(--ai-muted);
+}
+
+.ai-original-badge {
+  position: absolute; top: 4px; left: 4px; z-index: 1;
+  border-radius: 4px; background: rgb(0 0 0 / .65); color: #fff;
+  padding: 3px 6px; font-size: 11px; line-height: 1; white-space: nowrap;
+}
+
+/* 빈 상태·안내 */
+.ai-empty { padding: 64px 0; text-align: center; color: var(--ai-muted); }
+.ai-empty p + p { margin-top: 8px; font-size: 14px; }
+.ai-empty code {
+  border-radius: 6px; background: #eef2f8; color: var(--ai-ink); padding: 2px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; white-space: nowrap;
+}
+
+/* 상세 — 1280 이상 영상 왼쪽·정보 오른쪽 */
+.ai-detail { display: grid; gap: 16px; }
+@media (min-width: 1280px) {
+  .ai-detail { grid-template-columns: minmax(0, 1fr) minmax(22rem, 28rem); gap: 32px; }
+  .ai-detail-info { position: sticky; top: 16px; align-self: start; }
+}
+.ai-detail-video { display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: 12px; background: #000; }
+.ai-detail-head { display: flex; align-items: baseline; gap: 4px 12px; }
+.ai-detail-no { flex-shrink: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; color: var(--ai-muted); }
+.ai-detail-name {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 24px; font-weight: 700; letter-spacing: -.01em;
+}
+@media (min-width: 640px) { .ai-detail-name { font-size: 30px; } }
+.ai-detail-en {
+  min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 14px; color: var(--ai-muted);
+}
+.ai-detail-use { margin-top: 4px; font-size: 14px; color: var(--ai-muted); }
+.ai-detail-concept { margin-top: 16px; line-height: 1.7; word-break: keep-all; }
+.ai-credit { margin-top: 12px; font-size: 12px; color: var(--ai-muted); word-break: keep-all; }
+.ai-credit a { text-decoration: underline; color: var(--ai-pen); }
+.ai-credit strong { font-weight: 600; }
+.ai-credit span, .ai-credit a, .ai-credit strong { white-space: nowrap; }
+
+.ai-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
+.ai-pill {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 20px; border-radius: 999px;
+  font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  border: 1px solid var(--ai-pen); background: var(--ai-pen); color: #fff;
+  transition: background-color .15s ease, opacity .15s ease;
+}
+.ai-pill:hover:not(:disabled) { background: #1d4488; }
+.ai-pill:disabled { opacity: .5; cursor: not-allowed; }
+.ai-pill.is-done { background: var(--ai-ink); border-color: var(--ai-ink); }
+.ai-pill--ghost { background: #fff; color: var(--ai-ink); border-color: var(--ai-line); font-weight: 500; padding: 0 16px; }
+.ai-pill--ghost:hover { background: #fff; border-color: var(--ai-pen); }
+.ai-note { font-size: 14px; color: var(--ai-muted); white-space: nowrap; }
+/* 긴 안내(복사 실패)는 줄바꿈을 허용하고 단추 아래 한 줄을 차지한다 */
+.ai-note--warn { flex-basis: 100%; white-space: normal; word-break: keep-all; color: #9a3412; }
+.ai-detail-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 24px; }
