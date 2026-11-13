@@ -90,6 +90,10 @@ async function runApi() {
   check('다른 학급 단원 섞음 → 400', res.status() === 400, res.status());
   res = await copy(['00000000-0000-4000-8000-000000000000'], [cfg.T1]);
   check('없는 단원 → 404', res.status() === 404, res.status());
+  const many = Array.from({ length: 51 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`);
+  res = await copy(many, [cfg.T1]);
+  body = await res.json();
+  check('51개 → 400 한국어 안내', res.status() === 400 && /50개/.test(body.error ?? ''), { status: res.status(), body });
 }
 
 async function runUi() {
@@ -135,15 +139,27 @@ async function runUi() {
   await cards.first().waitFor();
   check('T1 단원 카드 2장', (await cards.count()) === 2, await cards.allInnerTexts());
 
-  // 2. S 영상 탭에서 1단원만 T2 로 내보내기
+  // 2. S 영상 탭에서 1단원만 T2 로 내보내기 — 학급 목록을 읽는 동안은 '불러오는 중', 복사 중에는 체크 잠금
   await page.goto(`${BASE}/teacher/classrooms/${cfg.S}?tab=videos`);
+  const slowOther = '**/api/classrooms/other/**';
+  await page.route(slowOther, async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
   await page.getByRole('button', { name: '단원 내보내기' }).click();
   await dialog.waitFor();
+  await page.waitForTimeout(300);
+  check('학급 목록 읽는 중 안내', (await dialog.getByText('불러오는 중').count()) > 0
+    && (await dialog.getByText('내보낼 수 있는 다른 학급이 없습니다').count()) === 0, await dialog.innerText());
+  await dialog.getByLabel('UT E2E 겹친반').waitFor(); // 늦춘 응답이 끝난 뒤에 route 를 푼다
+  await page.unroute(slowOther);
   await dialog.getByLabel('UT E2E 1단원').check();
   await dialog.getByLabel('UT E2E 겹친반').check();
+  const slowCopy = '**/api/units/copy';
+  await page.route(slowCopy, async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
   await dialog.getByRole('button', { name: '내보내기', exact: true }).click();
+  await page.waitForTimeout(300);
+  check('복사 중에는 체크 잠금', await dialog.getByLabel('UT E2E 겹친반').isDisabled(), null);
   const exportLine = dialog.getByText(/UT E2E 겹친반:/);
   await exportLine.waitFor();
+  await page.unroute(slowCopy);
   const exportText = await exportLine.innerText();
   check('내보내기 결과 합침 1', exportText.includes('합침 1'), exportText);
   await shot('2-export-result');

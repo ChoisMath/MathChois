@@ -14,6 +14,7 @@ import {
 } from '../../lib/videos';
 import VideoPickerModal from './VideoPickerModal';
 import { chapterOptionsForVideo } from '../../lib/chapterOptions';
+import { createRequestGate } from '../../lib/requestGate';
 import SortOrderSelect from '../common/SortOrderSelect';
 import IconButton from '../common/IconButton';
 import { useAuth } from '../../contexts/AuthContext';
@@ -239,12 +240,16 @@ export default function ClassroomVideoTab({ classroomId, isTeacher, units, unitP
 
   /* 교사: 학급 챕터 목록(필기 챕터 선택지). 실패해도 영상 목록은 표시 — 보조 정보.
      탭은 학급마다 key 로 다시 그려지므로 다른 학급의 응답이 늦게 도착할 일은 없다. */
+  const chaptersGate = useMemo(() => createRequestGate(), []); // 늦게 온 이전 응답이 새 목록을 덮지 않게
   const reloadChapters = useCallback(() => {
     if (!isTeacher) return;
+    const token = chaptersGate.next();
     api.get(`/api/classrooms/${classroomId}/chapters`)
-      .then((list) => setChapters([...(list || [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))))
+      .then((list) => {
+        if (chaptersGate.isLatest(token)) setChapters([...(list || [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)));
+      })
       .catch(() => { /* 유지 */ });
-  }, [classroomId, isTeacher]);
+  }, [classroomId, isTeacher, chaptersGate]);
 
   useEffect(() => { reloadChapters(); }, [reloadChapters]);
 

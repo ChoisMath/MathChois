@@ -13,3 +13,5 @@ export const addItemsToUnit = (id, { chapterIds, classroomVideoIds }) =>
 /** 여러 단원을 여러 학급으로 통째 복사 → { results: [{ classroomId, ok, ...개수 | error }] } */
 export const copyUnits = (unitIds, targetClassroomIds) =>
   api.post('/api/units/copy', { unitIds, targetClassroomIds });
+/** 단원 복사 한 번에 고를 수 있는 단원·학급 수(서버 routes/units.ts 와 같다) */
+export const COPY_LIST_MAX = 50;

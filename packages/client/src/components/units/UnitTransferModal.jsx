@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { FolderInput, FolderOutput, X } from 'lucide-react';
 import IconButton from '../common/IconButton';
 import { api } from '../../lib/api';
-import { listUnits, copyUnits } from '../../lib/units';
+import { listUnits, copyUnits, COPY_LIST_MAX } from '../../lib/units';
 
 /**
  * 단원 불러오기·내보내기 — 단원(챕터·영상 배정·필기 챕터 연결)을 통째로 다른 학급과 주고받는다(`POST /api/units/copy`).
@@ -22,7 +22,7 @@ import { listUnits, copyUnits } from '../../lib/units';
 export default function UnitTransferModal({ mode, classroomId, units, onDone, onClose }) {
   const isExport = mode === 'export';
   const uid = useId();
-  const [classrooms, setClassrooms] = useState([]);       // 다른 학급 { id, name }
+  const [classrooms, setClassrooms] = useState(null);     // 다른 학급 { id, name } (null = 읽는 중)
   const [sourceCid, setSourceCid] = useState('');          // 불러오기: 고른 학급
   const [sourceUnits, setSourceUnits] = useState(null);    // 불러오기: 그 학급 단원(null = 아직 안 고름/읽는 중)
   const latestSourceCid = useRef('');                       // 학급을 빨리 바꿀 때 늦게 온 이전 응답을 버린다
@@ -35,7 +35,7 @@ export default function UnitTransferModal({ mode, classroomId, units, onDone, on
   useEffect(() => {
     api.get(`/api/classrooms/other/${classroomId}`)
       .then((list) => setClassrooms(list || []))
-      .catch(() => setError('다른 학급 목록을 불러오지 못했습니다.'));
+      .catch(() => { setClassrooms([]); setError('다른 학급 목록을 불러오지 못했습니다.'); });
   }, [classroomId]);
 
   useEffect(() => {
@@ -61,8 +61,9 @@ export default function UnitTransferModal({ mode, classroomId, units, onDone, on
 
   const unitList = isExport ? units : (sourceUnits ?? []);
   const chosenUnits = unitList.filter((u) => unitIds.has(u.id)).map((u) => u.id);
-  const chosenTargets = isExport ? classrooms.filter((c) => targetIds.has(c.id)).map((c) => c.id) : [classroomId];
-  const canRun = !busy && chosenUnits.length > 0 && chosenTargets.length > 0;
+  const chosenTargets = isExport ? (classrooms ?? []).filter((c) => targetIds.has(c.id)).map((c) => c.id) : [classroomId];
+  const tooMany = chosenUnits.length > COPY_LIST_MAX || chosenTargets.length > COPY_LIST_MAX;
+  const canRun = !busy && !tooMany && chosenUnits.length > 0 && chosenTargets.length > 0;
 
   const handleRun = async () => {
     if (!canRun) return;
@@ -79,7 +80,7 @@ export default function UnitTransferModal({ mode, classroomId, units, onDone, on
     }
   };
 
-  const classroomName = (cid) => (cid === classroomId ? '이 학급' : classrooms.find((c) => c.id === cid)?.name ?? '학급');
+  const classroomName = (cid) => (cid === classroomId ? '이 학급' : classrooms?.find((c) => c.id === cid)?.name ?? '학급');
   const Icon = isExport ? FolderOutput : FolderInput;
   const actionLabel = isExport ? '내보내기' : '불러오기';
 
@@ -112,11 +113,11 @@ export default function UnitTransferModal({ mode, classroomId, units, onDone, on
                 <select
                   value={sourceCid}
                   onChange={(e) => handleSourceChange(e.target.value)}
-                  disabled={busy}
+                  disabled={busy || classrooms == null}
                   className="min-h-11 px-3 border border-gray-300 rounded-md text-sm text-gray-800"
                 >
-                  <option value="">학급을 선택하세요</option>
-                  {classrooms.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <option value="">{classrooms == null ? '불러오는 중…' : '학급을 선택하세요'}</option>
+                  {(classrooms ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </label>
             )}
@@ -129,6 +130,7 @@ export default function UnitTransferModal({ mode, classroomId, units, onDone, on
                 items={unitList}
                 selected={unitIds}
                 onChange={setUnitIds}
+                disabled={busy}
                 renderLabel={(u) => (
                   <>
                     <span>{u.title}</span>
@@ -146,12 +148,16 @@ export default function UnitTransferModal({ mode, classroomId, units, onDone, on
                 items={classrooms}
                 selected={targetIds}
                 onChange={setTargetIds}
+                disabled={busy}
                 renderLabel={(c) => c.name}
               />
             )}
           </div>
         )}
 
+        {tooMany && !results && (
+          <p className="text-sm text-amber-700 mt-3" role="alert">단원·학급은 한 번에 {COPY_LIST_MAX}개까지 고를 수 있습니다.</p>
+        )}
         {error && <p className="text-sm text-red-600 mt-3" role="alert">{error}</p>}
 
         {!results && (
@@ -180,8 +186,16 @@ function resultLine(name, r) {
   return r.linksUnresolved > 0 ? `${line} · 필기 챕터 연결 못 함 ${r.linksUnresolved}` : line;
 }
 
-/** 전체 선택이 붙은 체크 목록 */
-function CheckList({ title, allLabel, empty, items, selected, onChange, renderLabel }) {
+/** 전체 선택이 붙은 체크 목록. items 가 null 이면 읽는 중, disabled 면 체크 잠금(복사 중) */
+function CheckList({ title, allLabel, empty, items, selected, onChange, renderLabel, disabled = false }) {
+  if (items == null) {
+    return (
+      <section>
+        <h3 className="text-xs font-medium text-gray-500 mb-1">{title}</h3>
+        <p className="text-sm text-gray-400 py-4 text-center" aria-busy="true">불러오는 중…</p>
+      </section>
+    );
+  }
   const allChecked = items.length > 0 && items.every((it) => selected.has(it.id));
   const toggle = (id) => {
     const next = new Set(selected);
@@ -200,6 +214,7 @@ function CheckList({ title, allLabel, empty, items, selected, onChange, renderLa
               type="checkbox"
               checked={allChecked}
               onChange={() => onChange(allChecked ? new Set() : new Set(items.map((it) => it.id)))}
+              disabled={disabled}
               className="h-4 w-4 shrink-0"
             />
             {allLabel}
@@ -208,7 +223,7 @@ function CheckList({ title, allLabel, empty, items, selected, onChange, renderLa
             {items.map((item) => (
               <li key={item.id}>
                 <label className="flex items-center gap-3 min-h-11 px-3 py-1.5 text-sm text-gray-800 cursor-pointer hover:bg-gray-50">
-                  <input type="checkbox" checked={selected.has(item.id)} onChange={() => toggle(item.id)} className="h-4 w-4 shrink-0" />
+                  <input type="checkbox" checked={selected.has(item.id)} onChange={() => toggle(item.id)} disabled={disabled} className="h-4 w-4 shrink-0" />
                   <span className="min-w-0 flex-1 break-keep [overflow-wrap:anywhere]">{renderLabel(item)}</span>
                 </label>
               </li>

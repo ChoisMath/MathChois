@@ -40,7 +40,11 @@ const itemsBody = z.object({
 });
 const reorderBody = z.object({ ids: z.array(z.string().uuid()) });
 // 단원 통째 복사 — 중복 id 는 한 번만
-const idList = z.array(z.string().uuid()).min(1).max(50).transform((ids) => [...new Set(ids)]);
+export const COPY_LIST_MAX = 50;
+const idList = z.array(z.string().uuid())
+  .min(1, '단원과 학급을 하나 이상 고르세요')
+  .max(COPY_LIST_MAX, `단원·학급은 한 번에 ${COPY_LIST_MAX}개까지 고를 수 있습니다`)
+  .transform((ids) => [...new Set(ids)]);
 const copyBody = z.object({ unitIds: idList, targetClassroomIds: idList });
 
 /** zod 실패 → 400 { error: 첫 issue message }. 성공이면 파싱된 값, 실패면 응답을 보내고 null. */

@@ -54,7 +54,12 @@ export function planUnitCopy(sources: CopySourceUnit[], target: CopyTargetState)
     counts: { unitsCreated: 0, unitsMerged: 0, chaptersCreated: 0, chaptersMoved: 0, videosCreated: 0, videosMoved: 0, linksUnresolved: 0 },
   };
 
-  const targetUnitByKey = new Map(target.units.map((u) => [titleKey(u.title), u.id]));
+  // 같은 이름 단원이 여럿이면 목록 순서상 앞의 것(서버는 position 순으로 넘긴다)
+  const targetUnitByKey = new Map<string, string>();
+  for (const u of target.units) {
+    const key = titleKey(u.title);
+    if (!targetUnitByKey.has(key)) targetUnitByKey.set(key, u.id);
+  }
   const targetChapterByKey = new Map<string, string>();
   for (const c of target.chapters) {
     const key = titleKey(c.title);

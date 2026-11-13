@@ -61,7 +61,8 @@ export async function copyUnitsToClassroom(
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`chapter-title:${targetClassroomId}`}))`);
 
     const plan = planUnitCopy(sources, {
-      units: await tx.select({ id: units.id, title: units.title }).from(units).where(eq(units.classroomId, targetClassroomId)),
+      units: await tx.select({ id: units.id, title: units.title }).from(units)
+        .where(eq(units.classroomId, targetClassroomId)).orderBy(asc(units.position), asc(units.createdAt)),
       chapters: await tx.select({ id: chapters.id, title: chapters.title }).from(chapters)
         .where(eq(chapters.classroomId, targetClassroomId)).orderBy(asc(chapters.position)),
       videos: await tx.select({ id: classroomVideos.id, videoId: classroomVideos.videoId, note: classroomVideos.note, chapterId: classroomVideos.chapterId })

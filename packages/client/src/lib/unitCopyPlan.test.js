@@ -24,6 +24,12 @@ describe('planUnitCopy', () => {
     expect(p.counts).toMatchObject({ unitsCreated: 0, unitsMerged: 1 });
   });
 
+  it('대상에 같은 이름 단원이 둘이면 앞(목록 순서상 먼저) 단원에 합친다', () => {
+    const p = planUnitCopy([src('u1', '1단원')],
+      { ...empty, units: [{ id: 't-first', title: '1단원' }, { id: 't-second', title: '1단원' }] });
+    expect(p.units[0].existingUnitId).toBe('t-first');
+  });
+
   it('대상에 같은 이름 챕터(공백만 다름)가 있으면 새로 만들지 않고 옮김', () => {
     const p = planUnitCopy([src('u1', '1단원', [ch('c1', '수열')])],
       { ...empty, chapters: [{ id: 't-c1', title: ' 수열 ' }] });
